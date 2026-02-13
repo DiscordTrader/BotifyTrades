@@ -3334,20 +3334,20 @@ def get_all_broker_trades(status: Optional[str] = None, broker: Optional[str] = 
 
 def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = None, 
                    status: Optional[str] = None, broker: Optional[str] = None, 
-                   limit: int = 200) -> Dict[str, Any]:
+                   limit: int = 500) -> Dict[str, Any]:
     """
-    Get ONLY bot-executed trades (trades with channel_id) - isolated from broker sync.
-    Returns trades and filter metadata for UI dropdowns.
-    Uses LEFT JOIN to include trades even if channel was deleted (shows as 'Unknown').
+    Get bot-executed trades grouped into positions (BTO + related STC closures).
+    Returns position-grouped data with P&L calculations, similar to P&L Tracker.
     """
     conn = get_connection()
     cursor = conn.cursor()
     
     query = '''
         SELECT t.id, t.symbol, t.strike, t.expiry, t.call_put, t.direction, t.quantity,
-               t.executed_price as price, t.current_price, t.pnl, t.pnl_percent, t.status, t.broker,
-               t.asset_type, t.option_id, t.executed_at, t.closed_at, t.channel_id,
-               t.message_id, t.source,
+               t.intended_price, t.executed_price, t.current_price, t.pnl, t.pnl_percent, 
+               t.status, t.broker, t.asset_type, t.option_id, t.executed_at, t.closed_at, 
+               t.channel_id, t.message_id, t.source, t.risk_trigger, t.origin_trade_id,
+               t.stop_loss_price, t.profit_target_price,
                COALESCE(c.name, 'Unknown') as channel_name, 
                COALESCE(c.category, '') as channel_category
         FROM trades t 
@@ -3364,10 +3364,6 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
         query += ' AND UPPER(t.symbol) LIKE ?'
         params.append(f'%{symbol.upper()}%')
     
-    if status:
-        query += ' AND t.status = ?'
-        params.append(status)
-    
     if broker:
         query += ' AND t.broker = ?'
         params.append(broker)
@@ -3376,7 +3372,152 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
     params.append(limit)
     
     cursor.execute(query, params)
-    trades = [dict(row) for row in cursor.fetchall()]
+    all_trades = [dict(row) for row in cursor.fetchall()]
+    
+    bto_trades = {}
+    stc_trades = []
+    
+    for trade in all_trades:
+        if trade['direction'] == 'BTO':
+            bto_trades[trade['id']] = trade
+        elif trade['direction'] == 'STC':
+            stc_trades.append(trade)
+    
+    positions = {}
+    
+    for tid, bto in bto_trades.items():
+        entry_price = float(bto.get('executed_price') or bto.get('intended_price') or 0)
+        current_price = float(bto.get('current_price') or 0) or entry_price
+        bto_qty = int(bto.get('quantity') or 0)
+        
+        desc_parts = [bto['symbol']]
+        if bto.get('strike'):
+            desc_parts.append(f"${bto['strike']}{bto.get('call_put', '') or ''}")
+        if bto.get('expiry'):
+            desc_parts.append(bto['expiry'])
+        description = ' '.join(desc_parts)
+        
+        raw_asset = bto.get('asset_type') or ''
+        if raw_asset.lower() == 'option':
+            asset_type = 'option'
+        elif raw_asset.lower() == 'stock':
+            asset_type = 'stock'
+        elif bto.get('call_put') or bto.get('option_id') or bto.get('strike'):
+            asset_type = 'option'
+        else:
+            asset_type = 'stock'
+        
+        positions[tid] = {
+            'id': tid,
+            'symbol': bto['symbol'],
+            'strike': bto.get('strike'),
+            'expiry': bto.get('expiry'),
+            'call_put': bto.get('call_put'),
+            'asset_type': asset_type,
+            'description': description,
+            'bto_qty': bto_qty,
+            'entry_price': entry_price,
+            'current_price': current_price,
+            'total_closed_qty': 0,
+            'total_pnl': float(bto.get('pnl') or 0),
+            'avg_pnl_percent': float(bto.get('pnl_percent') or 0),
+            'status': bto.get('status', 'OPEN'),
+            'broker': bto.get('broker', 'Unknown'),
+            'channel_id': bto.get('channel_id'),
+            'channel_name': bto.get('channel_name', 'Unknown'),
+            'channel_category': bto.get('channel_category', ''),
+            'open_time': bto.get('executed_at', ''),
+            'closed_time': bto.get('closed_at'),
+            'stop_loss': bto.get('stop_loss_price'),
+            'profit_target': bto.get('profit_target_price'),
+            'closures': []
+        }
+    
+    for stc in stc_trades:
+        origin_id = stc.get('origin_trade_id')
+        matched_bto_id = None
+        
+        if origin_id and origin_id in positions:
+            matched_bto_id = origin_id
+        else:
+            candidates = []
+            for tid, pos in positions.items():
+                if (pos['symbol'] == stc['symbol'] and 
+                    pos['channel_id'] == stc['channel_id'] and
+                    pos.get('strike') == stc.get('strike') and
+                    pos.get('expiry') == stc.get('expiry') and
+                    pos.get('call_put') == stc.get('call_put') and
+                    pos.get('broker') == stc.get('broker')):
+                    remaining = pos['bto_qty'] - pos['total_closed_qty']
+                    if remaining > 0:
+                        candidates.append((tid, pos.get('open_time') or ''))
+            if candidates:
+                candidates.sort(key=lambda x: x[1])
+                matched_bto_id = candidates[0][0]
+        
+        if matched_bto_id:
+            pos = positions[matched_bto_id]
+            exit_price = float(stc.get('executed_price') or stc.get('intended_price') or 0)
+            stc_qty = int(stc.get('quantity') or 0)
+            entry_price = pos['entry_price']
+            
+            multiplier = 100 if pos['asset_type'] == 'option' else 1
+            closure_pnl = (exit_price - entry_price) * stc_qty * multiplier
+            closure_pnl_pct = ((exit_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+            
+            exit_reason = stc.get('risk_trigger') or stc.get('source') or 'SIGNAL'
+            
+            pos['closures'].append({
+                'stc_id': stc['id'],
+                'stc_qty': stc_qty,
+                'exit_price': exit_price,
+                'pnl': closure_pnl,
+                'pnl_percent': closure_pnl_pct,
+                'exit_reason': exit_reason,
+                'closed_at': stc.get('executed_at') or stc.get('closed_at') or ''
+            })
+            pos['total_closed_qty'] += stc_qty
+    
+    for tid, pos in positions.items():
+        bto_qty = pos['bto_qty']
+        if pos['closures']:
+            total_pnl = sum(c['pnl'] for c in pos['closures'])
+            
+            remaining_qty = bto_qty - pos['total_closed_qty']
+            if remaining_qty > 0 and pos['current_price'] > 0:
+                multiplier = 100 if pos['asset_type'] == 'option' else 1
+                unrealized = (pos['current_price'] - pos['entry_price']) * remaining_qty * multiplier
+                total_pnl += unrealized
+            
+            pos['total_pnl'] = total_pnl
+            
+            weighted_pct = sum(c['pnl_percent'] * c['stc_qty'] for c in pos['closures'])
+            total_closed_qty = pos['total_closed_qty']
+            if total_closed_qty > 0:
+                pos['avg_pnl_percent'] = weighted_pct / total_closed_qty
+            
+            if pos['total_closed_qty'] >= bto_qty:
+                pos['status'] = 'CLOSED'
+                last_closure = max(pos['closures'], key=lambda c: c.get('closed_at') or '')
+                pos['closed_time'] = last_closure.get('closed_at')
+            elif pos['total_closed_qty'] > 0:
+                pos['status'] = 'PARTIAL'
+        elif pos['status'] == 'OPEN' and pos['entry_price'] > 0 and pos['current_price'] > 0:
+            multiplier = 100 if pos['asset_type'] == 'option' else 1
+            pos['total_pnl'] = (pos['current_price'] - pos['entry_price']) * bto_qty * multiplier
+            pos['avg_pnl_percent'] = ((pos['current_price'] - pos['entry_price']) / pos['entry_price'] * 100) if pos['entry_price'] > 0 else 0
+    
+    position_list = sorted(positions.values(), key=lambda p: p.get('open_time') or '', reverse=True)
+    
+    if status:
+        position_list = [p for p in position_list if p['status'] == status]
+    
+    total_pnl = sum(p['total_pnl'] for p in position_list)
+    closed_positions = [p for p in position_list if p['total_closed_qty'] > 0]
+    wins = len([p for p in closed_positions if p['total_pnl'] > 0])
+    losses = len([p for p in closed_positions if p['total_pnl'] < 0])
+    win_rate = (wins / len(closed_positions) * 100) if closed_positions else 0
+    avg_return = (sum(p['avg_pnl_percent'] for p in closed_positions) / len(closed_positions)) if closed_positions else 0
     
     channel_query = '''
         SELECT DISTINCT c.discord_channel_id, c.name, c.category, 
@@ -3390,24 +3531,33 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
     cursor.execute(channel_query)
     channels = [dict(row) for row in cursor.fetchall()]
     
-    symbol_query = '''
-        SELECT DISTINCT UPPER(symbol) as symbol, COUNT(*) as count
-        FROM trades 
-        WHERE channel_id IS NOT NULL AND channel_id != ''
-        GROUP BY UPPER(symbol)
-        ORDER BY count DESC
-        LIMIT 50
+    broker_query = '''
+        SELECT DISTINCT broker FROM trades 
+        WHERE channel_id IS NOT NULL AND channel_id != '' AND broker IS NOT NULL
+        ORDER BY broker
     '''
-    cursor.execute(symbol_query)
-    symbols = [row['symbol'] for row in cursor.fetchall()]
+    cursor.execute(broker_query)
+    brokers = [row['broker'] for row in cursor.fetchall()]
+    if not brokers:
+        brokers = ['WEBULL', 'WEBULL_PAPER', 'ALPACA_PAPER', 'ROBINHOOD']
     
     return {
-        'trades': trades,
+        'positions': position_list,
+        'summary': {
+            'total_positions': len(position_list),
+            'open_positions': len([p for p in position_list if p['status'] == 'OPEN']),
+            'closed_positions': len([p for p in position_list if p['status'] == 'CLOSED']),
+            'partial_positions': len([p for p in position_list if p['status'] == 'PARTIAL']),
+            'total_pnl': round(total_pnl, 2),
+            'avg_return': round(avg_return, 1),
+            'win_rate': round(win_rate, 1),
+            'wins': wins,
+            'losses': losses
+        },
         'filters': {
             'channels': channels,
-            'symbols': symbols,
-            'statuses': ['OPEN', 'CLOSED', 'PENDING', 'CANCELLED'],
-            'brokers': ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'ROBINHOOD']
+            'statuses': ['OPEN', 'PARTIAL', 'CLOSED', 'PENDING'],
+            'brokers': brokers
         }
     }
 

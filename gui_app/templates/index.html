@@ -239,44 +239,70 @@
     <!-- Bot Trades Container (hidden by default) -->
     <div id="bot-trades-container" style="display: none;">
         <!-- Filter Bar -->
-        <div class="bot-trades-filters" style="display: flex; gap: 12px; padding: 16px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+        <div class="bot-trades-filters" style="display: flex; gap: 12px; padding: 16px; background: #2C2C2E; border-radius: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
             <div style="display: flex; align-items: center; gap: 8px;">
-                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Channel:</label>
-                <select id="bot-filter-channel" onchange="loadBotTrades()" class="form-select" style="min-width: 180px; background-color: #2C2C2E; color: #FFFFFF;">
-                    <option value="" style="background-color: #2C2C2E; color: #FFFFFF;">All Channels</option>
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Channel:</label>
+                <select id="bot-filter-channel" onchange="loadBotTrades()" class="form-select" style="min-width: 180px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;">
+                    <option value="">All Channels</option>
                 </select>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Symbol:</label>
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Symbol:</label>
                 <input type="text" id="bot-filter-symbol" placeholder="Search symbol..." 
-                       class="form-control" style="min-width: 120px; max-width: 150px;"
+                       class="form-control" style="min-width: 120px; max-width: 150px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;"
                        oninput="debounceBotSearch()">
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Status:</label>
-                <select id="bot-filter-status" onchange="loadBotTrades()" class="form-select" style="min-width: 120px; background-color: #2C2C2E; color: #FFFFFF;">
-                    <option value="" style="background-color: #2C2C2E; color: #FFFFFF;">All Status</option>
-                    <option value="OPEN" style="background-color: #2C2C2E; color: #FFFFFF;">Open</option>
-                    <option value="CLOSED" style="background-color: #2C2C2E; color: #FFFFFF;">Closed</option>
-                    <option value="PENDING" style="background-color: #2C2C2E; color: #FFFFFF;">Pending</option>
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Status:</label>
+                <select id="bot-filter-status" onchange="loadBotTrades()" class="form-select" style="min-width: 120px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;">
+                    <option value="">All Status</option>
+                    <option value="OPEN">OPEN</option>
+                    <option value="PARTIAL">PARTIAL</option>
+                    <option value="CLOSED">CLOSED</option>
+                    <option value="PENDING">PENDING</option>
                 </select>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Broker:</label>
-                <select id="bot-filter-broker" onchange="loadBotTrades()" class="form-select" style="min-width: 140px; background-color: #2C2C2E; color: #FFFFFF;">
-                    <option value="" style="background-color: #2C2C2E; color: #FFFFFF;">All Brokers</option>
+                <label style="font-size: 0.875rem; color: #8E8E93; white-space: nowrap; font-weight: 500;">Broker:</label>
+                <select id="bot-filter-broker" onchange="loadBotTrades()" class="form-select" style="min-width: 140px; background-color: #1C1C1E; color: #FFFFFF; border: 1px solid #3A3A3C; border-radius: 8px; padding: 8px 12px;">
+                    <option value="">All Brokers</option>
                 </select>
             </div>
-            <button onclick="resetBotFilters()" class="btn btn-secondary btn-small" style="margin-left: auto;">
-                Reset Filters
+            <button onclick="loadBotTrades()" style="padding: 8px 20px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-left: auto;">
+                Refresh
+            </button>
+            <button onclick="resetBotFilters()" style="padding: 8px 20px; background: #3A3A3C; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                Reset
             </button>
         </div>
         
-        <!-- Bot Trades Table -->
+        <!-- Summary Stats Bar -->
+        <div id="bot-summary-stats" style="display: flex; gap: 24px; margin-bottom: 20px; padding: 16px 20px; background: #2C2C2E; border-radius: 12px; font-size: 14px; flex-wrap: wrap;">
+            <div style="color: #00d4ff;">
+                <strong>Positions:</strong> <span id="botTotalPositions">0</span>
+            </div>
+            <div style="color: #22c55e;">
+                <strong>Open:</strong> <span id="botOpenCount">0</span>
+            </div>
+            <div style="color: #9ca3af;">
+                <strong>Closed:</strong> <span id="botClosedCount">0</span>
+            </div>
+            <div>
+                <strong style="color: #fff;">Total P/L:</strong> <span id="botTotalPNL" style="color: #00ff88;">$0.00</span>
+            </div>
+            <div>
+                <strong style="color: #fff;">Win Rate:</strong> <span id="botWinRate" style="color: #ffaa00;">0%</span>
+            </div>
+            <div>
+                <strong style="color: #fff;">Avg Return:</strong> <span id="botAvgReturn" style="color: #ffaa00;">0%</span>
+            </div>
+        </div>
+        
+        <!-- Bot Trades Position Cards -->
         <div id="bot-trades-table">
             <div style="text-align: center; padding: 60px 20px;">
                 <div class="spinner" style="margin: 0 auto 20px;"></div>
-                <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading bot trades...</div>
+                <div style="color: #8E8E93; font-size: 0.9375rem;">Loading bot trades...</div>
             </div>
         </div>
     </div>
@@ -2372,15 +2398,42 @@ async function purgeConditionalOrders() {
 let botTradesDebounceTimer = null;
 let botFiltersInitialized = false;
 
+function formatBotTime(timestamp) {
+    if (!timestamp) return '-';
+    let ts = timestamp;
+    if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+        ts = ts.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(ts);
+    return d.toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', 
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'America/New_York'
+    });
+}
+
+function formatBotFullTime(timestamp) {
+    if (!timestamp) return '-';
+    let ts = timestamp;
+    if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+        ts = ts.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(ts);
+    return d.toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        timeZone: 'America/New_York'
+    });
+}
+
 async function loadBotTrades() {
     console.log('[loadBotTrades] Starting...');
     const container = document.getElementById('bot-trades-table');
     if (!container) return;
     
-    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading bot trades...</div></div>';
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: #8E8E93;">Loading bot trades...</div></div>';
     
     try {
-        // Get filter values
         const channelId = document.getElementById('bot-filter-channel')?.value || '';
         const symbol = document.getElementById('bot-filter-symbol')?.value || '';
         const status = document.getElementById('bot-filter-status')?.value || '';
@@ -2397,46 +2450,57 @@ async function loadBotTrades() {
         const data = await response.json();
         
         if (!data.success) {
-            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error: ${data.error}</div>`;
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: #ff3b30;">Error: ${data.error}</div>`;
             return;
         }
         
-        // Initialize filter dropdowns (only once)
         if (!botFiltersInitialized && data.filters) {
             initBotFilters(data.filters);
             botFiltersInitialized = true;
         }
         
-        const trades = data.trades || [];
+        const positions = data.positions || [];
+        const summary = data.summary || {};
         
-        // Update summary
-        const summaryEl = document.getElementById('summary-text');
-        if (summaryEl) {
-            summaryEl.textContent = `${trades.length} bot trade${trades.length !== 1 ? 's' : ''} with channel attribution`;
-        }
+        updateBotSummary(summary);
         
-        if (trades.length === 0) {
+        if (positions.length === 0) {
             container.innerHTML = `
                 <div style="text-align: center; padding: 60px 20px;">
-                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">🤖</div>
-                    <div style="color: var(--text-secondary); font-size: 1rem;">No bot trades found</div>
-                    <div style="color: var(--text-muted); font-size: 0.875rem; margin-top: 8px;">Trades executed from Discord signals will appear here</div>
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">📊</div>
+                    <div style="color: #8E8E93; font-size: 1rem;">No bot trades found</div>
+                    <div style="color: #636366; font-size: 0.875rem; margin-top: 8px;">Trades executed from Discord signals will appear here</div>
                 </div>
             `;
             return;
         }
         
-        // Render bot trades table
-        container.innerHTML = renderBotTradesTable(trades);
+        container.innerHTML = renderBotPositionCards(positions);
         
     } catch (err) {
         console.error('[loadBotTrades] Error:', err);
-        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load bot trades: ${err.message}</div>`;
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: #ff3b30;">Failed to load bot trades: ${err.message}</div>`;
     }
 }
 
+function updateBotSummary(summary) {
+    const totalPnl = summary.total_pnl || 0;
+    const avgReturn = summary.avg_return || 0;
+    const pnlColor = totalPnl >= 0 ? '#00ff88' : '#ff3b30';
+    const retColor = avgReturn >= 0 ? '#00ff88' : '#ff3b30';
+    
+    const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+    const es = (id, val, col) => { const e = document.getElementById(id); if (e) { e.textContent = val; e.style.color = col; } };
+    
+    el('botTotalPositions', summary.total_positions || 0);
+    el('botOpenCount', summary.open_positions || 0);
+    el('botClosedCount', summary.closed_positions || 0);
+    es('botTotalPNL', `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`, pnlColor);
+    es('botWinRate', `${summary.win_rate || 0}% (${summary.wins || 0}W/${summary.losses || 0}L)`, '#ffaa00');
+    es('botAvgReturn', `${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}%`, retColor);
+}
+
 function initBotFilters(filters) {
-    // Populate channel dropdown
     const channelSelect = document.getElementById('bot-filter-channel');
     if (channelSelect && filters.channels) {
         channelSelect.innerHTML = '<option value="">All Channels</option>';
@@ -2448,7 +2512,6 @@ function initBotFilters(filters) {
         });
     }
     
-    // Populate broker dropdown
     const brokerSelect = document.getElementById('bot-filter-broker');
     if (brokerSelect && filters.brokers) {
         brokerSelect.innerHTML = '<option value="">All Brokers</option>';
@@ -2461,112 +2524,196 @@ function initBotFilters(filters) {
     }
 }
 
-function renderBotTradesTable(trades) {
-    let html = `
-        <table class="data-table" style="width: 100%;">
-            <thead>
-                <tr>
-                    <th style="min-width: 140px;">Channel</th>
-                    <th>Symbol</th>
-                    <th>Strike</th>
-                    <th>Expiry</th>
-                    <th>Direction</th>
-                    <th>Qty</th>
-                    <th>Entry</th>
-                    <th>Current</th>
-                    <th>P&L</th>
-                    <th>Broker</th>
-                    <th>Status</th>
-                    <th>Time</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    trades.forEach(trade => {
-        const pnl = parseFloat(trade.pnl) || 0;
-        const pnlPercent = parseFloat(trade.pnl_percent) || 0;
-        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+function getBotBrokerBadge(broker) {
+    const colors = {
+        'WEBULL': 'linear-gradient(135deg, #ff6b00, #ff9500)',
+        'WEBULL_PAPER': 'linear-gradient(135deg, #ff8c00, #ffb347)',
+        'ALPACA_PAPER': 'linear-gradient(135deg, #00c853, #00e676)',
+        'ALPACA': 'linear-gradient(135deg, #00c853, #00e676)',
+        'ROBINHOOD': 'linear-gradient(135deg, #00c805, #21ce99)',
+        'SCHWAB': 'linear-gradient(135deg, #0070c9, #00a0dc)',
+        'IBKR': 'linear-gradient(135deg, #d41f2c, #ff4444)',
+        'IBKR_PAPER': 'linear-gradient(135deg, #d41f2c, #ff4444)',
+        'TASTYTRADE': 'linear-gradient(135deg, #e91e63, #ff5722)'
+    };
+    const bg = colors[broker] || 'linear-gradient(135deg, #555, #777)';
+    return `<span style="background: ${bg}; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${broker}</span>`;
+}
+
+function renderBotPositionCards(positions) {
+    return positions.map((pos, index) => {
+        const pnl = pos.total_pnl || 0;
+        const pnlPct = pos.avg_pnl_percent || 0;
+        const borderColor = pnl > 0 ? '#00ff88' : (pnl < 0 ? '#ff3b30' : '#3A3A3C');
+        const pnlColor = pnl > 0 ? '#00ff88' : (pnl < 0 ? '#ff3b30' : '#ffaa00');
         const pnlSign = pnl >= 0 ? '+' : '';
         
-        const directionBadge = (trade.direction === 'BTO' || trade.action === 'BUY') 
-            ? '<span class="badge badge-success">BTO</span>'
-            : '<span class="badge badge-error">STC</span>';
+        const statusStyles = {
+            'OPEN': 'background: #00d4ff; color: #000;',
+            'PARTIAL': 'background: #ffaa00; color: #000;',
+            'CLOSED': 'background: #00ff88; color: #000;',
+            'PENDING': 'background: #fbbf24; color: #000;'
+        };
+        const statusStyle = statusStyles[pos.status] || statusStyles['PENDING'];
         
-        const statusBadge = getStatusBadge(trade.status);
-        const brokerBadge = getBrokerBadge(trade.broker);
-        
-        const strikeDisplay = trade.strike ? `$${trade.strike}${trade.call_put || ''}` : '-';
-        const expiryDisplay = trade.expiry || '-';
-        const entryPrice = parseFloat(trade.price) || 0;
-        const currentPrice = parseFloat(trade.current_price) || entryPrice;
-        
-        // Format time in EST (timestamps are stored in UTC)
-        let timeDisplay = '-';
-        if (trade.executed_at) {
-            // Ensure timestamp is treated as UTC by appending 'Z' if missing
-            let ts = trade.executed_at;
-            if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
-                ts = ts.replace(' ', 'T') + 'Z';
-            }
-            const d = new Date(ts);
-            timeDisplay = d.toLocaleString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                hour: '2-digit', 
-                minute: '2-digit',
-                timeZone: 'America/New_York'
-            });
+        let closuresHtml = '';
+        if (pos.closures && pos.closures.length > 0) {
+            const closureRows = pos.closures.map((c, ci) => {
+                const cPnlColor = c.pnl > 0 ? '#00ff88' : (c.pnl < 0 ? '#ff3b30' : '#ffaa00');
+                const cSign = c.pnl >= 0 ? '+' : '';
+                const reason = c.exit_reason || 'SIGNAL';
+                const reasonColor = reason.includes('PT') ? '#30D158' : 
+                                   (reason.includes('STOP') || reason.includes('SL') ? '#FF453A' : 
+                                   (reason.includes('TRAIL') ? '#FF9F0A' : '#8E8E93'));
+                return `
+                    <div style="display: grid; grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #2C2C2E; align-items: center; font-size: 14px;">
+                        <div><span style="background: #ff9500; color: #000; padding: 4px 12px; border-radius: 6px; font-weight: 700; font-size: 12px;">STC #${ci + 1}</span></div>
+                        <div style="color: #fff;">Qty: <strong>${c.stc_qty}</strong></div>
+                        <div style="color: #fff;">Exit: <strong>$${c.exit_price.toFixed(2)}</strong></div>
+                        <div style="color: ${cPnlColor}; font-weight: 600;">${cSign}$${c.pnl.toFixed(2)}</div>
+                        <div style="color: ${cPnlColor}; font-weight: 600;">${cSign}${c.pnl_percent.toFixed(1)}%</div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${reason}</span>
+                            <span style="color: #636366; font-size: 12px;">${formatBotTime(c.closed_at)}</span>
+                        </div>
+                    </div>`;
+            }).join('');
+            
+            closuresHtml = `
+                <div style="padding: 12px 20px; background: #2C2C2E; font-weight: 700; font-size: 13px; color: #8E8E93; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;">
+                    <span>Closures (${pos.closures.length})</span>
+                    <span style="font-size: 11px; color: #636366; font-weight: 400;">Entry: $${pos.entry_price.toFixed(2)}</span>
+                </div>
+                ${closureRows}
+                <div style="background: #3A3A3C; padding: 12px 20px; display: grid; grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr; gap: 12px; align-items: center; font-weight: 700; font-size: 14px; border-top: 2px solid #00d4ff;">
+                    <div style="color: #00d4ff;">TOTAL</div>
+                    <div></div>
+                    <div></div>
+                    <div style="color: ${pnlColor};">${pnlSign}$${pnl.toFixed(2)}</div>
+                    <div style="color: ${pnlColor};">${pnlSign}${pnlPct.toFixed(1)}%</div>
+                    <div style="color: #fff;">Closed: ${pos.total_closed_qty}/${pos.bto_qty}</div>
+                </div>`;
         }
         
-        html += `
-            <tr>
-                <td>
-                    <span class="channel-badge" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; padding: 4px 10px; border-radius: 6px; font-weight: 500; display: inline-block;">
-                        #${trade.channel_name}
-                    </span>
-                </td>
-                <td><strong style="color: var(--text-primary);">${trade.symbol}</strong></td>
-                <td>${strikeDisplay}</td>
-                <td style="color: var(--text-secondary);">${expiryDisplay}</td>
-                <td>${directionBadge}</td>
-                <td>${trade.qty}</td>
-                <td>$${entryPrice.toFixed(2)}</td>
-                <td>$${currentPrice.toFixed(2)}</td>
-                <td class="${pnlClass}" style="font-weight: 600;">${pnlSign}$${pnl.toFixed(2)} (${pnlSign}${pnlPercent.toFixed(1)}%)</td>
-                <td>${brokerBadge}</td>
-                <td>${statusBadge}</td>
-                <td style="color: var(--text-muted); font-size: 0.85rem;">${timeDisplay}</td>
-            </tr>
-        `;
-    });
+        let detailHtml = `
+            <div style="padding: 16px 20px; background: #2C2C2E; font-weight: 700; font-size: 13px; color: #8E8E93; text-transform: uppercase;">
+                Position Details
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 16px 20px; font-size: 14px;">
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Opened</div>
+                    <div style="color: #fff; font-weight: 600;">${formatBotFullTime(pos.open_time)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Closed</div>
+                    <div style="color: #fff; font-weight: 600;">${pos.closed_time ? formatBotFullTime(pos.closed_time) : (pos.status === 'OPEN' ? 'Still Open' : '-')}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Duration</div>
+                    <div style="color: #fff; font-weight: 600;">${calcDuration(pos.open_time, pos.closed_time)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Entry Price</div>
+                    <div style="color: #fff; font-weight: 600;">$${pos.entry_price.toFixed(2)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Current / Exit</div>
+                    <div style="color: #fff; font-weight: 600;">$${pos.current_price.toFixed(2)}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Asset Type</div>
+                    <div style="color: #fff; font-weight: 600;">${pos.asset_type === 'option' ? 'Options' : 'Stock'}</div>
+                </div>
+                ${pos.stop_loss ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Stop Loss</div>
+                    <div style="color: #ff3b30; font-weight: 600;">$${parseFloat(pos.stop_loss).toFixed(2)}</div>
+                </div>` : ''}
+                ${pos.profit_target ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Profit Target</div>
+                    <div style="color: #00ff88; font-weight: 600;">$${parseFloat(pos.profit_target).toFixed(2)}</div>
+                </div>` : ''}
+            </div>`;
+        
+        return `
+            <div style="background: #2C2C2E; border-radius: 12px; margin-bottom: 12px; overflow: hidden; border-left: 4px solid ${borderColor}; transition: all 0.3s ease;">
+                <div onclick="toggleBotDetail(${index})" style="padding: 16px 20px; cursor: pointer; display: grid; grid-template-columns: 2fr 0.8fr 1fr 0.8fr 1.2fr 1fr 0.8fr auto; gap: 12px; align-items: center; transition: background 0.2s;" onmouseover="this.style.background='#3A3A3C'" onmouseout="this.style.background='transparent'">
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Position</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">${pos.description}</div>
+                        <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                            <span style="background: rgba(99, 102, 241, 0.2); color: #818cf8; padding: 3px 8px; border-radius: 5px; font-weight: 600; font-size: 11px;">#${pos.channel_name}</span>
+                            ${getBotBrokerBadge(pos.broker)}
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Qty</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">${pos.bto_qty}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Entry</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">$${pos.entry_price.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Closed</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #fff;">${pos.total_closed_qty} / ${pos.bto_qty}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">P&L</div>
+                        <div style="font-size: 15px; font-weight: 600; color: ${pnlColor};">${pnlSign}$${pnl.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: #8E8E93; font-weight: 500; text-transform: uppercase; margin-bottom: 4px;">Return</div>
+                        <div style="font-size: 15px; font-weight: 600; color: ${pnlColor};">${pnlSign}${pnlPct.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                        <span style="${statusStyle} padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 11px; text-transform: uppercase;">${pos.status}</span>
+                    </div>
+                    <div>
+                        <span id="bot-expand-${index}" style="font-size: 18px; color: #8E8E93; transition: transform 0.3s; display: inline-block;">&#9654;</span>
+                    </div>
+                </div>
+                
+                <div id="bot-detail-${index}" style="display: none; background: #1C1C1E; border-top: 1px solid #3A3A3C;">
+                    ${detailHtml}
+                    ${closuresHtml}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function calcDuration(openTime, closeTime) {
+    if (!openTime) return '-';
+    let t1 = openTime;
+    if (!t1.endsWith('Z') && !t1.includes('+') && !t1.includes('-', 10)) t1 = t1.replace(' ', 'T') + 'Z';
+    const start = new Date(t1);
     
-    html += '</tbody></table>';
-    return html;
+    let end;
+    if (closeTime) {
+        let t2 = closeTime;
+        if (!t2.endsWith('Z') && !t2.includes('+') && !t2.includes('-', 10)) t2 = t2.replace(' ', 'T') + 'Z';
+        end = new Date(t2);
+    } else {
+        end = new Date();
+    }
+    
+    const diffMs = end - start;
+    const mins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${mins % 60}m`;
+    return `${mins}m`;
 }
 
-function getStatusBadge(status) {
-    const statusColors = {
-        'OPEN': 'background: rgba(34, 197, 94, 0.2); color: #22c55e;',
-        'CLOSED': 'background: rgba(156, 163, 175, 0.2); color: #9ca3af;',
-        'PENDING': 'background: rgba(251, 191, 36, 0.2); color: #fbbf24;',
-        'CANCELLED': 'background: rgba(239, 68, 68, 0.2); color: #ef4444;'
-    };
-    const style = statusColors[status] || statusColors['PENDING'];
-    return `<span class="badge" style="${style} padding: 3px 8px; border-radius: 4px; font-size: 0.75rem;">${status}</span>`;
-}
-
-function getBrokerBadge(broker) {
-    const brokerColors = {
-        'WEBULL': 'background: rgba(59, 130, 246, 0.2); color: #3b82f6;',
-        'WEBULL_PAPER': 'background: rgba(59, 130, 246, 0.15); color: #93c5fd;',
-        'ALPACA': 'background: rgba(245, 158, 11, 0.2); color: #f59e0b;',
-        'ALPACA_PAPER': 'background: rgba(245, 158, 11, 0.15); color: #fcd34d;',
-        'IBKR': 'background: rgba(168, 85, 247, 0.2); color: #a855f7;',
-        'IBKR_PAPER': 'background: rgba(168, 85, 247, 0.15); color: #c4b5fd;'
-    };
-    const style = brokerColors[broker] || 'background: rgba(156, 163, 175, 0.2); color: #9ca3af;';
-    return `<span class="badge" style="${style} padding: 3px 8px; border-radius: 4px; font-size: 0.75rem;">${broker}</span>`;
+function toggleBotDetail(index) {
+    const detail = document.getElementById(`bot-detail-${index}`);
+    const icon = document.getElementById(`bot-expand-${index}`);
+    if (!detail) return;
+    
+    const isExpanded = detail.style.display !== 'none';
+    detail.style.display = isExpanded ? 'none' : 'block';
+    if (icon) icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
 function debounceBotSearch() {
