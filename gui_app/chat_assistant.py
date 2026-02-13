@@ -657,13 +657,13 @@ This ensures accurate P&L regardless of multiple entries."""
     
     "signal_formats": {
         "keywords": ["signal format", "format learning", "teach format", "custom signal", "learn signal", "ai format", "parse signal"],
-        "title": "AI-Powered Signal Format Learning",
-        "content": """BotifyTrades can learn new signal formats using AI - pay once to teach, use forever!
+        "title": "Signal Format Learning",
+        "content": """BotifyTrades can learn new signal formats - no AI required! AI is optional for enhanced detection.
 
 **How It Works:**
 1. You show me an example signal via the chatbot
-2. AI analyzes it ONCE to understand the structure
-3. I save the pattern for instant future parsing (no more AI costs!)
+2. I analyze it using built-in rules (or AI if enabled) to understand the structure
+3. I save the pattern for instant future parsing!
 
 **Teaching a New Format:**
 Say something like:
@@ -874,71 +874,249 @@ def handle_format_commands(query: str) -> Optional[Dict]:
     return None
 
 
+def _parse_signal_rule_based(signal_text: str) -> Optional[Dict]:
+    """Parse a trading signal using rule-based patterns (no AI needed).
+    
+    Detects: action, symbol, strike, expiry, option type, entry price, SL, PT,
+    conditional triggers (over/under), and role mentions.
+    """
+    import re
+    text = signal_text.strip()
+    text_upper = text.upper()
+    
+    parsed = {}
+    
+    role_match = re.search(r'<@&\d+>', text)
+    if role_match:
+        parsed['has_role_mention'] = True
+    
+    action_match = re.search(r'\b(BTO|STC|BUY|SELL|BUYING|SELLING|LONG|SHORT|BOUGHT|SOLD)\b', text_upper)
+    if action_match:
+        action_map = {
+            'BTO': 'BTO', 'BUY': 'BTO', 'BUYING': 'BTO', 'LONG': 'BTO', 'BOUGHT': 'BTO',
+            'STC': 'STC', 'SELL': 'STC', 'SELLING': 'STC', 'SHORT': 'STC', 'SOLD': 'STC'
+        }
+        parsed['action'] = action_map.get(action_match.group(1), 'BTO')
+    
+    option_match = re.search(
+        r'\$?([A-Z]{1,5})\s+\$?(\d{1,4}(?:\.\d{1,2})?)\s*([CcPp])\s*(?:(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?)?',
+        text_upper
+    )
+    if option_match:
+        parsed['symbol'] = option_match.group(1)
+        parsed['strike'] = float(option_match.group(2))
+        parsed['option_type'] = 'C' if option_match.group(3).upper() == 'C' else 'P'
+        parsed['is_option'] = True
+        parsed['asset_type'] = 'option'
+        if option_match.group(4) and option_match.group(5):
+            month = option_match.group(4)
+            day = option_match.group(5)
+            year = option_match.group(6) if option_match.group(6) else str(datetime.now().year)
+            if len(year) == 2:
+                year = '20' + year
+            parsed['expiration'] = f"{month}/{day}/{year}"
+    
+    if 'symbol' not in parsed:
+        sym_match = re.search(r'(?:^|\s)\$?([A-Z]{1,5})(?:\s|$)', text_upper)
+        if sym_match and sym_match.group(1) not in ('BTO', 'STC', 'BUY', 'SELL', 'SL', 'PT', 'TP', 'TRIM', 'EXIT', 'OUT', 'OVER', 'UNDER', 'ABOVE', 'BELOW', 'THE', 'FOR', 'AND', 'ALL'):
+            parsed['symbol'] = sym_match.group(1)
+            parsed['is_option'] = False
+            parsed['asset_type'] = 'stock'
+    
+    price_match = re.search(r'[@]\s*\$?([\d.]+)', text)
+    if price_match:
+        parsed['entry_price'] = float(price_match.group(1))
+    elif not price_match:
+        price_match2 = re.search(r'(?:entry|price|at|@)\s*[:=]?\s*\$?([\d.]+)', text, re.IGNORECASE)
+        if price_match2:
+            parsed['entry_price'] = float(price_match2.group(1))
+    
+    cond_match = re.search(r'(?:over|above|ocer|ober|ovwe|ovre|ovr|abve|abov)\s+\$?([\d.]+)', text, re.IGNORECASE)
+    if cond_match:
+        parsed['conditional_trigger'] = float(cond_match.group(1))
+        parsed['trigger_direction'] = 'above'
+        if 'action' not in parsed:
+            parsed['action'] = 'BTO'
+    
+    cond_under = re.search(r'(?:under|below)\s+\$?([\d.]+)', text, re.IGNORECASE)
+    if cond_under and not cond_match:
+        parsed['conditional_trigger'] = float(cond_under.group(1))
+        parsed['trigger_direction'] = 'below'
+    
+    sl_match = re.search(r'(?:SL|stop\s*loss|stop)\s*[:=]?\s*\$?([\d.]+)(%)?', text, re.IGNORECASE)
+    if sl_match:
+        if sl_match.group(2):
+            parsed['stop_loss_pct'] = float(sl_match.group(1))
+        else:
+            parsed['stop_loss'] = float(sl_match.group(1))
+    
+    pt_matches = re.findall(r'(?:PT|TP|target|profit)\s*\d?\s*[:=]?\s*\$?([\d.]+)', text, re.IGNORECASE)
+    if pt_matches:
+        parsed['profit_targets'] = [float(p) for p in pt_matches]
+    
+    trim_match = re.search(r'\b(TRIM|EXIT|OUT|CLOSE|SOLD|TAKING\s+PROFIT)\b', text_upper)
+    if trim_match and 'action' not in parsed:
+        parsed['action'] = 'STC'
+    
+    return parsed if parsed.get('symbol') else None
+
+
+def _build_regex_from_signal(signal_text: str, parsed: Dict) -> str:
+    """Build a regex pattern from a signal example and its parsed fields."""
+    import re
+    pattern = re.escape(signal_text)
+    
+    if parsed.get('symbol'):
+        pattern = pattern.replace(re.escape(parsed['symbol']), r'([A-Z]{1,5})')
+    
+    for field in ['entry_price', 'conditional_trigger', 'stop_loss', 'strike']:
+        val = parsed.get(field)
+        if val is not None:
+            val_str = str(val)
+            if val_str.endswith('.0'):
+                val_str = val_str[:-2]
+            pattern = pattern.replace(re.escape(val_str), r'([\d.]+)', 1)
+    
+    if parsed.get('stop_loss_pct') is not None:
+        val_str = str(parsed['stop_loss_pct'])
+        if val_str.endswith('.0'):
+            val_str = val_str[:-2]
+        pattern = pattern.replace(re.escape(val_str), r'(\d+)', 1)
+    
+    pattern = pattern.replace(re.escape('<@&') + r'\d+' + re.escape('>'), r'<@&\d+>')
+    
+    role_fix = re.sub(r'<@\\&(\d+)>', r'<@&\\d+>', pattern)
+    if role_fix != pattern:
+        pattern = role_fix
+    
+    return pattern
+
+
 def teach_new_format(signal_example: str) -> Dict:
-    """Teach the bot a new signal format using AI."""
+    """Teach the bot a new signal format - works without AI using rule-based parsing.
+    Falls back to AI for enhanced analysis if available."""
     try:
-        from .format_trainer import FormatTrainer
-        trainer = FormatTrainer()
+        parsed = _parse_signal_rule_based(signal_example)
         
-        if not trainer.is_ai_available():
+        ai_result = None
+        try:
+            from .format_trainer import FormatTrainer
+            trainer = FormatTrainer()
+            if trainer.is_ai_available():
+                ai_result = trainer.learn_format_from_example(signal_example)
+                if ai_result and ai_result.get('success'):
+                    parsed_ai = ai_result.get('parsed_fields', {})
+                    if parsed_ai.get('symbol'):
+                        if parsed is None:
+                            parsed = {}
+                        for key, val in parsed_ai.items():
+                            if val is not None and key not in parsed:
+                                parsed[key] = val
+        except Exception as e:
+            print(f"[CHAT] AI enhancement skipped: {e}")
+        
+        if not parsed or not parsed.get('symbol'):
             return {
                 "success": True,
-                "response": "**AI Not Available**\n\nTo teach new signal formats, I need access to AI. This feature uses Replit AI Integrations (billed to your Replit credits) or you can configure your own OpenAI API key in Settings.\n\nWithout AI, I can still parse signals using built-in patterns.",
+                "response": "**Could Not Parse Signal**\n\nI couldn't identify a trading signal in your example. Make sure it contains at least:\n- A ticker symbol (e.g., SPY, AAPL)\n- An action or trigger (e.g., BTO, over $150)\n\n**Example formats I can learn:**\n- `BTO SPY 600C 12/20 @ 1.50`\n- `AAPL over 150 SL 145`\n- `<@&role> TSLA 250C 1/15 @ 3.20`\n\nTry again with a clearer signal.",
                 "topic": "format_teaching"
             }
         
-        # Learn the format
-        result = trainer.learn_format_from_example(signal_example)
+        action = parsed.get('action', 'BTO')
+        symbol = parsed.get('symbol', 'Unknown')
+        asset_type = parsed.get('asset_type', 'option' if parsed.get('is_option') else 'stock')
         
-        if not result.get('success'):
-            return {
-                "success": True,
-                "response": f"**Learning Failed**\n\nI couldn't learn that format: {result.get('error', 'Unknown error')}\n\nPlease try again with a different example.",
-                "topic": "format_teaching"
-            }
+        if ai_result and ai_result.get('success'):
+            format_name = ai_result.get('format_name', f"Custom {symbol} Format")
+            description = ai_result.get('description', f"Learned from example: {signal_example[:50]}")
+            regex_pattern = ai_result.get('suggested_regex') or _build_regex_from_signal(signal_example, parsed)
+            confidence = ai_result.get('confidence', 0.85)
+            used_ai = True
+        else:
+            format_name = f"Custom {asset_type.title()} Format"
+            if parsed.get('conditional_trigger'):
+                format_name = f"Conditional {parsed.get('trigger_direction', 'above').title()} Entry"
+            elif parsed.get('is_option'):
+                format_name = f"Options {action} Format"
+            description = f"Learned from example: {signal_example[:80]}"
+            regex_pattern = _build_regex_from_signal(signal_example, parsed)
+            confidence = 0.75
+            used_ai = False
         
-        # Save to database
         from . import database as db
+        
+        field_mappings = {
+            'action': action,
+            'asset_type': asset_type,
+            'has_sl': 'stop_loss' in parsed or 'stop_loss_pct' in parsed,
+            'has_pt': 'profit_targets' in parsed,
+            'has_conditional': 'conditional_trigger' in parsed,
+            'is_option': parsed.get('is_option', False),
+        }
+        
         format_id = db.save_signal_format(
-            name=result.get('format_name', 'Custom Format'),
-            description=result.get('description', ''),
+            name=format_name,
+            description=description,
             example_signal=signal_example,
-            parsed_fields=result.get('parsed_fields', {}),
-            field_mappings=result.get('field_mappings', {}),
-            regex_pattern=result.get('suggested_regex')
+            parsed_fields=parsed,
+            field_mappings=field_mappings,
+            regex_pattern=regex_pattern
         )
         
-        parsed = result.get('parsed_fields', {})
-        action = parsed.get('action', 'Unknown')
-        symbol = parsed.get('symbol', 'Unknown')
+        if regex_pattern:
+            pattern_id = db.add_learned_pattern(
+                name=format_name,
+                pattern=regex_pattern,
+                example_text=signal_example,
+                action=action,
+                asset_type=asset_type,
+                description=description
+            )
+            if pattern_id:
+                db.approve_learned_pattern(pattern_id, 'chatbot_teach')
+                print(f"[CHAT] Auto-approved learned pattern #{pattern_id}: {format_name}")
         
-        response_text = f"""**Format Learned Successfully!** 
-
-**Name:** {result.get('format_name', 'Custom Format')}
-**Confidence:** {result.get('confidence', 0.8)*100:.0f}%
-
-**Parsed from your example:**
-- Action: {action}
-- Symbol: {symbol}"""
+        response_text = f"**Format Learned Successfully!**\n\n"
+        response_text += f"**Name:** {format_name}\n"
+        response_text += f"**Method:** {'AI-Enhanced' if used_ai else 'Rule-Based'} Analysis\n"
+        response_text += f"**Confidence:** {confidence*100:.0f}%\n\n"
+        response_text += f"**Parsed from your example:**\n"
+        response_text += f"- Action: {action}\n"
+        response_text += f"- Symbol: {symbol}\n"
+        response_text += f"- Type: {asset_type.title()}\n"
         
         if parsed.get('entry_price'):
-            response_text += f"\n- Entry: ${parsed.get('entry_price')}"
+            response_text += f"- Entry: ${parsed['entry_price']}\n"
+        if parsed.get('conditional_trigger'):
+            response_text += f"- Trigger: {parsed.get('trigger_direction', 'above')} ${parsed['conditional_trigger']}\n"
         if parsed.get('is_option'):
-            response_text += f"\n- Strike: ${parsed.get('strike')}"
-            response_text += f"\n- Type: {'Call' if parsed.get('option_type') == 'C' else 'Put'}"
+            response_text += f"- Strike: ${parsed.get('strike')}\n"
+            response_text += f"- Type: {'Call' if parsed.get('option_type') == 'C' else 'Put'}\n"
+            if parsed.get('expiration'):
+                response_text += f"- Expiry: {parsed['expiration']}\n"
+        if parsed.get('stop_loss'):
+            response_text += f"- Stop Loss: ${parsed['stop_loss']}\n"
+        elif parsed.get('stop_loss_pct'):
+            response_text += f"- Stop Loss: {parsed['stop_loss_pct']}%\n"
+        if parsed.get('profit_targets'):
+            response_text += f"- Profit Targets: {', '.join('$' + str(p) for p in parsed['profit_targets'])}\n"
         
-        response_text += "\n\nThis format will now be automatically recognized for future signals!"
+        response_text += "\nThis format will now be automatically recognized for future signals!"
+        if not used_ai:
+            response_text += "\n\n*Tip: Enable AI in Settings for even better format detection.*"
         
         return {
             "success": True,
             "response": response_text,
             "topic": "format_teaching",
             "format_id": format_id,
-            "ai_powered": True
+            "ai_powered": used_ai
         }
         
     except Exception as e:
         print(f"[CHAT] Error teaching format: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "success": True,
             "response": f"**Error**\n\nSomething went wrong while learning the format: {str(e)}",
