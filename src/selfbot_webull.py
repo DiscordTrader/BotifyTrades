@@ -2797,9 +2797,10 @@ class WebullBroker:
             print(f"[PAPER TRADE] Placing {action} {qty} {symbol} {strike}{opt_type} {expiry_mmdd} @{limit_price} on Webull PAPER account")
         
         # Price slippage protection for BTO orders (reload settings from database in real-time)
-        # Uses channel-specific settings if available, otherwise falls back to global
+        # SKIP slippage check for market orders - user explicitly wants fast fills
+        _is_market_entry = limit_price is None
         _current_slippage_settings = get_effective_slippage_settings(channel_id)  # Channel or global settings
-        if _current_slippage_settings['enabled'] and action.upper() in ('BTO', 'BTC'):
+        if _current_slippage_settings['enabled'] and action.upper() in ('BTO', 'BTC') and not _is_market_entry:
             source_label = _current_slippage_settings.get('source', 'global').upper()
             print(f"[SLIPPAGE] Checking price slippage for {action} {symbol} ${strike}{opt_type} {expiry_mmdd}")
             print(f"[SLIPPAGE] Current threshold: {_current_slippage_settings['threshold_percent']}% (from {source_label})")
@@ -2867,33 +2868,43 @@ class WebullBroker:
             
             # Handle market orders EARLY - get quote before any calculations that need price
             effective_price = limit_price
-            if effective_price is None:
-                print(f"[WEBULL] Market order detected - fetching current option quote...", flush=True)
+            is_market_mode = effective_price is None
+            if is_market_mode:
+                print(f"[WEBULL] ⚡ MARKET ORDER mode - fetching current option quote for aggressive pricing...", flush=True)
                 try:
                     quote_data = wb.get_option_quote(stock=symbol, optionId=option_id)
                     print(f"[WEBULL] Quote data received: {type(quote_data)}", flush=True)
                     if quote_data:
-                        # Use ask price for BUY, bid price for SELL
                         if side == 'BUY':
                             ask_list = quote_data.get('askList', [])
                             if ask_list and len(ask_list) > 0:
-                                effective_price = float(ask_list[0].get('price', 0))
+                                raw_ask = float(ask_list[0].get('price', 0))
                             else:
-                                effective_price = float(quote_data.get('askPrice', 0) or 0)
+                                raw_ask = float(quote_data.get('askPrice', 0) or 0)
+                            if raw_ask and raw_ask > 0:
+                                effective_price = round(raw_ask * 1.02, 2)
+                                print(f"[WEBULL] ⚡ MARKET BUY: ask=${raw_ask} → limit=${effective_price} (+2% buffer for fast fill)", flush=True)
+                            else:
+                                effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
+                                if effective_price and effective_price > 0:
+                                    effective_price = round(effective_price * 1.03, 2)
+                                    print(f"[WEBULL] ⚡ MARKET BUY: using last=${effective_price} (+3% buffer)", flush=True)
                         else:
                             bid_list = quote_data.get('bidList', [])
                             if bid_list and len(bid_list) > 0:
-                                effective_price = float(bid_list[0].get('price', 0))
+                                raw_bid = float(bid_list[0].get('price', 0))
                             else:
-                                effective_price = float(quote_data.get('bidPrice', 0) or 0)
-                        
-                        if effective_price and effective_price > 0:
-                            print(f"[WEBULL] Using market price: ${effective_price}", flush=True)
-                        else:
-                            # Fallback to close/last price
-                            effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
-                            if effective_price and effective_price > 0:
-                                print(f"[WEBULL] Using last/close price: ${effective_price}", flush=True)
+                                raw_bid = float(quote_data.get('bidPrice', 0) or 0)
+                            if raw_bid and raw_bid > 0:
+                                effective_price = round(raw_bid * 0.98, 2)
+                                effective_price = max(0.01, effective_price)
+                                print(f"[WEBULL] ⚡ MARKET SELL: bid=${raw_bid} → limit=${effective_price} (-2% buffer for fast fill)", flush=True)
+                            else:
+                                effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
+                                if effective_price and effective_price > 0:
+                                    effective_price = round(effective_price * 0.97, 2)
+                                    effective_price = max(0.01, effective_price)
+                                    print(f"[WEBULL] ⚡ MARKET SELL: using last=${effective_price} (-3% buffer)", flush=True)
                     else:
                         print(f"[WEBULL] No quote data returned", flush=True)
                 except Exception as quote_err:
@@ -3052,7 +3063,8 @@ class WebullBroker:
                 'orders': [{'quantity': int(adjusted_qty), 'action': side, 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
                 'lmtPrice': float(effective_price)
             }
-            print(f"[{self.name}] Placing option order via direct API: {api_payload}")
+            order_mode_label = "MARKET-MODE (aggressive limit)" if is_market_mode else "LIMIT"
+            print(f"[{self.name}] Placing {order_mode_label} option order via direct API: {api_payload}")
             
             try:
                 api_url = wb._urls.place_option_orders(wb._account_id)
