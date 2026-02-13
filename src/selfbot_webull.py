@@ -10741,9 +10741,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             opt['qty'] = 1
                             print(f"[POSITION SIZE] ✓ Fallback to 1 contract (no price available)")
                     else:
-                        # Max position size disabled and no global default - fallback to 1
                         opt['qty'] = 1
                         print(f"[POSITION SIZE] ⚠️ Max position size disabled, no global default set - using 1 contract")
+                
+                # GLOBAL MAX_POSITION_SIZE CAP: Final safety check after all qty determination
+                # If total position value exceeds global max_position_size, reduce qty to fit
+                if not opt.get('_blocked_by_max_position') and not opt.get('_calculate_qty'):
+                    _current_trading_settings = get_trading_settings()
+                    max_position_size_enabled = _current_trading_settings.get('max_position_size_enabled', True)
+                    if max_position_size_enabled:
+                        max_position_size = _current_trading_settings['max_position_size']
+                        price = opt.get('price')
+                        final_qty = opt.get('qty', 1)
+                        if price and price > 0 and final_qty > 0:
+                            if opt.get('asset') == 'option':
+                                cost_per_unit = price * 100
+                            else:
+                                cost_per_unit = price
+                            total_cost = cost_per_unit * final_qty
+                            if total_cost > max_position_size:
+                                adjusted_qty = max(1, int(max_position_size / cost_per_unit))
+                                if adjusted_qty < final_qty:
+                                    print(f"[POSITION SIZE] ⚠️ GLOBAL CAP: {final_qty} units (${total_cost:.0f}) exceeds MAX_POSITION_SIZE (${max_position_size:.0f}) → reduced to {adjusted_qty} units (${cost_per_unit * adjusted_qty:.0f})")
+                                    opt['qty'] = adjusted_qty
             
             # PROPORTIONAL EXIT FOR STC: Calculate proportional exit qty based on trader's exit percentage
             # This ensures we exit the same PERCENTAGE of our position as the trader does
@@ -11466,9 +11486,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             stk['qty'] = 1
                             print(f"[DEFAULT QTY] ✓ Fallback to 1 share (no price available)")
                     else:
-                        # Max position size disabled and no global default - fallback to 1
                         stk['qty'] = 1
                         print(f"[DEFAULT QTY] ⚠️ Max position size disabled, no global default set - using 1 share")
+                
+                # GLOBAL MAX_POSITION_SIZE CAP for stocks: Final safety check
+                if not stk.get('_calculate_qty'):
+                    _current_trading_settings = get_trading_settings()
+                    max_position_size_enabled = _current_trading_settings.get('max_position_size_enabled', True)
+                    if max_position_size_enabled:
+                        max_position_size = _current_trading_settings['max_position_size']
+                        price = stk.get('price')
+                        final_qty = stk.get('qty', 1)
+                        if price and price > 0 and final_qty > 0:
+                            total_cost = price * final_qty
+                            if total_cost > max_position_size:
+                                adjusted_qty = max(1, int(max_position_size / price))
+                                if adjusted_qty < final_qty:
+                                    print(f"[POSITION SIZE] ⚠️ GLOBAL CAP: {final_qty} shares (${total_cost:.0f}) exceeds MAX_POSITION_SIZE (${max_position_size:.0f}) → reduced to {adjusted_qty} shares (${price * adjusted_qty:.0f})")
+                                    stk['qty'] = adjusted_qty
             
             # For signals with _calculate_qty=True (like Jacob format), set placeholder qty
             # The actual qty will be calculated at execution time based on buying power

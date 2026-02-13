@@ -710,6 +710,7 @@ def init_db():
             order_id TEXT,
             stop_loss_price REAL,
             profit_target_price REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (channel_id) REFERENCES channels(id)
         )
     ''')
@@ -777,6 +778,16 @@ def init_db():
         cursor.execute("ALTER TABLE trades ADD COLUMN close_reason TEXT")
         conn.commit()
         print("[DATABASE] ✓ Close reason tracking column added")
+    
+    # Migration: Add created_at column for trade ordering and lookups
+    try:
+        cursor.execute('SELECT created_at FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding created_at column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN created_at TIMESTAMP")
+        cursor.execute("UPDATE trades SET created_at = COALESCE(executed_at, datetime('now')) WHERE created_at IS NULL")
+        conn.commit()
+        print("[DATABASE] ✓ created_at column added (backfilled from executed_at)")
     
     # Migration: Fix trades with UNKNOWN broker - default to Webull
     cursor.execute("UPDATE trades SET broker = 'Webull' WHERE broker = 'UNKNOWN' OR broker IS NULL OR broker = ''")
@@ -2963,8 +2974,8 @@ def add_trade(signal_data: Dict) -> int:
             executed_price, executed_at, status, broker, order_id,
             stop_loss_price, profit_target_price, risk_trigger, origin_trade_id,
             user_id, source, pnl, pnl_percent, conditional_order_id, routing_mapping_id,
-            original_symbol, original_strike
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            original_symbol, original_strike, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         signal_data.get('channel_id'),
         signal_data.get('message_id'),
@@ -2992,7 +3003,8 @@ def add_trade(signal_data: Dict) -> int:
         signal_data.get('conditional_order_id'),
         signal_data.get('routing_mapping_id'),  # Signal routing discriminator
         signal_data.get('original_symbol'),  # NDX→QQQ conversion tracking
-        signal_data.get('original_strike')   # Original strike before conversion
+        signal_data.get('original_strike'),  # Original strike before conversion
+        datetime.now()  # created_at - always set explicitly for migrated DBs
     ))
     
     conn.commit()
