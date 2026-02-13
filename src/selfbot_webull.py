@@ -7347,6 +7347,13 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
         # Clean text of invisible unicode characters before parsing
         text = self.clean_signal_text(text)
         
+        # Exclude "Watching XXX over Y.Y" patterns - these are watchlist alerts, not trade signals
+        # Examples: "Watching JDZG over 2.20 for a scalp", "Watching TEAD over 0.70"
+        import re as _re
+        if _re.search(r'\bwatching\s+[A-Z]+\s+over\b', text, _re.IGNORECASE):
+            print(f"[ALERT PARSER] ⏭️ Skipping 'Watching' pattern - not a trade signal: {text[:80]}")
+            return None
+        
         alert_data = {
             'symbol': None,
             'entry_price': None,
@@ -7636,6 +7643,12 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                     return
                             except Exception as dedup_err:
                                 print(f"[DEDUP] ⚠️ Dedup check error (proceeding with execution): {dedup_err}")
+                            
+                            # Apply entry_order_mode from channel settings
+                            entry_order_mode = target_channel_info.get('entry_order_mode', 'limit') or 'limit'
+                            if entry_order_mode == 'market':
+                                signal['_use_market_order'] = True
+                                print(f"[ALERT PARSER] ✓ Market order enabled for BTO (channel entry_order_mode=market)")
                             
                             # Add directly to queue for execution
                             await self.order_queue.put(signal)
