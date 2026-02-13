@@ -2869,8 +2869,8 @@ class WebullBroker:
             # Handle market orders EARLY - get quote before any calculations that need price
             effective_price = limit_price
             is_market_mode = effective_price is None
-            market_buy_buffers = [0.03, 0.05, 0.08, 0.10]
-            market_sell_buffers = [0.02, 0.04, 0.06, 0.08]
+            market_buy_buffers = [0.01, 0.02, 0.03, 0.05]
+            market_sell_buffers = [0.01, 0.02, 0.03, 0.04]
             
             def _get_market_price(wb_client, sym, opt_id, order_side, buffer_pct):
                 try:
@@ -3103,7 +3103,7 @@ class WebullBroker:
                     buffers = market_buy_buffers if side == 'BUY' else market_sell_buffers
                     
                     for retry_idx in range(1, len(buffers)):
-                        _time.sleep(1.5)
+                        _time.sleep(0.8)
                         try:
                             orders_list = wb.get_current_orders() or []
                             order_status = None
@@ -3131,7 +3131,7 @@ class WebullBroker:
                             except Exception as cancel_err:
                                 print(f"[{self.name}] ⚠️ Cancel attempt: {cancel_err}", flush=True)
                             
-                            _time.sleep(0.3)
+                            _time.sleep(0.2)
                             new_price, _ = _get_market_price(wb, symbol, option_id, side, new_buffer)
                             if new_price and new_price > 0:
                                 effective_price = new_price
