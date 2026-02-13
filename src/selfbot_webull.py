@@ -2882,13 +2882,13 @@ class WebullBroker:
                             else:
                                 raw_ask = float(quote_data.get('askPrice', 0) or 0)
                             if raw_ask and raw_ask > 0:
-                                effective_price = round(raw_ask * 1.02, 2)
-                                print(f"[WEBULL] ⚡ MARKET BUY: ask=${raw_ask} → limit=${effective_price} (+2% buffer for fast fill)", flush=True)
+                                effective_price = round(raw_ask * 1.01, 2)
+                                print(f"[WEBULL] ⚡ MARKET BUY: ask=${raw_ask} → limit=${effective_price} (+1% buffer for fast fill)", flush=True)
                             else:
                                 effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
                                 if effective_price and effective_price > 0:
-                                    effective_price = round(effective_price * 1.03, 2)
-                                    print(f"[WEBULL] ⚡ MARKET BUY: using last=${effective_price} (+3% buffer)", flush=True)
+                                    effective_price = round(effective_price * 1.02, 2)
+                                    print(f"[WEBULL] ⚡ MARKET BUY: using last=${effective_price} (+2% buffer)", flush=True)
                         else:
                             bid_list = quote_data.get('bidList', [])
                             if bid_list and len(bid_list) > 0:
@@ -2896,15 +2896,15 @@ class WebullBroker:
                             else:
                                 raw_bid = float(quote_data.get('bidPrice', 0) or 0)
                             if raw_bid and raw_bid > 0:
-                                effective_price = round(raw_bid * 0.98, 2)
+                                effective_price = round(raw_bid * 0.99, 2)
                                 effective_price = max(0.01, effective_price)
-                                print(f"[WEBULL] ⚡ MARKET SELL: bid=${raw_bid} → limit=${effective_price} (-2% buffer for fast fill)", flush=True)
+                                print(f"[WEBULL] ⚡ MARKET SELL: bid=${raw_bid} → limit=${effective_price} (-1% buffer for fast fill)", flush=True)
                             else:
                                 effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
                                 if effective_price and effective_price > 0:
-                                    effective_price = round(effective_price * 0.97, 2)
+                                    effective_price = round(effective_price * 0.98, 2)
                                     effective_price = max(0.01, effective_price)
-                                    print(f"[WEBULL] ⚡ MARKET SELL: using last=${effective_price} (-3% buffer)", flush=True)
+                                    print(f"[WEBULL] ⚡ MARKET SELL: using last=${effective_price} (-2% buffer)", flush=True)
                     else:
                         print(f"[WEBULL] No quote data returned", flush=True)
                 except Exception as quote_err:
