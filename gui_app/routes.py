@@ -4710,10 +4710,19 @@ def register_routes(app):
                     if isinstance(account_info, dict) and account_info.get('code') == 'auth.token.expire':
                         print(f"[API] ❌ Webull auth failed - both access and refresh tokens are expired")
                         print(f"[API]    User must re-authenticate via Webull to get fresh tokens")
-                        # Mark broker as not authenticated
                         if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
                             _bot_instance.broker._tokens_valid = False
-                        return None  # Return None instead of fake $0.00 data
+                        try:
+                            from gui_app.broker_credentials_service import set_broker_status
+                            set_broker_status('webull_live', False, 'disconnected', error='Auth tokens expired - re-login required')
+                        except Exception:
+                            pass
+                        try:
+                            from gui_app.discord_notifier import notify_broker_disconnected
+                            notify_broker_disconnected('Webull', 'Auth tokens expired - re-login required')
+                        except Exception:
+                            pass
+                        return None
                     
                     # Log response structure for debugging
                     if isinstance(account_info, dict):
@@ -11771,16 +11780,20 @@ def register_routes(app):
                     try:
                         if hasattr(webull_broker, 'is_authenticated'):
                             webull_logged_in = webull_broker.is_authenticated()
-                        if not webull_logged_in:
-                            webull_logged_in = getattr(webull_broker, '_logged_in', False) or getattr(webull_broker, 'connected', False)
+                        else:
+                            webull_logged_in = getattr(webull_broker, '_logged_in', False)
                     except Exception:
-                        webull_logged_in = getattr(webull_broker, '_logged_in', False) or getattr(webull_broker, 'connected', False)
+                        webull_logged_in = getattr(webull_broker, '_logged_in', False)
+                    if not webull_logged_in and getattr(webull_broker, '_tokens_valid', True) is False:
+                        webull_logged_in = False
                 
                 if webull_logged_in:
                     set_broker_status('webull_live', True, 'connected')
                     status['webull_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
-                    status['webull_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                    error_msg = 'Auth tokens expired' if webull_broker and getattr(webull_broker, '_tokens_valid', True) is False else None
+                    set_broker_status('webull_live', False, 'disconnected', error=error_msg)
+                    status['webull_live'] = {'connected': False, 'status': 'disconnected', 'error': error_msg, 'account_info': None}
                 
                 # Webull Paper - uses dedicated webull_paper_broker instance
                 wb_paper_broker = getattr(_bot_instance, 'webull_paper_broker', None)
@@ -17287,9 +17300,9 @@ def register_routes(app):
                         if hasattr(broker_instance, 'is_authenticated'):
                             instance_connected = broker_instance.is_authenticated()
                         else:
-                            instance_connected = getattr(broker_instance, 'connected', False) or getattr(broker_instance, '_logged_in', False)
-                        if not instance_connected:
                             instance_connected = getattr(broker_instance, '_logged_in', False)
+                            if instance_connected and hasattr(broker_instance, '_tokens_valid') and not broker_instance._tokens_valid:
+                                instance_connected = False
                     else:
                         instance_connected = (
                             getattr(broker_instance, 'connected', False) or 
@@ -17389,6 +17402,9 @@ def register_routes(app):
                 is_connected = broker_instance and getattr(broker_instance, 'connected', False)
                 if not is_connected and broker_instance and broker_name == 'webull':
                     is_connected = getattr(broker_instance, '_logged_in', False)
+                if is_connected and broker_instance and hasattr(broker_instance, '_tokens_valid'):
+                    if not broker_instance._tokens_valid:
+                        is_connected = False
                 is_paper = getattr(broker_instance, 'paper_trade', False) if broker_instance else False
                 is_paper = is_paper or 'paper' in broker_name.lower()
                 
