@@ -2869,46 +2869,47 @@ class WebullBroker:
             # Handle market orders EARLY - get quote before any calculations that need price
             effective_price = limit_price
             is_market_mode = effective_price is None
-            if is_market_mode:
-                print(f"[WEBULL] ⚡ MARKET ORDER mode - fetching current option quote for aggressive pricing...", flush=True)
+            market_buy_buffers = [0.03, 0.05, 0.08, 0.10]
+            market_sell_buffers = [0.02, 0.04, 0.06, 0.08]
+            
+            def _get_market_price(wb_client, sym, opt_id, order_side, buffer_pct):
                 try:
-                    quote_data = wb.get_option_quote(stock=symbol, optionId=option_id)
-                    print(f"[WEBULL] Quote data received: {type(quote_data)}", flush=True)
-                    if quote_data:
-                        if side == 'BUY':
-                            ask_list = quote_data.get('askList', [])
-                            if ask_list and len(ask_list) > 0:
-                                raw_ask = float(ask_list[0].get('price', 0))
-                            else:
-                                raw_ask = float(quote_data.get('askPrice', 0) or 0)
-                            if raw_ask and raw_ask > 0:
-                                effective_price = round(raw_ask * 1.01, 2)
-                                print(f"[WEBULL] ⚡ MARKET BUY: ask=${raw_ask} → limit=${effective_price} (+1% buffer for fast fill)", flush=True)
-                            else:
-                                effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
-                                if effective_price and effective_price > 0:
-                                    effective_price = round(effective_price * 1.02, 2)
-                                    print(f"[WEBULL] ⚡ MARKET BUY: using last=${effective_price} (+2% buffer)", flush=True)
-                        else:
-                            bid_list = quote_data.get('bidList', [])
-                            if bid_list and len(bid_list) > 0:
-                                raw_bid = float(bid_list[0].get('price', 0))
-                            else:
-                                raw_bid = float(quote_data.get('bidPrice', 0) or 0)
-                            if raw_bid and raw_bid > 0:
-                                effective_price = round(raw_bid * 0.99, 2)
-                                effective_price = max(0.01, effective_price)
-                                print(f"[WEBULL] ⚡ MARKET SELL: bid=${raw_bid} → limit=${effective_price} (-1% buffer for fast fill)", flush=True)
-                            else:
-                                effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
-                                if effective_price and effective_price > 0:
-                                    effective_price = round(effective_price * 0.98, 2)
-                                    effective_price = max(0.01, effective_price)
-                                    print(f"[WEBULL] ⚡ MARKET SELL: using last=${effective_price} (-2% buffer)", flush=True)
+                    qd = wb_client.get_option_quote(stock=sym, optionId=opt_id)
+                    if not qd:
+                        return None, None
+                    if order_side == 'BUY':
+                        ask_list = qd.get('askList', [])
+                        raw = float(ask_list[0].get('price', 0)) if ask_list else float(qd.get('askPrice', 0) or 0)
+                        if raw and raw > 0:
+                            price = round(raw * (1 + buffer_pct), 2)
+                            print(f"[WEBULL] ⚡ MARKET BUY: ask=${raw:.2f} → limit=${price:.2f} (+{buffer_pct*100:.0f}% buffer)", flush=True)
+                            return price, raw
+                        last = float(qd.get('close', 0) or qd.get('lastPrice', 0) or 0)
+                        if last and last > 0:
+                            price = round(last * (1 + buffer_pct + 0.01), 2)
+                            print(f"[WEBULL] ⚡ MARKET BUY: last=${last:.2f} → limit=${price:.2f} (+{(buffer_pct+0.01)*100:.0f}% buffer)", flush=True)
+                            return price, last
                     else:
-                        print(f"[WEBULL] No quote data returned", flush=True)
-                except Exception as quote_err:
-                    print(f"[WEBULL] Could not get option quote: {quote_err}", flush=True)
+                        bid_list = qd.get('bidList', [])
+                        raw = float(bid_list[0].get('price', 0)) if bid_list else float(qd.get('bidPrice', 0) or 0)
+                        if raw and raw > 0:
+                            price = max(0.01, round(raw * (1 - buffer_pct), 2))
+                            print(f"[WEBULL] ⚡ MARKET SELL: bid=${raw:.2f} → limit=${price:.2f} (-{buffer_pct*100:.0f}% buffer)", flush=True)
+                            return price, raw
+                        last = float(qd.get('close', 0) or qd.get('lastPrice', 0) or 0)
+                        if last and last > 0:
+                            price = max(0.01, round(last * (1 - buffer_pct - 0.01), 2))
+                            print(f"[WEBULL] ⚡ MARKET SELL: last=${last:.2f} → limit=${price:.2f} (-{(buffer_pct+0.01)*100:.0f}% buffer)", flush=True)
+                            return price, last
+                    return None, None
+                except Exception as e:
+                    print(f"[WEBULL] Could not get option quote: {e}", flush=True)
+                    return None, None
+            
+            if is_market_mode:
+                initial_buffer = market_buy_buffers[0] if side == 'BUY' else market_sell_buffers[0]
+                print(f"[WEBULL] ⚡ MARKET ORDER mode - aggressive limit with {initial_buffer*100:.0f}% initial buffer...", flush=True)
+                effective_price, _raw_price = _get_market_price(wb, symbol, option_id, side, initial_buffer)
                 
                 if not effective_price or effective_price <= 0:
                     return {
@@ -3056,49 +3057,103 @@ class WebullBroker:
             headers = wb.build_req_headers(include_trade_token=True, include_time=True)
             
             option_enforce = 'DAY'
-            api_payload = {
-                'orderType': 'LMT',
-                'serialId': str(uuid.uuid4()),
-                'timeInForce': option_enforce,
-                'orders': [{'quantity': int(adjusted_qty), 'action': side, 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
-                'lmtPrice': float(effective_price)
-            }
-            order_mode_label = "MARKET-MODE (aggressive limit)" if is_market_mode else "LIMIT"
-            print(f"[{self.name}] Placing {order_mode_label} option order via direct API: {api_payload}")
             
-            try:
-                api_url = wb._urls.place_option_orders(wb._account_id)
-                print(f"[{self.name}] API URL: {api_url}")
-                api_response = requests.post(api_url, json=api_payload, headers=headers, timeout=wb.timeout)
-                print(f"[{self.name}] Response Status: {api_response.status_code}")
+            def _place_single_order(wb_inst, opt_id_val, s, adj_q, eff_p, attempt_label=""):
+                import requests as req_lib
+                import uuid as uuid_lib
+                hdrs = wb_inst.build_req_headers(include_trade_token=True, include_time=True)
+                payload = {
+                    'orderType': 'LMT',
+                    'serialId': str(uuid_lib.uuid4()),
+                    'timeInForce': 'DAY',
+                    'orders': [{'quantity': int(adj_q), 'action': s, 'tickerId': int(opt_id_val), 'tickerType': 'OPTION'}],
+                    'lmtPrice': float(eff_p)
+                }
+                print(f"[{self.name}] {attempt_label}Placing order: {s} {int(adj_q)} @ ${eff_p:.2f}", flush=True)
+                try:
+                    url = wb_inst._urls.place_option_orders(wb_inst._account_id)
+                    resp = req_lib.post(url, json=payload, headers=hdrs, timeout=wb_inst.timeout)
+                    if resp.status_code == 200:
+                        rj = resp.json()
+                        print(f"[{self.name}] {attempt_label}✓ Order placed: orderId={rj.get('orderId')}", flush=True)
+                        return rj
+                    else:
+                        emsg = f"Webull API Error {resp.status_code}: {resp.reason}"
+                        try:
+                            emsg += f" - {resp.json()}"
+                        except:
+                            emsg += f" - {resp.text}"
+                        print(f"[{self.name}] {attempt_label}❌ Order failed: {emsg}", flush=True)
+                        return {'success': False, 'msg': emsg, 'error': 'WEBULL_API_ERROR', 'status_code': resp.status_code}
+                except Exception as e:
+                    print(f"[{self.name}] {attempt_label}❌ API call failed: {e}", flush=True)
+                    return {'success': False, 'msg': str(e), 'error': 'API_EXCEPTION'}
+            
+            order_mode_label = "MARKET-MODE (aggressive limit)" if is_market_mode else "LIMIT"
+            print(f"[{self.name}] Placing {order_mode_label} option order via direct API")
+            
+            result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, "[Attempt 1] ")
+            
+            if is_market_mode and result and isinstance(result, dict):
+                order_id = result.get('orderId') or (result.get('data', {}) or {}).get('orderId')
+                order_ok = result.get('success', True) if 'success' in result else (order_id is not None)
                 
-                if api_response.status_code == 200:
-                    response_json = api_response.json()
-                    print(f"[{self.name}] ✓ Order placed successfully: orderId={response_json.get('orderId')}")
-                    return response_json
-                else:
-                    error_msg = f"Webull API Error {api_response.status_code}: {api_response.reason}"
-                    try:
-                        error_details = api_response.json()
-                        error_msg += f" - Details: {error_details}"
-                    except:
-                        error_msg += f" - Text: {api_response.text}"
+                if order_ok and order_id:
+                    import time as _time
+                    buffers = market_buy_buffers if side == 'BUY' else market_sell_buffers
                     
-                    print(f"[{self.name}] ❌ Order failed: {error_msg}")
-                    log_error_to_db('order_execution', f"Option order failed: {error_msg}", 
-                                   'WebullBroker', 'error', f'Symbol: {symbol}, Action: {side}, Qty: {adjusted_qty}')
-                    return {
-                        'success': False,
-                        'msg': error_msg,
-                        'error': 'WEBULL_API_ERROR',
-                        'status_code': api_response.status_code
-                    }
+                    for retry_idx in range(1, len(buffers)):
+                        _time.sleep(1.5)
+                        try:
+                            orders_list = wb.get_current_orders() or []
+                            order_status = None
+                            for o in orders_list:
+                                if str(o.get('orderId', '')) == str(order_id):
+                                    order_status = o.get('status', '').upper()
+                                    break
+                            
+                            if order_status == 'FILLED':
+                                print(f"[{self.name}] ✅ MARKET ORDER FILLED on attempt {retry_idx}", flush=True)
+                                break
+                            elif order_status == 'PARTIAL_FILLED':
+                                print(f"[{self.name}] ✅ MARKET ORDER PARTIALLY FILLED - keeping order active", flush=True)
+                                break
+                            elif order_status is None:
+                                print(f"[{self.name}] ⚠️ Could not find order {order_id} in active orders - may have filled already", flush=True)
+                                break
+                            
+                            new_buffer = buffers[retry_idx]
+                            print(f"[{self.name}] ⏳ Order not filled (status={order_status}), chasing with +{new_buffer*100:.0f}% buffer...", flush=True)
+                            
+                            try:
+                                cancel_resp = wb.cancel_order(order_id)
+                                print(f"[{self.name}] 🔄 Cancelled order {order_id} for re-price", flush=True)
+                            except Exception as cancel_err:
+                                print(f"[{self.name}] ⚠️ Cancel attempt: {cancel_err}", flush=True)
+                            
+                            _time.sleep(0.3)
+                            new_price, _ = _get_market_price(wb, symbol, option_id, side, new_buffer)
+                            if new_price and new_price > 0:
+                                effective_price = new_price
+                                result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, f"[Chase {retry_idx+1}/{len(buffers)}] ")
+                                new_order_id = (result or {}).get('orderId')
+                                if new_order_id:
+                                    order_id = new_order_id
+                            else:
+                                print(f"[{self.name}] ⚠️ Could not get updated price for chase", flush=True)
+                                break
+                        except Exception as chase_err:
+                            print(f"[{self.name}] ⚠️ Chase check error: {chase_err}", flush=True)
+                            break
                     
-            except Exception as api_error:
-                print(f"[{self.name}] ❌ API call failed: {api_error}")
-                log_error_to_db('order_execution', f"Webull API call failed: {str(api_error)}", 
-                               'WebullBroker', 'error', f'Symbol: {symbol}')
-                raise Exception(f"Webull API Error: {str(api_error)}") from api_error
+                    print(f"[{self.name}] 🏁 Market order chase complete. Final price: ${effective_price:.2f}", flush=True)
+            
+            if not result or (isinstance(result, dict) and not result.get('orderId') and result.get('success') == False):
+                error_msg = (result or {}).get('msg', 'Unknown error')
+                log_error_to_db('order_execution', f"Option order failed: {error_msg}", 
+                               'WebullBroker', 'error', f'Symbol: {symbol}, Action: {side}, Qty: {adjusted_qty}')
+            
+            return result
 
         resp = await self.loop.run_in_executor(None, _blocking_place)
         
@@ -7975,31 +8030,55 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         limit_price = order.get('limit_price')
                         limit_cap_pct = order.get('limit_cap_pct')
                         
+                        # Check channel's Entry Order Mode setting
+                        channel_entry_mode = 'limit'
+                        try:
+                            if channel_id:
+                                ch_info = get_channel_by_discord_id(str(channel_id))
+                                if ch_info:
+                                    channel_entry_mode = ch_info.get('entry_order_mode', 'limit') or 'limit'
+                        except Exception:
+                            pass
+                        
+                        is_channel_market_mode = (channel_entry_mode == 'market')
+                        
                         # Determine order type: market vs limit
-                        # Use limit order if: limit cap is enabled OR entry offset is applied
-                        use_limit_order = limit_cap_enabled or entry_price_offset != 0
+                        # PRIORITY: Market mode > Trigger Offset > Default limit
+                        # Market mode OVERRIDES trigger offset (user wants fastest fill)
+                        # Limit Cap still acts as safety ceiling even in market mode
+                        if is_channel_market_mode:
+                            use_limit_order = False
+                            if entry_price_offset != 0:
+                                sys.stderr.write(f"[CONDITIONAL EXEC] ⚡ Market mode OVERRIDES trigger offset ({entry_price_offset}%) - using market order for fastest fill\n")
+                                sys.stderr.flush()
+                                entry_price_offset = 0
+                            else:
+                                sys.stderr.write(f"[CONDITIONAL EXEC] ⚡ Channel market mode active - using market order\n")
+                                sys.stderr.flush()
+                        else:
+                            use_limit_order = limit_cap_enabled or entry_price_offset != 0
                         
                         # If limit cap is enabled, use the stored limit_price as max price
+                        # Limit Cap acts as hard ceiling EVEN in market mode
                         effective_limit_price = None
                         if limit_cap_enabled and limit_price:
                             effective_limit_price = limit_price
-                            sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap active: max buy price ${limit_price:.4f}\n")
+                            if is_channel_market_mode:
+                                sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap ceiling in market mode: max ${limit_price:.4f}\n")
+                            else:
+                                sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap active: max buy price ${limit_price:.4f}\n")
                             sys.stderr.flush()
                         elif limit_cap_enabled and not limit_price:
-                            # Edge case: limit_cap_enabled but limit_price missing (legacy/restored orders)
-                            # Compute limit_price on-the-fly from trigger price and cap percentage
                             if limit_cap_pct and float(limit_cap_pct) > 0:
                                 computed_limit = triggered_price * (1 + float(limit_cap_pct) / 100)
                                 effective_limit_price = computed_limit
-                                sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap computed on-the-fly: ${computed_limit:.4f} (trigger ${triggered_price:.2f} + {limit_cap_pct}%)\n")
+                                sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap computed: ${computed_limit:.4f} (trigger ${triggered_price:.2f} + {limit_cap_pct}%)\n")
                                 sys.stderr.flush()
                             else:
-                                # No percentage available - fallback to market order to satisfy "execute if over by a penny"
                                 use_limit_order = False
                                 sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ Limit Cap enabled but no percentage - using market order\n")
                                 sys.stderr.flush()
-                        elif entry_price_offset != 0:
-                            # Apply offset to execution price
+                        elif entry_price_offset != 0 and not is_channel_market_mode:
                             effective_limit_price = execution_price * (1 + entry_price_offset / 100)
                         
                         signal = {
@@ -8009,10 +8088,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'symbol': symbol,
                             'price': execution_price,
                             'is_market_order': not use_limit_order,
+                            '_use_market_order': is_channel_market_mode and not use_limit_order,
                             '_conditional_order_id': order['id'],
                             '_broker_override': broker_name,
-                            'channel_id': order.get('channel_id'),  # Critical for RiskManager tracking
-                            '_trigger_price': triggered_price,  # Store original trigger price
+                            'channel_id': order.get('channel_id'),
+                            '_trigger_price': triggered_price,
                         }
                         
                         # Add limit price cap for broker execution
@@ -11059,11 +11139,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except:
                         pass
                 
-                # Entry Order Mode: Force market orders for BTO if configured
+                # Entry Order Mode: Force market orders if configured
                 entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
-                if entry_order_mode == 'market' and opt.get('action', 'BTO').upper() == 'BTO':
-                    opt['_use_market_order'] = True
-                    print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
+                if entry_order_mode == 'market':
+                    action_upper = opt.get('action', 'BTO').upper()
+                    if action_upper == 'BTO':
+                        opt['_use_market_order'] = True
+                        print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
+                    elif action_upper == 'STC':
+                        opt['_use_market_order'] = True
+                        print(f"[ENTRY MODE] ✓ Market order enabled for STC exit (channel setting)")
                 
                 # NDX→QQQ Conversion: Convert NDX options to QQQ with target delta
                 ndx_to_qqq_enabled = channel_info.get('ndx_to_qqq_enabled', 0) if channel_info else 0
@@ -11664,11 +11749,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except:
                         pass
                 
-                # Entry Order Mode: Force market orders for BTO if configured
+                # Entry Order Mode: Force market orders if configured
                 entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
-                if entry_order_mode == 'market' and stk.get('action', 'BTO').upper() == 'BTO':
-                    stk['_use_market_order'] = True
-                    print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
+                if entry_order_mode == 'market':
+                    stk_action = stk.get('action', 'BTO').upper()
+                    if stk_action == 'BTO':
+                        stk['_use_market_order'] = True
+                        print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
+                    elif stk_action == 'STC':
+                        stk['_use_market_order'] = True
+                        print(f"[ENTRY MODE] ✓ Market order enabled for STC exit (channel setting)")
                 
                 # Add channel_record_id and channel_id for database saving after execution
                 if channel_info:
