@@ -264,10 +264,29 @@
                 </div>
             </div>
             <div class="chat-suggestions" id="chat-suggestions">
-                <button onclick="askQuestion('How do I get started?')">Getting Started</button>
-                <button onclick="askQuestion('How do I add a channel?')">Add Channel</button>
-                <button onclick="askQuestion('Show formats')">Formats</button>
-                <button onclick="askQuestion('Any issues?')">Check Issues</button>
+                <div id="main-suggestions">
+                    <button onclick="askQuestion('How do I get started?')">Getting Started</button>
+                    <button onclick="askQuestion('How do I add a channel?')">Add Channel</button>
+                    <button onclick="askQuestion('Show formats')">Formats</button>
+                    <button onclick="askQuestion('Any issues?')">Check Issues</button>
+                    <button onclick="showInvestigationButtons()">Investigation</button>
+                    <button onclick="askQuestion('help')">All Commands</button>
+                </div>
+                <div id="investigation-suggestions" style="display:none;">
+                    <button onclick="showMainButtons()" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.2);color:#aaa;">&#8592; Back</button>
+                    <button onclick="askQuestion('show events')">Recent Events</button>
+                    <button onclick="askQuestion('show failures')">Failures</button>
+                    <button onclick="askQuestion('show entries')">Entries</button>
+                    <button onclick="askQuestion('show exits')">Exits</button>
+                    <button onclick="askQuestion('show stops')">Stop Losses</button>
+                    <button onclick="askQuestion('show targets')">Profit Targets</button>
+                    <button onclick="askQuestion('show fills')">Filled Orders</button>
+                    <button onclick="askQuestion('show broker failures')">Broker Errors</button>
+                    <button onclick="askQuestion('show chasers')">Order Chasers</button>
+                    <button onclick="askQuestion('show conditionals')">Conditionals</button>
+                    <button onclick="askQuestion('event summary')">24h Summary</button>
+                    <button onclick="promptSymbolInvestigation()">Investigate Symbol</button>
+                </div>
             </div>
             <div class="chat-input-container">
                 <input type="text" id="chat-input" class="chat-input" placeholder="Type your question..." onkeypress="handleChatKeypress(event)">
@@ -490,11 +509,13 @@
     }
     .chat-suggestions {
         padding: 12px 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(0, 0, 0, 0.2);
+    }
+    .chat-suggestions > div {
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
-        background: rgba(0, 0, 0, 0.2);
     }
     .chat-suggestions button {
         background: rgba(0, 245, 255, 0.08);
@@ -1185,6 +1206,24 @@
         }
         document.getElementById('chat-input').value = question;
         sendChatMessage();
+        showMainButtons();
+    }
+    
+    function showInvestigationButtons() {
+        document.getElementById('main-suggestions').style.display = 'none';
+        document.getElementById('investigation-suggestions').style.display = 'flex';
+    }
+    
+    function showMainButtons() {
+        document.getElementById('investigation-suggestions').style.display = 'none';
+        document.getElementById('main-suggestions').style.display = 'flex';
+    }
+    
+    function promptSymbolInvestigation() {
+        const symbol = prompt('Enter a ticker symbol to investigate (e.g. SPY, AAPL, QQQ):');
+        if (symbol && symbol.trim()) {
+            askQuestion('what happened with ' + symbol.trim().toUpperCase());
+        }
     }
     
     function addMessageHTML(content, isUser = false) {
