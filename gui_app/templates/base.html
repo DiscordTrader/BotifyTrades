@@ -269,11 +269,13 @@
                     <button onclick="askQuestion('How do I add a channel?')">Add Channel</button>
                     <button onclick="askQuestion('Show formats')">Formats</button>
                     <button onclick="askQuestion('Any issues?')">Check Issues</button>
-                    <button onclick="showInvestigationButtons()">Investigation</button>
+                    <button onclick="showSubButtons('investigation')">Investigation</button>
+                    <button onclick="showSubButtons('channel')">Channel Settings</button>
+                    <button onclick="showSubButtons('risk')">Risk Management</button>
                     <button onclick="askQuestion('help')">All Commands</button>
                 </div>
-                <div id="investigation-suggestions" style="display:none;">
-                    <button onclick="showMainButtons()" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.2);color:#aaa;">&#8592; Back</button>
+                <div id="investigation-suggestions" class="sub-suggestions" style="display:none;">
+                    <button onclick="showMainButtons()" class="back-btn">&#8592; Back</button>
                     <button onclick="askQuestion('show events')">Recent Events</button>
                     <button onclick="askQuestion('show failures')">Failures</button>
                     <button onclick="askQuestion('show entries')">Entries</button>
@@ -286,6 +288,35 @@
                     <button onclick="askQuestion('show conditionals')">Conditionals</button>
                     <button onclick="askQuestion('event summary')">24h Summary</button>
                     <button onclick="promptSymbolInvestigation()">Investigate Symbol</button>
+                </div>
+                <div id="channel-suggestions" class="sub-suggestions" style="display:none;">
+                    <button onclick="showMainButtons()" class="back-btn">&#8592; Back</button>
+                    <button onclick="askQuestion('channel settings')">All Settings</button>
+                    <button onclick="askQuestion('execution mode')">Execution Mode</button>
+                    <button onclick="askQuestion('broker override')">Broker Override</button>
+                    <button onclick="askQuestion('multi broker execution')">Multi-Broker</button>
+                    <button onclick="askQuestion('conditional orders')">Conditional Orders</button>
+                    <button onclick="askQuestion('ticker filter')">Ticker Filter</button>
+                    <button onclick="askQuestion('NDX to QQQ')">NDX→QQQ</button>
+                    <button onclick="askQuestion('position sizing')">Position Sizing</button>
+                    <button onclick="askQuestion('entry order mode')">Entry Order Mode</button>
+                    <button onclick="askQuestion('order chasing')">Order Chasing</button>
+                    <button onclick="askQuestion('signal update automation')">Signal Updates</button>
+                </div>
+                <div id="risk-suggestions" class="sub-suggestions" style="display:none;">
+                    <button onclick="showMainButtons()" class="back-btn">&#8592; Back</button>
+                    <button onclick="askQuestion('risk management')">All Risk Settings</button>
+                    <button onclick="askQuestion('profit targets')">Profit Targets</button>
+                    <button onclick="askQuestion('stop loss settings')">Stop Loss</button>
+                    <button onclick="askQuestion('trailing stop')">Trailing Stop</button>
+                    <button onclick="askQuestion('early trailing stop')">Early Trailing</button>
+                    <button onclick="askQuestion('giveback guard')">Giveback Guard</button>
+                    <button onclick="askQuestion('leave runner')">Leave Runner</button>
+                    <button onclick="askQuestion('dynamic SL escalation')">Dynamic SL</button>
+                    <button onclick="askQuestion('stop loss order type')">SL Order Type</button>
+                    <button onclick="askQuestion('circuit breaker')">Circuit Breaker</button>
+                    <button onclick="askQuestion('best risk settings for scalping')">Scalping Preset</button>
+                    <button onclick="askQuestion('best risk settings for conservative')">Conservative Preset</button>
                 </div>
             </div>
             <div class="chat-input-container">
@@ -532,6 +563,15 @@
         background: rgba(0, 245, 255, 0.15);
         border-color: #00F5FF;
         transform: translateY(-1px);
+    }
+    .chat-suggestions .back-btn {
+        background: rgba(255,255,255,0.08);
+        border-color: rgba(255,255,255,0.2);
+        color: #aaa;
+    }
+    .chat-suggestions .back-btn:hover {
+        background: rgba(255,255,255,0.15);
+        color: #fff;
     }
     .chat-input-container {
         padding: 16px 20px;
@@ -1209,13 +1249,15 @@
         showMainButtons();
     }
     
-    function showInvestigationButtons() {
+    function showSubButtons(category) {
         document.getElementById('main-suggestions').style.display = 'none';
-        document.getElementById('investigation-suggestions').style.display = 'flex';
+        document.querySelectorAll('.sub-suggestions').forEach(el => el.style.display = 'none');
+        const target = document.getElementById(category + '-suggestions');
+        if (target) target.style.display = 'flex';
     }
     
     function showMainButtons() {
-        document.getElementById('investigation-suggestions').style.display = 'none';
+        document.querySelectorAll('.sub-suggestions').forEach(el => el.style.display = 'none');
         document.getElementById('main-suggestions').style.display = 'flex';
     }
     
