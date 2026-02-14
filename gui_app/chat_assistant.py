@@ -854,7 +854,7 @@ GREETINGS = [
     ("hi", "Hey! I'm here to help you with BotifyTrades. What would you like to know?"),
     ("hello", "Hello! How can I help you with BotifyTrades today?"),
     ("hey", "Hey there! What can I help you with?"),
-    ("help", "I can help you understand BotifyTrades! Ask me about:\n• Getting started\n• Dashboard\n• Channels & trading\n• Settings & brokers\n• Options trading\n• P&L tracking\n• Risk management\n\nWhat would you like to know?"),
+    ("help", None),
     ("thanks", "You're welcome! Let me know if you have any other questions."),
     ("thank you", "Happy to help! Feel free to ask anything else about BotifyTrades."),
 ]
@@ -916,6 +916,89 @@ def check_greeting(query: str) -> Optional[str]:
     return None
 
 
+def _get_help_response() -> Dict:
+    """Return comprehensive help message showing all available commands and topics."""
+    help_text = """**BotifyTrades Assistant - Help Guide**
+
+I can answer questions, run commands, and help you understand every feature. Here's everything I can do:
+
+---
+
+**Ask Me About (Topics):**
+- "getting started" - Setup guide and first steps
+- "dashboard" - Dashboard features and navigation
+- "channels" / "channel settings" - How channels work, all settings explained
+- "brokers" / "broker setup" - Connecting Webull, Alpaca, Schwab, Robinhood, IBKR, etc.
+- "options trading" - How options signals are parsed and executed
+- "risk management" - Stop losses, profit targets, trailing stops, and more
+- "P&L" / "profit loss" - P&L tracking and performance analytics
+- "signals" / "signal parsing" - How trading signals are detected and processed
+- "conditional orders" - Price-triggered order system
+- "position sizing" - Auto-quantity, account %, and signal override
+- "ticker filter" - Allow/block list per channel
+- "NDX to QQQ" - Index-to-ETF conversion
+- "order chasing" - Unfilled order monitoring
+- "notifications" - Discord webhooks and desktop alerts
+- "leaderboard" - Channel performance rankings
+- "troubleshooting" - Common issues and fixes
+
+---
+
+**Event Tracking Commands:**
+- "show events" - Last 20 trading events
+- "show failures" / "show errors" - Failed or rejected orders
+- "show entries" - Recent BTO/entry orders
+- "show exits" - Recent STC/exit orders
+- "show stops" - Stop loss and trailing stop triggers
+- "show targets" - Profit target hits
+- "show fills" - Filled orders
+- "show broker failures" - Broker-level errors
+- "show chasers" - Order chaser activity
+- "show conditionals" - Conditional order events
+- "show duplicates" - Blocked duplicate signals
+- "show sl updates" - Stop loss update events
+- "show giveback" - Giveback guard triggers
+- "event summary" - 24-hour overview of all activity
+- "show events SPY" - Filter events by symbol
+- "show events webull" - Filter events by broker
+
+---
+
+**Signal Format Commands:**
+- "teach this format: [paste signal]" - Teach a new signal format
+- "show formats" / "list formats" - View all learned formats
+- "delete format #1" - Remove a learned format
+- "disable format #1" / "enable format #1" - Toggle formats
+
+---
+
+**Tips:**
+- Ask anything in plain English - I understand natural questions
+- Combine topics: "how do trailing stops work with profit targets?"
+- Ask for recommendations: "best risk settings for scalping"
+- Type any question - if I don't know, I'll try AI to help
+
+What would you like to know?"""
+
+    return {
+        "success": True,
+        "response": help_text,
+        "topic": "help"
+    }
+
+
+HELP_TRIGGERS = [
+    "help", "help me", "commands", "list commands", "show commands",
+    "what can you do", "what do you do", "what are your commands",
+    "available commands", "command list", "all commands",
+    "how to use", "how do i use this", "how does this work",
+    "what can i ask", "what can i ask you", "what should i ask",
+    "menu", "options", "guide", "help guide", "user guide",
+    "what can the chatbot do", "chatbot help", "assistant help",
+    "show help", "bot help", "bot commands",
+]
+
+
 def get_response(query: str) -> Dict:
     """Get AI assistant response for a query.
     
@@ -936,6 +1019,10 @@ def get_response(query: str) -> Dict:
             "topic": None,
             "ai_available": is_ai_available()
         }
+    
+    query_lower = query.lower().strip()
+    if query_lower in HELP_TRIGGERS or query_lower.rstrip('?') in HELP_TRIGGERS:
+        return _get_help_response()
     
     greeting_response = check_greeting(query)
     if greeting_response:
