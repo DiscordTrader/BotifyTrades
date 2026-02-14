@@ -14191,7 +14191,7 @@ def register_routes(app):
     def api_chat():
         """AI Chat Assistant endpoint - handles user questions about the app with error context"""
         try:
-            from .chat_assistant import get_ai_response
+            from .chat_assistant import get_response
             
             data = request.json
             query = data.get('message', '').strip()
@@ -14203,8 +14203,7 @@ def register_routes(app):
                     'topic': None
                 })
             
-            # Use AI-powered response that analyzes logs, trades, and errors
-            result = get_ai_response(query)
+            result = get_response(query)
             return jsonify(result)
             
         except Exception as e:

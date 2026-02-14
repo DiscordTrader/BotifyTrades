@@ -1053,7 +1053,14 @@ def get_response(query: str) -> Dict:
             "confidence": round(score, 2)
         }
     
-    # Try AI-powered response if available
+    query_lower_check = query.lower().strip()
+    if is_trade_query(query_lower_check):
+        return analyze_trades(query)
+    elif is_log_query(query_lower_check):
+        return analyze_logs(query)
+    elif is_error_query(query_lower_check):
+        return analyze_errors(query)
+    
     ai_response = get_general_ai_response(query)
     if ai_response:
         return {
