@@ -964,6 +964,15 @@ I can answer questions, run commands, and help you understand every feature. Her
 
 ---
 
+**Symbol Investigation (ask in plain English):**
+- "what happened with SPY" - Full investigation: events, failures, logs, trades
+- "why did AAPL fail" - Focus on failures and errors for a symbol
+- "SPY history" / "SPY status" - Quick symbol lookup
+- "investigate TSLA" / "debug QQQ" - Deep dive into a symbol
+- "check SPY trades" - Show trade history for a symbol
+
+---
+
 **Signal Format Commands:**
 - "teach this format: [paste signal]" - Teach a new signal format
 - "show formats" / "list formats" - View all learned formats
@@ -1150,7 +1159,163 @@ def handle_event_commands(query: str) -> Optional[Dict]:
             return _query_events(f'{symbol.title()} Events', broker=symbol.lower())
         return _query_events(f'{symbol} Events', symbol=symbol)
     
+    symbol_investigation_patterns = [
+        r'(?:what|tell me what)\s+happened\s+(?:with|to|for)\s+([A-Za-z]{1,5})',
+        r'why\s+(?:did|was|is)\s+([A-Za-z]{1,5})\s+(?:fail|reject|error|not fill|not work|cancel)',
+        r'(?:why|how)\s+(?:did|was)\s+([A-Za-z]{1,5})\s+(?:stop|exit|sell|trim|close)',
+        r'(?:status|history|details|info|investigate|lookup|look up)\s+(?:of|for|on)?\s*([A-Za-z]{1,5})',
+        r'([A-Za-z]{1,5})\s+(?:status|history|details|events|what happened|failures|summary)',
+        r'(?:check|show|get)\s+([A-Za-z]{1,5})\s+(?:status|history|details|events|trades|orders)',
+        r'(?:anything|everything)\s+(?:on|about|for|with)\s+([A-Za-z]{1,5})',
+        r'(?:debug|diagnose|troubleshoot)\s+([A-Za-z]{1,5})',
+    ]
+    
+    noise_words = {'the', 'a', 'an', 'my', 'our', 'this', 'that', 'it', 'for', 'on', 'in', 'is', 'was', 'did', 'do', 'not', 'all'}
+    
+    for pattern in symbol_investigation_patterns:
+        match = re.search(pattern, query_lower)
+        if match:
+            symbol = match.group(1).upper()
+            if symbol.lower() not in noise_words and len(symbol) >= 1:
+                return _investigate_symbol(symbol, query)
+    
     return None
+
+
+def _investigate_symbol(symbol: str, original_query: str) -> Dict:
+    """Build a comprehensive investigation report for a symbol using events + logs + trades."""
+    try:
+        from . import database as db
+        
+        response_parts = [f"**Investigation: {symbol}**\n"]
+        
+        events, total = db.get_order_events(
+            symbol=symbol,
+            limit=30
+        )
+        
+        if events:
+            response_parts.append(f"**Order Events** ({total} total)\n")
+            
+            event_counts = {}
+            for e in events:
+                etype = e.get('event_type', 'UNKNOWN')
+                event_counts[etype] = event_counts.get(etype, 0) + 1
+            
+            summary_items = [f"{etype}: {count}" for etype, count in sorted(event_counts.items(), key=lambda x: -x[1])]
+            response_parts.append("Summary: " + " | ".join(summary_items) + "\n")
+            
+            failures = [e for e in events if e.get('severity') in ('error', 'critical') or e.get('event_type') in ('ORDER_FAILED', 'ORDER_REJECTED')]
+            if failures:
+                response_parts.append(f"**Failures & Errors ({len(failures)}):**")
+                for f_evt in failures[:5]:
+                    ts = f_evt.get('timestamp', '')
+                    if ts and len(ts) > 16:
+                        ts = ts[5:16]
+                    reason = f_evt.get('reason', 'No reason provided')
+                    broker = f_evt.get('broker', '')
+                    evt_type = f_evt.get('event_type', '')
+                    line = f"- [{ts}] {evt_type}"
+                    if broker:
+                        line += f" ({broker})"
+                    line += f": {reason}"
+                    response_parts.append(line)
+                if len(failures) > 5:
+                    response_parts.append(f"  *...and {len(failures) - 5} more failures*")
+                response_parts.append("")
+            
+            risk_events = [e for e in events if e.get('event_type') in ('STOP_LOSS', 'PROFIT_TARGET', 'TRAILING_STOP', 'EARLY_TRAILING', 'GIVEBACK_GUARD', 'SL_UPDATE')]
+            if risk_events:
+                response_parts.append(f"**Risk Triggers ({len(risk_events)}):**")
+                for r_evt in risk_events[:5]:
+                    ts = r_evt.get('timestamp', '')
+                    if ts and len(ts) > 16:
+                        ts = ts[5:16]
+                    evt_type = r_evt.get('event_type', '')
+                    reason = r_evt.get('reason', '')
+                    price = r_evt.get('price', '')
+                    line = f"- [{ts}] {evt_type}"
+                    if price:
+                        line += f" @ ${price}"
+                    if reason:
+                        line += f" - {reason}"
+                    response_parts.append(line)
+                response_parts.append("")
+            
+            recent_timeline = events[:10]
+            response_parts.append("**Recent Timeline:**")
+            for evt in recent_timeline:
+                response_parts.append(_format_event_row(evt))
+            if total > 10:
+                response_parts.append(f"*...{total - 10} earlier events not shown*")
+            response_parts.append("")
+        else:
+            response_parts.append("**Order Events:** No events found for this symbol.\n")
+        
+        log_lines = []
+        try:
+            from src.log_monitor import get_log_monitor
+            monitor = get_log_monitor()
+            symbol_logs = monitor.search_logs(symbol, count=20)
+            if symbol_logs:
+                response_parts.append(f"**Console Logs** ({len(symbol_logs)} entries with '{symbol}'):\n```")
+                for log in symbol_logs[-10:]:
+                    ts = log.get('timestamp', '')
+                    if ts and len(ts) > 8:
+                        ts = ts[-8:]
+                    msg = log.get('message', '')
+                    if len(msg) > 200:
+                        msg = msg[:200] + '...'
+                    response_parts.append(f"[{ts}] {msg}")
+                response_parts.append("```")
+                if len(symbol_logs) > 10:
+                    response_parts.append(f"*{len(symbol_logs) - 10} earlier log entries not shown*")
+                response_parts.append("")
+        except Exception as log_err:
+            pass
+        
+        try:
+            trades = db.get_trades(limit=100)
+            if trades:
+                symbol_trades = [t for t in trades if symbol.upper() in (t.get('symbol', '') or '').upper()]
+                if symbol_trades:
+                    response_parts.append(f"**Trade History** ({len(symbol_trades)} trades):")
+                    for t in symbol_trades[:8]:
+                        action = t.get('action', t.get('side', '?'))
+                        qty = t.get('quantity', t.get('qty', 0))
+                        price = t.get('price', t.get('fill_price', 0))
+                        status = t.get('status', '')
+                        broker = t.get('broker', '')
+                        ts = (t.get('filled_at') or t.get('created_at') or '')[:16]
+                        line = f"- [{ts}] {action} x{qty} @ ${price}"
+                        if status:
+                            line += f" [{status}]"
+                        if broker:
+                            line += f" ({broker})"
+                        response_parts.append(line)
+                    if len(symbol_trades) > 8:
+                        response_parts.append(f"  *...and {len(symbol_trades) - 8} more trades*")
+                    response_parts.append("")
+        except Exception:
+            pass
+        
+        if len(response_parts) <= 2:
+            response_parts.append("No activity found for this symbol. Events are recorded when the bot processes signals, places orders, or triggers risk rules during live trading.")
+        
+        response_parts.append("**Commands:** `show events " + symbol + "` | `show failures` | `event summary`")
+        
+        return {
+            "success": True,
+            "response": "\n".join(response_parts),
+            "topic": "symbol_investigation"
+        }
+    except Exception as e:
+        print(f"[CHAT] Symbol investigation error for {symbol}: {e}")
+        return {
+            "success": True,
+            "response": f"**Error investigating {symbol}**\n\nCould not retrieve data: {str(e)}\n\nTry `show events {symbol}` to see just the event log.",
+            "topic": "symbol_investigation"
+        }
 
 
 def _format_event_row(event: Dict) -> str:
