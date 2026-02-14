@@ -1302,7 +1302,18 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
         if len(response_parts) <= 2:
             response_parts.append("No activity found for this symbol. Events are recorded when the bot processes signals, places orders, or triggers risk rules during live trading.")
         
-        response_parts.append("**Commands:** `show events " + symbol + "` | `show failures` | `event summary`")
+        response_parts.append("---")
+        response_parts.append("**More commands for " + symbol + ":**")
+        response_parts.append(f"- `show events {symbol}` - All events for {symbol}")
+        response_parts.append(f"- `show failures` - All failed/rejected orders")
+        response_parts.append(f"- `show entries` - All BTO/entry orders")
+        response_parts.append(f"- `show exits` - All STC/exit orders")
+        response_parts.append(f"- `show stops` - Stop loss & trailing stop triggers")
+        response_parts.append(f"- `show targets` - Profit target hits")
+        response_parts.append(f"- `show fills` - Filled orders")
+        response_parts.append(f"- `show chasers` - Order chaser activity")
+        response_parts.append(f"- `event summary` - 24-hour overview")
+        response_parts.append(f"- `help` - Full list of all commands")
         
         return {
             "success": True,
