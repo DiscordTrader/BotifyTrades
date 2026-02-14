@@ -530,10 +530,14 @@
             
             if (data.response) {
                 addMessage(data.response, false);
+            } else if (data.error) {
+                addMessage('Error: ' + data.error, false);
+            } else {
+                addMessage('Sorry, I had trouble understanding that. Please try rephrasing.', false);
             }
         } catch (error) {
             hideTyping();
-            addMessage('Sorry, I encountered an error. Please try again.', false);
+            addMessage('Sorry, there was an error. Please try again.', false);
         }
         
         input.disabled = false;

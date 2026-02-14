@@ -120,6 +120,199 @@ Links to add Execution/Tracking channels, view Leaderboard, and access Settings.
 **Reset Tracking** - Clears all signals/lots/closures for that channel to start fresh."""
     },
     
+    "execution_mode": {
+        "keywords": ["execution mode", "execute mode", "trade execution", "auto execute"],
+        "title": "Channel Execution Mode",
+        "content": """Each channel has two modes that can be enabled independently:
+
+**Execution Mode** - Bot places REAL orders with your broker
+- Requires a connected broker
+- Supports all risk management features
+- Best for: Automated trading with trusted signal providers
+
+**Tracking Mode** - Bot monitors signals WITHOUT placing orders
+- Tracks theoretical P&L based on entry/exit signals
+- Uses paper trading position sizing
+- Best for: Evaluating signal providers before committing real money
+
+**Dual-Mode** - A channel can be BOTH Execute AND Track simultaneously. Useful for live trading while also maintaining a paper trail.
+
+Configure in **Trading > Execution > Channel Management**."""
+    },
+
+    "broker_override": {
+        "keywords": ["broker override", "channel broker", "per channel broker", "assign broker"],
+        "title": "Per-Channel Broker Override",
+        "content": """Assign a specific broker to each channel for independent trading.
+
+**How It Works:**
+- By default, channels use the global broker (usually Webull)
+- Override lets you assign ANY connected broker to a specific channel
+- Each channel trades independently on its assigned broker
+
+**Use Cases:**
+- Channel A → Webull LIVE (real money)
+- Channel B → Webull PAPER (testing)
+- Channel C → Alpaca PAPER (different strategy)
+- Channel D → Schwab (different account)
+
+**Setup:** Trading > Execution > Channel Management > Select channel > Broker Override dropdown
+
+**Multi-Broker Execution** - Execute the SAME signal on multiple brokers simultaneously. Enable per channel."""
+    },
+
+    "conditional_orders": {
+        "keywords": ["conditional orders", "conditional order", "over under", "price trigger", "trigger order", "trigger based"],
+        "title": "Conditional Orders",
+        "content": """Conditional orders execute when a price condition is met (e.g., "BTO SPY 450C over $2.50").
+
+**Channel Settings:**
+- **Enable Conditional Orders** - Turn on monitoring
+- **Auto Execute** - Automatically execute when condition met (vs. manual confirmation)
+- **Order Expiry** - How long orders remain active (e.g., 60 minutes)
+- **Trigger Offset** - Buffer % added to trigger price to avoid false triggers
+- **Limit Cap** - Maximum limit price as % above trigger (prevents chasing runaway prices, e.g., 5% cap means max pay is 105% of trigger)
+- **Slippage Protection** - Maximum allowed slippage % before rejecting
+
+**Monitor Upgrade:** Automatically switches from Finnhub/yfinance to broker's real-time data when brokers connect.
+
+Configure in **Trading > Execution > Channel Management > Conditional Order Settings**."""
+    },
+
+    "ticker_filter": {
+        "keywords": ["ticker filter", "symbol filter", "allow list", "block list", "restrict symbols", "filter tickers"],
+        "title": "Per-Channel Ticker Filter",
+        "content": """Restrict trading to specific symbols per channel.
+
+**Modes:**
+- **OFF** - Trade all symbols (default)
+- **ALLOW LIST** - Only trade symbols on this list
+- **BLOCK LIST** - Trade everything EXCEPT symbols on this list
+
+**Rules:**
+- Applied to BTO signals only (exits always allowed)
+- Uses the underlying symbol for options (e.g., SPY for SPY 450C)
+- Case-insensitive matching
+
+**Examples:**
+- ALLOW LIST: SPY, QQQ, AAPL → Only trades these 3 tickers
+- BLOCK LIST: TSLA, NVDA → Trades everything except these
+
+Configure in **Trading > Execution > Channel Management > Ticker Filter**."""
+    },
+
+    "ndx_to_qqq": {
+        "keywords": ["ndx to qqq", "ndx qqq", "index conversion", "ndx conversion", "ndx"],
+        "title": "NDX→QQQ Conversion",
+        "content": """Automatically convert NDX (Nasdaq 100 Index) options signals to equivalent QQQ (ETF) options.
+
+**Why?** Some channels post NDX options which require large accounts. QQQ options are much more affordable and track the same index.
+
+**How It Works:**
+1. Bot detects NDX option signal
+2. Converts to equivalent QQQ strike using delta matching
+3. Places QQQ order instead
+
+**Settings:**
+- **Enable** - Toggle conversion on/off per channel
+- **Delta Matching** - Finds the QQQ strike with closest delta to the NDX strike
+
+Configure in **Trading > Execution > Channel Management > NDX→QQQ**."""
+    },
+
+    "position_sizing": {
+        "keywords": ["position sizing", "position size", "how many contracts", "auto quantity", "buying power percentage", "force my size"],
+        "title": "Position Sizing",
+        "content": """Controls how many contracts/shares to buy per trade. Configure per channel.
+
+**Options:**
+- **Position Size %** - % of buying power per trade (e.g., 5% of $100k = $5,000 per trade)
+- **Tracking Size %** - Separate % for paper/tracking trades
+- **Default Quantity** - Fixed number of contracts/shares (overrides % calculation)
+- **Max Position Size $** - Dollar cap on any single position
+- **Force My Size %** - Ignore signal provider's percentage and always use YOUR setting
+
+**Signal Override:**
+Signal providers can include position size (e.g., "12.5% OF ACCOUNT"). With Force My Size OFF, the signal's % overrides your channel setting. With Force My Size ON, your channel setting always wins.
+
+**Calculation:** `quantity = (buying_power × position_size_pct) / option_price`
+Automatically rounds to whole contracts.
+
+Configure in **Trading > Execution > Channel Management > Position Sizing**."""
+    },
+
+    "entry_order_mode": {
+        "keywords": ["entry order mode", "entry mode", "market entry", "limit entry", "entry order type"],
+        "title": "Entry Order Mode",
+        "content": """Choose how BTO (entry) orders are placed per channel.
+
+**Options:**
+- **Limit** (default) - Places limit order at signal price. Better price control, may not fill if price moves
+- **Market** - Places market order for fastest fill. Prioritizes speed over price, may have slippage
+
+**When to Use Market:**
+- Fast-moving signals where speed matters
+- 0DTE/scalping strategies
+- Signal providers with tight windows
+
+**When to Use Limit:**
+- Swing trades where a few cents matter
+- Conservative approach
+- Higher-priced options
+
+Configure in **Trading > Execution > Channel Management > Entry Order Mode**."""
+    },
+
+    "order_chasing": {
+        "keywords": ["order chasing", "order chase", "unfilled orders", "chase order", "entry chase", "exit chase"],
+        "title": "Order Chasing",
+        "content": """Monitors unfilled orders and replaces them with updated prices.
+
+**Exit Order Chase:**
+- Watches pending exit (STC) orders
+- If unfilled after timeout, cancels and replaces with mid-price limit order
+- Ensures exits happen even when prices move
+
+**Entry Order Chase:**
+- Watches pending entry (BTO) orders  
+- If unfilled, updates price to current mid-price
+- Helps get into positions when market moves
+
+**Settings:**
+- **Enable** - Toggle chase on/off per channel
+- **Timeout** - How long to wait before chasing (seconds)
+- **Max Retries** - Maximum number of chase attempts
+
+**Startup Restoration:** Pending orders from before restart are automatically restored for chasing.
+
+Configure in **Trading > Execution > Channel Management > Order Chasing**."""
+    },
+
+    "signal_update_automation": {
+        "keywords": ["signal update", "signal automation", "SL update", "follow-up update", "signal provider update"],
+        "title": "Signal Update Automation",
+        "content": """Automatically apply signal provider's follow-up updates to existing positions.
+
+**What It Does:**
+When a signal provider sends an update (e.g., "SL to $5.00", "moving my SL to 4.50"), the bot:
+1. Detects the update message
+2. Finds the matching open position
+3. Updates the stop loss/profit target automatically
+
+**Supported Update Formats:**
+- "SL to $X" / "stop loss $X"
+- "moving my SL to X"
+- "new SL X" / "adjusted SL to X"
+- "PT to $X" / "take profit $X"
+
+**Behavior:**
+- Updates override channel default AND dynamic SL settings
+- Displayed in the risk monitor
+- Works for both pending and filled positions
+
+Configure in **Trading > Execution > Channel Management > Signal Update Automation**."""
+    },
+
     "execution_vs_tracking": {
         "keywords": ["execution vs tracking", "difference", "execute vs track", "what is execution", "what is tracking"],
         "title": "Execution vs Tracking Mode",
@@ -254,7 +447,7 @@ Click any position to see individual STC (Sell-to-Close) transactions:
     },
     
     "risk_management": {
-        "keywords": ["risk", "stop loss", "profit target", "trailing stop", "position size", "risk management", "tiered", "protect", "best settings", "recommended", "combinations"],
+        "keywords": ["risk", "risk management", "tiered", "protect", "best settings", "recommended", "combinations", "best risk settings"],
         "title": "Risk Management - Complete Guide",
         "content": """BotifyTrades has industry-grade risk management. Settings are in Trading > Execution > Channel Management > Per-Channel Risk.
 
@@ -375,7 +568,221 @@ Keep a small portion of winning trades running for extra upside:
 - SL Mode: Market
 - Exit Strategy: Hybrid"""
     },
-    
+
+    "profit_targets": {
+        "keywords": ["profit targets", "profit target", "PT1", "PT2", "PT3", "PT4", "tiered targets", "take profit", "trim targets"],
+        "title": "Profit Targets (4-Tier System)",
+        "content": """BotifyTrades supports up to 4 tiered profit targets. Configure them in **Trading > Execution > Channel Management > Per-Channel Risk**.
+
+**How It Works:**
+Each tier has a **trigger %** (when to sell) and a **quantity %** (how much to sell):
+- **PT1** - First target (e.g., sell 25% at +20% profit)
+- **PT2** - Second target (e.g., sell 25% at +40% profit)
+- **PT3** - Third target (e.g., sell 25% at +60% profit)
+- **PT4** - Fourth target (e.g., sell remaining at +100% profit)
+
+**Key Rules:**
+- Tiers trigger sequentially - PT1 must hit before PT2 activates
+- Each tier's quantity is % of the ORIGINAL position
+- Total across all tiers should equal 100% (unless using Leave Runner)
+- Set trigger to 0% to disable a tier
+
+**Trim Order Mode:**
+- **Market** (default) - Instant fill, may have slippage
+- **Limit** - Better price control, but may not fill
+
+**With Leave Runner:**
+If Leave Runner is enabled, reduce total PT quantities to leave room (e.g., PT1: 25%, PT2: 25%, PT3: 25%, Runner: 25%)
+
+**Example Setups:**
+- **Conservative**: PT1: 50% at +15%, PT2: 50% at +30%
+- **Balanced**: PT1: 33% at +20%, PT2: 33% at +40%, PT3: 34% at +60%
+- **Aggressive**: PT1: 25% at +30%, PT2: 25% at +60%, PT3: 25% at +100%, PT4: 25% at +150%
+- **Scalping/0DTE**: PT1: 50% at +15%, PT2: 50% at +30%"""
+    },
+
+    "stop_loss_settings": {
+        "keywords": ["stop loss settings", "stop loss", "SL settings", "stop loss order type", "SL order type", "SL limit offset", "stop loss percentage"],
+        "title": "Stop Loss Settings",
+        "content": """Stop Loss automatically exits a position when it drops by X% from entry price. Configure in **Per-Channel Risk**.
+
+**Settings:**
+- **SL %** - The percentage drop from entry that triggers exit (e.g., 20% means exit if price drops 20%)
+- **SL Order Type** - Choose how the exit order is placed:
+  - **Limit** (default) - Places a limit order. Retries multiple times, then switches to market if unfilled
+  - **Market** - Immediate market order for guaranteed exit (may have slippage)
+- **SL Limit Offset** - When using Limit SL, adds a buffer between trigger price and limit price (default 3%) to improve fill probability
+
+**Follow-up SL Updates:**
+Signal providers can update your stop loss via messages like:
+- "SL to $5.00" / "moving my SL to 4.50" / "stop loss $3"
+- These override channel default and dynamic SL settings
+- Displayed in the risk monitor
+
+**Dynamic SL Escalation:**
+After each profit target hit, the SL automatically moves up:
+- **Standard** - Moderate escalation
+- **Aggressive** - Fast escalation after each PT
+- **Conservative** - Slow, gradual escalation
+
+**Recommendations:**
+- Use **Market** SL for 0DTE/scalping (speed matters most)
+- Use **Limit** SL with 3-5% offset for swing trades (better fills)
+- Set SL between 15-30% for most options strategies"""
+    },
+
+    "trailing_stop": {
+        "keywords": ["trailing stop", "trail stop", "trailing percentage", "trail activation", "trailing stops"],
+        "title": "Trailing Stop",
+        "content": """Trailing Stop locks in profit by trailing behind the peak price. Configure in **Per-Channel Risk**.
+
+**How It Works:**
+1. Position must gain the **Activation %** before trailing begins
+2. Once activated, it tracks the highest price reached
+3. If price drops **Trail %** from the peak, it sells
+
+**Settings:**
+- **Activation %** - Minimum gain before trailing starts (e.g., 15%)
+- **Trail %** - How far price can drop from peak before selling (e.g., 5%)
+
+**Example:**
+- Activation: 15%, Trail: 5%
+- Position enters at $1.00, price rises to $1.25 (+25%) - trailing is active
+- Peak reaches $1.30 (+30%)
+- Trailing stop triggers at $1.235 ($1.30 - 5%)
+- Position sells, locking in ~23.5% profit
+
+**Tips:**
+- Wider Trail % for volatile stocks (8-10%)
+- Tighter Trail % for steady movers (3-5%)
+- Works great combined with profit targets - trailing protects gains between tiers"""
+    },
+
+    "early_trailing_stop": {
+        "keywords": ["early trailing", "early trailing stop", "breakeven stop", "breakeven first"],
+        "title": "Early Trailing Stop",
+        "content": """Early Trailing Stop is a breakeven-first approach that provides extra downside protection. Configure in **Per-Channel Risk**.
+
+**How It Works:**
+1. After the **Activation %** gain, the stop moves to breakeven (entry price)
+2. Then it locks in profit in **Step %** increments as price climbs
+
+**Settings:**
+- **Activation %** - Gain needed to move stop to entry (e.g., 5%)
+- **Step %** - Incremental profit lock-in above breakeven (e.g., 3%)
+
+**Example:**
+- Activation: 5%, Step: 3%
+- Entry at $1.00
+- Price hits $1.05 (+5%) → SL moves to $1.00 (breakeven)
+- Price hits $1.08 (+8%) → SL moves to $1.05 (locking +5%)
+- Price hits $1.11 (+11%) → SL moves to $1.08 (locking +8%)
+- Price drops to $1.08 → Sells, locking in +8% profit
+
+**Best For:**
+- 0DTE trades where breakeven protection is crucial
+- Volatile options that spike then reverse
+- Combined with regular trailing stop for layered protection"""
+    },
+
+    "giveback_guard": {
+        "keywords": ["giveback guard", "giveback", "max profit giveback", "profit protection"],
+        "title": "Giveback Guard",
+        "content": """Giveback Guard prevents giving back too much unrealized profit. Configure in **Per-Channel Risk**.
+
+**How It Works:**
+- Tracks the peak unrealized profit during a trade
+- If profit drops more than **Giveback Allowed %** from peak, it exits
+
+**Setting:**
+- **Giveback Allowed %** - Maximum % of peak profit you're willing to lose (e.g., 15%)
+
+**Example:**
+- Giveback: 15%
+- Position gains +50% (peak)
+- Profit drops to +35% (gave back 15% of entry price from peak)
+- Giveback Guard triggers and sells
+
+**Best For:**
+- Trades that spike quickly then reverse
+- Protecting large unrealized gains
+- Combining with trailing stops for extra safety"""
+    },
+
+    "leave_runner": {
+        "keywords": ["leave runner", "runner", "runner position", "keep runner"],
+        "title": "Leave Runner",
+        "content": """Leave Runner keeps a small portion of winning trades running for extra upside. Configure in **Per-Channel Risk**.
+
+**Settings:**
+- **Enable** - Toggle on/off
+- **Runner %** - What percentage of the position to keep (e.g., 25%)
+
+**How It Works:**
+1. All profit targets fire, selling most of the position
+2. The Runner % stays open
+3. A trailing stop protects the runner portion
+4. Lets you capture unexpected big moves
+
+**Example:**
+- PT1: 25% at +20%, PT2: 25% at +40%, PT3: 25% at +60%
+- Runner: 25% stays open after all PTs hit
+- Runner protected by trailing stop
+
+**Tips:**
+- 15-25% runner is typical
+- Ensure PT quantities + Runner % = 100%
+- Works best on momentum trades with breakout potential"""
+    },
+
+    "dynamic_sl_escalation": {
+        "keywords": ["dynamic SL", "dynamic SL escalation", "SL escalation", "escalation profile"],
+        "title": "Dynamic SL Escalation",
+        "content": """Dynamic SL Escalation automatically raises your stop loss after each profit target is hit. Configure in **Per-Channel Risk**.
+
+**Profiles:**
+- **Standard** - Moderate SL adjustment after each PT
+- **Aggressive** - Large SL jumps after each PT (locks in more profit faster)
+- **Conservative** - Small SL adjustments (gives more room to run)
+
+**How It Works:**
+1. PT1 hits → SL moves up to a % above entry
+2. PT2 hits → SL moves higher
+3. PT3 hits → SL moves even higher
+4. Each escalation ratchets the SL up, never back down
+
+**Example (Standard):**
+- Original SL: -20% from entry
+- After PT1 (+20%): SL moves to -5% (near breakeven)
+- After PT2 (+40%): SL moves to +10% (profit locked)
+- After PT3 (+60%): SL moves to +25% (significant profit protected)
+
+**Best For:**
+- Multi-target strategies where you want progressive protection
+- Reducing risk as position becomes profitable"""
+    },
+
+    "circuit_breaker": {
+        "keywords": ["circuit breaker", "emergency halt", "daily loss limit", "trading halt", "kill switch"],
+        "title": "Circuit Breaker",
+        "content": """Circuit Breaker provides emergency halt controls when daily losses exceed your threshold.
+
+**Settings:**
+- **Daily Loss Limit** - Stop trading after losing $X in a day
+- **Max Positions** - Limit concurrent open positions per channel
+
+**How It Works:**
+1. Tracks cumulative daily P&L
+2. When losses exceed the limit, ALL new entries are blocked
+3. Existing positions continue to be managed (SL/PT still active)
+4. Resets at market open next day
+
+**Best For:**
+- Preventing catastrophic loss days
+- Discipline enforcement
+- Account protection during volatile markets"""
+    },
+
     "signals": {
         "keywords": ["signal", "signals", "bto", "stc", "buy to open", "sell to close", "signal format", "alert", "trade signal"],
         "title": "Signal Parsing",
