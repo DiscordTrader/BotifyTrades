@@ -54,9 +54,9 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25MB max upload
 
     # Security settings for cookies
-    app.config['SESSION_COOKIE_SECURE'] = True  # Only send over HTTPS
-    app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     
     # Import database and config services
     from . import database

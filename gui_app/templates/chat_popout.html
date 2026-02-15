@@ -439,17 +439,29 @@
             </div>
         </div>
         
-        <div id="log-upload-banner" style="display:none; padding: 8px 24px; background: rgba(139,92,246,0.1); border-top: 1px solid rgba(139,92,246,0.2); font-size: 12px; color: #A78BFA; display: none;">
+        <div id="log-upload-banner" style="display:none; padding: 8px 24px; background: rgba(139,92,246,0.1); border-top: 1px solid rgba(139,92,246,0.2); font-size: 12px; color: #A78BFA;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span id="log-upload-filename"></span>
                 <button onclick="clearLogUpload()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px; padding: 0 4px;">x</button>
             </div>
         </div>
+        <div id="paste-log-area" style="display:none; padding: 8px 16px;">
+            <textarea id="paste-log-text" style="width:100%; height:120px; background:rgba(15,20,30,0.9); color:#e0e0e0; border:1px solid rgba(139,92,246,0.3); border-radius:8px; padding:8px; font-size:11px; font-family:monospace; resize:vertical;" placeholder="Paste your log content here..."></textarea>
+            <div style="display:flex; gap:8px; margin-top:6px;">
+                <button onclick="submitPastedLog()" style="flex:1; padding:6px; background:linear-gradient(135deg,#8B5CF6,#6366F1); color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Analyze Pasted Log</button>
+                <button onclick="closePasteArea()" style="padding:6px 12px; background:rgba(255,255,255,0.1); color:#aaa; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Cancel</button>
+            </div>
+        </div>
         <div class="chat-input-container">
             <input type="file" id="log-file-input" accept=".log,.txt,.text,.csv,.out" style="display:none" onchange="handleFileSelect(event)">
-            <button onclick="document.getElementById('log-file-input').click()" class="upload-btn" title="Upload log file for debugging">
+            <button onclick="document.getElementById('log-file-input').click()" class="upload-btn" title="Upload log file">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                </svg>
+            </button>
+            <button onclick="togglePasteArea()" class="upload-btn" title="Paste log text" style="margin-left:2px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
                 </svg>
             </button>
             <input type="text" id="chat-input" class="chat-input" placeholder="Type your question..." onkeypress="handleKeypress(event)" autofocus>
@@ -588,6 +600,64 @@
         document.getElementById('log-upload-banner').style.display = 'none';
         document.getElementById('log-file-input').value = '';
         document.getElementById('chat-input').placeholder = 'Type your question...';
+    }
+
+    function togglePasteArea() {
+        const area = document.getElementById('paste-log-area');
+        area.style.display = area.style.display === 'none' ? 'block' : 'none';
+        if (area.style.display === 'block') {
+            document.getElementById('paste-log-text').focus();
+        }
+    }
+
+    function closePasteArea() {
+        document.getElementById('paste-log-area').style.display = 'none';
+        document.getElementById('paste-log-text').value = '';
+    }
+
+    async function submitPastedLog() {
+        const logText = document.getElementById('paste-log-text').value.trim();
+        if (!logText) {
+            addMessage('Please paste some log content first.', false);
+            return;
+        }
+
+        const query = document.getElementById('chat-input').value.trim();
+        addMessage(query || 'Analyze pasted log content', true);
+        document.getElementById('chat-input').value = '';
+        closePasteArea();
+        showTyping();
+
+        try {
+            const response = await fetch('/api/chat/upload-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ log_content: logText, query: query || '' }),
+                credentials: 'include'
+            });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => '');
+                throw new Error(`Server returned ${response.status}. ${errText.substring(0, 200)}`);
+            }
+            const data = await response.json();
+            hideTyping();
+
+            if (data.response) {
+                let statsHeader = '';
+                if (data.stats) {
+                    const s = data.stats;
+                    statsHeader = `📊 **Quick Stats:** ${s.entries || 0} entries, ${s.exits || 0} exits, ${s.errors || 0} errors, ${s.rejections || 0} rejections\n\n`;
+                }
+                addMessage(statsHeader + data.response, false);
+            } else if (data.error) {
+                addMessage('Error: ' + data.error, false);
+            } else {
+                addMessage('Could not analyze the log. Please try again.', false);
+            }
+        } catch (error) {
+            hideTyping();
+            addMessage('Error analyzing log: ' + error.message, false);
+        }
     }
 
     // Drag and drop

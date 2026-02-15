@@ -325,11 +325,23 @@
                     <button onclick="clearChatLogUpload()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:13px; padding: 0 4px;">x</button>
                 </div>
             </div>
+            <div id="chat-paste-log-area" style="display:none; padding: 6px 12px;">
+                <textarea id="chat-paste-log-text" style="width:100%; height:100px; background:rgba(15,20,30,0.9); color:#e0e0e0; border:1px solid rgba(139,92,246,0.3); border-radius:6px; padding:6px; font-size:10px; font-family:monospace; resize:vertical;" placeholder="Paste your log content here..."></textarea>
+                <div style="display:flex; gap:6px; margin-top:4px;">
+                    <button onclick="submitChatPastedLog()" style="flex:1; padding:4px; background:linear-gradient(135deg,#8B5CF6,#6366F1); color:white; border:none; border-radius:4px; cursor:pointer; font-size:11px;">Analyze</button>
+                    <button onclick="closeChatPasteArea()" style="padding:4px 8px; background:rgba(255,255,255,0.1); color:#aaa; border:none; border-radius:4px; cursor:pointer; font-size:11px;">Cancel</button>
+                </div>
+            </div>
             <div class="chat-input-container">
                 <input type="file" id="chat-log-file-input" accept=".log,.txt,.text,.csv,.out" style="display:none" onchange="handleChatFileSelect(event)">
-                <button onclick="document.getElementById('chat-log-file-input').click()" class="chat-upload-btn" title="Upload log file for debugging">
+                <button onclick="document.getElementById('chat-log-file-input').click()" class="chat-upload-btn" title="Upload log file">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                    </svg>
+                </button>
+                <button onclick="toggleChatPasteArea()" class="chat-upload-btn" title="Paste log text" style="margin-left:1px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
                     </svg>
                 </button>
                 <input type="text" id="chat-input" class="chat-input" placeholder="Type your question..." onkeypress="handleChatKeypress(event)">
@@ -1363,6 +1375,64 @@
         banner.style.display = 'block';
         document.getElementById('chat-input').placeholder = 'Ask about this log file (or press send to analyze)...';
         document.getElementById('chat-input').focus();
+    }
+
+    function toggleChatPasteArea() {
+        const area = document.getElementById('chat-paste-log-area');
+        area.style.display = area.style.display === 'none' ? 'block' : 'none';
+        if (area.style.display === 'block') {
+            document.getElementById('chat-paste-log-text').focus();
+        }
+    }
+
+    function closeChatPasteArea() {
+        document.getElementById('chat-paste-log-area').style.display = 'none';
+        document.getElementById('chat-paste-log-text').value = '';
+    }
+
+    async function submitChatPastedLog() {
+        const logText = document.getElementById('chat-paste-log-text').value.trim();
+        if (!logText) {
+            addMessage('Please paste some log content first.');
+            return;
+        }
+
+        const query = document.getElementById('chat-input').value.trim();
+        addMessage(query || 'Analyze pasted log content', true);
+        document.getElementById('chat-input').value = '';
+        closeChatPasteArea();
+        showTyping();
+
+        try {
+            const response = await fetch('/api/chat/upload-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ log_content: logText, query: query || '' }),
+                credentials: 'include'
+            });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => '');
+                throw new Error(`Server returned ${response.status}. ${errText.substring(0, 200)}`);
+            }
+            const data = await response.json();
+            hideTyping();
+
+            if (data.response) {
+                let statsHeader = '';
+                if (data.stats) {
+                    const s = data.stats;
+                    statsHeader = `📊 **Quick Stats:** ${s.entries || 0} entries, ${s.exits || 0} exits, ${s.errors || 0} errors, ${s.rejections || 0} rejections\n\n`;
+                }
+                addMessage(statsHeader + data.response);
+            } else if (data.error) {
+                addMessage('Error: ' + data.error);
+            } else {
+                addMessage('Could not analyze the log. Please try again.');
+            }
+        } catch (error) {
+            hideTyping();
+            addMessage('Error analyzing log: ' + error.message);
+        }
     }
 
     function clearChatLogUpload() {
