@@ -319,7 +319,19 @@
                     <button onclick="askQuestion('best risk settings for conservative')">Conservative Preset</button>
                 </div>
             </div>
+            <div id="chat-log-upload-banner" style="display:none; padding: 6px 20px; background: rgba(139,92,246,0.1); border-top: 1px solid rgba(139,92,246,0.2); font-size: 11px; color: #A78BFA;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span id="chat-log-upload-filename"></span>
+                    <button onclick="clearChatLogUpload()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:13px; padding: 0 4px;">x</button>
+                </div>
+            </div>
             <div class="chat-input-container">
+                <input type="file" id="chat-log-file-input" accept=".log,.txt,.text,.csv,.out" style="display:none" onchange="handleChatFileSelect(event)">
+                <button onclick="document.getElementById('chat-log-file-input').click()" class="chat-upload-btn" title="Upload log file for debugging">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                    </svg>
+                </button>
                 <input type="text" id="chat-input" class="chat-input" placeholder="Type your question..." onkeypress="handleChatKeypress(event)">
                 <button id="chat-send" class="chat-send" onclick="sendChatMessage()">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -597,6 +609,26 @@
     }
     .chat-input::placeholder {
         color: #666;
+    }
+    .chat-upload-btn {
+        width: 38px;
+        height: 38px;
+        border-radius: 19px;
+        background: rgba(139, 92, 246, 0.15);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #A78BFA;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        align-self: center;
+    }
+    .chat-upload-btn:hover {
+        background: rgba(139, 92, 246, 0.3);
+        border-color: rgba(139, 92, 246, 0.5);
+        color: #C4B5FD;
     }
     .chat-send {
         width: 46px;
@@ -1310,9 +1342,83 @@
         if (typing) typing.remove();
     }
     
+    let chatPendingLogFile = null;
+
+    function handleChatFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const allowed = ['.log', '.txt', '.text', '.csv', '.out'];
+        const ext = '.' + file.name.split('.').pop().toLowerCase();
+        if (!allowed.includes(ext)) {
+            addMessage(`Unsupported file type: ${ext}. Please use .log, .txt, or .csv files.`);
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            addMessage('File is too large (max 5MB). Please trim it to the relevant section.');
+            return;
+        }
+        chatPendingLogFile = file;
+        const banner = document.getElementById('chat-log-upload-banner');
+        document.getElementById('chat-log-upload-filename').textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        banner.style.display = 'block';
+        document.getElementById('chat-input').placeholder = 'Ask about this log file (or press send to analyze)...';
+        document.getElementById('chat-input').focus();
+    }
+
+    function clearChatLogUpload() {
+        chatPendingLogFile = null;
+        document.getElementById('chat-log-upload-banner').style.display = 'none';
+        document.getElementById('chat-log-file-input').value = '';
+        document.getElementById('chat-input').placeholder = 'Type your question...';
+    }
+
     async function sendChatMessage() {
         const input = document.getElementById('chat-input');
         const message = input.value.trim();
+
+        if (chatPendingLogFile) {
+            const displayMsg = message || `Analyze log file: ${chatPendingLogFile.name}`;
+            addMessage(displayMsg, true);
+            input.value = '';
+            input.disabled = true;
+            document.getElementById('chat-send').disabled = true;
+            showTyping();
+
+            try {
+                const formData = new FormData();
+                formData.append('file', chatPendingLogFile);
+                formData.append('query', message || '');
+
+                const response = await fetch('/api/chat/upload-log', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                hideTyping();
+
+                if (data.response) {
+                    let statsHeader = '';
+                    if (data.stats) {
+                        const s = data.stats;
+                        statsHeader = `📊 **Quick Stats:** ${s.entries || 0} entries, ${s.exits || 0} exits, ${s.errors || 0} errors, ${s.rejections || 0} rejections\n\n`;
+                    }
+                    addMessage(statsHeader + data.response);
+                } else if (data.error) {
+                    addMessage('Error: ' + data.error);
+                } else {
+                    addMessage('Could not analyze the log file. Please try a smaller file.');
+                }
+            } catch (error) {
+                hideTyping();
+                addMessage('Error uploading file: ' + error.message);
+            }
+
+            clearChatLogUpload();
+            input.disabled = false;
+            document.getElementById('chat-send').disabled = false;
+            input.focus();
+            return;
+        }
         
         if (!message) return;
         

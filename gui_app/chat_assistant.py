@@ -3245,6 +3245,156 @@ def is_ai_available() -> bool:
     return _get_openai_client() is not None
 
 
+def analyze_uploaded_log(log_content: str, query: str = "") -> Dict:
+    """Analyze an uploaded log file for entries, exits, rejections, failures, etc."""
+    try:
+        if not log_content or not log_content.strip():
+            return {
+                "success": True,
+                "response": "The uploaded log file appears to be empty. Please upload a file with log content.",
+                "topic": "log_upload"
+            }
+
+        lines = log_content.strip().split('\n')
+        total_lines = len(lines)
+
+        entry_lines = []
+        exit_lines = []
+        error_lines = []
+        reject_lines = []
+        risk_lines = []
+        signal_lines = []
+        order_lines = []
+
+        entry_kw = ['BTO', 'ENTRY', 'BUYING', 'BOUGHT', 'BUY_TO_OPEN', 'OPENING POSITION', 'ENTRY SIGNAL']
+        exit_kw = ['STC', 'EXIT', 'SELLING', 'SOLD', 'SELL_TO_CLOSE', 'CLOSING POSITION', 'EXIT SIGNAL']
+        error_kw = ['ERROR', 'FAILED', 'FAILURE', 'EXCEPTION', 'TRACEBACK', 'CRITICAL']
+        reject_kw = ['REJECT', 'REJECTED', 'DENIED', 'BLOCKED', 'SKIPPED', 'IGNORED', 'INSUFFICIENT', 'INVALID']
+        risk_kw = ['STOP LOSS', 'PROFIT TARGET', 'TRAILING', 'PT1', 'PT2', 'PT3', 'PT4', 'GIVEBACK', 'CIRCUIT BREAKER', 'RISK']
+        signal_kw = ['SIGNAL', 'PARSED', 'DETECTED', 'PATTERN', 'FORMAT']
+        order_kw = ['ORDER', 'FILLED', 'PENDING', 'CANCELLED', 'CANCELED', 'PLACED', 'SUBMITTED']
+
+        for i, line in enumerate(lines):
+            upper = line.upper()
+            if any(kw in upper for kw in entry_kw):
+                entry_lines.append((i + 1, line.strip()))
+            if any(kw in upper for kw in exit_kw):
+                exit_lines.append((i + 1, line.strip()))
+            if any(kw in upper for kw in error_kw):
+                error_lines.append((i + 1, line.strip()))
+            if any(kw in upper for kw in reject_kw):
+                reject_lines.append((i + 1, line.strip()))
+            if any(kw in upper for kw in risk_kw):
+                risk_lines.append((i + 1, line.strip()))
+            if any(kw in upper for kw in signal_kw):
+                signal_lines.append((i + 1, line.strip()))
+            if any(kw in upper for kw in order_kw):
+                order_lines.append((i + 1, line.strip()))
+
+        summary_parts = [
+            f"**Log File Analysis** ({total_lines} lines)\n",
+            f"- Entries (BTO): **{len(entry_lines)}**",
+            f"- Exits (STC): **{len(exit_lines)}**",
+            f"- Orders: **{len(order_lines)}**",
+            f"- Signals: **{len(signal_lines)}**",
+            f"- Risk Events: **{len(risk_lines)}**",
+            f"- Errors/Failures: **{len(error_lines)}**",
+            f"- Rejections/Skips: **{len(reject_lines)}**",
+        ]
+
+        max_context_chars = 12000
+        context_parts = []
+
+        if error_lines:
+            context_parts.append("=== ERRORS/FAILURES ===")
+            for ln, txt in error_lines[:30]:
+                context_parts.append(f"L{ln}: {txt[:300]}")
+
+        if reject_lines:
+            context_parts.append("\n=== REJECTIONS/SKIPS ===")
+            for ln, txt in reject_lines[:20]:
+                context_parts.append(f"L{ln}: {txt[:300]}")
+
+        if entry_lines:
+            context_parts.append("\n=== ENTRIES (BTO) ===")
+            for ln, txt in entry_lines[:25]:
+                context_parts.append(f"L{ln}: {txt[:300]}")
+
+        if exit_lines:
+            context_parts.append("\n=== EXITS (STC) ===")
+            for ln, txt in exit_lines[:25]:
+                context_parts.append(f"L{ln}: {txt[:300]}")
+
+        if risk_lines:
+            context_parts.append("\n=== RISK EVENTS ===")
+            for ln, txt in risk_lines[:20]:
+                context_parts.append(f"L{ln}: {txt[:300]}")
+
+        if order_lines:
+            context_parts.append("\n=== ORDER ACTIVITY ===")
+            for ln, txt in order_lines[:20]:
+                context_parts.append(f"L{ln}: {txt[:300]}")
+
+        context = '\n'.join(context_parts)
+        if len(context) > max_context_chars:
+            context = context[:max_context_chars] + "\n... (truncated)"
+
+        user_query = query.strip() if query.strip() else "Analyze this log file. Summarize all entries, exits, rejections, failures, and errors. Highlight anything unusual or problematic."
+
+        ai_response = _call_openai(user_query, context, "log_upload")
+
+        if ai_response:
+            return {
+                "success": True,
+                "response": ai_response,
+                "topic": "log_upload",
+                "ai_powered": True,
+                "stats": {
+                    "total_lines": total_lines,
+                    "entries": len(entry_lines),
+                    "exits": len(exit_lines),
+                    "errors": len(error_lines),
+                    "rejections": len(reject_lines),
+                    "risk_events": len(risk_lines),
+                    "orders": len(order_lines),
+                    "signals": len(signal_lines)
+                }
+            }
+        else:
+            summary = '\n'.join(summary_parts)
+            if error_lines:
+                summary += "\n\n**Recent Errors:**\n"
+                for ln, txt in error_lines[:10]:
+                    summary += f"- Line {ln}: `{txt[:150]}`\n"
+            if reject_lines:
+                summary += "\n**Rejections:**\n"
+                for ln, txt in reject_lines[:10]:
+                    summary += f"- Line {ln}: `{txt[:150]}`\n"
+            if not error_lines and not reject_lines:
+                summary += "\n\nNo errors or rejections found in the log file."
+
+            return {
+                "success": True,
+                "response": summary,
+                "topic": "log_upload",
+                "stats": {
+                    "total_lines": total_lines,
+                    "entries": len(entry_lines),
+                    "exits": len(exit_lines),
+                    "errors": len(error_lines),
+                    "rejections": len(reject_lines)
+                }
+            }
+
+    except Exception as e:
+        print(f"[CHAT] Log upload analysis error: {e}")
+        return {
+            "success": True,
+            "response": f"Error analyzing log file: {str(e)}. Please try a smaller file or paste the relevant section.",
+            "topic": "error"
+        }
+
+
 def _call_openai(query: str, context: str, analysis_type: str) -> Optional[str]:
     """Call OpenAI to analyze context and answer query."""
     try:
@@ -3267,6 +3417,18 @@ Be concise and highlight the most relevant information.""",
 Analyze the errors and issues to help the user understand what went wrong.
 Provide clear explanations and suggest solutions when possible.
 Be empathetic - users are often frustrated when things don't work.""",
+            
+            "log_upload": """You are a log file debugger for BotifyTrades, a Discord trading bot that automates stock and options trading.
+The user has uploaded a log file. Analyze it thoroughly and answer their question.
+Focus on:
+- Trade entries (BTO) and exits (STC) - were they successful? What symbols/prices?
+- Rejections and skipped signals - WHY were they rejected? (insufficient funds, invalid format, filtered, etc.)
+- Errors and failures - broker connection issues, order placement failures, API errors
+- Risk management events - stop loss triggers, profit target hits, trailing stops
+- Signal parsing - were signals detected and parsed correctly?
+- Order flow - was the order placed, filled, or cancelled?
+Provide a clear summary with specific line references. Highlight problems and suggest fixes.
+Use markdown formatting for readability.""",
             
             "general": """You are a helpful assistant for BotifyTrades, a Discord trading bot that automates stock and options trading.
 Answer the user's question helpfully. Be concise but informative.

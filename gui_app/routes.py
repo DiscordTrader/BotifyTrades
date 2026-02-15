@@ -14306,6 +14306,57 @@ def register_routes(app):
                 'error': str(e)
             })
     
+    @app.route('/api/chat/upload-log', methods=['POST'])
+    @login_required
+    def api_chat_upload_log():
+        """Upload a log file for AI-powered debugging analysis."""
+        try:
+            from .chat_assistant import analyze_uploaded_log
+
+            log_content = None
+            query = ""
+
+            if 'file' in request.files:
+                file = request.files['file']
+                if file and file.filename:
+                    allowed_ext = {'.log', '.txt', '.text', '.csv', '.out'}
+                    ext = '.' + file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+                    if ext not in allowed_ext:
+                        return jsonify({'success': False, 'error': f'Unsupported file type: {ext}. Use .log, .txt, or .csv'})
+
+                    raw = file.read()
+                    try:
+                        log_content = raw.decode('utf-8')
+                    except UnicodeDecodeError:
+                        log_content = raw.decode('latin-1')
+
+                    max_size = 500_000
+                    if len(log_content) > max_size:
+                        log_content = log_content[-max_size:]
+
+                query = request.form.get('query', '') or request.form.get('message', '')
+
+            elif request.is_json:
+                data = request.json
+                log_content = data.get('log_content', '')
+                query = data.get('query', '') or data.get('message', '')
+
+                max_size = 500_000
+                if log_content and len(log_content) > max_size:
+                    log_content = log_content[-max_size:]
+
+            if not log_content:
+                return jsonify({'success': False, 'error': 'No log content provided. Upload a file or paste log text.'})
+
+            result = analyze_uploaded_log(log_content, query)
+            return jsonify(result)
+
+        except Exception as e:
+            print(f"[CHAT] Log upload error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)})
+
     @app.route('/api/chat/suggestions', methods=['GET'])
     def api_chat_suggestions():
         """Get topic suggestions for chat assistant"""

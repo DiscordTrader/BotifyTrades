@@ -241,6 +241,48 @@
     .chat-input::placeholder {
         color: #666;
     }
+    .upload-btn {
+        width: 42px;
+        height: 42px;
+        border-radius: 21px;
+        background: rgba(139, 92, 246, 0.15);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #A78BFA;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+    .upload-btn:hover {
+        background: rgba(139, 92, 246, 0.3);
+        border-color: rgba(139, 92, 246, 0.5);
+        color: #C4B5FD;
+        box-shadow: 0 2px 12px rgba(139, 92, 246, 0.2);
+    }
+    .drag-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(139, 92, 246, 0.15);
+        backdrop-filter: blur(4px);
+        z-index: 999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    }
+    .drag-overlay-content {
+        background: rgba(13, 17, 23, 0.95);
+        border: 2px dashed rgba(139, 92, 246, 0.6);
+        border-radius: 20px;
+        padding: 40px 60px;
+        text-align: center;
+        color: #A78BFA;
+    }
+    .drag-overlay-content .icon { font-size: 48px; margin-bottom: 12px; }
+    .drag-overlay-content .title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .drag-overlay-content .subtitle { font-size: 13px; color: #6B7A90; }
     .chat-send {
         width: 52px;
         height: 52px;
@@ -397,7 +439,19 @@
             </div>
         </div>
         
+        <div id="log-upload-banner" style="display:none; padding: 8px 24px; background: rgba(139,92,246,0.1); border-top: 1px solid rgba(139,92,246,0.2); font-size: 12px; color: #A78BFA; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span id="log-upload-filename"></span>
+                <button onclick="clearLogUpload()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px; padding: 0 4px;">x</button>
+            </div>
+        </div>
         <div class="chat-input-container">
+            <input type="file" id="log-file-input" accept=".log,.txt,.text,.csv,.out" style="display:none" onchange="handleFileSelect(event)">
+            <button onclick="document.getElementById('log-file-input').click()" class="upload-btn" title="Upload log file for debugging">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                </svg>
+            </button>
             <input type="text" id="chat-input" class="chat-input" placeholder="Type your question..." onkeypress="handleKeypress(event)" autofocus>
             <button id="chat-send" class="chat-send" onclick="sendMessage()">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -506,9 +560,122 @@
         if (typing) typing.remove();
     }
     
+    let pendingLogFile = null;
+
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const allowed = ['.log', '.txt', '.text', '.csv', '.out'];
+        const ext = '.' + file.name.split('.').pop().toLowerCase();
+        if (!allowed.includes(ext)) {
+            addMessage(`Unsupported file type: ${ext}. Please use .log, .txt, or .csv files.`, false);
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            addMessage('File is too large (max 5MB). Please trim it to the relevant section.', false);
+            return;
+        }
+        pendingLogFile = file;
+        const banner = document.getElementById('log-upload-banner');
+        document.getElementById('log-upload-filename').textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        banner.style.display = 'block';
+        document.getElementById('chat-input').placeholder = 'Ask about this log file (or press send to analyze)...';
+        document.getElementById('chat-input').focus();
+    }
+
+    function clearLogUpload() {
+        pendingLogFile = null;
+        document.getElementById('log-upload-banner').style.display = 'none';
+        document.getElementById('log-file-input').value = '';
+        document.getElementById('chat-input').placeholder = 'Type your question...';
+    }
+
+    // Drag and drop
+    let dragCounter = 0;
+    document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) {
+            let overlay = document.getElementById('drag-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'drag-overlay';
+                overlay.className = 'drag-overlay';
+                overlay.innerHTML = '<div class="drag-overlay-content"><div class="icon">📄</div><div class="title">Drop Log File</div><div class="subtitle">.log, .txt, .csv supported</div></div>';
+                document.body.appendChild(overlay);
+            }
+            overlay.style.display = 'flex';
+        }
+    });
+    document.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            const overlay = document.getElementById('drag-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+    });
+    document.addEventListener('dragover', (e) => e.preventDefault());
+    document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        const overlay = document.getElementById('drag-overlay');
+        if (overlay) overlay.style.display = 'none';
+        if (e.dataTransfer.files.length > 0) {
+            const fakeEvent = { target: { files: e.dataTransfer.files } };
+            handleFileSelect(fakeEvent);
+        }
+    });
+
     async function sendMessage() {
         const input = document.getElementById('chat-input');
         const message = input.value.trim();
+
+        if (pendingLogFile) {
+            const displayMsg = message || `Analyze log file: ${pendingLogFile.name}`;
+            addMessage(displayMsg, true);
+            input.value = '';
+            input.disabled = true;
+            document.getElementById('chat-send').disabled = true;
+            showTyping();
+
+            try {
+                const formData = new FormData();
+                formData.append('file', pendingLogFile);
+                formData.append('query', message || '');
+
+                const response = await fetch('/api/chat/upload-log', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                hideTyping();
+
+                if (data.response) {
+                    let statsHeader = '';
+                    if (data.stats) {
+                        const s = data.stats;
+                        statsHeader = `📊 **Quick Stats:** ${s.entries || 0} entries, ${s.exits || 0} exits, ${s.errors || 0} errors, ${s.rejections || 0} rejections\n\n`;
+                    }
+                    addMessage(statsHeader + data.response, false);
+                } else if (data.error) {
+                    addMessage('Error: ' + data.error, false);
+                } else {
+                    addMessage('Could not analyze the log file. Please try a smaller file.', false);
+                }
+            } catch (error) {
+                hideTyping();
+                addMessage('Error uploading file: ' + error.message, false);
+            }
+
+            clearLogUpload();
+            input.disabled = false;
+            document.getElementById('chat-send').disabled = false;
+            input.focus();
+            return;
+        }
+
         if (!message) return;
         
         addMessage(message, true);
