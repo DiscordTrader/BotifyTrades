@@ -3585,12 +3585,14 @@ def register_routes(app):
                         
                         result_data = {
                             'buying_power': account_info.get('buying_power', 0) if account_info else 0,
+                            'options_buying_power': account_info.get('options_buying_power', account_info.get('buying_power', 0)) if account_info else 0,
                             'cash_balance': account_info.get('cash', 0) if account_info else 0,
                             'net_liquidation': account_info.get('portfolio_value', 0) if account_info else 0,
                             'equity': account_info.get('portfolio_value', 0) if account_info else 0,
                             'unrealized_pnl': account_info.get('unrealized_pnl', 0) if account_info else 0,
                             'positions': positions_list,
                             'account_number': getattr(broker, 'account_number', None),
+                            'account_type': account_info.get('account_type', '') if account_info else '',
                             'status': 'ok'
                         }
                         _api_cache[cache_key] = (result_data, time.time())
@@ -3669,12 +3671,14 @@ def register_routes(app):
             
             result_data = {
                 'buying_power': account_info.get('buying_power', 0) if account_info else 0,
+                'options_buying_power': account_info.get('options_buying_power', account_info.get('buying_power', 0)) if account_info else 0,
                 'cash_balance': account_info.get('cash', 0) if account_info else 0,
                 'net_liquidation': account_info.get('portfolio_value', 0) if account_info else 0,
                 'equity': account_info.get('portfolio_value', 0) if account_info else 0,
                 'unrealized_pnl': account_info.get('unrealized_pnl', 0) if account_info else 0,
                 'positions': positions_list,
                 'account_number': broker.account_number,
+                'account_type': account_info.get('account_type', '') if account_info else '',
                 'status': 'ok'
             }
             _api_cache[cache_key] = (result_data, time.time())

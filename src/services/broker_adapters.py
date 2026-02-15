@@ -158,18 +158,51 @@ class SchwabAdapter(BaseBrokerAdapter):
     
     def parse_fill(self, raw_order: Dict) -> Optional[BrokerFillData]:
         try:
-            filled_at = self.normalize_timestamp(raw_order.get('enteredTime'))
+            symbol = raw_order.get('symbol', '')
+            asset_type = 'stock'
+            instruction = raw_order.get('instruction', 'BUY')
+            
+            legs = raw_order.get('orderLegCollection', [])
+            if legs:
+                leg = legs[0]
+                inst = leg.get('instrument', {})
+                asset_type = 'option' if inst.get('assetType', '').upper() == 'OPTION' else 'stock'
+                symbol = inst.get('symbol', symbol)
+                instruction = leg.get('instruction', instruction)
+            
+            total_qty = 0
+            total_cost = 0.0
+            latest_time = None
+            
+            activities = raw_order.get('orderActivityCollection', [])
+            for activity in activities:
+                for leg_data in activity.get('executionLegs', []):
+                    leg_qty = int(leg_data.get('quantity', 0))
+                    leg_price = float(leg_data.get('price', 0))
+                    total_qty += leg_qty
+                    total_cost += leg_qty * leg_price
+                    leg_time = self.normalize_timestamp(leg_data.get('time'))
+                    if leg_time and (latest_time is None or leg_time > latest_time):
+                        latest_time = leg_time
+            
+            if total_qty == 0:
+                total_qty = int(raw_order.get('filledQuantity', 0))
+                total_cost = total_qty * float(raw_order.get('price', 0))
+            
+            avg_price = total_cost / total_qty if total_qty > 0 else float(raw_order.get('price', 0))
+            
+            filled_at = latest_time or self.normalize_timestamp(raw_order.get('closeTime') or raw_order.get('enteredTime'))
             if not filled_at:
                 filled_at = datetime.now()
             
             return BrokerFillData(
                 broker=self.BROKER_NAME,
                 order_id=str(raw_order.get('orderId', '')),
-                symbol=raw_order.get('symbol', ''),
-                asset_type='option' if 'option' in raw_order.get('assetType', '').lower() else 'stock',
-                side=raw_order.get('instruction', 'BUY'),
-                quantity=int(raw_order.get('filledQuantity', 0)),
-                fill_price=float(raw_order.get('price', 0)),
+                symbol=symbol,
+                asset_type=asset_type,
+                side=instruction,
+                quantity=total_qty,
+                fill_price=avg_price,
                 filled_at=filled_at,
                 raw_data=raw_order
             )

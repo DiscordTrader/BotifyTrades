@@ -121,8 +121,7 @@ class SchwabBroker(BrokerInterface):
         params = {
             'response_type': 'code',
             'client_id': self.client_id,
-            'redirect_uri': self.redirect_uri,
-            'scope': 'readonly'
+            'redirect_uri': self.redirect_uri
         }
         return f"{self.AUTH_URL}?{urllib.parse.urlencode(params)}"
     
@@ -291,6 +290,45 @@ class SchwabBroker(BrokerInterface):
         if self.token_expiry and datetime.now().timestamp() >= (self.token_expiry - 60):
             return await self._refresh_access_token()
         return bool(self.access_token)
+
+    def _format_price(self, price: float) -> str:
+        """Format price for Schwab API.
+        For prices < $1: truncate to 4 decimal places
+        For prices >= $1: truncate to 2 decimal places
+        """
+        import math
+        if price < 1.0:
+            truncated = math.floor(price * 10000) / 10000
+            return f"{truncated:.4f}"
+        else:
+            truncated = math.floor(price * 100) / 100
+            return f"{truncated:.2f}"
+
+    async def _make_request(self, method, url, **kwargs):
+        """Make HTTP request with rate limit and token refresh handling"""
+        import httpx
+
+        headers = kwargs.pop('headers', {})
+        if 'Authorization' not in headers:
+            headers['Authorization'] = f'Bearer {self.access_token}'
+        if 'Accept' not in headers:
+            headers['Accept'] = 'application/json'
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.request(method, url, headers=headers, **kwargs)
+
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', '60'))
+                print(f"[{self.name}] Rate limited, waiting {retry_after}s...")
+                await asyncio.sleep(retry_after)
+                response = await client.request(method, url, headers=headers, **kwargs)
+
+            elif response.status_code == 401:
+                if await self._refresh_access_token():
+                    headers['Authorization'] = f'Bearer {self.access_token}'
+                    response = await client.request(method, url, headers=headers, **kwargs)
+
+            return response
     
     def _get_session_type(self) -> str:
         """Get order session type based on extended hours setting.
@@ -375,7 +413,10 @@ class SchwabBroker(BrokerInterface):
                         'settled_cash': settled_cash,
                         'unsettled_cash': unsettled_cash,
                         'cashAvailableForTrading': cash_available_for_trading,
-                        'availableFunds': available_funds
+                        'availableFunds': available_funds,
+                        'options_buying_power': float(balances.get('optionBuyingPower', buying_power)),
+                        'account_type': account.get('type', 'UNKNOWN'),
+                        'account_id': self.account_number or ''
                     }
                     
         except Exception as e:
@@ -438,7 +479,16 @@ class SchwabBroker(BrokerInterface):
                     action=action
                 )
             
-            instruction = "BUY" if action.upper() == "BTO" else "SELL"
+            if action.upper() == "BTO":
+                instruction = "BUY"
+            elif action.upper() == "STC":
+                instruction = "SELL"
+            elif action.upper() == "SHORT":
+                instruction = "SELL_SHORT"
+            elif action.upper() == "COVER":
+                instruction = "BUY_TO_COVER"
+            else:
+                instruction = "SELL" if "SELL" in action.upper() or "STC" in action.upper() else "BUY"
             order_type = "LIMIT" if price else "MARKET"
             
             session = self._get_session_type()
@@ -459,7 +509,7 @@ class SchwabBroker(BrokerInterface):
             }
             
             if price:
-                order_payload["price"] = price
+                order_payload["price"] = self._format_price(price)
             
             if self.dry_run:
                 print(f"[{self.name}] DRY RUN - Would place order: {json.dumps(order_payload, indent=2)}")
@@ -473,40 +523,36 @@ class SchwabBroker(BrokerInterface):
                     action=action
                 )
             
-            import httpx
-            
             headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Content-Type': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
-                    headers=headers,
-                    json=order_payload
+            response = await self._make_request(
+                'POST',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                headers=headers,
+                json=order_payload
+            )
+            
+            if response.status_code in [200, 201]:
+                order_id = response.headers.get('Location', '').split('/')[-1]
+                return OrderResult(
+                    success=True,
+                    order_id=order_id,
+                    message=f"Order placed: {action} {quantity} {symbol}",
+                    price=price,
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
                 )
-                
-                if response.status_code in [200, 201]:
-                    order_id = response.headers.get('Location', '').split('/')[-1]
-                    return OrderResult(
-                        success=True,
-                        order_id=order_id,
-                        message=f"Order placed: {action} {quantity} {symbol}",
-                        price=price,
-                        quantity=quantity,
-                        symbol=symbol,
-                        action=action
-                    )
-                else:
-                    error_msg = response.text
-                    return OrderResult(
-                        success=False,
-                        message=f"Order failed: {response.status_code} - {error_msg}",
-                        symbol=symbol,
-                        action=action
-                    )
+            else:
+                error_msg = response.text
+                return OrderResult(
+                    success=False,
+                    message=f"Order failed: {response.status_code} - {error_msg}",
+                    symbol=symbol,
+                    action=action
+                )
                     
         except Exception as e:
             return OrderResult(
@@ -577,7 +623,7 @@ class SchwabBroker(BrokerInterface):
             }
             
             if price:
-                order_payload["price"] = price
+                order_payload["price"] = self._format_price(price)
             
             if self.dry_run:
                 print(f"[{self.name}] DRY RUN - Would place option order: {json.dumps(order_payload, indent=2)}")
@@ -591,40 +637,36 @@ class SchwabBroker(BrokerInterface):
                     action=action
                 )
             
-            import httpx
-            
             headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Content-Type': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
-                    headers=headers,
-                    json=order_payload
+            response = await self._make_request(
+                'POST',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                headers=headers,
+                json=order_payload
+            )
+            
+            if response.status_code in [200, 201]:
+                order_id = response.headers.get('Location', '').split('/')[-1]
+                return OrderResult(
+                    success=True,
+                    order_id=order_id,
+                    message=f"Option order placed: {action} {quantity} {option_symbol}",
+                    price=price,
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
                 )
-                
-                if response.status_code in [200, 201]:
-                    order_id = response.headers.get('Location', '').split('/')[-1]
-                    return OrderResult(
-                        success=True,
-                        order_id=order_id,
-                        message=f"Option order placed: {action} {quantity} {option_symbol}",
-                        price=price,
-                        quantity=quantity,
-                        symbol=symbol,
-                        action=action
-                    )
-                else:
-                    error_msg = response.text
-                    return OrderResult(
-                        success=False,
-                        message=f"Order failed: {response.status_code} - {error_msg}",
-                        symbol=symbol,
-                        action=action
-                    )
+            else:
+                error_msg = response.text
+                return OrderResult(
+                    success=False,
+                    message=f"Order failed: {response.status_code} - {error_msg}",
+                    symbol=symbol,
+                    action=action
+                )
                     
         except Exception as e:
             return OrderResult(
@@ -958,19 +1000,14 @@ class SchwabBroker(BrokerInterface):
                             'position_id': instrument.get('cusip', symbol)
                         }
                         
-                        # Parse option details if applicable
                         if asset_type == 'option':
-                            # Debug: log the full instrument for troubleshooting
-                            print(f"[{self.name}] Option instrument data: {instrument}")
+                            position_data['raw_symbol'] = symbol
                             
-                            # Schwab option symbol format: e.g., "QQQ   260128P00630000"
-                            # Parse from symbol if individual fields not available
                             strike_price = instrument.get('strikePrice', 0)
                             expiration = instrument.get('expirationDate', '')
                             put_call = instrument.get('putCall', '')
                             underlying = instrument.get('underlyingSymbol', '')
                             
-                            # If strike/expiry not in instrument, parse from OCC symbol
                             if (not strike_price or strike_price == 0) and symbol:
                                 parsed = self._parse_occ_symbol(symbol)
                                 if parsed:
@@ -978,7 +1015,6 @@ class SchwabBroker(BrokerInterface):
                                     strike_price = parsed.get('strike', 0)
                                     expiration = parsed.get('expiry', '')
                                     put_call = parsed.get('option_type', put_call)
-                                    print(f"[{self.name}] Parsed OCC symbol {symbol}: {parsed}")
                             
                             position_data['strike'] = float(strike_price) if strike_price else 0.0
                             position_data['expiry'] = expiration[:10] if expiration else ''
@@ -1107,31 +1143,39 @@ class SchwabBroker(BrokerInterface):
                         symbol = instrument.get('symbol', '')
                         underlying = instrument.get('underlyingSymbol', symbol) if asset_type == 'option' else symbol
                         
-                        # Get fill info from order activities
                         activities = order.get('orderActivityCollection', [])
-                        filled_price = 0
-                        filled_qty = 0
+                        total_filled_qty = 0
+                        total_cost = 0.0
                         filled_time = order.get('closeTime', '') or order.get('enteredTime', '')
                         
                         for activity in activities:
                             if activity.get('activityType') == 'EXECUTION':
                                 exec_legs = activity.get('executionLegs', [])
                                 for exec_leg in exec_legs:
-                                    filled_price = float(exec_leg.get('price', 0))
-                                    filled_qty = int(exec_leg.get('quantity', 0))
-                                    filled_time = exec_leg.get('time', filled_time)
+                                    leg_qty = int(exec_leg.get('quantity', 0))
+                                    leg_price = float(exec_leg.get('price', 0))
+                                    total_filled_qty += leg_qty
+                                    total_cost += leg_qty * leg_price
+                                    leg_time = exec_leg.get('time', '')
+                                    if leg_time and leg_time > filled_time:
+                                        filled_time = leg_time
+                        
+                        filled_qty = total_filled_qty
+                        filled_price = (total_cost / total_filled_qty) if total_filled_qty > 0 else 0
                         
                         if filled_qty == 0:
-                            filled_qty = int(order.get('filledQuantity', leg.get('quantity', 0)))
+                            filled_qty = int(order.get('filledQuantity', 0)) or int(leg.get('quantity', 0))
                         if filled_price == 0:
                             filled_price = float(order.get('price', 0))
+                        
+                        instruction = leg.get('instruction', '') if leg else ''
                         
                         order_data = {
                             'order_id': str(order.get('orderId', '')),
                             'symbol': underlying,
                             'quantity': filled_qty,
                             'filled_price': filled_price,
-                            'action': leg.get('instruction', ''),  # BUY/SELL
+                            'action': instruction,
                             'filled_time': filled_time,
                             'asset_type': 'option' if asset_type == 'option' else 'stock',
                             'order_type': order.get('orderType', '')
@@ -1151,6 +1195,122 @@ class SchwabBroker(BrokerInterface):
             print(f"[{self.name}] Error getting order history: {e}")
         
         return []
+
+    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """Cancel an existing order"""
+        try:
+            if not await self._ensure_valid_token():
+                return {'success': False, 'message': 'Not authenticated with Schwab'}
+
+            response = await self._make_request(
+                'DELETE',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}"
+            )
+
+            if response.status_code in [200, 201, 202, 204]:
+                return {'success': True, 'message': f'Order {order_id} cancelled successfully'}
+            else:
+                return {'success': False, 'message': f'Cancel failed: {response.status_code} - {response.text}'}
+
+        except Exception as e:
+            return {'success': False, 'message': f'Exception cancelling order: {str(e)}'}
+
+    async def replace_order(self, order_id: str, new_order_payload: Dict) -> Dict[str, Any]:
+        """Replace an existing order with a new one"""
+        try:
+            if not await self._ensure_valid_token():
+                return {'success': False, 'order_id': None, 'message': 'Not authenticated with Schwab'}
+
+            headers = {
+                'Content-Type': 'application/json'
+            }
+
+            response = await self._make_request(
+                'PUT',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
+                headers=headers,
+                json=new_order_payload
+            )
+
+            if response.status_code in [200, 201, 202, 204]:
+                new_order_id = response.headers.get('Location', '').split('/')[-1] if response.headers.get('Location') else order_id
+                return {'success': True, 'order_id': new_order_id, 'message': f'Order {order_id} replaced with {new_order_id}'}
+            else:
+                return {'success': False, 'order_id': None, 'message': f'Replace failed: {response.status_code} - {response.text}'}
+
+        except Exception as e:
+            return {'success': False, 'order_id': None, 'message': f'Exception replacing order: {str(e)}'}
+
+    async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """Get status of a specific order"""
+        try:
+            if not await self._ensure_valid_token():
+                return None
+
+            import httpx
+
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
+                    headers=headers
+                )
+
+                if response.status_code == 200:
+                    order = response.json()
+
+                    status_map = {
+                        'WORKING': 'pending',
+                        'FILLED': 'filled',
+                        'CANCELED': 'cancelled',
+                        'REJECTED': 'rejected',
+                        'EXPIRED': 'expired',
+                        'PENDING_ACTIVATION': 'pending',
+                        'QUEUED': 'pending',
+                        'ACCEPTED': 'pending'
+                    }
+
+                    schwab_status = order.get('status', 'UNKNOWN')
+                    mapped_status = status_map.get(schwab_status, schwab_status.lower())
+
+                    filled_quantity = int(order.get('filledQuantity', 0))
+                    total_quantity = int(order.get('quantity', 0))
+                    remaining_quantity = total_quantity - filled_quantity
+
+                    avg_price = 0.0
+                    total_cost = 0.0
+                    total_filled = 0
+                    activities = order.get('orderActivityCollection', [])
+                    for activity in activities:
+                        if activity.get('activityType') == 'EXECUTION':
+                            for exec_leg in activity.get('executionLegs', []):
+                                leg_qty = int(exec_leg.get('quantity', 0))
+                                leg_price = float(exec_leg.get('price', 0))
+                                total_filled += leg_qty
+                                total_cost += leg_qty * leg_price
+                    if total_filled > 0:
+                        avg_price = total_cost / total_filled
+                    elif filled_quantity > 0:
+                        avg_price = float(order.get('price', 0))
+
+                    return {
+                        'status': mapped_status,
+                        'filled_quantity': filled_quantity,
+                        'remaining_quantity': remaining_quantity,
+                        'average_price': avg_price
+                    }
+
+                else:
+                    print(f"[{self.name}] Error getting order status: {response.status_code}")
+                    return None
+
+        except Exception as e:
+            print(f"[{self.name}] Exception getting order status: {e}")
+            return None
 
 
 BrokerFactory.register_broker('SCHWAB', SchwabBroker)

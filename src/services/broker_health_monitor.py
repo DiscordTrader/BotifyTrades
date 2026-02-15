@@ -69,9 +69,9 @@ BROKER_BUYING_POWER_FIELDS = {
         'fallback': 'buying_power'
     },
     'SCHWAB': {
-        'options': ['optionBuyingPower', 'availableFunds'],
-        'stocks': ['availableFunds', 'buyingPower'],
-        'fallback': 'availableFunds'
+        'options': ['options_buying_power', 'optionBuyingPower', 'buying_power', 'availableFunds'],
+        'stocks': ['buying_power', 'availableFunds', 'buyingPower', 'cash'],
+        'fallback': 'buying_power'
     },
     'IBKR': {
         'options': ['AvailableFunds', 'BuyingPower', 'availableFunds', 'buyingPower'],
