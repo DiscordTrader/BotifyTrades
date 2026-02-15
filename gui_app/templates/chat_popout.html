@@ -571,8 +571,8 @@
             addMessage(`Unsupported file type: ${ext}. Please use .log, .txt, or .csv files.`, false);
             return;
         }
-        if (file.size > 5 * 1024 * 1024) {
-            addMessage('File is too large (max 5MB). Please trim it to the relevant section.', false);
+        if (file.size > 20 * 1024 * 1024) {
+            addMessage('File is too large (max 20MB). Please trim it to the relevant section.', false);
             return;
         }
         pendingLogFile = file;

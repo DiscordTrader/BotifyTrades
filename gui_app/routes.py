@@ -14330,7 +14330,7 @@ def register_routes(app):
                     except UnicodeDecodeError:
                         log_content = raw.decode('latin-1')
 
-                    max_size = 500_000
+                    max_size = 20_000_000
                     if len(log_content) > max_size:
                         log_content = log_content[-max_size:]
 
@@ -14341,7 +14341,7 @@ def register_routes(app):
                 log_content = data.get('log_content', '')
                 query = data.get('query', '') or data.get('message', '')
 
-                max_size = 500_000
+                max_size = 20_000_000
                 if log_content and len(log_content) > max_size:
                     log_content = log_content[-max_size:]
 

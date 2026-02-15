@@ -72,7 +72,7 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Notification System**: Real-time alerting for critical trading events via Discord webhooks and desktop browser notifications. Includes notification bell UI in the dashboard with popup panel, configurable webhook URL, and polling-based desktop notifications. Supported alert types: order failures, stop loss triggers, profit target hits, and order fills (BTO/STC).
 
-**Log File Upload & Debug**: The AI chat assistant supports uploading .log/.txt/.csv files for automated debugging. Users can upload a log file via the purple upload button or drag-and-drop, then ask questions about entries, exits, rejections, failures, and risk events. The system categorizes log lines, builds structured context, and uses OpenAI for analysis. Falls back to a formatted summary when AI is unavailable. API: `/api/chat/upload-log`, max 500KB (auto-truncated).
+**Log File Upload & Debug**: The AI chat assistant supports uploading .log/.txt/.csv files for automated debugging. Users can upload a log file via the purple upload button or drag-and-drop, then ask questions about entries, exits, rejections, failures, and risk events. The system categorizes log lines, builds structured context, and uses OpenAI for analysis. Falls back to a formatted summary when AI is unavailable. API: `/api/chat/upload-log`, max 20MB (auto-truncated).
 
 **Isolated Execution Flows**: Critical architecture separating Channel Execution (direct broker trading) from Signal Routing (webhook forwarding).
 
