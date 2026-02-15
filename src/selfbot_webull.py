@@ -5726,6 +5726,10 @@ class SelfClient(discord.Client):
             return getattr(self, 'upstox_broker', None)
         elif 'zerodha' in broker_lower:
             return getattr(self, 'zerodha_broker', None)
+        elif 'schwab' in broker_lower:
+            return getattr(self, 'schwab_broker', None)
+        elif 'questrade' in broker_lower:
+            return getattr(self, 'questrade_broker', None)
         
         return None
 
@@ -11557,7 +11561,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
                         'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01),
                         'trim_limit_offset_mode': channel_info.get('trim_limit_offset_mode', 'dollar'),
-                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0)
+                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0),
+                        'sl_order_mode': channel_info.get('sl_order_mode', 'limit'),
+                        'sl_limit_offset': channel_info.get('sl_limit_offset', 0.03),
+                        'entry_order_mode': channel_info.get('entry_order_mode', 'limit'),
+                        'enable_early_trailing': channel_info.get('enable_early_trailing', 0),
+                        'early_trailing_activation_pct': channel_info.get('early_trailing_activation_pct', 5.0),
+                        'early_trailing_step_pct': channel_info.get('early_trailing_step_pct', 3.0),
+                        'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
+                        'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
+                        'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
                     }
                     
                     # Add channel_record_id and channel_id for database saving after execution
@@ -11852,7 +11865,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
                         'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01),
                         'trim_limit_offset_mode': channel_info.get('trim_limit_offset_mode', 'dollar'),
-                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0)
+                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0),
+                        'sl_order_mode': channel_info.get('sl_order_mode', 'limit'),
+                        'sl_limit_offset': channel_info.get('sl_limit_offset', 0.03),
+                        'entry_order_mode': channel_info.get('entry_order_mode', 'limit'),
+                        'enable_early_trailing': channel_info.get('enable_early_trailing', 0),
+                        'early_trailing_activation_pct': channel_info.get('early_trailing_activation_pct', 5.0),
+                        'early_trailing_step_pct': channel_info.get('early_trailing_step_pct', 3.0),
+                        'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
+                        'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
+                        'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
                     }
                     
                     # Add channel_record_id and channel_id for database saving after execution
@@ -13933,6 +13955,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 live_broker = self.broker
                                 broker_name_used = 'Webull'
                                 _original_print(f"[LIVE TRADE] Using channel broker override: Webull")
+                            elif broker_override == 'webull_paper' and hasattr(self, 'webull_paper_broker') and self.webull_paper_broker and getattr(self.webull_paper_broker, '_logged_in', False):
+                                live_broker = self.webull_paper_broker
+                                broker_name_used = 'Webull_Paper'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Webull Paper")
+                            elif broker_override in ('schwab', 'schwab_live', 'schwab_paper') and hasattr(self, 'schwab_broker') and self.schwab_broker and self.schwab_broker.connected:
+                                live_broker = self.schwab_broker
+                                broker_name_used = 'Schwab'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Charles Schwab")
+                            elif broker_override == 'questrade' and hasattr(self, 'questrade_broker') and self.questrade_broker and self.questrade_broker.connected:
+                                live_broker = self.questrade_broker
+                                broker_name_used = 'Questrade'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Questrade")
                             else:
                                 _original_print(f"[LIVE TRADE] ❌ REJECTED: Broker override '{broker_override}' not available or not connected")
                                 _original_print(f"[LIVE TRADE] Please check broker configuration in Settings")
