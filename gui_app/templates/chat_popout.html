@@ -641,17 +641,22 @@
             showTyping();
 
             try {
-                const formData = new FormData();
-                formData.append('file', pendingLogFile);
-                formData.append('query', message || '');
+                const fileText = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(new Error('Could not read file'));
+                    reader.readAsText(pendingLogFile);
+                });
 
                 const response = await fetch('/api/chat/upload-log', {
                     method: 'POST',
-                    body: formData,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ log_content: fileText, query: message || '', filename: pendingLogFile.name }),
                     credentials: 'include'
                 });
                 if (!response.ok) {
-                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                    const errText = await response.text().catch(() => '');
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}. ${errText.substring(0, 200)}`);
                 }
                 const data = await response.json();
                 hideTyping();
