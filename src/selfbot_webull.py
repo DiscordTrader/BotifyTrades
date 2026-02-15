@@ -6626,6 +6626,10 @@ class SelfClient(discord.Client):
             if self.paper_broker and hasattr(self.paper_broker, 'connected') and self.paper_broker.connected:
                 price_monitor.set_alpaca_broker(self.paper_broker)
             
+            if self.schwab_broker and getattr(self.schwab_broker, 'connected', False):
+                price_monitor.register_broker('SCHWAB', self.schwab_broker)
+                _original_print("[PRICE_MONITOR] ✓ Schwab broker registered", flush=True)
+            
             price_monitor.start(self.loop)
             _original_print("[PRICE_MONITOR] ✓ Started with event loop", flush=True)
             
@@ -6651,6 +6655,9 @@ class SelfClient(discord.Client):
             if self.robinhood_broker:
                 conditional_order_router.set_broker_instance('Robinhood', self.robinhood_broker)
                 _original_print("[CONDITIONAL] ✓ Robinhood registered for price monitoring", flush=True)
+            if self.schwab_broker and getattr(self.schwab_broker, 'connected', False):
+                conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
+                _original_print("[CONDITIONAL] ✓ Schwab registered for price monitoring", flush=True)
         except Exception as e:
             _original_print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
         

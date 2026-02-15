@@ -376,6 +376,32 @@ class BrokerPriceMonitor(PriceMonitor):
                     if quote and 'lastTradePrice' in quote:
                         return float(quote['lastTradePrice'])
             
+            elif broker_normalized == 'schwab':
+                if hasattr(self.broker_instance, 'get_quote'):
+                    price = await self.broker_instance.get_quote(self.symbol)
+                    if price and price > 0:
+                        return float(price)
+            
+            elif broker_normalized == 'robinhood':
+                if hasattr(self.broker_instance, 'get_quote'):
+                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    if isinstance(quote, (int, float)) and quote > 0:
+                        return float(quote)
+                    elif isinstance(quote, dict):
+                        price = quote.get('last_trade_price') or quote.get('last_extended_hours_trade_price') or quote.get('price')
+                        if price:
+                            return float(price)
+            
+            elif broker_normalized in ('tastytrade', 'ibkr'):
+                if hasattr(self.broker_instance, 'get_quote'):
+                    result = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    if isinstance(result, (int, float)) and result > 0:
+                        return float(result)
+                    elif isinstance(result, dict):
+                        price = result.get('last', 0) or result.get('price', 0) or result.get('close', 0)
+                        if price and float(price) > 0:
+                            return float(price)
+            
         except Exception as e:
             sys.stderr.write(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}\n")
             sys.stderr.flush()
