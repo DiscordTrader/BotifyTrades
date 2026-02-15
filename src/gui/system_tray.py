@@ -173,7 +173,19 @@ class TrayIconManager(QObject):
     
     def _open_web_panel(self):
         """Open the web control panel in browser"""
-        webbrowser.open(f"http://localhost:{self.web_panel_port}")
+        import subprocess
+        url = f"http://localhost:{self.web_panel_port}"
+        try:
+            if sys.platform == 'win32':
+                subprocess.Popen(['cmd', '/c', 'start', '', url],
+                               shell=False,
+                               creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0x08000000)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', url])
+            else:
+                subprocess.Popen(['xdg-open', url])
+        except Exception:
+            webbrowser.open(url)
     
     def _open_logs(self):
         """Open the logs folder"""

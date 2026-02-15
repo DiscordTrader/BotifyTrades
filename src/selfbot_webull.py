@@ -15499,9 +15499,21 @@ Environment Variables:
                         )
                         
                         import webbrowser
+                        import subprocess
                         url = f"http://localhost:{startup_state['gui_port']}"
                         _original_print(f"[GUI] Opening control panel in browser: {url}")
-                        webbrowser.open(url)
+                        try:
+                            if sys.platform == 'win32':
+                                subprocess.Popen(['cmd', '/c', 'start', '', url], 
+                                               shell=False, 
+                                               creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0x08000000)
+                            elif sys.platform == 'darwin':
+                                subprocess.Popen(['open', url])
+                            else:
+                                subprocess.Popen(['xdg-open', url])
+                        except Exception as browser_err:
+                            _original_print(f"[GUI] subprocess open failed ({browser_err}), trying webbrowser fallback")
+                            webbrowser.open(url)
                         
                         def shutdown_handler():
                             _original_print("[MAIN] Shutdown requested from tray")
