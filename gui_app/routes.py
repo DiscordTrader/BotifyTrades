@@ -3229,6 +3229,31 @@ def register_routes(app):
             })
             return result
 
+        if getattr(paper_broker, '_tokens_valid', True) is False:
+            if hasattr(paper_broker, 'get_account_info') and _bot_instance and hasattr(_bot_instance, 'loop'):
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        paper_broker.get_account_info(),
+                        _bot_instance.loop
+                    )
+                    acct_info = future.result(timeout=10)
+                    if acct_info and acct_info.get('buying_power', 0) > 0:
+                        result = jsonify({
+                            'buying_power': acct_info.get('buying_power', 0),
+                            'cash_balance': acct_info.get('cash', 0),
+                            'net_liquidation': acct_info.get('portfolio_value', 0),
+                            'total_profit_loss': 0, 'day_profit_loss': 0,
+                            'settled_cash': 0, 'unsettled_cash': 0, 'status': 'ok'
+                        })
+                        return result
+                except Exception:
+                    pass
+            return jsonify({
+                'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                'total_profit_loss': 0, 'day_profit_loss': 0,
+                'settled_cash': 0, 'unsettled_cash': 0, 'status': 'token_expired'
+            })
+
         try:
             wb_client = getattr(paper_broker, '_client', None) or getattr(paper_broker, 'wb', None)
             if not wb_client:
@@ -3345,14 +3370,38 @@ def register_routes(app):
                 result = jsonify(balance_data)
                 _api_cache[cache_key] = (result, time.time())
                 return result
-            else:
-                result = jsonify({
-                    'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
-                    'total_profit_loss': 0, 'day_profit_loss': 0,
-                    'settled_cash': 0, 'unsettled_cash': 0, 'status': 'loading'
-                })
-                _api_cache[cache_key] = (result, time.time())
-                return result
+            
+            if paper_broker and hasattr(paper_broker, 'get_account_info') and _bot_instance and hasattr(_bot_instance, 'loop'):
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        paper_broker.get_account_info(),
+                        _bot_instance.loop
+                    )
+                    acct_info = future.result(timeout=10)
+                    if acct_info:
+                        fallback_data = {
+                            'buying_power': acct_info.get('buying_power', 0),
+                            'cash_balance': acct_info.get('cash', 0),
+                            'net_liquidation': acct_info.get('portfolio_value', 0),
+                            'total_profit_loss': 0,
+                            'day_profit_loss': 0,
+                            'settled_cash': 0,
+                            'unsettled_cash': 0,
+                            'status': 'ok'
+                        }
+                        result = jsonify(fallback_data)
+                        _api_cache[cache_key] = (result, time.time())
+                        return result
+                except Exception:
+                    pass
+            
+            result = jsonify({
+                'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                'total_profit_loss': 0, 'day_profit_loss': 0,
+                'settled_cash': 0, 'unsettled_cash': 0, 'status': 'ok'
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
         except Exception as e:
             print(f"[API] Exception in webull_paper balance endpoint: {e}")
             import traceback
@@ -4362,6 +4411,14 @@ def register_routes(app):
                 'net_liquidation': 0,
                 'total_profit_loss': 0,
                 'day_profit_loss': 0
+            },
+            'webull_paper': {
+                'status': 'not_initialized',
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0
             }
         }
         
@@ -4385,6 +4442,28 @@ def register_routes(app):
             except Exception as e:
                 print(f"[API] Error fetching Webull LIVE account: {type(e).__name__}: {e}")
                 accounts['webull_live']['status'] = 'error'
+        
+        # Fetch Webull PAPER account
+        wb_paper = getattr(_bot_instance, 'webull_paper_broker', None) if _bot_instance else None
+        if wb_paper and getattr(wb_paper, '_logged_in', False):
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    wb_paper.get_account_info(),
+                    _bot_instance.loop
+                )
+                wp_data = future.result(timeout=10)
+                if wp_data:
+                    accounts['webull_paper'] = {
+                        'status': 'ok',
+                        'buying_power': wp_data.get('buying_power', 0),
+                        'cash_balance': wp_data.get('cash', 0),
+                        'net_liquidation': wp_data.get('portfolio_value', 0),
+                        'total_profit_loss': 0,
+                        'day_profit_loss': 0
+                    }
+            except Exception as e:
+                print(f"[API] Error fetching Webull PAPER account: {e}")
+                accounts['webull_paper']['status'] = 'error'
         
         # Fetch Alpaca PAPER account
         if _bot_instance and hasattr(_bot_instance, 'paper_broker') and _bot_instance.paper_broker:
@@ -4629,6 +4708,8 @@ def register_routes(app):
             traceback.print_exc()
             return None
     
+    _webull_token_refresh_cooldown = {'last_attempt': 0, 'cooldown_seconds': 300}
+
     async def _get_webull_account():
         """Helper to get Webull account data"""
         # Skip during startup to prevent initialization hang
@@ -4640,6 +4721,9 @@ def register_routes(app):
             # Check if broker is initialized
             if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
                 print("[API] Broker not initialized yet")
+                return None
+            
+            if getattr(_bot_instance.broker, '_tokens_valid', True) is False:
                 return None
             
             wb = _bot_instance.broker._client
@@ -4659,8 +4743,12 @@ def register_routes(app):
                     
                     # Check if token is expired and refresh if needed
                     if isinstance(account_info, dict) and account_info.get('code') == 'auth.token.expire':
+                        now = time.time()
+                        cooldown = _webull_token_refresh_cooldown
+                        if now - cooldown['last_attempt'] < cooldown['cooldown_seconds']:
+                            return None
+                        cooldown['last_attempt'] = now
                         print(f"[API] Webull token expired - attempting refresh...")
-                        # Refresh the token
                         try:
                             if hasattr(wb, 'refresh_login'):
                                 new_token_data = wb.refresh_login()

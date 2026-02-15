@@ -3630,6 +3630,8 @@ class WebullBroker:
 
     async def get_positions(self) -> list:
         """Get current open positions from Webull (stocks and options)"""
+        if getattr(self, '_tokens_valid', True) is False:
+            return []
         def _blocking_get():
             wb = self._client
             if not wb:
@@ -3640,6 +3642,9 @@ class WebullBroker:
             # Get all positions (stocks and options together)
             try:
                 all_positions = wb.get_positions()
+                if isinstance(all_positions, dict) and all_positions.get('code') == 'auth.token.expire':
+                    self._tokens_valid = False
+                    return []
                 if all_positions:
                     for pos in all_positions:
                         # Convert position to float for comparison (API may return string)
@@ -3748,10 +3753,16 @@ class WebullBroker:
                                 'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
                                 'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
                             })
+            except KeyError as e:
+                if str(e) == "'positions'" or str(e) == "'openOrders'":
+                    if not getattr(self, '_token_error_logged', False):
+                        print(f"[RISK] Webull tokens expired - position fetching disabled until re-authentication")
+                        self._token_error_logged = True
+                    self._tokens_valid = False
+                else:
+                    print(f"[RISK] Warning: Could not fetch positions: {e}")
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch positions: {e}")
-                import traceback
-                traceback.print_exc()
             
             return positions
         
@@ -3767,6 +3778,8 @@ class WebullBroker:
         Returns:
             List of order dicts with keys: order_id, symbol, quantity, limit_price, action, status
         """
+        if getattr(self, '_tokens_valid', True) is False:
+            return []
         def _blocking_get_orders():
             wb = self._client
             if not wb:
@@ -3795,10 +3808,14 @@ class WebullBroker:
                     })
                 
                 return orders
+            except KeyError as e:
+                if str(e) == "'openOrders'":
+                    self._tokens_valid = False
+                else:
+                    print(f"[Webull] Error getting pending orders: {e}")
+                return []
             except Exception as e:
                 print(f"[Webull] Error getting pending orders: {e}")
-                import traceback
-                traceback.print_exc()
                 return []
         
         return await self.loop.run_in_executor(None, _blocking_get_orders)
