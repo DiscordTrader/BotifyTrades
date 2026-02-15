@@ -493,11 +493,14 @@ class SchwabBroker(BrokerInterface):
             
             session = self._get_session_type()
             
+            is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
+            duration = "GOOD_TILL_CANCEL" if is_exit else "DAY"
+            
             order_payload = {
                 "orderStrategyType": "SINGLE",
                 "orderType": order_type,
                 "session": session,
-                "duration": "DAY",
+                "duration": duration,
                 "orderLegCollection": [{
                     "instruction": instruction,
                     "quantity": quantity,
@@ -534,7 +537,7 @@ class SchwabBroker(BrokerInterface):
                 json=order_payload
             )
             
-            if response.status_code in [200, 201]:
+            if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
                 return OrderResult(
                     success=True,
@@ -607,11 +610,14 @@ class SchwabBroker(BrokerInterface):
             
             session = self._get_session_type()
             
+            is_exit = (instruction == "SELL_TO_CLOSE")
+            duration = "GOOD_TILL_CANCEL" if is_exit else "DAY"
+            
             order_payload = {
                 "orderStrategyType": "SINGLE",
                 "orderType": order_type,
                 "session": session,
-                "duration": "DAY",
+                "duration": duration,
                 "orderLegCollection": [{
                     "instruction": instruction,
                     "quantity": quantity,
@@ -648,7 +654,7 @@ class SchwabBroker(BrokerInterface):
                 json=order_payload
             )
             
-            if response.status_code in [200, 201]:
+            if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
                 return OrderResult(
                     success=True,
