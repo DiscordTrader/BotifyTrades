@@ -35,6 +35,7 @@ class SchwabBroker(BrokerInterface):
         self.account_hash = None
         self.account_number = None
         self.dry_run = config.get('dry_run', True)
+        self._token_refresh_lock = asyncio.Lock()
         
         self.client_id = config.get('client_id', '')
         self.client_secret = config.get('client_secret', '')
@@ -203,8 +204,33 @@ class SchwabBroker(BrokerInterface):
                     expires_in = token_data.get('expires_in', 1800)
                     self.token_expiry = (datetime.now().timestamp() + expires_in)
                     self._save_tokens()
-                    print(f"[{self.name}] ✓ Access token refreshed")
+                    print(f"[{self.name}] ✓ Access token refreshed (expires in {expires_in}s)")
                     return True
+                elif response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', '30'))
+                    print(f"[{self.name}] Token refresh rate limited, waiting {retry_after}s...")
+                    await asyncio.sleep(retry_after)
+                    response = await client.post(self.TOKEN_URL, headers=headers, data=data)
+                    if response.status_code == 200:
+                        token_data = response.json()
+                        self.access_token = token_data.get('access_token')
+                        if token_data.get('refresh_token'):
+                            self.refresh_token = token_data.get('refresh_token')
+                        expires_in = token_data.get('expires_in', 1800)
+                        self.token_expiry = (datetime.now().timestamp() + expires_in)
+                        self._save_tokens()
+                        print(f"[{self.name}] ✓ Access token refreshed after rate limit wait")
+                        return True
+                    print(f"[{self.name}] ❌ Token refresh failed after rate limit: {response.status_code}")
+                    return False
+                elif response.status_code == 400:
+                    error_text = response.text
+                    if 'invalid_grant' in error_text:
+                        print(f"[{self.name}] ❌ Refresh token expired or revoked. Re-authentication required.")
+                        self.connected = False
+                    else:
+                        print(f"[{self.name}] ❌ Token refresh failed: {response.status_code} - {error_text}")
+                    return False
                 else:
                     print(f"[{self.name}] ❌ Token refresh failed: {response.status_code}")
                     return False
@@ -286,10 +312,14 @@ class SchwabBroker(BrokerInterface):
         return None
     
     async def _ensure_valid_token(self) -> bool:
-        """Ensure we have a valid access token"""
-        if self.token_expiry and datetime.now().timestamp() >= (self.token_expiry - 60):
-            return await self._refresh_access_token()
-        return bool(self.access_token)
+        """Ensure we have a valid access token with thread-safe refresh"""
+        if not self.access_token:
+            return False
+        if self.token_expiry and datetime.now().timestamp() >= (self.token_expiry - 120):
+            async with self._token_refresh_lock:
+                if self.token_expiry and datetime.now().timestamp() >= (self.token_expiry - 120):
+                    return await self._refresh_access_token()
+        return True
 
     def _format_price(self, price: float) -> str:
         """Format price for Schwab API.
@@ -321,10 +351,14 @@ class SchwabBroker(BrokerInterface):
                 retry_after = int(response.headers.get('Retry-After', '60'))
                 print(f"[{self.name}] Rate limited, waiting {retry_after}s...")
                 await asyncio.sleep(retry_after)
+                await self._ensure_valid_token()
+                headers['Authorization'] = f'Bearer {self.access_token}'
                 response = await client.request(method, url, headers=headers, **kwargs)
 
             elif response.status_code == 401:
-                if await self._refresh_access_token():
+                async with self._token_refresh_lock:
+                    refreshed = await self._refresh_access_token()
+                if refreshed:
                     headers['Authorization'] = f'Bearer {self.access_token}'
                     response = await client.request(method, url, headers=headers, **kwargs)
 
