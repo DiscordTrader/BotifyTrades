@@ -80,6 +80,8 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Per-Channel Ticker Filter**: Restricts trading to specific symbols per channel, with modes for OFF, ALLOW LIST, or BLOCK LIST. Applied to BTO signals only, using the underlying symbol for options.
 
+**Channel Scanner**: Admin-only feature that scans Discord channel message history (up to 2000 messages) using pure pattern matching (no AI) to discover signal formats. Normalizes messages by replacing tickers/prices/strikes/expiries with placeholders, clusters similar templates, and generates regex patterns. Detected patterns are saved as "pending" and require admin approval before activation in the signal parsing pipeline. UI accessible via "Scan Formats" button on channel cards (admin build only), with a modal showing scan results, pattern cards with action type/confidence/examples, and pattern management (approve/disable/delete). Service: `src/services/channel_scanner.py`, API: `/api/channels/<id>/scan` + `/api/scanner/*`.
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. A License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting, and session-based authentication.
 
