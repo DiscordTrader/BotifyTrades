@@ -3056,7 +3056,7 @@ class WebullBroker:
             
             headers = wb.build_req_headers(include_trade_token=True, include_time=True)
             
-            option_enforce = 'DAY'
+            option_enforce = 'GTC'
             
             def _place_single_order(wb_inst, opt_id_val, s, adj_q, eff_p, attempt_label=""):
                 import requests as req_lib
@@ -3065,7 +3065,7 @@ class WebullBroker:
                 payload = {
                     'orderType': 'LMT',
                     'serialId': str(uuid_lib.uuid4()),
-                    'timeInForce': 'DAY',
+                    'timeInForce': option_enforce,
                     'orders': [{'quantity': int(adj_q), 'action': s, 'tickerId': int(opt_id_val), 'tickerType': 'OPTION'}],
                     'lmtPrice': float(eff_p)
                 }
@@ -3554,6 +3554,7 @@ class WebullBroker:
                             'error': 'WEBULL_MIN_LOT_SIZE'
                         }
 
+            stock_enforce = 'GTC'
             if is_market_order:
                 base_payload = {
                     'stock': base_sym,
@@ -3573,7 +3574,7 @@ class WebullBroker:
                     'lmtPrice': round(float(effective_price), 2),
                     'action': side,
                     'orderType': 'LMT',
-                    'enforce': 'DAY',
+                    'enforce': stock_enforce,
                     'quant': int(adjusted_qty),
                     'outsideRegularTradingHour': True,
                     'stpPrice': None,
