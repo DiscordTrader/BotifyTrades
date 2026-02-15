@@ -51,7 +51,8 @@ def create_app():
     app.config['JSON_SORT_KEYS'] = False
     app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
     app.config['TEMPLATES_AUTO_RELOAD'] = True  # Force template reload
-    
+    app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25MB max upload
+
     # Security settings for cookies
     app.config['SESSION_COOKIE_SECURE'] = True  # Only send over HTTPS
     app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access
@@ -71,6 +72,11 @@ def create_app():
     # Register routes
     from . import routes
     routes.register_routes(app)
+
+    @app.errorhandler(413)
+    def request_entity_too_large(error):
+        from flask import jsonify
+        return jsonify({'success': False, 'error': 'File too large. Maximum upload size is 20MB.'}), 413
     
     return app
 

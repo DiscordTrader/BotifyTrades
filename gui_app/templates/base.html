@@ -1391,8 +1391,12 @@
 
                 const response = await fetch('/api/chat/upload-log', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    credentials: 'include'
                 });
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 hideTyping();
 
