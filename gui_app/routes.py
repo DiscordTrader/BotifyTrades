@@ -14619,6 +14619,145 @@ def register_routes(app):
                 'error': str(e)
             })
     
+    # ============ CHANNEL SCANNER API ============
+
+    @app.route('/api/channels/<channel_id>/scan', methods=['POST'])
+    @login_required
+    def api_scan_channel(channel_id):
+        """Scan channel history to discover signal formats (no AI)."""
+        try:
+            import asyncio
+            from src.services.channel_scanner import scan_channel_history
+
+            limit = request.json.get('limit', 1000) if request.json else 1000
+            limit = min(int(limit), 2000)
+
+            if not _bot_instance or not hasattr(_bot_instance, 'loop') or not _bot_instance.loop:
+                return jsonify({'success': False, 'error': 'Discord bot is not connected. Please wait for bot to start.'})
+
+            future = asyncio.run_coroutine_threadsafe(
+                scan_channel_history(_bot_instance, int(channel_id), limit=limit),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=120)
+            return jsonify(result)
+
+        except Exception as e:
+            print(f"[API] Error scanning channel: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/scanner/save-pattern', methods=['POST'])
+    @login_required
+    def api_save_scanned_pattern():
+        """Save a detected pattern from the scanner as a learned pattern."""
+        try:
+            data = request.json
+            if not data:
+                return jsonify({'success': False, 'error': 'No data provided'})
+
+            name = data.get('name', '').strip()
+            pattern = data.get('pattern', '').strip()
+            action = data.get('action', 'BTO').upper()
+            asset_type = data.get('asset_type', 'stock')
+            example = data.get('example', '')
+            description = data.get('description', '')
+
+            if not name or not pattern:
+                return jsonify({'success': False, 'error': 'Name and pattern are required'})
+
+            try:
+                import re
+                re.compile(pattern, re.IGNORECASE)
+            except re.error as e:
+                return jsonify({'success': False, 'error': f'Invalid regex pattern: {e}'})
+
+            pattern_id = db.add_learned_pattern(
+                name=name,
+                pattern=pattern,
+                example_text=example,
+                action=action,
+                asset_type=asset_type,
+                description=description
+            )
+
+            if pattern_id:
+                print(f"[SCANNER] Saved pattern '{name}' (id={pattern_id}) as pending")
+                return jsonify({
+                    'success': True,
+                    'pattern_id': pattern_id,
+                    'message': f'Pattern "{name}" saved as pending. Approve it to activate.'
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Failed to save pattern (may already exist)'})
+
+        except Exception as e:
+            print(f"[API] Error saving scanned pattern: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/scanner/patterns', methods=['GET'])
+    @login_required
+    def api_get_learned_patterns():
+        """Get all learned patterns for management."""
+        try:
+            patterns = db.get_all_learned_patterns()
+            return jsonify({'success': True, 'patterns': patterns})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/scanner/patterns/<int:pattern_id>/approve', methods=['POST'])
+    @login_required
+    def api_approve_pattern(pattern_id):
+        """Approve a learned pattern for active use."""
+        try:
+            success = db.approve_learned_pattern(pattern_id, approved_by='admin')
+            if success:
+                try:
+                    from src.services.signal_format_registry import get_signal_format_registry
+                    registry = get_signal_format_registry()
+                    if hasattr(registry, '_load_learned_patterns'):
+                        registry._load_learned_patterns()
+                        print(f"[SCANNER] Reloaded learned patterns after approval")
+                except Exception as e:
+                    print(f"[SCANNER] Warning: Could not reload registry: {e}")
+
+                return jsonify({'success': True, 'message': 'Pattern approved and activated'})
+            return jsonify({'success': False, 'error': 'Pattern not found'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/scanner/patterns/<int:pattern_id>/disable', methods=['POST'])
+    @login_required
+    def api_disable_pattern(pattern_id):
+        """Disable a learned pattern."""
+        try:
+            success = db.disable_learned_pattern(pattern_id)
+            if success:
+                try:
+                    from src.services.signal_format_registry import get_signal_format_registry
+                    registry = get_signal_format_registry()
+                    if hasattr(registry, '_load_learned_patterns'):
+                        registry._load_learned_patterns()
+                except Exception:
+                    pass
+                return jsonify({'success': True, 'message': 'Pattern disabled'})
+            return jsonify({'success': False, 'error': 'Pattern not found'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/scanner/patterns/<int:pattern_id>', methods=['DELETE'])
+    @login_required
+    def api_delete_pattern(pattern_id):
+        """Delete a learned pattern."""
+        try:
+            success = db.delete_learned_pattern(pattern_id)
+            if success:
+                return jsonify({'success': True, 'message': 'Pattern deleted'})
+            return jsonify({'success': False, 'error': 'Pattern not found'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
     # ============ ERROR MONITORING API ============
     
     @app.route('/api/errors', methods=['GET'])

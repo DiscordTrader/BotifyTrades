@@ -1039,6 +1039,52 @@
     </div>
 </div>
 
+<!-- Scanner Modal -->
+<div class="modal-overlay" id="scannerModal">
+    <div class="modal-content" style="max-width: 820px; max-height: 90vh;">
+        <div class="modal-header" style="background: linear-gradient(135deg, #7C3AED 0%, #3B82F6 100%);">
+            <h3 style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.2rem;">🔍</span>
+                Channel Scanner - <span id="scannerChannelName"></span>
+            </h3>
+            <button class="modal-close" onclick="closeScannerModal()">x</button>
+        </div>
+        <div class="modal-body" style="padding: 20px; overflow-y: auto; flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <div>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                        Scans channel messages and discovers signal formats using pattern matching. No AI needed.
+                    </p>
+                </div>
+                <button id="scanStartBtn" onclick="startChannelScan()" style="padding: 8px 20px; background: linear-gradient(135deg, #7C3AED, #3B82F6); border: none; border-radius: 8px; color: white; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap;">
+                    Start Scan
+                </button>
+            </div>
+
+            <div id="scannerSummary"></div>
+            <div id="scannerResults"></div>
+
+            <!-- Saved Patterns Section -->
+            <div id="scannerSavedPatterns" style="display: none; margin-top: 20px; border-top: 1px solid rgba(139,161,199,0.12); padding-top: 16px;">
+                <h4 style="color: #D1E4FF; font-size: 13px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                    <span>📋</span> Saved Learned Patterns
+                </h4>
+                <div id="savedPatternsList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.scanner-spinner {
+    width: 40px; height: 40px; margin: 0 auto;
+    border: 3px solid rgba(124,58,237,0.2);
+    border-top: 3px solid #7C3AED;
+    border-radius: 50%;
+    animation: scanSpin 0.8s linear infinite;
+}
+@keyframes scanSpin { to { transform: rotate(360deg); } }
+</style>
 
 <script>
 const IS_ADMIN_BUILD = {{ is_admin_build|tojson }};
@@ -1387,10 +1433,11 @@ function renderChannels() {
                 </div>
                 
                 <!-- Footer -->
-                <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: rgba(15,19,25,0.6); border-top: 1px solid rgba(139,161,199,0.08);">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(15,19,25,0.6); border-top: 1px solid rgba(139,161,199,0.08);">
                     <button onclick="openUserModal(${channel.id}, '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(139,161,199,0.1); border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #8BA1C7; cursor: pointer;">
                         Users <span style="background: rgba(16,240,179,0.15); color: #10F0B3; padding: 1px 5px; border-radius: 2px; margin-left: 4px; font-size: 9px;">${userCount > 0 ? userCount : 'All'}</span>
                     </button>
+                    <button onclick="openScannerModal('${channel.discord_channel_id}', '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); border-radius: 3px; color: #A78BFA; cursor: pointer;" title="Scan channel messages to discover signal formats">Scan Formats</button>
                     <button onclick="deleteChannel(${channel.id})" style="font-size: 10px; padding: 4px 10px; background: rgba(255,82,82,0.1); border: 1px solid rgba(255,82,82,0.2); border-radius: 3px; color: #FF5252; cursor: pointer;">Delete</button>
                 </div>
             </div>
@@ -2295,5 +2342,285 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTradeSummarySettings();
     loadSignalConversionSettings();
 });
+
+// ========== CHANNEL SCANNER ==========
+let scannerChannelId = null;
+let scannerChannelName = '';
+let scannerPatterns = [];
+
+function openScannerModal(channelId, channelName) {
+    scannerChannelId = channelId;
+    scannerChannelName = channelName;
+    scannerPatterns = [];
+    document.getElementById('scannerModal').classList.add('active');
+    document.getElementById('scannerChannelName').textContent = channelName;
+    document.getElementById('scannerResults').innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+            <div style="font-size: 2rem; margin-bottom: 10px;">🔍</div>
+            <p>Click "Start Scan" to analyze the last 1000 messages and discover signal formats.</p>
+            <p style="font-size: 0.8rem; margin-top: 8px;">No AI is used. Pure pattern matching only.</p>
+        </div>`;
+    document.getElementById('scannerSummary').innerHTML = '';
+    document.getElementById('scannerSavedPatterns').style.display = 'none';
+    loadSavedPatterns();
+}
+
+function closeScannerModal() {
+    document.getElementById('scannerModal').classList.remove('active');
+    scannerChannelId = null;
+}
+
+async function startChannelScan() {
+    const resultsEl = document.getElementById('scannerResults');
+    const summaryEl = document.getElementById('scannerSummary');
+    const scanBtn = document.getElementById('scanStartBtn');
+
+    scanBtn.disabled = true;
+    scanBtn.textContent = 'Scanning...';
+    resultsEl.innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <div class="scanner-spinner"></div>
+            <p style="color: var(--text-secondary); margin-top: 16px;">Scanning ${scannerChannelName}...</p>
+            <p style="color: var(--text-muted); font-size: 0.8rem;">Fetching up to 1000 messages and analyzing patterns</p>
+        </div>`;
+
+    try {
+        const response = await fetch(`/api/channels/${scannerChannelId}/scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ limit: 1000 })
+        });
+        const data = await response.json();
+
+        if (!data.success) {
+            resultsEl.innerHTML = `<div style="text-align: center; padding: 30px; color: #EF4444;">${data.error || 'Scan failed'}</div>`;
+            scanBtn.disabled = false;
+            scanBtn.textContent = 'Start Scan';
+            return;
+        }
+
+        scannerPatterns = data.patterns || [];
+        const summary = data.summary || {};
+
+        summaryEl.innerHTML = `
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+                <div style="background: rgba(16,240,179,0.1); border: 1px solid rgba(16,240,179,0.2); border-radius: 8px; padding: 8px 14px; font-size: 12px;">
+                    <span style="color: #10F0B3; font-weight: 700;">${data.messages_scanned}</span>
+                    <span style="color: #8BA1C7;"> messages scanned</span>
+                </div>
+                <div style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 8px; padding: 8px 14px; font-size: 12px;">
+                    <span style="color: #3B82F6; font-weight: 700;">${summary.total_patterns || 0}</span>
+                    <span style="color: #8BA1C7;"> patterns found</span>
+                </div>
+                <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); border-radius: 8px; padding: 8px 14px; font-size: 12px;">
+                    <span style="color: #10B981; font-weight: 700;">${summary.entry_patterns || 0}</span>
+                    <span style="color: #8BA1C7;"> entries</span>
+                </div>
+                <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 8px 14px; font-size: 12px;">
+                    <span style="color: #EF4444; font-weight: 700;">${summary.exit_patterns || 0}</span>
+                    <span style="color: #8BA1C7;"> exits</span>
+                </div>
+                <div style="background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); border-radius: 8px; padding: 8px 14px; font-size: 12px;">
+                    <span style="color: #F59E0B; font-weight: 700;">${summary.trim_patterns || 0}</span>
+                    <span style="color: #8BA1C7;"> trims</span>
+                </div>
+                <div style="background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.2); border-radius: 8px; padding: 8px 14px; font-size: 12px;">
+                    <span style="color: #A78BFA; font-weight: 700;">${summary.update_patterns || 0}</span>
+                    <span style="color: #8BA1C7;"> updates</span>
+                </div>
+            </div>`;
+
+        if (scannerPatterns.length === 0) {
+            resultsEl.innerHTML = `
+                <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                    <div style="font-size: 2rem; margin-bottom: 10px;">📭</div>
+                    <p>No recognizable signal patterns found in this channel.</p>
+                    <p style="font-size: 0.8rem; margin-top: 8px;">The channel may not contain trading signals, or the formats are too varied.</p>
+                </div>`;
+        } else {
+            renderScannerPatterns(scannerPatterns);
+        }
+    } catch (error) {
+        resultsEl.innerHTML = `<div style="text-align: center; padding: 30px; color: #EF4444;">Error: ${error.message}</div>`;
+    }
+
+    scanBtn.disabled = false;
+    scanBtn.textContent = 'Start Scan';
+}
+
+function renderScannerPatterns(patterns) {
+    const resultsEl = document.getElementById('scannerResults');
+    const actionColors = {
+        'BTO': { bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.3)', text: '#10B981', label: 'ENTRY' },
+        'STC': { bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.3)', text: '#EF4444', label: 'EXIT' },
+        'TRIM': { bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)', text: '#F59E0B', label: 'TRIM' },
+        'UPDATE': { bg: 'rgba(124,58,237,0.1)', border: 'rgba(124,58,237,0.3)', text: '#A78BFA', label: 'UPDATE' }
+    };
+
+    resultsEl.innerHTML = patterns.map((p, i) => {
+        const colors = actionColors[p.action] || actionColors['BTO'];
+        const confPct = Math.round(p.confidence * 100);
+        const confColor = confPct >= 70 ? '#10B981' : confPct >= 40 ? '#F59E0B' : '#EF4444';
+        const examples = (p.example_messages || []).slice(0, 3);
+
+        return `
+            <div style="background: rgba(20,24,33,0.9); border: 1px solid rgba(139,161,199,0.12); border-radius: 12px; padding: 16px; margin-bottom: 12px;" id="scanner-pattern-${i}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="background: ${colors.bg}; border: 1px solid ${colors.border}; color: ${colors.text}; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700;">${colors.label}</span>
+                        <span style="color: #D1E4FF; font-size: 12px; font-weight: 600;">${p.name}</span>
+                        <span style="color: #6B7A90; font-size: 10px;">${p.asset_type}</span>
+                        ${p.is_embed ? '<span style="background: rgba(59,130,246,0.15); color: #60A5FA; padding: 1px 6px; border-radius: 3px; font-size: 9px;">EMBED</span>' : ''}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="color: #6B7A90; font-size: 10px;">${p.match_count} matches</span>
+                        <span style="color: ${confColor}; font-size: 10px; font-weight: 600;">${confPct}%</span>
+                        <button onclick="addScannedPattern(${i})" id="add-btn-${i}" style="font-size: 10px; padding: 3px 10px; background: linear-gradient(135deg, rgba(16,240,179,0.2), rgba(124,58,237,0.2)); border: 1px solid rgba(16,240,179,0.3); border-radius: 4px; color: #10F0B3; cursor: pointer; font-weight: 600;">+ Add</button>
+                    </div>
+                </div>
+                <div style="background: rgba(0,0,0,0.3); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; overflow-x: auto;">
+                    <code style="color: #A78BFA; font-size: 10px; word-break: break-all; font-family: 'JetBrains Mono', monospace;">${escapeHtml(p.regex_pattern)}</code>
+                </div>
+                <div style="border-left: 2px solid rgba(139,161,199,0.15); padding-left: 10px;">
+                    <div style="color: #6B7A90; font-size: 9px; text-transform: uppercase; margin-bottom: 4px;">Example Messages</div>
+                    ${examples.map(ex => `<div style="color: #8BA1C7; font-size: 11px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${escapeHtml(ex)}</div>`).join('')}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+async function addScannedPattern(index) {
+    const pattern = scannerPatterns[index];
+    if (!pattern) return;
+
+    const btn = document.getElementById(`add-btn-${index}`);
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    try {
+        const response = await fetch('/api/scanner/save-pattern', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: pattern.name,
+                pattern: pattern.regex_pattern,
+                action: pattern.action,
+                asset_type: pattern.asset_type,
+                example: pattern.example_messages[0] || '',
+                description: pattern.description
+            })
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            btn.textContent = 'Saved (Pending)';
+            btn.style.background = 'rgba(16,185,129,0.2)';
+            btn.style.borderColor = 'rgba(16,185,129,0.3)';
+            btn.style.color = '#10B981';
+            showNotification(`Pattern "${pattern.name}" saved! Approve it to activate.`);
+            loadSavedPatterns();
+        } else {
+            btn.textContent = 'Failed';
+            btn.style.color = '#EF4444';
+            btn.disabled = false;
+            showNotification(result.error || 'Failed to save pattern', 'error');
+        }
+    } catch (error) {
+        btn.textContent = '+ Add';
+        btn.disabled = false;
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function loadSavedPatterns() {
+    const container = document.getElementById('scannerSavedPatterns');
+    const list = document.getElementById('savedPatternsList');
+
+    try {
+        const response = await fetch('/api/scanner/patterns');
+        const data = await response.json();
+
+        if (!data.success || !data.patterns || data.patterns.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        const actionColors = {
+            'BTO': '#10B981', 'STC': '#EF4444', 'TRIM': '#F59E0B', 'UPDATE': '#A78BFA'
+        };
+        const statusColors = {
+            'active': { bg: 'rgba(16,185,129,0.15)', text: '#10B981' },
+            'pending': { bg: 'rgba(245,158,11,0.15)', text: '#F59E0B' },
+            'disabled': { bg: 'rgba(107,122,144,0.15)', text: '#6B7A90' }
+        };
+
+        list.innerHTML = data.patterns.map(p => {
+            const sc = statusColors[p.status] || statusColors['pending'];
+            const ac = actionColors[p.action] || '#8BA1C7';
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(20,24,33,0.8); border: 1px solid rgba(139,161,199,0.08); border-radius: 8px; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                        <span style="color: ${ac}; font-size: 10px; font-weight: 700;">${p.action}</span>
+                        <span style="color: #D1E4FF; font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</span>
+                        <span style="background: ${sc.bg}; color: ${sc.text}; padding: 1px 6px; border-radius: 3px; font-size: 9px; flex-shrink: 0;">${p.status}</span>
+                    </div>
+                    <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                        ${p.status === 'pending' ? `<button onclick="approvePattern(${p.id})" style="font-size: 9px; padding: 2px 8px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); border-radius: 3px; color: #10B981; cursor: pointer;">Approve</button>` : ''}
+                        ${p.status === 'active' ? `<button onclick="disablePattern(${p.id})" style="font-size: 9px; padding: 2px 8px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); border-radius: 3px; color: #F59E0B; cursor: pointer;">Disable</button>` : ''}
+                        <button onclick="deletePattern(${p.id})" style="font-size: 9px; padding: 2px 8px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: 3px; color: #EF4444; cursor: pointer;">Delete</button>
+                    </div>
+                </div>`;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading saved patterns:', error);
+    }
+}
+
+async function approvePattern(id) {
+    try {
+        const response = await fetch(`/api/scanner/patterns/${id}/approve`, { method: 'POST' });
+        const result = await response.json();
+        if (result.success) {
+            showNotification('Pattern approved and activated!');
+            loadSavedPatterns();
+        } else {
+            showNotification(result.error || 'Failed to approve', 'error');
+        }
+    } catch (error) { showNotification('Error: ' + error.message, 'error'); }
+}
+
+async function disablePattern(id) {
+    try {
+        const response = await fetch(`/api/scanner/patterns/${id}/disable`, { method: 'POST' });
+        const result = await response.json();
+        if (result.success) {
+            showNotification('Pattern disabled');
+            loadSavedPatterns();
+        } else {
+            showNotification(result.error || 'Failed to disable', 'error');
+        }
+    } catch (error) { showNotification('Error: ' + error.message, 'error'); }
+}
+
+async function deletePattern(id) {
+    if (!confirm('Delete this pattern permanently?')) return;
+    try {
+        const response = await fetch(`/api/scanner/patterns/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (result.success) {
+            showNotification('Pattern deleted');
+            loadSavedPatterns();
+        } else {
+            showNotification(result.error || 'Failed to delete', 'error');
+        }
+    } catch (error) { showNotification('Error: ' + error.message, 'error'); }
+}
 </script>
 {% endblock %}
