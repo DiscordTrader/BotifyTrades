@@ -839,6 +839,16 @@ def exchange_code_for_tokens(
                 # Start auto-refresh thread
                 token_manager.start_auto_refresh()
                 
+                # Reset broker backoff state so it retries immediately
+                try:
+                    from gui_app.routes import _bot_instance
+                    if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                        if hasattr(_bot_instance.schwab_broker, 'reset_token_auth'):
+                            _bot_instance.schwab_broker.reset_token_auth()
+                            print(f"[SCHWAB AUTH] Broker backoff state reset")
+                except Exception:
+                    pass
+                
                 print(f"[SCHWAB AUTH] Tokens saved successfully, auto-refresh started")
                 return True
             else:

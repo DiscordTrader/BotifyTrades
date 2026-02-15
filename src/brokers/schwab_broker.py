@@ -7,8 +7,12 @@ import os
 import sys
 import json
 import asyncio
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -36,6 +40,9 @@ class SchwabBroker(BrokerInterface):
         self.account_number = None
         self.dry_run = config.get('dry_run', True)
         self._token_refresh_lock = asyncio.Lock()
+        self._token_refresh_failures = 0
+        self._token_refresh_backoff_until = 0
+        self._token_auth_dead = False
         
         self.client_id = config.get('client_id', '')
         self.client_secret = config.get('client_secret', '')
@@ -169,8 +176,15 @@ class SchwabBroker(BrokerInterface):
             return False
     
     async def _refresh_access_token(self) -> bool:
-        """Refresh the access token using refresh token"""
+        """Refresh the access token using refresh token with exponential backoff"""
         try:
+            if self._token_auth_dead:
+                return False
+            
+            now = datetime.now().timestamp()
+            if now < self._token_refresh_backoff_until:
+                return False
+            
             if not self.refresh_token:
                 print(f"[{self.name}] No refresh token available")
                 return False
@@ -204,6 +218,9 @@ class SchwabBroker(BrokerInterface):
                     expires_in = token_data.get('expires_in', 1800)
                     self.token_expiry = (datetime.now().timestamp() + expires_in)
                     self._save_tokens()
+                    self._token_refresh_failures = 0
+                    self._token_refresh_backoff_until = 0
+                    self._token_auth_dead = False
                     print(f"[{self.name}] ✓ Access token refreshed (expires in {expires_in}s)")
                     return True
                 elif response.status_code == 429:
@@ -219,25 +236,48 @@ class SchwabBroker(BrokerInterface):
                         expires_in = token_data.get('expires_in', 1800)
                         self.token_expiry = (datetime.now().timestamp() + expires_in)
                         self._save_tokens()
+                        self._token_refresh_failures = 0
+                        self._token_refresh_backoff_until = 0
                         print(f"[{self.name}] ✓ Access token refreshed after rate limit wait")
                         return True
+                    self._apply_token_backoff()
                     print(f"[{self.name}] ❌ Token refresh failed after rate limit: {response.status_code}")
                     return False
                 elif response.status_code == 400:
                     error_text = response.text
                     if 'invalid_grant' in error_text:
-                        print(f"[{self.name}] ❌ Refresh token expired or revoked. Re-authentication required.")
+                        self._token_auth_dead = True
                         self.connected = False
+                        print(f"[{self.name}] ❌ Refresh token expired or revoked. Re-authentication required. (Token refresh suspended until re-auth)")
                     else:
-                        print(f"[{self.name}] ❌ Token refresh failed: {response.status_code} - {error_text}")
+                        self._apply_token_backoff()
+                        if self._token_refresh_failures <= 3:
+                            print(f"[{self.name}] ❌ Token refresh failed: {response.status_code} - {error_text}")
+                        else:
+                            backoff_remaining = int(self._token_refresh_backoff_until - datetime.now().timestamp())
+                            print(f"[{self.name}] ❌ Token refresh still failing (attempt {self._token_refresh_failures}). Next retry in {backoff_remaining}s. Re-authenticate via Settings.")
                     return False
                 else:
+                    self._apply_token_backoff()
                     print(f"[{self.name}] ❌ Token refresh failed: {response.status_code}")
                     return False
                     
         except Exception as e:
+            self._apply_token_backoff()
             print(f"[{self.name}] ❌ Error refreshing token: {e}")
             return False
+    
+    def _apply_token_backoff(self):
+        """Apply exponential backoff after token refresh failure"""
+        self._token_refresh_failures += 1
+        backoff = min(300, 15 * (2 ** min(self._token_refresh_failures - 1, 5)))
+        self._token_refresh_backoff_until = datetime.now().timestamp() + backoff
+    
+    def reset_token_auth(self):
+        """Reset token auth state after re-authentication (call from auth flow)"""
+        self._token_auth_dead = False
+        self._token_refresh_failures = 0
+        self._token_refresh_backoff_until = 0
     
     async def _verify_connection(self) -> bool:
         """Verify connection by fetching account info"""
