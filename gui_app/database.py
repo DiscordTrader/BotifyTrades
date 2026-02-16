@@ -12625,7 +12625,7 @@ def record_broker_rate_limit_hit(broker_name: str) -> bool:
 def add_learned_pattern(name: str, pattern: str, example_text: str, 
                        action: str = 'BTO', asset_type: str = 'stock',
                        description: str = None) -> Optional[int]:
-    """Add a new learned pattern (pending approval)."""
+    """Add a new learned pattern (pending approval). Updates if name already exists."""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -12637,6 +12637,21 @@ def add_learned_pattern(name: str, pattern: str, example_text: str,
         conn.commit()
         return cursor.lastrowid
     except Exception as e:
+        if 'UNIQUE constraint' in str(e):
+            try:
+                cursor.execute('''
+                    UPDATE learned_patterns SET pattern = ?, example_text = ?, action = ?, 
+                    asset_type = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE name = ?
+                ''', (pattern, example_text, action, asset_type, description, name))
+                conn.commit()
+                cursor.execute('SELECT id FROM learned_patterns WHERE name = ?', (name,))
+                row = cursor.fetchone()
+                print(f"[DATABASE] ✓ Updated existing learned pattern: {name}")
+                return row['id'] if row else None
+            except Exception as e2:
+                print(f"[DATABASE] Error updating learned pattern: {e2}")
+                return None
         print(f"[DATABASE] Error adding learned pattern: {e}")
         return None
 

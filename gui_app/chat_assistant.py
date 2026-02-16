@@ -2042,7 +2042,7 @@ def _build_regex_from_signal(signal_text: str, parsed: Dict) -> str:
     pattern = re.escape(signal_text)
     
     if parsed.get('symbol'):
-        pattern = pattern.replace(re.escape(parsed['symbol']), r'([A-Z]{1,5})')
+        pattern = pattern.replace(re.escape(parsed['symbol']), r'([A-Za-z]{1,5})')
     
     for field in ['entry_price', 'conditional_trigger', 'stop_loss', 'strike']:
         val = parsed.get(field)
@@ -2063,6 +2063,8 @@ def _build_regex_from_signal(signal_text: str, parsed: Dict) -> str:
     role_fix = re.sub(r'<@\\&(\d+)>', r'<@&\\d+>', pattern)
     if role_fix != pattern:
         pattern = role_fix
+    
+    pattern = re.sub(r'(?:\\ )+', r'\\s+', pattern)
     
     return pattern
 
