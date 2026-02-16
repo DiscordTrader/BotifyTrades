@@ -1965,10 +1965,11 @@ def _parse_signal_rule_based(signal_text: str) -> Optional[Dict]:
     if role_match:
         parsed['has_role_mention'] = True
     
-    action_match = re.search(r'\b(BTO|STC|BUY|SELL|BUYING|SELLING|LONG|SHORT|BOUGHT|SOLD)\b', text_upper)
+    action_match = re.search(r'\b(BTO|STC|BUY|SELL|BUYING|SELLING|LONG|SHORT|BOUGHT|SOLD|ENTRY|ENTER|ENTERING)\b', text_upper)
     if action_match:
         action_map = {
             'BTO': 'BTO', 'BUY': 'BTO', 'BUYING': 'BTO', 'LONG': 'BTO', 'BOUGHT': 'BTO',
+            'ENTRY': 'BTO', 'ENTER': 'BTO', 'ENTERING': 'BTO',
             'STC': 'STC', 'SELL': 'STC', 'SELLING': 'STC', 'SHORT': 'STC', 'SOLD': 'STC'
         }
         parsed['action'] = action_map.get(action_match.group(1), 'BTO')
@@ -1993,7 +1994,7 @@ def _parse_signal_rule_based(signal_text: str) -> Optional[Dict]:
     
     if 'symbol' not in parsed:
         sym_match = re.search(r'(?:^|\s)\$?([A-Z]{1,5})(?:\s|$)', text_upper)
-        if sym_match and sym_match.group(1) not in ('BTO', 'STC', 'BUY', 'SELL', 'SL', 'PT', 'TP', 'TRIM', 'EXIT', 'OUT', 'OVER', 'UNDER', 'ABOVE', 'BELOW', 'THE', 'FOR', 'AND', 'ALL', 'IN', 'AT', 'TO', 'OF', 'ON', 'IS', 'IT', 'OR', 'UP', 'MY', 'BY', 'IF', 'SO', 'DO', 'NO', 'AN', 'AS', 'AM', 'BE', 'HE', 'ME', 'WE', 'US'):
+        if sym_match and sym_match.group(1) not in ('BTO', 'STC', 'BUY', 'SELL', 'SL', 'PT', 'TP', 'TRIM', 'EXIT', 'OUT', 'OVER', 'UNDER', 'ABOVE', 'BELOW', 'ENTRY', 'ENTER', 'ENTERING', 'LONG', 'SHORT', 'BOUGHT', 'SOLD', 'BUYING', 'SELLING', 'LOTTO', 'THE', 'FOR', 'AND', 'ALL', 'IN', 'AT', 'TO', 'OF', 'ON', 'IS', 'IT', 'OR', 'UP', 'MY', 'BY', 'IF', 'SO', 'DO', 'NO', 'AN', 'AS', 'AM', 'BE', 'HE', 'ME', 'WE', 'US'):
             parsed['symbol'] = sym_match.group(1)
             parsed['is_option'] = False
             parsed['asset_type'] = 'stock'
@@ -2044,10 +2045,28 @@ def _build_regex_from_signal(signal_text: str, parsed: Dict) -> str:
     if parsed.get('symbol'):
         pattern = pattern.replace(re.escape(parsed['symbol']), r'([A-Za-z]{1,5})')
     
-    for field in ['entry_price', 'conditional_trigger', 'stop_loss', 'strike']:
+    if parsed.get('is_option') and parsed.get('strike') is not None:
+        strike_str = str(parsed['strike'])
+        if strike_str.endswith('.0'):
+            strike_str = strike_str[:-2]
+        opt_type = parsed.get('option_type', 'C').lower()
+        strike_with_type = re.escape(strike_str) + opt_type
+        pattern = pattern.replace(strike_with_type, r'(\d+(?:\.\d+)?)\s*([cCpP])', 1)
+        if re.escape(strike_str) in pattern:
+            pattern = pattern.replace(re.escape(strike_str), r'([\d.]+)', 1)
+    
+    for field in ['entry_price', 'conditional_trigger', 'stop_loss']:
         val = parsed.get(field)
         if val is not None:
             val_str = str(val)
+            if val_str.endswith('.0'):
+                val_str = val_str[:-2]
+            pattern = pattern.replace(re.escape(val_str), r'([\d.]+)', 1)
+    
+    if not parsed.get('is_option'):
+        field_val = parsed.get('strike')
+        if field_val is not None:
+            val_str = str(field_val)
             if val_str.endswith('.0'):
                 val_str = val_str[:-2]
             pattern = pattern.replace(re.escape(val_str), r'([\d.]+)', 1)
@@ -2064,7 +2083,16 @@ def _build_regex_from_signal(signal_text: str, parsed: Dict) -> str:
     if role_fix != pattern:
         pattern = role_fix
     
+    trailing_words = ['lotto', 'LOTTO', 'Lotto', 'daytrade', 'swing', 'scalp', 'risky', 'safe', 'weekly', 'daily']
+    for word in trailing_words:
+        esc_word = re.escape(word)
+        if esc_word in pattern:
+            pattern = pattern.replace(esc_word, r'(?:\S+)?')
+    
     pattern = re.sub(r'(?:\\ )+', r'\\s+', pattern)
+    
+    if pattern.endswith(r'\s+(?:\S+)?'):
+        pattern = pattern.replace(r'\s+(?:\S+)?', r'(?:\s+\S+)?')
     
     return pattern
 
