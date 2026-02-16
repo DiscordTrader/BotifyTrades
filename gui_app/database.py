@@ -9401,7 +9401,7 @@ def save_signal_format(name: str, description: str, example_signal: str,
                        regex_pattern: Optional[str] = None) -> Optional[int]:
     """Alias for save_learned_signal_format."""
     return save_learned_signal_format(name, description, example_signal, 
-                                       parsed_fields, field_mappings, regex_pattern)
+                                       parsed_fields, regex_pattern, field_mappings)
 
 
 def get_signal_formats(enabled_only: bool = False) -> List[Dict]:

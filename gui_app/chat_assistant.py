@@ -1993,7 +1993,7 @@ def _parse_signal_rule_based(signal_text: str) -> Optional[Dict]:
     
     if 'symbol' not in parsed:
         sym_match = re.search(r'(?:^|\s)\$?([A-Z]{1,5})(?:\s|$)', text_upper)
-        if sym_match and sym_match.group(1) not in ('BTO', 'STC', 'BUY', 'SELL', 'SL', 'PT', 'TP', 'TRIM', 'EXIT', 'OUT', 'OVER', 'UNDER', 'ABOVE', 'BELOW', 'THE', 'FOR', 'AND', 'ALL'):
+        if sym_match and sym_match.group(1) not in ('BTO', 'STC', 'BUY', 'SELL', 'SL', 'PT', 'TP', 'TRIM', 'EXIT', 'OUT', 'OVER', 'UNDER', 'ABOVE', 'BELOW', 'THE', 'FOR', 'AND', 'ALL', 'IN', 'AT', 'TO', 'OF', 'ON', 'IS', 'IT', 'OR', 'UP', 'MY', 'BY', 'IF', 'SO', 'DO', 'NO', 'AN', 'AS', 'AM', 'BE', 'HE', 'ME', 'WE', 'US'):
             parsed['symbol'] = sym_match.group(1)
             parsed['is_option'] = False
             parsed['asset_type'] = 'stock'
