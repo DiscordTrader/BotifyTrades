@@ -304,7 +304,7 @@ TOON_EXIT_PATTERN = re.compile(
 # Supports: "FRSX over 2.35" or "FRSX over 2.35-2.4" (uses first price as trigger)
 # Also handles common typos: ocer, ober, ovwe, ovre, ovr, abve, abov
 CONDITIONAL_TRIGGER_PATTERN = re.compile(
-    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovwe|ovre|ovr|above|abve|abov)\s+\$?([\d.]+)(?:\s*[-–—to]+\s*\$?[\d.]+)?',
+    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovwe|ovre|ovr|iver|above|abve|abov)\s+\$?([\d.]+)(?:\s*[-–—to]+\s*\$?[\d.]+)?',
     re.IGNORECASE
 )
 
