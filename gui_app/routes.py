@@ -14674,7 +14674,6 @@ def register_routes(app):
 
     @app.route('/api/channels/<channel_id>/scan', methods=['POST'])
     @login_required
-    @admin_required
     def api_scan_channel(channel_id):
         """Scan channel history to discover signal formats (no AI)."""
         try:
@@ -14702,7 +14701,6 @@ def register_routes(app):
 
     @app.route('/api/scanner/save-pattern', methods=['POST'])
     @login_required
-    @admin_required
     def api_save_scanned_pattern():
         """Save a detected pattern from the scanner as a learned pattern."""
         try:
@@ -14751,7 +14749,6 @@ def register_routes(app):
 
     @app.route('/api/scanner/patterns', methods=['GET'])
     @login_required
-    @admin_required
     def api_get_learned_patterns():
         """Get all learned patterns for management."""
         try:
@@ -14762,7 +14759,6 @@ def register_routes(app):
 
     @app.route('/api/scanner/patterns/<int:pattern_id>/approve', methods=['POST'])
     @login_required
-    @admin_required
     def api_approve_pattern(pattern_id):
         """Approve a learned pattern for active use."""
         try:
@@ -14784,7 +14780,6 @@ def register_routes(app):
 
     @app.route('/api/scanner/patterns/<int:pattern_id>/disable', methods=['POST'])
     @login_required
-    @admin_required
     def api_disable_pattern(pattern_id):
         """Disable a learned pattern."""
         try:
@@ -14804,7 +14799,6 @@ def register_routes(app):
 
     @app.route('/api/scanner/patterns/<int:pattern_id>', methods=['DELETE'])
     @login_required
-    @admin_required
     def api_delete_pattern(pattern_id):
         """Delete a learned pattern."""
         try:

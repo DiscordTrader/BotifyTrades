@@ -1437,7 +1437,7 @@ function renderChannels() {
                     <button onclick="openUserModal(${channel.id}, '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(139,161,199,0.1); border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #8BA1C7; cursor: pointer;">
                         Users <span style="background: rgba(16,240,179,0.15); color: #10F0B3; padding: 1px 5px; border-radius: 2px; margin-left: 4px; font-size: 9px;">${userCount > 0 ? userCount : 'All'}</span>
                     </button>
-                    ${IS_ADMIN_BUILD ? `<button onclick="openScannerModal('${channel.discord_channel_id}', '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); border-radius: 3px; color: #A78BFA; cursor: pointer;" title="Scan channel messages to discover signal formats">Scan Formats</button>` : ''}
+                    <button onclick="openScannerModal('${channel.discord_channel_id}', '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); border-radius: 3px; color: #A78BFA; cursor: pointer;" title="Scan channel messages to discover signal formats">Scan Formats</button>
                     <button onclick="deleteChannel(${channel.id})" style="font-size: 10px; padding: 4px 10px; background: rgba(255,82,82,0.1); border: 1px solid rgba(255,82,82,0.2); border-radius: 3px; color: #FF5252; cursor: pointer;">Delete</button>
                 </div>
             </div>
