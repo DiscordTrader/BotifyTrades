@@ -141,31 +141,54 @@ def normalize_to_template(text: str) -> str:
     t = re.sub(r'<@[!&]?\d+>', '', t)
     t = re.sub(r'<#\d+>', '', t)
     t = re.sub(r'https?://\S+', '', t)
-    t = re.sub(r'\d{1,2}(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{2,4}', '{EXPIRY}', t, flags=re.IGNORECASE)
-    t = re.sub(r'\d{1,2}/\d{1,2}(?:/\d{2,4})?', '{EXPIRY}', t)
-    t = re.sub(r'\d+(?:\.\d{1,2})?[CPcp](?=\s|$|@)', '{STRIKE}', t)
-    t = re.sub(r'\$\d+(?:\.\d{1,4})?', '{PRICE}', t)
-    t = re.sub(r'(@\s?)\d+(?:\.\d{1,4})?', r'\1{PRICE}', t)
-    t = re.sub(r'(avg\.?\s)\d+(?:\.\d{1,4})?', r'\1{PRICE}', t)
-    t = re.sub(r'(average\s)\d+(?:\.\d{1,4})?', r'\1{PRICE}', t, flags=re.IGNORECASE)
-    t = re.sub(r'(lim\s?)\d+(?:\.\d{1,4})?', r'\1{PRICE}', t)
-    t = re.sub(r'\d+(?:\.\d+)?%', '{PCT}', t)
-    t = re.sub(r'\$[A-Z]{1,6}', '{TICKER}', t)
-    t = re.sub(r'(?<![A-Za-z])[A-Z]{2,6}(?![a-z])', '{TICKER}', t)
-    t = re.sub(r'(?:^|\s)\d{1,4}(?=\s)', ' {QTY}', t)
+
+    slots = []
+    def _slot(tag):
+        idx = len(slots)
+        slots.append(tag)
+        return f'\x00{idx}\x00'
+
+    t = re.sub(r'\d{1,2}(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{2,4}', lambda m: _slot('EXPIRY'), t, flags=re.IGNORECASE)
+    t = re.sub(r'\d{1,2}/\d{1,2}(?:/\d{2,4})?', lambda m: _slot('EXPIRY'), t)
+    t = re.sub(r'\d+(?:\.\d{1,2})?[CPcp](?=\s|$|@|\*)', lambda m: _slot('STRIKE'), t)
+    t = re.sub(r'\$\d+(?:\.\d{1,4})?', lambda m: _slot('PRICE'), t)
+    t = re.sub(r'(@\s?)\d+(?:\.\d{1,4})?', lambda m: m.group(1) + _slot('PRICE'), t)
+    t = re.sub(r'(?:(?:^|(?<=\s))\.)?\d+(?:\.\d{1,4})?(?=\s|\*|$)', lambda m: _slot('PRICE') if m.group(0).strip() else m.group(0), t)
+    t = re.sub(r'\d+(?:\.\d+)?%', lambda m: _slot('PCT'), t)
+    t = re.sub(r'\$[A-Z]{1,6}', lambda m: _slot('TICKER'), t)
+
+    SKIP_WORDS = {'ENTRY', 'TRIM', 'EXIT', 'BTO', 'STC', 'BUY', 'SELL', 'SL', 'PT', 'TP',
+                  'OPEN', 'CLOSE', 'ALERT', 'SOLD', 'OUT', 'OF', 'THE', 'FOR', 'AND',
+                  'IN', 'AT', 'TO', 'MY', 'IS', 'IT', 'OR', 'UP', 'BY', 'NO', 'ON',
+                  'ALL', 'WITH', 'HERE', 'MORE', 'NOTES', 'VALUE', 'LOTTO', 'SMALL',
+                  'SELLING', 'BUYING', 'TRIMMING', 'REMAINING', 'SHARES', 'LOSS',
+                  'RUNNERS', 'HOLDING', 'HALF', 'TOOK', 'DONE', 'FLAT', 'HOW', 'TRADE',
+                  'I', 'A', 'C', 'P'}
+    def _replace_ticker(m):
+        word = m.group(0)
+        if word in SKIP_WORDS:
+            return word
+        return _slot('TICKER')
+    t = re.sub(r'(?<![A-Za-z\x00])[A-Z]{1,6}(?![a-z\x00])', _replace_ticker, t)
+    t = re.sub(r'(?:^|\s)\d{1,4}(?=\s)', lambda m: ' ' + _slot('QTY'), t)
+
+    for i, tag in enumerate(slots):
+        t = t.replace(f'\x00{i}\x00', '{' + tag + '}')
     t = re.sub(r'\s+', ' ', t).strip()
     return t
 
 
 def template_to_regex(template: str) -> str:
     r = re.escape(template)
-    r = r.replace(r'\{TICKER\}', r'([A-Za-z]{1,6})')
-    r = r.replace(r'\{PRICE\}', r'(\d+(?:\.\d{1,4})?)')
+    r = r.replace(r'\{TICKER\}', r'\$?([A-Za-z]{1,6})')
+    r = r.replace(r'\{PRICE\}', r'\.?(\d+(?:\.\d{1,4})?)')
     r = r.replace(r'\{STRIKE\}', r'(\d+(?:\.\d{1,2})?[CPcp])')
     r = r.replace(r'\{EXPIRY\}', r'(\d{1,2}/\d{1,2}(?:/\d{2,4})?)')
     r = r.replace(r'\{PCT\}', r'(\d+(?:\.\d+)?%)')
     r = r.replace(r'\{QTY\}', r'(\d{1,4})')
-    r = r.replace(r'\ ', r'\s+')
+    r = re.sub(r'(?:\\ )+', r'\\s+', r)
+    r = re.sub(r'@everyone\\s\+', r'(?:@everyone\\s+)?', r)
+    r = re.sub(r'^', r'(?:<@&\\d+>\\s+)?', r, count=1)
     return r
 
 
