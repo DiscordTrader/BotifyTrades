@@ -605,12 +605,17 @@ class SignalFormatRegistry:
     def _load_learned_patterns(self) -> None:
         """Load learned patterns from database with full metadata."""
         try:
+            old_learned = [name for name in self._formats if name.startswith('learned_')]
+            for name in old_learned:
+                self.unregister(name)
+            self._learned_pattern_metadata.clear()
+
             from gui_app.database import get_active_learned_patterns
             patterns = get_active_learned_patterns()
+            loaded = 0
             for p in patterns:
                 if p.get('pattern') and p.get('name'):
                     pattern_name = f"learned_{p['name']}"
-                    # Store metadata for use in parser
                     self._learned_pattern_metadata[pattern_name] = {
                         'action': p.get('action', 'BTO'),
                         'asset_type': p.get('asset_type', 'stock'),
@@ -622,14 +627,15 @@ class SignalFormatRegistry:
                     self.register(
                         name=pattern_name,
                         description=p.get('description', 'Learned pattern'),
-                        priority=50 + p.get('id', 0),  # Lower priority than built-in
+                        priority=50 + p.get('id', 0),
                         pattern=p['pattern'],
                         parser=lambda m, t, pn=pattern_name: self._parse_learned_pattern_with_metadata(m, t, pn),
                         examples=[p.get('example_text', '')]
                     )
-                    print(f"[FORMAT REGISTRY] ✓ Loaded learned pattern: {p['name']} (action={p.get('action', 'BTO')}, approved={p.get('approved_by') is not None})")
+                    loaded += 1
+            print(f"[FORMAT REGISTRY] ✓ Loaded {loaded} learned patterns (cleared {len(old_learned)} old)")
         except Exception as e:
-            pass  # Database not available or no patterns
+            print(f"[FORMAT REGISTRY] Warning: Could not load learned patterns: {e}")
     
     # =========================================================================
     # PARSER IMPLEMENTATIONS
