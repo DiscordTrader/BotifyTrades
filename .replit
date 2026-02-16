@@ -19,12 +19,12 @@ args = "BotifyTrades"
 name = "BotifyTrades"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python src/selfbot_webull.py"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"Bot stopped by user request\""
 
 [nix]
 channel = "stable-25_05"
