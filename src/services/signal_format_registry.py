@@ -1304,29 +1304,49 @@ class SignalFormatRegistry:
     
     def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
         """Parse signals using learned patterns with database metadata."""
+        import re as _re
         groups = match.groups()
         symbol = None
         price = None
+        strike = None
+        opt_type = None
+        expiry = None
         
-        # Get metadata from stored database config
         metadata = self._learned_pattern_metadata.get(pattern_name, {})
         action = metadata.get('action', 'BTO')
         asset_type = metadata.get('asset_type', 'stock')
         confidence = metadata.get('confidence', 0.85)
         admin_approved = metadata.get('admin_approved', False)
         
-        # Try to extract symbol and price from groups
         for g in groups:
-            if g:
-                # Check if it looks like a ticker
-                if g.isalpha() and len(g) <= 5:
-                    symbol = g.upper()
-                # Check if it looks like a price
-                elif g.replace('.', '').isdigit():
-                    try:
-                        price = float(g)
-                    except ValueError:
-                        pass
+            if not g:
+                continue
+            g_stripped = g.strip()
+            
+            if g_stripped.isalpha() and len(g_stripped) <= 6:
+                if not symbol:
+                    symbol = g_stripped.upper()
+            elif _re.match(r'^(\d+(?:\.\d+)?)\s*([CcPp])$', g_stripped):
+                m = _re.match(r'^(\d+(?:\.\d+)?)\s*([CcPp])$', g_stripped)
+                strike = float(m.group(1))
+                opt_type = m.group(2).upper()
+                asset_type = 'option'
+            elif _re.match(r'^(\d+(?:\.\d+)?)\s+([CcPp])$', g_stripped):
+                m = _re.match(r'^(\d+(?:\.\d+)?)\s+([CcPp])$', g_stripped)
+                strike = float(m.group(1))
+                opt_type = m.group(2).upper()
+                asset_type = 'option'
+            elif g_stripped.replace('.', '').isdigit():
+                try:
+                    val = float(g_stripped)
+                    if price is None:
+                        price = val
+                except ValueError:
+                    pass
+            elif _re.match(r'^\d+(?:\.\d+)?%$', g_stripped):
+                pass
+            elif _re.match(r'^\d{1,2}/\d{1,2}(?:/\d{2,4})?$', g_stripped):
+                expiry = g_stripped
         
         if not symbol:
             return None
@@ -1337,16 +1357,16 @@ class SignalFormatRegistry:
             "qty": 1,
             "qty_specified": False,
             "symbol": symbol,
-            "strike": None,
-            "opt_type": None,
-            "expiry": None,
+            "strike": strike,
+            "opt_type": opt_type,
+            "expiry": expiry,
             "price": price,
             "is_market_order": price is None,
             "confidence": confidence,
             "_learned_pattern": True,
             "_admin_approved": admin_approved,
-            "_requires_approval": True,  # Security: learned patterns require approval for execution
-            "_execution_allowed": admin_approved  # Only execute if admin approved
+            "_requires_approval": True,
+            "_execution_allowed": admin_approved
         }
     
     def _parse_learned_pattern(self, match: re.Match, text: str) -> Optional[Dict]:
