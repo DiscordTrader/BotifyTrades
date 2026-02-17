@@ -2810,8 +2810,27 @@ class WebullBroker:
                 return self._get_current_option_quote(self._client, symbol, strike, opt_type, expiry_mmdd, expiry_year)
             
             current_price = await asyncio.to_thread(get_quote)
+            
+            # FIX: For conditional option orders where QOT failed, the limit_price is the
+            # STOCK trigger price (e.g. $602.10), not the option premium (e.g. $1.38).
+            # Detect this by checking if this is a conditional market order with no QOT price,
+            # and use the current option quote as the reference price instead.
+            _slippage_reference = limit_price
+            _is_conditional = kwargs.get('_conditional_order_id') or kwargs.get('conditional_order_id')
+            _is_conditional_stock_price = (
+                _is_conditional
+                and kwargs.get('_is_market_order', False)
+                and kwargs.get('_qot_price') is None
+                and kwargs.get('_trigger_price') is not None
+                and limit_price == kwargs.get('_trigger_price')
+            )
+            if _is_conditional_stock_price and current_price and current_price > 0:
+                print(f"[SLIPPAGE] ⚡ Conditional option: signal price ${limit_price:.2f} equals stock trigger, not option premium")
+                print(f"[SLIPPAGE] Using option quote ${current_price:.2f} as slippage reference instead")
+                _slippage_reference = current_price
+            
             # Use dynamic threshold from database
-            decision, slippage_pct = self._evaluate_slippage(limit_price, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
+            decision, slippage_pct = self._evaluate_slippage(_slippage_reference, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
             
             if decision == SlippageDecision.ABORT:
                 print(f"[SLIPPAGE] ❌ Order ABORTED - excessive slippage or illiquid")
@@ -12387,6 +12406,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     order_price = signal['_limit_price']
                     _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${order_price:.4f} (max allowed)")
                 
+                # FIX: For conditional option market orders, the price is the STOCK trigger price
+                # (e.g. $602.10), not the option premium. Use market order (None) instead of
+                # sending a limit price that equals the stock price.
+                _is_conditional_market_option = (
+                    signal.get('_conditional_order_id') is not None
+                    and signal.get('is_market_order', False)
+                    and signal.get('_qot_price') is None
+                    and signal.get('_trigger_price') is not None
+                    and order_price and order_price == signal.get('_trigger_price')
+                )
+                if _is_conditional_market_option:
+                    _original_print(f"[{broker_name}] ⚡ Conditional option: price ${order_price:.2f} is stock trigger, switching to MARKET ORDER")
+                    order_price = None
+                
                 _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${order_price}")
                 
                 if uses_modern_signature:
@@ -12398,7 +12431,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         option_type=signal['opt_type'],
                         action=signal['action'],
                         quantity=signal['qty'],
-                        price=order_price  # Uses limit_cap price if enabled
+                        price=order_price,
+                        _conditional_order_id=signal.get('_conditional_order_id'),
+                        _is_market_order=signal.get('is_market_order', False),
+                        _qot_price=signal.get('_qot_price'),
+                        _trigger_price=signal.get('_trigger_price')
                     )
                 elif broker_upper in india_brokers:
                     # Indian brokers (Zerodha, Upstox, DhanQ) use standardized interface
@@ -12424,7 +12461,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt_type=signal['opt_type'],
                         expiry_mmdd=signal['expiry'],
                         limit_price=order_price,  # Uses limit_cap price if enabled
-                        channel_id=signal.get('channel_id')
+                        channel_id=signal.get('channel_id'),
+                        _conditional_order_id=signal.get('_conditional_order_id'),
+                        _is_market_order=signal.get('is_market_order', False),
+                        _qot_price=signal.get('_qot_price'),
+                        _trigger_price=signal.get('_trigger_price')
                     )
                 
                 # Log the result for debugging (applies to all option orders)
