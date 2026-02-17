@@ -24,7 +24,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python src/selfbot_webull.py"
+args = "echo \"Bot stopped by user request\""
 
 [nix]
 channel = "stable-25_05"
