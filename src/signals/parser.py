@@ -396,10 +396,11 @@ FULL_EXIT_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Direct sell without percentage: "selling XTLB" (implies 100% exit)
+# Direct sell without percentage: "selling XTLB", "im selling RXT", "I'm selling CRVS" (implies 100% exit)
 # Must exclude reserved words: here, now, on, more, all, half, quarter, third
 DIRECT_SELL_PATTERN = re.compile(
-    r'^(?:selling|sold)\s+(?!\d)'  # Must NOT be followed by a number (that's partial exit)
+    r'(?:(?:i\'?m|i\s+am|we\'?re|we\s+are|just)\s+)?'  # Optional natural language prefix
+    r'(?:selling|sold)\s+(?!\d)'  # Must NOT be followed by a number (that's partial exit)
     r'(?:\$?(?P<symbol>(?!here|now|on|more|all|half|quarter|third)[A-Z]{1,5}))(?:\s|$)',
     re.IGNORECASE
 )
