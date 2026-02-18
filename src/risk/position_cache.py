@@ -817,14 +817,20 @@ class PositionCache:
         return count
     
     def remove(self, position_key: str) -> None:
-        """Remove a position from cache."""
+        """Remove a position from cache and clean up stale trade_id mapping."""
         self._cache.pop(position_key, None)
+        old_trade_id = self._trade_id_map.pop(position_key, None)
+        if old_trade_id:
+            print(f"[RISK] ✓ Cleaned trade_id mapping: {position_key} (trade #{old_trade_id})")
     
     def cleanup_stale(self, active_keys: set) -> int:
         """Remove cache entries not in active positions. Returns count removed."""
         stale = [k for k in self._cache.keys() if k not in active_keys]
         for key in stale:
             del self._cache[key]
+            old_trade_id = self._trade_id_map.pop(key, None)
+            if old_trade_id:
+                print(f"[RISK] ✓ Cleaned stale trade_id mapping: {key} (trade #{old_trade_id})")
         return len(stale)
     
     def __len__(self) -> int:

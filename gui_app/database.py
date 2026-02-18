@@ -3874,7 +3874,7 @@ def load_risk_state(trade_id: int) -> dict:
                trailing_stop_price, trailing_activated, highest_price,
                risk_settings_hash, early_trailing_active, early_stop_price, early_steps_locked
         FROM trades
-        WHERE id = ?
+        WHERE id = ? AND status IN ('OPEN', 'PENDING')
     ''', (trade_id,))
     
     row = cursor.fetchone()
