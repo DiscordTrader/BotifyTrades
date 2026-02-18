@@ -12,6 +12,19 @@ from datetime import datetime
 from .risk_types import PositionCacheEntry, PositionSnapshot
 
 
+def get_position_cache() -> 'PositionCache':
+    """Get the global PositionCache instance from the active RiskManager.
+    This is the singleton accessor used by partial exit and other modules.
+    Returns a fallback PositionCache if RiskManager not yet initialized."""
+    try:
+        from .position_monitor import risk_manager_instance
+        if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
+            return risk_manager_instance.cache
+    except Exception:
+        pass
+    return PositionCache()
+
+
 class PositionCache:
     """Manages position state cache with file persistence."""
     
@@ -222,6 +235,57 @@ class PositionCache:
     def get(self, position_key: str) -> Optional[PositionCacheEntry]:
         """Get cached entry for a position."""
         return self._cache.get(position_key)
+    
+    def get_position(self, symbol: str, broker: str = None, channel_id: str = None):
+        """Find an open position by symbol using database as source of truth.
+        Returns a lightweight object with qty, asset_type, broker, and option fields.
+        
+        Args:
+            symbol: Stock/option ticker symbol
+            broker: Optional broker filter for multi-broker setups
+            channel_id: Optional channel filter
+        """
+        symbol_upper = symbol.upper()
+        try:
+            from gui_app.database import get_open_trades_with_trailing_state
+            open_trades = get_open_trades_with_trailing_state()
+            matches = []
+            for trade in open_trades:
+                if trade.get('symbol', '').upper() != symbol_upper:
+                    continue
+                if broker and trade.get('broker', '').upper() != broker.upper():
+                    continue
+                if channel_id and trade.get('channel_id') and str(trade['channel_id']) != str(channel_id):
+                    continue
+                matches.append(trade)
+            
+            if not matches:
+                return None
+            
+            trade = matches[0]
+            
+            class PositionInfo:
+                pass
+            pos = PositionInfo()
+            pos.qty = trade.get('quantity', 0)
+            pos.asset_type = trade.get('asset_type', 'stock')
+            pos.broker = trade.get('broker', '')
+            pos.strike = trade.get('strike')
+            pos.opt_type = trade.get('call_put')
+            pos.expiry = trade.get('expiry')
+            pos.entry_price = trade.get('entry_price', 0)
+            pos.channel_id = trade.get('channel_id')
+            pos.trade_id = trade.get('id')
+            
+            if pos.asset_type == 'option' and pos.strike:
+                pos.position_key = f"{pos.broker}_{symbol_upper}_{pos.strike}_{pos.expiry}_{pos.opt_type}"
+            else:
+                pos.position_key = f"{pos.broker}_{symbol_upper}_stock"
+            
+            return pos
+        except Exception as e:
+            print(f"[RISK] Warning: Could not look up position from DB: {e}")
+            return None
     
     def get_or_create(self, position: PositionSnapshot, 
                       stop_loss_price: Optional[float] = None,
