@@ -709,12 +709,15 @@ def notify_order_placed(
     alert_type = "order_placed_bto" if action.upper() == "BTO" else "order_placed_stc"
     broker_label = broker.upper() if broker else 'Unknown'
     
+    is_option = bool(strike and expiry and opt_type)
+    unit_label = "contracts" if is_option else "shares"
+    
     option_str = ""
-    if strike and expiry and opt_type:
+    if is_option:
         option_str = f" ${strike}{opt_type} {expiry}"
     
     title = f"[{broker_label}] {action.upper()} ORDER PLACED: {symbol}{option_str}"
-    message = f"**{broker_label}**: {quantity} contracts @ ${price:.2f}"
+    message = f"**{broker_label}**: {quantity} {unit_label} @ ${price:.2f}"
     
     details = {
         'Qty': quantity,
@@ -750,12 +753,15 @@ def notify_order_filled(
     alert_type = "order_filled_bto" if action.upper() == "BTO" else "order_filled_stc"
     broker_label = broker.upper() if broker else 'Unknown'
     
+    is_option = bool(strike and expiry and opt_type)
+    unit_label = "contracts" if is_option else "shares"
+    
     option_str = ""
-    if strike and expiry and opt_type:
+    if is_option:
         option_str = f" ${strike}{opt_type} {expiry}"
     
     title = f"[{broker_label}] {action.upper()} FILLED: {symbol}{option_str}"
-    message = f"**{broker_label}**: {quantity} contracts @ ${price:.2f}"
+    message = f"**{broker_label}**: {quantity} {unit_label} @ ${price:.2f}"
     
     details = {
         'Qty': quantity,
