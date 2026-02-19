@@ -616,10 +616,14 @@ class SignalExitManager:
                         await asyncio.sleep(0.2)
                         
                         if hasattr(broker_instance, 'place_stop_order'):
-                            new_order = await loop.run_in_executor(None, lambda: broker_instance.place_stop_order(
+                            stop_result = broker_instance.place_stop_order(
                                 symbol=symbol, quantity=quantity, stop_price=new_sl_price, side='sell'
-                            ))
-                            new_order_id = getattr(new_order, 'id', None) or (new_order.get('id') if isinstance(new_order, dict) else None)
+                            )
+                            if asyncio.iscoroutine(stop_result) or asyncio.isfuture(stop_result):
+                                new_order = await stop_result
+                            else:
+                                new_order = stop_result
+                            new_order_id = getattr(new_order, 'order_id', None) or getattr(new_order, 'id', None) or (new_order.get('order_id') if isinstance(new_order, dict) else None) or (new_order.get('id') if isinstance(new_order, dict) else None)
                 
                 return {
                     'success': cancel_success,

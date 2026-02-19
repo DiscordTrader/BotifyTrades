@@ -38,7 +38,7 @@ class SchwabBroker(BrokerInterface):
         self.token_expiry = None
         self.account_hash = None
         self.account_number = None
-        self.dry_run = config.get('dry_run', True)
+        self.dry_run = config.get('dry_run', False)
         self._token_refresh_lock = asyncio.Lock()
         self._token_refresh_failures = 0
         self._token_refresh_backoff_until = 0
@@ -410,8 +410,8 @@ class SchwabBroker(BrokerInterface):
         Schwab session types:
         - NORMAL: Regular market hours only (9:30 AM - 4:00 PM ET)
         - SEAMLESS: Extended hours (pre-market + regular + after-hours)
-        - AM: Pre-market only
-        - PM: After-hours only
+        - AM: Pre-market only (7:00 AM - 9:28 AM ET)
+        - PM: After-hours only (4:02 PM - 8:00 PM ET)
         
         Returns:
             Session type string for order payload
@@ -426,6 +426,29 @@ class SchwabBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error checking extended hours setting: {e}")
         return "NORMAL"
+
+    def _get_duration(self, duration_hint: Optional[str] = None, is_exit: bool = False, is_near_expiry: bool = False) -> str:
+        """Get order duration/time-in-force.
+        
+        Schwab duration types:
+        - DAY: Day order (default)
+        - GOOD_TILL_CANCEL: GTC
+        - FILL_OR_KILL: FOK - fill entire order immediately or cancel
+        - IMMEDIATE_OR_CANCEL: IOC - fill what you can immediately, cancel rest
+        
+        Args:
+            duration_hint: Explicit duration override (DAY, GOOD_TILL_CANCEL, FILL_OR_KILL, IMMEDIATE_OR_CANCEL)
+            is_exit: Whether this is an exit/sell order (defaults to GTC)
+            is_near_expiry: Whether option is expiring today (forces DAY)
+        """
+        valid_durations = {"DAY", "GOOD_TILL_CANCEL", "FILL_OR_KILL", "IMMEDIATE_OR_CANCEL"}
+        if duration_hint and duration_hint.upper() in valid_durations:
+            return duration_hint.upper()
+        if is_near_expiry:
+            return "DAY"
+        if is_exit:
+            return "GOOD_TILL_CANCEL"
+        return "DAY"
     
     async def disconnect(self):
         """Disconnect from Schwab"""
@@ -1325,6 +1348,606 @@ class SchwabBroker(BrokerInterface):
             print(f"[{self.name}] Error getting order history: {e}")
         
         return []
+
+    async def place_stop_order(
+        self,
+        symbol: str,
+        quantity: int,
+        stop_price: float,
+        side: str = 'sell',
+        asset_type: str = 'EQUITY',
+        duration: str = 'GOOD_TILL_CANCEL'
+    ) -> OrderResult:
+        """Place a STOP order (broker-side stop loss).
+        
+        When the market price hits the stop_price, a MARKET order is triggered.
+        
+        Args:
+            symbol: Ticker symbol (equity or OCC option symbol)
+            quantity: Number of shares/contracts
+            stop_price: The trigger price
+            side: 'sell' for protective stop on long, 'buy' for stop on short
+            asset_type: 'EQUITY' or 'OPTION'
+            duration: Order duration (DAY, GOOD_TILL_CANCEL)
+        """
+        try:
+            if not await self._ensure_valid_token():
+                return OrderResult(success=False, message="Not authenticated with Schwab", symbol=symbol, action=side)
+
+            instruction_map = {
+                'sell': 'SELL',
+                'buy': 'BUY',
+                'sell_to_close': 'SELL_TO_CLOSE',
+                'buy_to_close': 'BUY_TO_CLOSE',
+            }
+            instruction = instruction_map.get(side.lower(), 'SELL')
+
+            session = self._get_session_type()
+            order_duration = self._get_duration(duration_hint=duration, is_exit=True)
+
+            order_payload = {
+                "orderStrategyType": "SINGLE",
+                "orderType": "STOP",
+                "stopPrice": self._format_price(stop_price),
+                "session": session,
+                "duration": order_duration,
+                "orderLegCollection": [{
+                    "instruction": instruction,
+                    "quantity": quantity,
+                    "instrument": {
+                        "symbol": symbol,
+                        "assetType": asset_type.upper()
+                    }
+                }]
+            }
+
+            if self.dry_run:
+                print(f"[{self.name}] DRY RUN - STOP order: {instruction} {quantity} {symbol} @ stop ${stop_price}")
+                return OrderResult(
+                    success=True, order_id="DRY_RUN",
+                    message=f"DRY RUN: STOP {instruction} {quantity} {symbol} @ ${stop_price}",
+                    price=stop_price, quantity=quantity, symbol=symbol, action=side
+                )
+
+            headers = {'Content-Type': 'application/json'}
+            response = await self._make_request(
+                'POST', f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                headers=headers, json=order_payload
+            )
+
+            if response.status_code in [200, 201, 202]:
+                order_id = response.headers.get('Location', '').split('/')[-1]
+                print(f"[{self.name}] ✓ STOP order placed: {instruction} {quantity} {symbol} @ ${stop_price} (ID: {order_id})")
+                return OrderResult(
+                    success=True, order_id=order_id,
+                    message=f"STOP order placed: {instruction} {quantity} {symbol} @ ${stop_price}",
+                    price=stop_price, quantity=quantity, symbol=symbol, action=side
+                )
+            else:
+                error_msg = response.text
+                print(f"[{self.name}] ❌ STOP order failed: {response.status_code} - {error_msg}")
+                return OrderResult(success=False, message=f"STOP order failed: {response.status_code} - {error_msg}", symbol=symbol, action=side)
+
+        except Exception as e:
+            return OrderResult(success=False, message=f"STOP order exception: {str(e)}", symbol=symbol, action=side)
+
+    async def place_stop_limit_order(
+        self,
+        symbol: str,
+        quantity: int,
+        stop_price: float,
+        limit_price: float,
+        side: str = 'sell',
+        asset_type: str = 'EQUITY',
+        duration: str = 'GOOD_TILL_CANCEL'
+    ) -> OrderResult:
+        """Place a STOP_LIMIT order.
+        
+        When the market price hits stop_price, a LIMIT order at limit_price is placed.
+        Provides price protection vs pure STOP (market) orders.
+        
+        Args:
+            symbol: Ticker symbol
+            quantity: Number of shares/contracts
+            stop_price: The trigger price
+            limit_price: The limit price after trigger
+            side: 'sell' or 'buy'
+            asset_type: 'EQUITY' or 'OPTION'
+            duration: Order duration
+        """
+        try:
+            if not await self._ensure_valid_token():
+                return OrderResult(success=False, message="Not authenticated with Schwab", symbol=symbol, action=side)
+
+            instruction_map = {
+                'sell': 'SELL',
+                'buy': 'BUY',
+                'sell_to_close': 'SELL_TO_CLOSE',
+                'buy_to_close': 'BUY_TO_CLOSE',
+            }
+            instruction = instruction_map.get(side.lower(), 'SELL')
+
+            session = self._get_session_type()
+            order_duration = self._get_duration(duration_hint=duration, is_exit=True)
+
+            order_payload = {
+                "orderStrategyType": "SINGLE",
+                "orderType": "STOP_LIMIT",
+                "stopPrice": self._format_price(stop_price),
+                "price": self._format_price(limit_price),
+                "session": session,
+                "duration": order_duration,
+                "orderLegCollection": [{
+                    "instruction": instruction,
+                    "quantity": quantity,
+                    "instrument": {
+                        "symbol": symbol,
+                        "assetType": asset_type.upper()
+                    }
+                }]
+            }
+
+            if self.dry_run:
+                print(f"[{self.name}] DRY RUN - STOP_LIMIT order: {instruction} {quantity} {symbol} stop=${stop_price} limit=${limit_price}")
+                return OrderResult(
+                    success=True, order_id="DRY_RUN",
+                    message=f"DRY RUN: STOP_LIMIT {instruction} {quantity} {symbol} stop=${stop_price} limit=${limit_price}",
+                    price=limit_price, quantity=quantity, symbol=symbol, action=side
+                )
+
+            headers = {'Content-Type': 'application/json'}
+            response = await self._make_request(
+                'POST', f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                headers=headers, json=order_payload
+            )
+
+            if response.status_code in [200, 201, 202]:
+                order_id = response.headers.get('Location', '').split('/')[-1]
+                print(f"[{self.name}] ✓ STOP_LIMIT order placed: {instruction} {quantity} {symbol} stop=${stop_price} limit=${limit_price} (ID: {order_id})")
+                return OrderResult(
+                    success=True, order_id=order_id,
+                    message=f"STOP_LIMIT order placed: {instruction} {quantity} {symbol}",
+                    price=limit_price, quantity=quantity, symbol=symbol, action=side
+                )
+            else:
+                error_msg = response.text
+                print(f"[{self.name}] ❌ STOP_LIMIT order failed: {response.status_code} - {error_msg}")
+                return OrderResult(success=False, message=f"STOP_LIMIT order failed: {response.status_code} - {error_msg}", symbol=symbol, action=side)
+
+        except Exception as e:
+            return OrderResult(success=False, message=f"STOP_LIMIT order exception: {str(e)}", symbol=symbol, action=side)
+
+    async def place_trailing_stop_order(
+        self,
+        symbol: str,
+        quantity: int,
+        trail_offset: float,
+        trail_type: str = 'VALUE',
+        price_basis: str = 'BID',
+        side: str = 'sell',
+        asset_type: str = 'EQUITY',
+        duration: str = 'DAY'
+    ) -> OrderResult:
+        """Place a TRAILING_STOP order.
+        
+        Stop price dynamically adjusts as price moves favorably.
+        
+        Args:
+            symbol: Ticker symbol
+            quantity: Number of shares/contracts
+            trail_offset: Trailing distance (dollar amount or percentage)
+            trail_type: 'VALUE' (dollar amount) or 'PERCENT'
+            price_basis: 'BID', 'ASK', or 'LAST' - reference price for trailing
+            side: 'sell' for protective trail on long positions
+            asset_type: 'EQUITY' or 'OPTION'
+            duration: Order duration (trailing stops typically DAY only)
+        """
+        try:
+            if not await self._ensure_valid_token():
+                return OrderResult(success=False, message="Not authenticated with Schwab", symbol=symbol, action=side)
+
+            instruction_map = {
+                'sell': 'SELL',
+                'buy': 'BUY',
+                'sell_to_close': 'SELL_TO_CLOSE',
+                'buy_to_close': 'BUY_TO_CLOSE',
+            }
+            instruction = instruction_map.get(side.lower(), 'SELL')
+
+            session = self._get_session_type()
+            valid_basis = {'BID', 'ASK', 'LAST'}
+            valid_type = {'VALUE', 'PERCENT'}
+            price_basis = price_basis.upper() if price_basis.upper() in valid_basis else 'BID'
+            trail_type = trail_type.upper() if trail_type.upper() in valid_type else 'VALUE'
+
+            order_payload = {
+                "orderStrategyType": "SINGLE",
+                "orderType": "TRAILING_STOP",
+                "complexOrderStrategyType": "NONE",
+                "stopPriceLinkBasis": price_basis,
+                "stopPriceLinkType": trail_type,
+                "stopPriceOffset": trail_offset,
+                "session": session,
+                "duration": self._get_duration(duration_hint=duration),
+                "orderLegCollection": [{
+                    "instruction": instruction,
+                    "quantity": quantity,
+                    "instrument": {
+                        "symbol": symbol,
+                        "assetType": asset_type.upper()
+                    }
+                }]
+            }
+
+            if self.dry_run:
+                print(f"[{self.name}] DRY RUN - TRAILING_STOP: {instruction} {quantity} {symbol} trail={trail_offset} ({trail_type})")
+                return OrderResult(
+                    success=True, order_id="DRY_RUN",
+                    message=f"DRY RUN: TRAILING_STOP {instruction} {quantity} {symbol} trail={trail_offset} ({trail_type})",
+                    quantity=quantity, symbol=symbol, action=side
+                )
+
+            headers = {'Content-Type': 'application/json'}
+            response = await self._make_request(
+                'POST', f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                headers=headers, json=order_payload
+            )
+
+            if response.status_code in [200, 201, 202]:
+                order_id = response.headers.get('Location', '').split('/')[-1]
+                print(f"[{self.name}] ✓ TRAILING_STOP placed: {instruction} {quantity} {symbol} trail={trail_offset} ({trail_type}) (ID: {order_id})")
+                return OrderResult(
+                    success=True, order_id=order_id,
+                    message=f"TRAILING_STOP placed: {instruction} {quantity} {symbol}",
+                    quantity=quantity, symbol=symbol, action=side
+                )
+            else:
+                error_msg = response.text
+                print(f"[{self.name}] ❌ TRAILING_STOP failed: {response.status_code} - {error_msg}")
+                return OrderResult(success=False, message=f"TRAILING_STOP failed: {response.status_code} - {error_msg}", symbol=symbol, action=side)
+
+        except Exception as e:
+            return OrderResult(success=False, message=f"TRAILING_STOP exception: {str(e)}", symbol=symbol, action=side)
+
+    async def place_oco_order(
+        self,
+        symbol: str,
+        quantity: int,
+        stop_loss_price: float,
+        profit_target_price: float,
+        side: str = 'sell',
+        asset_type: str = 'EQUITY',
+        stop_limit_price: Optional[float] = None
+    ) -> OrderResult:
+        """Place an OCO (One-Cancels-Other) order.
+        
+        Two exit orders linked together - when one fills, the other cancels.
+        Typically used for stop loss + profit target on existing position.
+        
+        Args:
+            symbol: Ticker symbol
+            quantity: Number of shares/contracts
+            stop_loss_price: Stop loss trigger price
+            profit_target_price: Profit target limit price
+            side: Exit side ('sell' for long positions)
+            asset_type: 'EQUITY' or 'OPTION'
+            stop_limit_price: Optional limit price for stop (uses STOP_LIMIT instead of STOP)
+        """
+        try:
+            if not await self._ensure_valid_token():
+                return OrderResult(success=False, message="Not authenticated with Schwab", symbol=symbol, action='OCO')
+
+            instruction_map = {
+                'sell': 'SELL',
+                'buy': 'BUY',
+                'sell_to_close': 'SELL_TO_CLOSE',
+                'buy_to_close': 'BUY_TO_CLOSE',
+            }
+            instruction = instruction_map.get(side.lower(), 'SELL')
+            session = self._get_session_type()
+
+            profit_leg = {
+                "orderStrategyType": "SINGLE",
+                "orderType": "LIMIT",
+                "session": session,
+                "duration": "GOOD_TILL_CANCEL",
+                "price": self._format_price(profit_target_price),
+                "orderLegCollection": [{
+                    "instruction": instruction,
+                    "quantity": quantity,
+                    "instrument": {
+                        "symbol": symbol,
+                        "assetType": asset_type.upper()
+                    }
+                }]
+            }
+
+            if stop_limit_price:
+                stop_leg = {
+                    "orderStrategyType": "SINGLE",
+                    "orderType": "STOP_LIMIT",
+                    "session": session,
+                    "duration": "GOOD_TILL_CANCEL",
+                    "stopPrice": self._format_price(stop_loss_price),
+                    "price": self._format_price(stop_limit_price),
+                    "orderLegCollection": [{
+                        "instruction": instruction,
+                        "quantity": quantity,
+                        "instrument": {
+                            "symbol": symbol,
+                            "assetType": asset_type.upper()
+                        }
+                    }]
+                }
+            else:
+                stop_leg = {
+                    "orderStrategyType": "SINGLE",
+                    "orderType": "STOP",
+                    "session": session,
+                    "duration": "GOOD_TILL_CANCEL",
+                    "stopPrice": self._format_price(stop_loss_price),
+                    "orderLegCollection": [{
+                        "instruction": instruction,
+                        "quantity": quantity,
+                        "instrument": {
+                            "symbol": symbol,
+                            "assetType": asset_type.upper()
+                        }
+                    }]
+                }
+
+            oco_payload = {
+                "orderStrategyType": "OCO",
+                "childOrderStrategies": [profit_leg, stop_leg]
+            }
+
+            if self.dry_run:
+                print(f"[{self.name}] DRY RUN - OCO: {instruction} {quantity} {symbol} PT=${profit_target_price} SL=${stop_loss_price}")
+                return OrderResult(
+                    success=True, order_id="DRY_RUN",
+                    message=f"DRY RUN: OCO {instruction} {quantity} {symbol} PT=${profit_target_price} SL=${stop_loss_price}",
+                    quantity=quantity, symbol=symbol, action='OCO'
+                )
+
+            headers = {'Content-Type': 'application/json'}
+            response = await self._make_request(
+                'POST', f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                headers=headers, json=oco_payload
+            )
+
+            if response.status_code in [200, 201, 202]:
+                order_id = response.headers.get('Location', '').split('/')[-1]
+                print(f"[{self.name}] ✓ OCO order placed: {instruction} {quantity} {symbol} PT=${profit_target_price} SL=${stop_loss_price} (ID: {order_id})")
+                return OrderResult(
+                    success=True, order_id=order_id,
+                    message=f"OCO placed: PT=${profit_target_price} SL=${stop_loss_price}",
+                    quantity=quantity, symbol=symbol, action='OCO'
+                )
+            else:
+                error_msg = response.text
+                print(f"[{self.name}] ❌ OCO order failed: {response.status_code} - {error_msg}")
+                return OrderResult(success=False, message=f"OCO failed: {response.status_code} - {error_msg}", symbol=symbol, action='OCO')
+
+        except Exception as e:
+            return OrderResult(success=False, message=f"OCO exception: {str(e)}", symbol=symbol, action='OCO')
+
+    async def place_bracket_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        stop_loss_price: Optional[float] = None,
+        profit_target_price: Optional[float] = None,
+        entry_price: Optional[float] = None
+    ) -> OrderResult:
+        """Place a bracket order (entry + stop loss + profit target).
+        
+        Uses Schwab's TRIGGER orderStrategyType with nested OCO child orders.
+        Entry order triggers, then OCO (stop loss + profit target) activates.
+        
+        Args:
+            symbol: Stock ticker
+            action: BTO (buy) or STC (sell)
+            quantity: Number of shares
+            stop_loss_price: Stop loss price
+            profit_target_price: Profit target price
+            entry_price: Entry limit price (None for market order)
+        """
+        try:
+            if not await self._ensure_valid_token():
+                return OrderResult(success=False, message="Not authenticated with Schwab", symbol=symbol, action=action)
+
+            if action.upper() == "BTO":
+                entry_instruction = "BUY"
+                exit_instruction = "SELL"
+            else:
+                entry_instruction = "SELL"
+                exit_instruction = "BUY"
+
+            session = self._get_session_type()
+            entry_order_type = "LIMIT" if entry_price else "MARKET"
+
+            entry_payload = {
+                "orderStrategyType": "TRIGGER" if (stop_loss_price or profit_target_price) else "SINGLE",
+                "orderType": entry_order_type,
+                "session": session,
+                "duration": "DAY",
+                "orderLegCollection": [{
+                    "instruction": entry_instruction,
+                    "quantity": quantity,
+                    "instrument": {
+                        "symbol": symbol,
+                        "assetType": "EQUITY"
+                    }
+                }]
+            }
+
+            if entry_price:
+                entry_payload["price"] = self._format_price(entry_price)
+
+            has_both = stop_loss_price is not None and profit_target_price is not None
+            has_sl_only = stop_loss_price is not None and profit_target_price is None
+            has_pt_only = profit_target_price is not None and stop_loss_price is None
+
+            if has_both:
+                profit_leg = {
+                    "orderStrategyType": "SINGLE",
+                    "session": session,
+                    "duration": "GOOD_TILL_CANCEL",
+                    "orderType": "LIMIT",
+                    "price": self._format_price(profit_target_price),
+                    "orderLegCollection": [{
+                        "instruction": exit_instruction,
+                        "quantity": quantity,
+                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                    }]
+                }
+                stop_leg = {
+                    "orderStrategyType": "SINGLE",
+                    "session": session,
+                    "duration": "GOOD_TILL_CANCEL",
+                    "orderType": "STOP",
+                    "stopPrice": self._format_price(stop_loss_price),
+                    "orderLegCollection": [{
+                        "instruction": exit_instruction,
+                        "quantity": quantity,
+                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                    }]
+                }
+                entry_payload["childOrderStrategies"] = [{
+                    "orderStrategyType": "OCO",
+                    "childOrderStrategies": [profit_leg, stop_leg]
+                }]
+                print(f"[{self.name}] Full BRACKET order: Entry + OCO(PT=${profit_target_price} / SL=${stop_loss_price})")
+            elif has_sl_only:
+                stop_child = {
+                    "orderStrategyType": "SINGLE",
+                    "session": session,
+                    "duration": "GOOD_TILL_CANCEL",
+                    "orderType": "STOP",
+                    "stopPrice": self._format_price(stop_loss_price),
+                    "orderLegCollection": [{
+                        "instruction": exit_instruction,
+                        "quantity": quantity,
+                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                    }]
+                }
+                entry_payload["childOrderStrategies"] = [stop_child]
+                print(f"[{self.name}] TRIGGER order: Entry + SL=${stop_loss_price}")
+            elif has_pt_only:
+                pt_child = {
+                    "orderStrategyType": "SINGLE",
+                    "session": session,
+                    "duration": "GOOD_TILL_CANCEL",
+                    "orderType": "LIMIT",
+                    "price": self._format_price(profit_target_price),
+                    "orderLegCollection": [{
+                        "instruction": exit_instruction,
+                        "quantity": quantity,
+                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                    }]
+                }
+                entry_payload["childOrderStrategies"] = [pt_child]
+                print(f"[{self.name}] TRIGGER order: Entry + PT=${profit_target_price}")
+
+            if self.dry_run:
+                sl_str = f" SL=${stop_loss_price}" if stop_loss_price else ""
+                pt_str = f" PT=${profit_target_price}" if profit_target_price else ""
+                print(f"[{self.name}] DRY RUN - BRACKET: {entry_instruction} {quantity} {symbol}{sl_str}{pt_str}")
+                return OrderResult(
+                    success=True, order_id="DRY_RUN",
+                    message=f"DRY RUN: BRACKET {entry_instruction} {quantity} {symbol}{sl_str}{pt_str}",
+                    price=entry_price, quantity=quantity, symbol=symbol, action=action
+                )
+
+            headers = {'Content-Type': 'application/json'}
+            response = await self._make_request(
+                'POST', f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                headers=headers, json=entry_payload
+            )
+
+            if response.status_code in [200, 201, 202]:
+                order_id = response.headers.get('Location', '').split('/')[-1]
+                sl_str = f" SL=${stop_loss_price}" if stop_loss_price else ""
+                pt_str = f" PT=${profit_target_price}" if profit_target_price else ""
+                print(f"[{self.name}] ✓ BRACKET order placed: {entry_instruction} {quantity} {symbol}{sl_str}{pt_str} (ID: {order_id})")
+                return OrderResult(
+                    success=True, order_id=order_id,
+                    message=f"BRACKET placed: {entry_instruction} {quantity} {symbol}{sl_str}{pt_str}",
+                    price=entry_price, quantity=quantity, symbol=symbol, action=action
+                )
+            else:
+                error_msg = response.text
+                print(f"[{self.name}] ❌ BRACKET order failed: {response.status_code} - {error_msg}")
+                return OrderResult(success=False, message=f"BRACKET failed: {response.status_code} - {error_msg}", symbol=symbol, action=action)
+
+        except Exception as e:
+            return OrderResult(success=False, message=f"BRACKET exception: {str(e)}", symbol=symbol, action=action)
+
+    async def get_transactions(self, days: int = 30, transaction_types: str = 'TRADE') -> List[Dict[str, Any]]:
+        """Get account transaction history.
+        
+        Args:
+            days: Number of days to look back (max 365)
+            transaction_types: Comma-separated types: TRADE, RECEIVE_AND_DELIVER,
+                             DIVIDEND_OR_INTEREST, ACH_RECEIPT, ACH_DISBURSEMENT,
+                             CASH_RECEIPT, CASH_DISBURSEMENT, ELECTRONIC_FUND, WIRE_IN,
+                             WIRE_OUT, JOURNAL, MEMORANDUM, MARGIN_CALL, MONEY_MARKET, SMA_ADJUSTMENT
+        """
+        try:
+            if not await self._ensure_valid_token():
+                return []
+
+            if not self.account_hash:
+                print(f"[{self.name}] No account_hash - cannot fetch transactions")
+                return []
+
+            import httpx
+            from datetime import timedelta
+
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=min(days, 365))
+
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/transactions",
+                params={
+                    'startDate': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'endDate': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'types': transaction_types
+                }
+            )
+
+            if response.status_code == 200:
+                transactions = response.json()
+                result = []
+                for txn in transactions:
+                    transfer_items = txn.get('transferItems', [])
+                    for item in transfer_items:
+                        instrument = item.get('instrument', {})
+                        result.append({
+                            'transaction_id': str(txn.get('activityId', '')),
+                            'type': txn.get('type', ''),
+                            'date': txn.get('tradeDate', '') or txn.get('settlementDate', ''),
+                            'settlement_date': txn.get('settlementDate', ''),
+                            'symbol': instrument.get('symbol', ''),
+                            'asset_type': instrument.get('assetType', ''),
+                            'description': txn.get('description', ''),
+                            'amount': float(item.get('amount', 0)),
+                            'price': float(item.get('price', 0)),
+                            'cost': float(item.get('cost', 0)),
+                            'instruction': item.get('instruction', ''),
+                            'position_effect': item.get('positionEffect', ''),
+                            'net_amount': float(txn.get('netAmount', 0)),
+                        })
+                return result
+            else:
+                print(f"[{self.name}] Transactions error: {response.status_code} - {response.text}")
+                return []
+
+        except Exception as e:
+            print(f"[{self.name}] Error getting transactions: {e}")
+            return []
 
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """Cancel an existing order"""
