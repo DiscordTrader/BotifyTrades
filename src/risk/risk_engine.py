@@ -276,7 +276,12 @@ def evaluate_exit_actions(
                 return actions, state
     
     if config.enable_giveback_guard:
-        activation_threshold = config.trailing_activation_pct if config.trailing_activation_pct > 0 else 30
+        if config.trailing_stop_pct > 0 and config.trailing_activation_pct > 0:
+            activation_threshold = config.trailing_activation_pct
+        elif config.enable_early_trailing and config.early_trailing_activation_pct > 0:
+            activation_threshold = config.early_trailing_activation_pct
+        else:
+            activation_threshold = 30
         pt2_activated = state.pt2_hit
         
         if not state.giveback_guard_active and (pt2_activated or state.max_pnl_seen >= activation_threshold):
@@ -337,12 +342,14 @@ def evaluate_exit_actions(
                 new_stop_price = state.entry_price * (1 + new_stop_pct / 100)
                 state.early_steps_locked = expected_steps
                 state.early_stop_price = new_stop_price
-                actions.append(RiskAction(
+                action = RiskAction(
                     action_type=ActionType.UPDATE_EARLY_STOP,
                     reason=f"Early trailing: +{new_stop_pct:.1f}% locked (Step {expected_steps})",
                     new_stop_price=new_stop_price,
                     priority=4
-                ))
+                )
+                action.steps_locked = expected_steps
+                actions.append(action)
     
     enabled_tiers = []
     tier_thresholds = {}

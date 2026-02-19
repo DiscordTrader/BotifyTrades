@@ -1517,6 +1517,14 @@ class RiskManager:
                         is_partial=False,
                         risk_trigger='giveback_guard'
                     )
+                elif 'Early trailing' in action.reason or 'early trailing' in action.reason:
+                    return ExitDecision(
+                        should_exit=True,
+                        reason=f"EARLY TRAIL [{channel_name}] {action.reason}",
+                        exit_qty=action.qty,
+                        is_partial=False,
+                        risk_trigger='early_trailing'
+                    )
                 else:
                     return ExitDecision.stop_loss(action.reason, action.qty, channel_name)
             
