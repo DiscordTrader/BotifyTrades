@@ -331,7 +331,7 @@ class RiskDBAdapter:
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                    c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                    t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct
+                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -352,7 +352,7 @@ class RiskDBAdapter:
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                    c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                    t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct
+                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -381,7 +381,7 @@ class RiskDBAdapter:
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                               c.trim_limit_offset_mode, c.trim_limit_offset_pct
+                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -402,7 +402,7 @@ class RiskDBAdapter:
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                               c.trim_limit_offset_mode, c.trim_limit_offset_pct
+                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -428,6 +428,12 @@ class RiskDBAdapter:
                         return routing_settings
                 
                 # PRIORITY 2: Channel-level risk settings (existing behavior - PRESERVED)
+                # Check if channel wants to use global risk settings instead of its own
+                use_global = row[34] if len(row) > 34 else 1  # Default: use global (backwards compat)
+                if use_global:
+                    print(f"[RISK] Channel '{row[7]}' uses global risk settings (use_global_risk_settings=1)")
+                    return None  # Return None so global RiskSettings apply
+                
                 # Check if risk management is explicitly enabled for this channel
                 risk_enabled = row[8] if len(row) > 8 else 0
                 

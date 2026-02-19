@@ -680,12 +680,41 @@ class SchwabBroker(BrokerInterface):
             option_symbol = self._build_option_symbol(symbol, expiry_formatted, strike, call_put)
             
             instruction = "BUY_TO_OPEN" if action.upper() == "BTO" else "SELL_TO_CLOSE"
+            
+            if not price:
+                print(f"[{self.name}] ⚠️ Options require LIMIT orders on Schwab - no price provided, attempting mid-price lookup")
+                try:
+                    quote = await self.get_option_quote(symbol, strike, expiry_formatted, option_type)
+                    if quote and quote.get('bid') and quote.get('ask'):
+                        mid_price = round((quote['bid'] + quote['ask']) / 2, 2)
+                        price = mid_price
+                        print(f"[{self.name}] ✓ Using mid-price ${mid_price:.2f} (bid: ${quote['bid']:.2f}, ask: ${quote['ask']:.2f})")
+                    elif quote and quote.get('last'):
+                        price = quote['last']
+                        print(f"[{self.name}] ✓ Using last price ${price:.2f}")
+                except Exception as quote_err:
+                    print(f"[{self.name}] ⚠️ Quote lookup failed: {quote_err}")
+            
             order_type = "LIMIT" if price else "MARKET"
             
             session = self._get_session_type()
             
             is_exit = (instruction == "SELL_TO_CLOSE")
-            duration = "GOOD_TILL_CANCEL" if is_exit else "DAY"
+            
+            is_near_expiry = False
+            try:
+                expiry_date = datetime.strptime(expiry_formatted, "%Y-%m-%d").date()
+                days_to_expiry = (expiry_date - datetime.now().date()).days
+                is_near_expiry = days_to_expiry <= 0
+            except Exception:
+                pass
+            
+            if is_near_expiry:
+                duration = "DAY"
+            elif is_exit:
+                duration = "GOOD_TILL_CANCEL"
+            else:
+                duration = "DAY"
             
             order_payload = {
                 "orderStrategyType": "SINGLE",

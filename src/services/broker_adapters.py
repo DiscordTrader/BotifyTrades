@@ -195,12 +195,19 @@ class SchwabAdapter(BaseBrokerAdapter):
             if not filled_at:
                 filled_at = datetime.now()
             
+            side_map = {
+                'BUY': 'BUY', 'SELL': 'SELL',
+                'BUY_TO_OPEN': 'BTO', 'SELL_TO_CLOSE': 'STC',
+                'BUY_TO_CLOSE': 'BTC', 'SELL_TO_OPEN': 'STO',
+            }
+            normalized_side = side_map.get(instruction.upper(), instruction)
+            
             return BrokerFillData(
                 broker=self.BROKER_NAME,
                 order_id=str(raw_order.get('orderId', '')),
                 symbol=symbol,
                 asset_type=asset_type,
-                side=instruction,
+                side=normalized_side,
                 quantity=total_qty,
                 fill_price=avg_price,
                 filled_at=filled_at,

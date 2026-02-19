@@ -109,11 +109,24 @@ class BrokerManager:
         if brokers_config.get('enable_schwab', False):
             try:
                 schwab_config = self.config.get('schwab', {}).copy()
-                schwab_config['dry_run'] = brokers_config.get('schwab_dry_run', True)
+                try:
+                    from gui_app.schwab_auth import get_schwab_credentials
+                    db_creds = get_schwab_credentials()
+                    if db_creds:
+                        schwab_config['client_id'] = db_creds.get('client_id', schwab_config.get('client_id', ''))
+                        schwab_config['client_secret'] = db_creds.get('client_secret', schwab_config.get('client_secret', ''))
+                        schwab_config['redirect_uri'] = db_creds.get('redirect_uri', schwab_config.get('redirect_uri', 'https://127.0.0.1'))
+                        schwab_config['dry_run'] = db_creds.get('dry_run', True)
+                        print(f"[BROKER MANAGER] Schwab dry_run={'ON' if schwab_config['dry_run'] else 'OFF (LIVE)'} (from saved credentials)")
+                    else:
+                        schwab_config['dry_run'] = brokers_config.get('schwab_dry_run', True)
+                except ImportError:
+                    schwab_config['dry_run'] = brokers_config.get('schwab_dry_run', True)
                 schwab_broker = BrokerFactory.create_broker('SCHWAB', schwab_config)
                 if schwab_broker and await schwab_broker.connect():
                     self.brokers['SCHWAB'] = schwab_broker
-                    print(f"[BROKER MANAGER] ✓ Schwab initialized")
+                    mode = "DRY RUN" if schwab_config.get('dry_run', True) else "LIVE"
+                    print(f"[BROKER MANAGER] ✓ Schwab initialized ({mode})")
                 else:
                     print(f"[BROKER MANAGER] ⚠️  Schwab not authenticated - use Settings to connect")
             except Exception as e:
