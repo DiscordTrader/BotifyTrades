@@ -233,7 +233,7 @@ class WebullBroker(BrokerInterface):
     def cache_option_id(self, symbol: str, strike: float, expiry: str, option_type: str, option_id: str):
         """Cache an option_id for faster exit order lookups"""
         import time
-        cache_key = f"{symbol}_{strike}_{expiry}_{option_type.upper()}"
+        cache_key = f"{symbol}_{float(strike):.2f}_{expiry}_{option_type.upper()}"
         self._option_id_cache[cache_key] = {
             'option_id': option_id,
             'cached_at': time.time()
@@ -242,7 +242,7 @@ class WebullBroker(BrokerInterface):
     def get_cached_option_id(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[str]:
         """Retrieve a cached option_id if still valid"""
         import time
-        cache_key = f"{symbol}_{strike}_{expiry}_{option_type.upper()}"
+        cache_key = f"{symbol}_{float(strike):.2f}_{expiry}_{option_type.upper()}"
         entry = self._option_id_cache.get(cache_key)
         if entry and (time.time() - entry['cached_at']) < self._option_id_cache_ttl:
             return entry['option_id']

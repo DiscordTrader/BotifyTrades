@@ -2950,7 +2950,7 @@ class WebullBroker:
             option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
             print(f"[WEBULL] ✓ Got option_id={option_id}, ticker_id={tId} for {symbol}")
             sys.stdout.flush()
-            if option_id and hasattr(self, 'cache_option_id'):
+            if option_id:
                 _yr = expiry_year or datetime.now().strftime('%Y')
                 if '/' in expiry_mmdd:
                     _parts = expiry_mmdd.split('/')
@@ -15577,7 +15577,14 @@ if __name__ == '__main__':
         _cleanup_done = True
         
         try:
-            # Force garbage collection to clean up circular references
+            try:
+                if hasattr(bot_instance, 'broker') and bot_instance.broker:
+                    task = getattr(bot_instance.broker, '_token_refresh_task', None)
+                    if task and not task.done():
+                        task.cancel()
+            except Exception:
+                pass
+            
             gc.collect()
             
             # Close thread pool executors and clean up threads
