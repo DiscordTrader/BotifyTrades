@@ -401,16 +401,17 @@ class PositionCacheEntry:
         if is_stop_loss:
             self.is_emergency_exit = True
         
+        is_transient_broker_error = reason and ('system' in reason.lower() and 'busy' in reason.lower())
+        
         if self.is_emergency_exit:
-            # EMERGENCY MODE: Ultra-fast retry for stop loss exits
-            # 5s, 10s, 15s, 15s, 15s... (cap at 15s)
             backoff_seconds = min(5 * self.exit_retry_count, 15)
             phase = "EMERGENCY"
-            # Switch to market order IMMEDIATELY on first failure for stop loss
             self.use_market_order = True
+        elif is_transient_broker_error and self.exit_retry_count <= self.MAX_FAST_RETRIES:
+            backoff_seconds = min(10 * self.exit_retry_count, 30)
+            phase = "FAST-TRANSIENT"
         elif self.exit_retry_count <= self.MAX_FAST_RETRIES:
-            # Normal retry phase: Exponential backoff 30s, 60s, 120s, 240s, 480s
-            backoff_seconds = min(30 * (2 ** (self.exit_retry_count - 1)), 480)
+            backoff_seconds = min(15 * (2 ** (self.exit_retry_count - 1)), 120)
             phase = "FAST"
         else:
             # Extended retry phase: Fixed 5-minute intervals, keep trying forever
@@ -427,6 +428,9 @@ class PositionCacheEntry:
         if phase == "EMERGENCY":
             print(f"[RISK-RETRY] ⚡ EMERGENCY EXIT failed (attempt {self.exit_retry_count}): {reason}")
             print(f"[RISK-RETRY] ⚡ Fast retry in {backoff_seconds}s with MARKET ORDER")
+        elif phase == "FAST-TRANSIENT":
+            print(f"[RISK-RETRY] ⚡ Broker transient error (attempt {self.exit_retry_count}/{self.MAX_FAST_RETRIES}): {reason}")
+            print(f"[RISK-RETRY] Quick retry in {backoff_seconds}s, market_order={self.use_market_order}")
         elif phase == "FAST":
             print(f"[RISK-RETRY] Exit failed (attempt {self.exit_retry_count}/{self.MAX_FAST_RETRIES}): {reason}")
             print(f"[RISK-RETRY] Next retry in {backoff_seconds}s, market_order={self.use_market_order}")

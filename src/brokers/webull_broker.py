@@ -602,31 +602,50 @@ class WebullBroker(BrokerInterface):
                         outsideRegularTradingHour=extended_hours_enabled
                     )
             
-            response = await asyncio.to_thread(execute_order)
+            TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
+            MAX_TRANSIENT_RETRIES = 3
+            TRANSIENT_RETRY_DELAY = 3
             
-            # Check for token expiration - auto-refresh and retry
-            if response and response.get('code') == 'trade.token.expire':
-                print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
-                refresh_success = await self._refresh_trade_token()
-                if refresh_success:
-                    print(f"[{self.name}] Token refreshed, retrying order...")
-                    response = await asyncio.to_thread(execute_order)
+            response = None
+            for attempt in range(1, MAX_TRANSIENT_RETRIES + 1):
+                print(f"[{self.name}] [Attempt {attempt}] Placing order: {side} {quantity} @ ${price}")
+                response = await asyncio.to_thread(execute_order)
+                
+                if response and response.get('code') == 'trade.token.expire':
+                    print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
+                    refresh_success = await self._refresh_trade_token()
+                    if refresh_success:
+                        print(f"[{self.name}] Token refreshed, retrying order...")
+                        response = await asyncio.to_thread(execute_order)
+                    else:
+                        self._tokens_valid = False
+                        return OrderResult(
+                            success=False,
+                            message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",
+                            symbol=symbol,
+                            action=action
+                        )
+                
+                error_code = response.get('code', '') if response else ''
+                is_transient = error_code in TRANSIENT_CODES or (response and 'system' in str(response.get('msg', '')).lower() and 'busy' in str(response.get('msg', '')).lower())
+                
+                if response and not response.get('msg'):
+                    break
+                elif is_transient and attempt < MAX_TRANSIENT_RETRIES:
+                    print(f"[{self.name}] [Attempt {attempt}] ⚠️ Transient error: {response.get('msg', 'Unknown')} - retrying in {TRANSIENT_RETRY_DELAY}s...")
+                    await asyncio.sleep(TRANSIENT_RETRY_DELAY)
+                    if attempt == 2:
+                        print(f"[{self.name}] Refreshing trade token before final retry...")
+                        await self._refresh_trade_token()
+                    continue
                 else:
-                    # Mark tokens as invalid for status reporting
-                    self._tokens_valid = False
-                    return OrderResult(
-                        success=False,
-                        message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",
-                        symbol=symbol,
-                        action=action
-                    )
+                    break
             
             if response and not response.get('msg'):
-                # Send Discord notification
                 try:
                     from gui_app.discord_notifier import send_bto_notification, send_stc_notification
                     
-                    executed_price = price if price else 0.0  # For market orders, we don't know exact price yet
+                    executed_price = price if price else 0.0
                     
                     if action == "BTO":
                         send_bto_notification(
@@ -635,12 +654,11 @@ class WebullBroker(BrokerInterface):
                             price=executed_price
                         )
                     elif action == "STC":
-                        # TODO: Look up entry price from database for P&L calculation
                         send_stc_notification(
                             symbol=symbol,
                             quantity=quantity,
                             price=executed_price,
-                            entry_price=0.0  # Placeholder - will need database lookup
+                            entry_price=0.0
                         )
                 except Exception as e:
                     print(f"[{self.name}] Failed to send Discord notification: {e}")
@@ -899,27 +917,48 @@ class WebullBroker(BrokerInterface):
                         outsideRegularTradingHour=extended_hours_enabled
                     )
             
-            response = await asyncio.to_thread(execute_order)
+            TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
+            MAX_TRANSIENT_RETRIES = 3
+            TRANSIENT_RETRY_DELAY = 3
             
-            # Check for token expiration - auto-refresh and retry
-            if response and response.get('code') == 'trade.token.expire':
-                print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
-                refresh_success = await self._refresh_trade_token()
-                if refresh_success:
-                    print(f"[{self.name}] Token refreshed, retrying option order...")
-                    response = await asyncio.to_thread(execute_order)
+            response = None
+            for attempt in range(1, MAX_TRANSIENT_RETRIES + 1):
+                print(f"[{self.name}] [Attempt {attempt}] Placing order: {side} {quantity} {symbol} ${strike}{option_type} @ ${price}")
+                response = await asyncio.to_thread(execute_order)
+                
+                if response and response.get('code') == 'trade.token.expire':
+                    print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
+                    refresh_success = await self._refresh_trade_token()
+                    if refresh_success:
+                        print(f"[{self.name}] Token refreshed, retrying option order...")
+                        response = await asyncio.to_thread(execute_order)
+                    else:
+                        self._tokens_valid = False
+                        return OrderResult(
+                            success=False,
+                            message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",
+                            symbol=symbol,
+                            action=action
+                        )
+                
+                error_code = response.get('code', '') if response else ''
+                is_transient = error_code in TRANSIENT_CODES or (response and 'system' in str(response.get('msg', '')).lower() and 'busy' in str(response.get('msg', '')).lower())
+                
+                if response and not response.get('msg'):
+                    break
+                elif is_transient and attempt < MAX_TRANSIENT_RETRIES:
+                    print(f"[{self.name}] [Attempt {attempt}] ⚠️ Transient error: {response.get('msg', 'Unknown')} - retrying in {TRANSIENT_RETRY_DELAY}s...")
+                    await asyncio.sleep(TRANSIENT_RETRY_DELAY)
+                    if attempt == 2:
+                        print(f"[{self.name}] Refreshing trade token before final retry...")
+                        await self._refresh_trade_token()
+                    continue
                 else:
-                    # Mark tokens as invalid for status reporting
-                    self._tokens_valid = False
-                    return OrderResult(
-                        success=False,
-                        message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",
-                        symbol=symbol,
-                        action=action
-                    )
+                    if is_transient:
+                        print(f"[{self.name}] [Attempt {attempt}] ❌ Transient error persisted after {MAX_TRANSIENT_RETRIES} attempts: {response.get('msg', 'Unknown')}")
+                    break
             
             if response and not response.get('msg'):
-                # Send Discord notification
                 try:
                     from gui_app.discord_notifier import send_bto_notification, send_stc_notification
                     
@@ -939,7 +978,7 @@ class WebullBroker(BrokerInterface):
                             symbol=symbol,
                             quantity=quantity,
                             price=executed_price,
-                            entry_price=0.0,  # TODO: Database lookup
+                            entry_price=0.0,
                             strike=strike,
                             expiry=expiry,
                             call_put=option_type
