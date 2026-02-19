@@ -6515,10 +6515,104 @@ def register_routes(app):
                                 'call_put': pos.get('option_type', '').upper()[:1] if pos.get('option_type') else None,
                                 'broker': 'ROBINHOOD'
                             })
-                        # Add Robinhood positions to live_positions for unified processing
                         live_positions.extend(robinhood_positions)
                 except Exception as e:
                     print(f"[API] Error fetching Robinhood positions: {e}")
+            
+            # Fetch Schwab positions if broker filter is SCHWAB or no filter
+            schwab_positions = []
+            if not broker_filter_upper or broker_filter_upper in ['SCHWAB', 'SCHWAB_LIVE', 'SCHWAB_PAPER']:
+                try:
+                    schwab_broker = None
+                    if hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                        schwab_broker = _bot_instance.schwab_broker
+                    elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'schwab_broker'):
+                        schwab_broker = _bot_instance.broker_manager.schwab_broker
+                    
+                    if schwab_broker and schwab_broker.is_authenticated():
+                        schwab_future = asyncio.run_coroutine_threadsafe(
+                            schwab_broker.get_positions_detailed(),
+                            _bot_instance.loop
+                        )
+                        schwab_raw = schwab_future.result(timeout=15) or []
+                        for pos in schwab_raw:
+                            schwab_positions.append({
+                                'symbol': pos.get('symbol', ''),
+                                'quantity': float(pos.get('quantity', 0)),
+                                'avg_cost': float(pos.get('avg_cost', 0)),
+                                'current_price': float(pos.get('current_price', 0)),
+                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
+                                'asset': pos.get('asset', 'stock'),
+                                'strike': pos.get('strike'),
+                                'expiry': pos.get('expiry'),
+                                'call_put': pos.get('direction', ''),
+                                'broker': 'SCHWAB'
+                            })
+                        live_positions.extend(schwab_positions)
+                except Exception as e:
+                    print(f"[API] Error fetching Schwab positions: {e}")
+            
+            # Fetch IBKR positions if broker filter is IBKR or no filter
+            if not broker_filter_upper or broker_filter_upper in ['IBKR', 'IBKR_LIVE', 'IBKR_PAPER']:
+                try:
+                    ibkr_broker = None
+                    if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+                        ibkr_broker = _bot_instance.ibkr_broker
+                    elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'ibkr_broker'):
+                        ibkr_broker = _bot_instance.broker_manager.ibkr_broker
+                    
+                    if ibkr_broker and hasattr(ibkr_broker, 'get_positions_detailed'):
+                        ibkr_future = asyncio.run_coroutine_threadsafe(
+                            ibkr_broker.get_positions_detailed(),
+                            _bot_instance.loop
+                        )
+                        ibkr_raw = ibkr_future.result(timeout=15) or []
+                        for pos in ibkr_raw:
+                            live_positions.append({
+                                'symbol': pos.get('symbol', ''),
+                                'quantity': float(pos.get('quantity', 0)),
+                                'avg_cost': float(pos.get('avg_cost', 0)),
+                                'current_price': float(pos.get('current_price', 0)),
+                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
+                                'asset': pos.get('asset', 'stock'),
+                                'strike': pos.get('strike'),
+                                'expiry': pos.get('expiry'),
+                                'call_put': pos.get('direction', ''),
+                                'broker': 'IBKR'
+                            })
+                except Exception as e:
+                    print(f"[API] Error fetching IBKR positions: {e}")
+            
+            # Fetch Tastytrade positions if broker filter matches or no filter
+            if not broker_filter_upper or broker_filter_upper in ['TASTYTRADE', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER']:
+                try:
+                    tt_broker = None
+                    if hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
+                        tt_broker = _bot_instance.tastytrade_broker
+                    elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'tastytrade_broker'):
+                        tt_broker = _bot_instance.broker_manager.tastytrade_broker
+                    
+                    if tt_broker and hasattr(tt_broker, 'get_positions_detailed'):
+                        tt_future = asyncio.run_coroutine_threadsafe(
+                            tt_broker.get_positions_detailed(),
+                            _bot_instance.loop
+                        )
+                        tt_raw = tt_future.result(timeout=15) or []
+                        for pos in tt_raw:
+                            live_positions.append({
+                                'symbol': pos.get('symbol', ''),
+                                'quantity': float(pos.get('quantity', 0)),
+                                'avg_cost': float(pos.get('avg_cost', 0)),
+                                'current_price': float(pos.get('current_price', 0)),
+                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
+                                'asset': pos.get('asset', 'stock'),
+                                'strike': pos.get('strike'),
+                                'expiry': pos.get('expiry'),
+                                'call_put': pos.get('direction', ''),
+                                'broker': 'TASTYTRADE'
+                            })
+                except Exception as e:
+                    print(f"[API] Error fetching Tastytrade positions: {e}")
             
             # Create order_id -> status mapping for quick lookup
             order_status_map = {order['order_id']: order['status'] for order in webull_orders}
@@ -6700,59 +6794,55 @@ def register_routes(app):
                             'stop_loss_pct': channel_info.get('stop_loss_pct', 10) if channel_info else 10
                         })
             
-            # Add live positions not tracked by bot (only if broker filter matches or is empty)
-            if not broker_filter_upper or broker_filter_upper == 'WEBULL':
-                for pos in live_positions:
-                    # Use same normalization as above for consistent matching
-                    direction = pos.get('direction') or pos.get('call_put') or ''
-                    call_put_norm = normalize_call_put(direction)
-                    expiry_norm = normalize_expiry(pos.get('expiry', ''))
+            # Add live positions not tracked by bot (all brokers)
+            for pos in live_positions:
+                direction = pos.get('direction') or pos.get('call_put') or ''
+                call_put_norm = normalize_call_put(direction)
+                expiry_norm = normalize_expiry(pos.get('expiry', ''))
+                
+                if pos['asset'] == 'option':
+                    pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
+                else:
+                    pos_key = f"{pos['symbol']}_stock"
+                
+                if pos_key not in tracked_positions and (not status_filter or status_filter == 'OPEN'):
+                    import hashlib
+                    stable_id = 'live_' + hashlib.md5(pos_key.encode()).hexdigest()[:12]
                     
-                    if pos['asset'] == 'option':
-                        pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
-                    else:
-                        pos_key = f"{pos['symbol']}_stock"
+                    pos_broker = pos.get('broker', 'Webull')
                     
-                    # Only add if not already tracked and status filter allows (OPEN positions only)
-                    if pos_key not in tracked_positions and (not status_filter or status_filter == 'OPEN'):
-                        # Generate stable deterministic ID from position key
-                        import hashlib
-                        stable_id = 'live_' + hashlib.md5(pos_key.encode()).hexdigest()[:12]
-                        
-                        # Convert live position to trade format
-                        live_pos_trade = {
-                            'id': stable_id,  # Stable ID for price tracking
-                            'symbol': pos['symbol'],
-                            'asset_type': pos['asset'],
-                            'side': 'BTO',  # Assume long position
-                            'quantity': int(pos['quantity']),
-                            'entry_price': pos['avg_cost'],
-                            'current_price': pos['current_price'],
-                            'pnl': pos['unrealized_pl'],
-                            'pnl_percent': ((pos['current_price'] - pos['avg_cost']) / pos['avg_cost'] * 100) if pos['avg_cost'] > 0 else 0,
-                            'status': 'OPEN',
-                            'broker': 'Webull',
-                            'executed_at': None,
-                            'strike': pos.get('strike'),
-                            'expiry': pos.get('expiry'),
-                            'call_put': call_put_norm,
-                            'option_id': pos.get('option_id'),
-                            'source': 'sync',  # Broker-synced position
-                            'fill_status': 'Filled',  # Live positions are already filled
-                            'channel_name': 'Global',
-                            'profit_target_1_pct': 20,
-                            'profit_target_2_pct': 50,
-                            'profit_target_3_pct': 100,
-                            'stop_loss_pct': 10,
-                        }
-                        # Add source_display badge for UI
-                        live_pos_trade['source_display'] = {
-                            'name': 'Webull Sync',
-                            'color': 'gray',
-                            'icon': '🔄',
-                            'full_name': 'Position from Webull'
-                        }
-                        merged.append(live_pos_trade)
+                    live_pos_trade = {
+                        'id': stable_id,
+                        'symbol': pos['symbol'],
+                        'asset_type': pos['asset'],
+                        'side': 'BTO',
+                        'quantity': int(pos['quantity']),
+                        'entry_price': pos['avg_cost'],
+                        'current_price': pos['current_price'],
+                        'pnl': pos['unrealized_pl'],
+                        'pnl_percent': ((pos['current_price'] - pos['avg_cost']) / pos['avg_cost'] * 100) if pos['avg_cost'] > 0 else 0,
+                        'status': 'OPEN',
+                        'broker': pos_broker,
+                        'executed_at': None,
+                        'strike': pos.get('strike'),
+                        'expiry': pos.get('expiry'),
+                        'call_put': call_put_norm,
+                        'option_id': pos.get('option_id'),
+                        'source': 'sync',
+                        'fill_status': 'Filled',
+                        'channel_name': 'Global',
+                        'profit_target_1_pct': 20,
+                        'profit_target_2_pct': 50,
+                        'profit_target_3_pct': 100,
+                        'stop_loss_pct': 10,
+                    }
+                    live_pos_trade['source_display'] = {
+                        'name': f'{pos_broker} Sync',
+                        'color': 'gray',
+                        'icon': '🔄',
+                        'full_name': f'Position from {pos_broker}'
+                    }
+                    merged.append(live_pos_trade)
             
             # Add pending Webull orders not tracked in database (only if status filter allows)
             if not status_filter or status_filter == 'PENDING':
@@ -8773,31 +8863,41 @@ def register_routes(app):
             conn = db.get_connection()
             cursor = conn.cursor()
             
-            if 'ALPACA' in broker:
+            broker_like_map = {
+                'ALPACA': '%ALPACA%',
+                'WEBULL': '%Webull%',
+                'SCHWAB': '%SCHWAB%',
+                'IBKR': '%IBKR%',
+                'TASTYTRADE': '%TASTYTRADE%',
+                'ROBINHOOD': '%ROBINHOOD%',
+                'QUESTRADE': '%QUESTRADE%',
+                'DHAN': '%DHAN%',
+                'UPSTOX': '%UPSTOX%',
+                'ZERODHA': '%ZERODHA%',
+            }
+            
+            like_pattern = None
+            for key, pattern in broker_like_map.items():
+                if key in broker:
+                    like_pattern = pattern
+                    break
+            
+            if like_pattern:
                 cursor.execute("""
                     UPDATE trades 
                     SET status = 'CLOSED', 
                         close_reason = 'ACCOUNT_RESET',
                         closed_at = datetime('now')
-                    WHERE broker LIKE '%ALPACA%' 
+                    WHERE UPPER(broker) LIKE UPPER(?) 
                     AND status IN ('OPEN', 'PENDING')
-                """)
-            elif 'WEBULL' in broker:
-                cursor.execute("""
-                    UPDATE trades 
-                    SET status = 'CLOSED', 
-                        close_reason = 'ACCOUNT_RESET',
-                        closed_at = datetime('now')
-                    WHERE broker LIKE '%Webull%' 
-                    AND status IN ('OPEN', 'PENDING')
-                """)
+                """, (like_pattern,))
             else:
                 cursor.execute("""
                     UPDATE trades 
                     SET status = 'CLOSED', 
                         close_reason = 'ACCOUNT_RESET',
                         closed_at = datetime('now')
-                    WHERE broker = ? 
+                    WHERE UPPER(broker) = ? 
                     AND status IN ('OPEN', 'PENDING')
                 """, (broker,))
             
@@ -8829,9 +8929,17 @@ def register_routes(app):
             cursor.execute("""
                 SELECT 
                     CASE 
-                        WHEN broker LIKE '%ALPACA%' THEN 'ALPACA'
-                        WHEN broker LIKE '%Webull%' THEN 'WEBULL'
-                        ELSE broker 
+                        WHEN UPPER(broker) LIKE '%ALPACA%' THEN 'ALPACA'
+                        WHEN UPPER(broker) LIKE '%WEBULL%' THEN 'WEBULL'
+                        WHEN UPPER(broker) LIKE '%SCHWAB%' THEN 'SCHWAB'
+                        WHEN UPPER(broker) LIKE '%IBKR%' OR UPPER(broker) LIKE '%INTERACTIVE%' THEN 'IBKR'
+                        WHEN UPPER(broker) LIKE '%TASTYTRADE%' OR UPPER(broker) LIKE '%TASTY%' THEN 'TASTYTRADE'
+                        WHEN UPPER(broker) LIKE '%ROBINHOOD%' THEN 'ROBINHOOD'
+                        WHEN UPPER(broker) LIKE '%QUESTRADE%' THEN 'QUESTRADE'
+                        WHEN UPPER(broker) LIKE '%DHAN%' THEN 'DHAN'
+                        WHEN UPPER(broker) LIKE '%UPSTOX%' THEN 'UPSTOX'
+                        WHEN UPPER(broker) LIKE '%ZERODHA%' THEN 'ZERODHA'
+                        ELSE UPPER(broker)
                     END as broker_group,
                     COUNT(*) as count
                 FROM trades 

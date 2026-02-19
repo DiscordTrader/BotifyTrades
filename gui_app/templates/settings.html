@@ -882,24 +882,11 @@ input:checked + .slider:before {
         <h3 style="color: #ffaa00;">🧹 Clear Stale Trades</h3>
         <p class="description">Use this when you switch broker API keys. Clears old open/pending trades from the database that belong to a previous account.</p>
         <div id="stale-trades-info" style="margin-bottom: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px;">
-            <div style="display: flex; gap: 24px; flex-wrap: wrap;">
-                <div>
-                    <span style="color: var(--text-secondary); font-size: 11px; text-transform: uppercase;">Alpaca Open Trades</span>
-                    <div id="alpaca-stale-count" style="font-size: 24px; font-weight: bold; color: #00d4ff;">-</div>
-                </div>
-                <div>
-                    <span style="color: var(--text-secondary); font-size: 11px; text-transform: uppercase;">Webull Open Trades</span>
-                    <div id="webull-stale-count" style="font-size: 24px; font-weight: bold; color: #00d4ff;">-</div>
-                </div>
+            <div id="stale-counts-container" style="display: flex; gap: 24px; flex-wrap: wrap;">
+                <div style="color: var(--text-secondary); font-size: 12px;">Loading broker counts...</div>
             </div>
         </div>
-        <div class="btn-group" style="gap: 12px;">
-            <button id="clear-alpaca-trades" class="btn" style="background: linear-gradient(135deg, #ff6b00 0%, #ff4400 100%); border: none; color: white;">
-                🗑️ Clear Alpaca Trades
-            </button>
-            <button id="clear-webull-trades" class="btn" style="background: linear-gradient(135deg, #ff6b00 0%, #ff4400 100%); border: none; color: white;">
-                🗑️ Clear Webull Trades
-            </button>
+        <div id="stale-buttons-container" class="btn-group" style="gap: 12px; flex-wrap: wrap;">
         </div>
         <p style="margin-top: 12px; font-size: 11px; color: rgba(255, 170, 0, 0.7);">⚠️ This marks trades as CLOSED (ACCOUNT_RESET). Data is preserved for history but won't show as open positions.</p>
     </div>
@@ -3894,81 +3881,84 @@ function showMessage(type, message) {
     }, 5000);
 }
 
-// Load stale trade counts
 async function loadStaleTradeCounts() {
     try {
         const response = await fetch('/api/trades/stale-count');
         const result = await response.json();
         
         if (result.success) {
-            document.getElementById('alpaca-stale-count').textContent = result.counts.ALPACA || 0;
-            document.getElementById('webull-stale-count').textContent = result.counts.WEBULL || 0;
+            const countsContainer = document.getElementById('stale-counts-container');
+            const buttonsContainer = document.getElementById('stale-buttons-container');
+            
+            const knownBrokers = ['WEBULL', 'ALPACA', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'ROBINHOOD', 'QUESTRADE', 'DHAN', 'UPSTOX', 'ZERODHA'];
+            const allBrokers = new Set([...knownBrokers, ...Object.keys(result.counts)]);
+            
+            let countsHtml = '';
+            let buttonsHtml = '';
+            
+            for (const broker of allBrokers) {
+                const count = result.counts[broker] || 0;
+                countsHtml += `
+                    <div>
+                        <span style="color: var(--text-secondary); font-size: 11px; text-transform: uppercase;">${broker} Open</span>
+                        <div id="${broker.toLowerCase()}-stale-count" style="font-size: 24px; font-weight: bold; color: ${count > 0 ? '#ff6b6b' : '#00d4ff'};">${count}</div>
+                    </div>
+                `;
+                if (count > 0) {
+                    buttonsHtml += `
+                        <button class="btn clear-stale-btn" data-broker="${broker}" style="background: linear-gradient(135deg, #ff6b00 0%, #ff4400 100%); border: none; color: white;">
+                            🗑️ Clear ${broker} Trades (${count})
+                        </button>
+                    `;
+                }
+            }
+            
+            if (!countsHtml) {
+                countsHtml = '<div style="color: #4ade80; font-size: 12px;">No open/pending trades found</div>';
+            }
+            
+            countsContainer.innerHTML = countsHtml;
+            buttonsContainer.innerHTML = buttonsHtml;
+            
+            document.querySelectorAll('.clear-stale-btn').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const broker = this.dataset.broker;
+                    const countEl = document.getElementById(`${broker.toLowerCase()}-stale-count`);
+                    const count = countEl ? countEl.textContent : '0';
+                    
+                    if (count === '0') {
+                        showMessage('info', `No ${broker} trades to clear`);
+                        return;
+                    }
+                    
+                    if (!confirm(`Are you sure you want to close ${count} ${broker} open/pending trades? This is useful when you switched to a new ${broker} account.`)) {
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch('/api/trades/clear-stale', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ broker: broker })
+                        });
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            showMessage('success', result.message);
+                            loadStaleTradeCounts();
+                        } else {
+                            showMessage('error', result.error || 'Failed to clear trades');
+                        }
+                    } catch (error) {
+                        showMessage('error', error.message);
+                    }
+                });
+            });
         }
     } catch (error) {
         console.error('Error loading stale counts:', error);
     }
 }
-
-// Clear stale trades handlers
-document.getElementById('clear-alpaca-trades').addEventListener('click', async () => {
-    const count = document.getElementById('alpaca-stale-count').textContent;
-    if (count === '0' || count === '-') {
-        showMessage('info', 'No Alpaca trades to clear');
-        return;
-    }
-    
-    if (!confirm(`Are you sure you want to close ${count} Alpaca open/pending trades? This is useful when you switched to a new Alpaca account.`)) {
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/trades/clear-stale', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ broker: 'ALPACA' })
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('success', result.message);
-            loadStaleTradeCounts();
-        } else {
-            showMessage('error', result.error || 'Failed to clear trades');
-        }
-    } catch (error) {
-        showMessage('error', error.message);
-    }
-});
-
-document.getElementById('clear-webull-trades').addEventListener('click', async () => {
-    const count = document.getElementById('webull-stale-count').textContent;
-    if (count === '0' || count === '-') {
-        showMessage('info', 'No Webull trades to clear');
-        return;
-    }
-    
-    if (!confirm(`Are you sure you want to close ${count} Webull open/pending trades? This is useful when you switched to a new Webull account.`)) {
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/trades/clear-stale', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ broker: 'WEBULL' })
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('success', result.message);
-            loadStaleTradeCounts();
-        } else {
-            showMessage('error', result.error || 'Failed to clear trades');
-        }
-    } catch (error) {
-        showMessage('error', error.message);
-    }
-});
 
 // Load all settings on page load
 loadBrokerStatus();

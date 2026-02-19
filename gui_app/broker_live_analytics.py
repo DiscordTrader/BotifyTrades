@@ -41,6 +41,9 @@ class BrokerLiveAnalytics:
         'tastytrade_paper': {'name': 'Tastytrade Paper', 'type': 'tastytrade', 'paper': True},
         'ibkr_live': {'name': 'IBKR Live', 'type': 'ibkr', 'paper': False},
         'ibkr_paper': {'name': 'IBKR Paper', 'type': 'ibkr', 'paper': True},
+        'schwab_live': {'name': 'Schwab Live', 'type': 'schwab', 'paper': False},
+        'schwab_paper': {'name': 'Schwab Paper', 'type': 'schwab', 'paper': True},
+        'robinhood': {'name': 'Robinhood', 'type': 'robinhood', 'paper': False},
     }
     
     def __init__(self):
@@ -95,6 +98,27 @@ class BrokerLiveAnalytics:
             creds = get_ibkr_credentials()
             creds['paper_mode'] = is_paper
             return creds
+        elif broker_type == 'schwab':
+            try:
+                from .broker_credentials_service import get_schwab_credentials
+                creds = get_schwab_credentials()
+                creds['paper_mode'] = is_paper
+                return creds
+            except (ImportError, Exception):
+                db = Database()
+                return {
+                    'client_id': db.get_setting('schwab_client_id', ''),
+                    'client_secret': db.get_setting('schwab_client_secret', ''),
+                    'redirect_uri': db.get_setting('schwab_redirect_uri', 'https://127.0.0.1'),
+                    'paper_mode': is_paper,
+                    'dry_run': is_paper
+                }
+        elif broker_type == 'robinhood':
+            try:
+                from .broker_credentials_service import get_robinhood_credentials
+                return get_robinhood_credentials()
+            except (ImportError, Exception):
+                return {}
         return {}
     
     def _is_cache_valid(self, broker_id: str) -> bool:
@@ -266,6 +290,51 @@ class BrokerLiveAnalytics:
             print(f"[ANALYTICS] Error connecting to {broker_id}: {e}")
             return None
     
+    async def connect_schwab(self, broker_id: str, credentials: Dict) -> Optional[Any]:
+        """Connect to Schwab account"""
+        try:
+            from src.brokers.schwab_broker import SchwabBroker
+        except ImportError:
+            print(f"[ANALYTICS] Schwab broker module not available")
+            return None
+        
+        try:
+            config = self.BROKER_CONFIGS.get(broker_id, {})
+            is_paper = config.get('paper', True)
+            
+            broker_config = {
+                'client_id': credentials.get('client_id', ''),
+                'client_secret': credentials.get('client_secret', ''),
+                'redirect_uri': credentials.get('redirect_uri', 'https://127.0.0.1'),
+                'dry_run': is_paper
+            }
+            
+            if not broker_config['client_id'] or not broker_config['client_secret']:
+                print(f"[ANALYTICS] Schwab credentials not configured for {broker_id}")
+                return None
+            
+            broker = SchwabBroker(broker_config)
+            connected = await broker.connect()
+            if connected:
+                self._clients[broker_id] = broker
+                return broker
+            
+            return None
+        except Exception as e:
+            print(f"[ANALYTICS] Error connecting to {broker_id}: {e}")
+            return None
+    
+    async def connect_robinhood(self, broker_id: str, credentials: Dict) -> Optional[Any]:
+        """Connect to Robinhood account - uses existing bot instance"""
+        try:
+            from gui_app.routes import _bot_instance
+            if _bot_instance and hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                self._clients[broker_id] = _bot_instance.robinhood_broker
+                return _bot_instance.robinhood_broker
+        except Exception as e:
+            print(f"[ANALYTICS] Error connecting to {broker_id}: {e}")
+        return None
+    
     async def get_client(self, broker_id: str) -> Optional[Any]:
         """Get or create client for broker"""
         if broker_id in self._clients:
@@ -283,6 +352,10 @@ class BrokerLiveAnalytics:
             return await self.connect_ibkr(broker_id, credentials)
         elif broker_type == 'tastytrade':
             return await self.connect_tastytrade(broker_id, credentials)
+        elif broker_type == 'schwab':
+            return await self.connect_schwab(broker_id, credentials)
+        elif broker_type == 'robinhood':
+            return await self.connect_robinhood(broker_id, credentials)
         
         return None
     
@@ -378,6 +451,23 @@ class BrokerLiveAnalytics:
                     buying_power = float(account.get('buying_power', 0) or 0)
                     cash = float(account.get('cash_balance', 0) or 0)
                     day_pnl = float(account.get('day_profit_loss', 0) or 0)
+                    
+                    return {
+                        'connected': True,
+                        'buying_power': buying_power,
+                        'cash': cash,
+                        'portfolio_value': portfolio_value,
+                        'day_pnl': day_pnl,
+                        'day_pnl_percent': (day_pnl / portfolio_value * 100) if portfolio_value > 0 else 0
+                    }
+            
+            elif broker_type == 'schwab':
+                account = await client.get_account_info()
+                if account:
+                    portfolio_value = float(account.get('portfolio_value', 0) or 0)
+                    buying_power = float(account.get('buying_power', 0) or 0)
+                    cash = float(account.get('cash', 0) or account.get('settled_cash', 0) or 0)
+                    day_pnl = float(account.get('day_pnl', 0) or 0)
                     
                     return {
                         'connected': True,
@@ -484,6 +574,62 @@ class BrokerLiveAnalytics:
                     }
                     
                     positions.append(position_data)
+            
+            elif broker_type == 'schwab':
+                raw_positions = await client.get_positions_detailed()
+                for pos in raw_positions:
+                    qty = float(pos.get('quantity', 0))
+                    if qty == 0:
+                        continue
+                    
+                    avg_cost = float(pos.get('avg_cost', 0))
+                    current_price = float(pos.get('current_price', 0))
+                    unrealized_pnl = float(pos.get('unrealized_pl', 0))
+                    pnl_percent = ((current_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0
+                    
+                    is_option = pos.get('asset') == 'option'
+                    
+                    position_data = {
+                        'symbol': pos.get('symbol', ''),
+                        'quantity': qty,
+                        'avg_cost': avg_cost,
+                        'current_price': current_price,
+                        'market_value': qty * current_price * (100 if is_option else 1),
+                        'unrealized_pnl': unrealized_pnl,
+                        'pnl_percent': pnl_percent,
+                        'asset_type': 'option' if is_option else 'stock'
+                    }
+                    
+                    if is_option:
+                        position_data['strike'] = pos.get('strike', 0)
+                        position_data['expiry'] = pos.get('expiry', '')
+                        position_data['option_type'] = 'CALL' if pos.get('direction', '') == 'C' else 'PUT'
+                    
+                    positions.append(position_data)
+            
+            elif broker_type == 'robinhood':
+                if hasattr(client, 'get_all_positions'):
+                    raw_positions = client.get_all_positions()
+                    for pos in raw_positions:
+                        qty = float(pos.get('quantity', 0))
+                        if qty == 0:
+                            continue
+                        
+                        avg_cost = float(pos.get('avg_price') or pos.get('average_buy_price') or 0)
+                        current_price = float(pos.get('current_price', 0))
+                        unrealized_pnl = float(pos.get('unrealized_pnl', 0))
+                        pnl_percent = ((current_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0
+                        
+                        positions.append({
+                            'symbol': pos.get('symbol', ''),
+                            'quantity': qty,
+                            'avg_cost': avg_cost,
+                            'current_price': current_price,
+                            'market_value': qty * current_price,
+                            'unrealized_pnl': unrealized_pnl,
+                            'pnl_percent': pnl_percent,
+                            'asset_type': pos.get('asset_type') or 'stock'
+                        })
                     
         except Exception as e:
             print(f"[ANALYTICS] Error getting positions for {broker_id}: {e}")
