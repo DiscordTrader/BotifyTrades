@@ -8614,11 +8614,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         try:
             from gui_app import database as db
             
-            if not db.is_signal_update_automation_enabled(str(after.channel.id)):
-                return
+            signal_automation_on = db.is_signal_update_automation_enabled(str(after.channel.id))
             
-            instance = db.get_signal_instance_by_message_id(str(after.id))
+            instance = db.get_signal_instance_by_message_id(str(after.id)) if signal_automation_on else None
             if not instance:
+                await self._handle_conditional_order_edit(after)
+                if not signal_automation_on:
+                    return
                 return
             
             if instance.get('exit_processed'):
@@ -8820,6 +8822,198 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
         except Exception as e:
             print(f"[OMS EDIT] Error processing message edit: {e}")
+            import traceback
+            traceback.print_exc()
+
+    async def _handle_conditional_order_edit(self, after: discord.Message):
+        """
+        Handle Discord message edits for CONDITIONAL ORDERS.
+        
+        When a signal provider edits a message that created a conditional order:
+        - SL changes: Update the pending order's stop loss
+        - PT changes: Update the pending order's profit targets
+        - Trigger price/symbol typo corrections: Re-parse and update the order
+        - Full cancellation: If message is cleared or no longer a valid signal
+        
+        Only processes orders in PENDING/ACTIVE_MONITORING/FALLBACK_MONITORING status.
+        """
+        try:
+            from gui_app import database as db
+            from gui_app.database import get_conditional_order_by_message_id, update_conditional_order_sl_pt
+            
+            cond_order = get_conditional_order_by_message_id(str(after.id))
+            if not cond_order:
+                return
+            
+            order_id = cond_order['id']
+            print(f"\n[COND EDIT] 📝 Detected edit on conditional order #{order_id} (message {after.id})")
+            
+            new_content = after.content
+            if not new_content or not new_content.strip():
+                print(f"[COND EDIT] ⚠️ Message cleared - conditional order #{order_id} remains active (manual cancel if needed)")
+                return
+            
+            from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
+            
+            if not is_conditional_order_signal(new_content, require_sl_pt=False):
+                print(f"[COND EDIT] ⚠️ Edited message no longer a conditional signal - order #{order_id} unchanged")
+                return
+            
+            parsed = parse_conditional_order_signal(new_content)
+            if not parsed:
+                print(f"[COND EDIT] ⚠️ Failed to parse edited message - order #{order_id} unchanged")
+                return
+            
+            changes = []
+            
+            new_symbol = parsed.get('symbol', '').upper()
+            old_symbol = (cond_order.get('symbol') or '').upper()
+            new_trigger = parsed.get('trigger_price')
+            old_trigger = cond_order.get('trigger_price') or cond_order.get('adjusted_trigger_price')
+            new_trigger_type = parsed.get('trigger_type', 'over')
+            old_trigger_type = cond_order.get('trigger_type', 'over')
+            
+            if new_symbol and new_symbol != old_symbol:
+                changes.append(f"symbol: {old_symbol} -> {new_symbol}")
+            trigger_changed = False
+            if new_trigger is not None and old_trigger is not None:
+                if abs(new_trigger - old_trigger) > 0.001:
+                    trigger_changed = True
+                    changes.append(f"trigger: ${old_trigger} -> ${new_trigger}")
+            elif new_trigger is not None and old_trigger is None:
+                trigger_changed = True
+                changes.append(f"trigger: None -> ${new_trigger}")
+            if new_trigger_type != old_trigger_type:
+                changes.append(f"trigger_type: {old_trigger_type} -> {new_trigger_type}")
+            
+            symbol_or_trigger_changed = (
+                (new_symbol and new_symbol != old_symbol) or
+                trigger_changed or
+                (new_trigger_type != old_trigger_type)
+            )
+            
+            if symbol_or_trigger_changed:
+                from src.services.conditional_orders.router import conditional_order_router
+                
+                old_order_cancelled = conditional_order_router.cancel_order(order_id)
+                if not old_order_cancelled:
+                    print(f"[COND EDIT] ⚠️ Failed to cancel old order #{order_id} - skipping re-create to avoid duplicates")
+                    return
+                
+                print(f"[COND EDIT] ✓ Cancelled old order #{order_id} due to symbol/trigger change")
+                
+                parsed['message_id'] = str(after.id)
+                parsed['author_id'] = str(after.author.id)
+                parsed['author_name'] = str(after.author)
+                
+                channel_id = str(after.channel.id)
+                
+                cond_broker = cond_order.get('broker_primary')
+                
+                new_order_id = conditional_order_router.create_order(channel_id, parsed, cond_broker)
+                if new_order_id:
+                    changes_str = ', '.join(changes)
+                    print(f"[COND EDIT] ✓ Re-created as order #{new_order_id} ({changes_str})")
+                    
+                    try:
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
+                            VALUES (?, 'PENDING', 'PENDING', 'EDIT_RECREATED', ?)
+                        ''', (new_order_id, f'Re-created from order #{order_id} due to edit: {changes_str}'))
+                        conn.commit()
+                    except Exception:
+                        pass
+                else:
+                    print(f"[COND EDIT] ❌ Failed to re-create order after edit")
+                return
+            
+            new_sl = parsed.get('stop_loss_value') or parsed.get('stop_loss')
+            new_sl_type = parsed.get('stop_loss_type')
+            new_sl_fixed = parsed.get('stop_loss_fixed')
+            new_sl_pct = parsed.get('stop_loss_pct')
+            
+            old_sl = cond_order.get('stop_loss_value')
+            old_sl_fixed = cond_order.get('stop_loss_fixed')
+            old_sl_pct = cond_order.get('stop_loss_pct')
+            
+            sl_changed = False
+            if new_sl is not None and old_sl is not None and abs(new_sl - old_sl) > 0.001:
+                sl_changed = True
+                changes.append(f"SL: ${old_sl} -> ${new_sl}")
+            elif new_sl is not None and old_sl is None:
+                sl_changed = True
+                changes.append(f"SL: None -> ${new_sl}")
+            if new_sl_fixed is not None and (old_sl_fixed is None or abs(new_sl_fixed - old_sl_fixed) > 0.001):
+                sl_changed = True
+            if new_sl_pct is not None and (old_sl_pct is None or abs(new_sl_pct - old_sl_pct) > 0.001):
+                sl_changed = True
+            
+            new_pts = parsed.get('profit_targets', [])
+            import json
+            old_pts_raw = cond_order.get('take_profit_targets')
+            old_pts = []
+            if old_pts_raw:
+                try:
+                    old_pts = json.loads(old_pts_raw)
+                except (json.JSONDecodeError, TypeError):
+                    try:
+                        old_pts = [float(t) for t in str(old_pts_raw).split(',') if t.strip()]
+                    except (ValueError, TypeError):
+                        old_pts = []
+            pt_changed = new_pts != old_pts and len(new_pts) > 0
+            if pt_changed:
+                changes.append(f"PTs: {old_pts} -> {new_pts}")
+            
+            if sl_changed or pt_changed:
+                update_kwargs = {}
+                if sl_changed:
+                    update_kwargs['stop_loss_value'] = new_sl
+                    update_kwargs['stop_loss_type'] = new_sl_type
+                    if new_sl_fixed is not None:
+                        update_kwargs['stop_loss_fixed'] = new_sl_fixed
+                    if new_sl_pct is not None:
+                        update_kwargs['stop_loss_pct'] = new_sl_pct
+                if pt_changed:
+                    update_kwargs['take_profit_targets'] = new_pts
+                
+                success = update_conditional_order_sl_pt(order_id, **update_kwargs)
+                
+                if success:
+                    changes_str = ', '.join(changes)
+                    print(f"[COND EDIT] ✓ Updated order #{order_id}: {changes_str}")
+                    
+                    try:
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
+                            VALUES (?, ?, ?, 'EDIT_UPDATED', ?)
+                        ''', (order_id, cond_order['status'], cond_order['status'], 
+                              f'Signal edit updated: {changes_str}'))
+                        conn.commit()
+                    except Exception:
+                        pass
+                else:
+                    print(f"[COND EDIT] ❌ Failed to update order #{order_id}")
+            else:
+                print(f"[COND EDIT] No meaningful changes detected for order #{order_id}")
+            
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE conditional_orders SET original_message = ? WHERE id = ?
+                ''', (new_content, order_id))
+                conn.commit()
+            except Exception:
+                pass
+                
+        except ImportError as ie:
+            print(f"[COND EDIT] ⚠️ Required modules not available: {ie}")
+        except Exception as e:
+            print(f"[COND EDIT] Error processing conditional order edit: {e}")
             import traceback
             traceback.print_exc()
 

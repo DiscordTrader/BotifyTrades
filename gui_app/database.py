@@ -10863,6 +10863,7 @@ def init_conditional_orders_table():
         ('limit_cap_pct', 'REAL DEFAULT 5.0'),
         ('limit_price', 'REAL'),
         ('author_name', 'TEXT'),
+        ('message_id', 'TEXT'),
     ]
     for col_name, col_type in extended_columns:
         try:
@@ -10870,6 +10871,13 @@ def init_conditional_orders_table():
             print(f"[DATABASE] Added column {col_name} to conditional_orders")
         except Exception:
             pass
+    
+    try:
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_conditional_message_id ON conditional_orders(message_id)
+        ''')
+    except Exception:
+        pass
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conditional_order_audit (
@@ -11097,7 +11105,8 @@ def create_conditional_order(
     limit_cap_enabled: int = 0,
     limit_cap_pct: float = None,
     limit_price: float = None,
-    author_name: str = None
+    author_name: str = None,
+    message_id: str = None
 ) -> Optional[int]:
     """Create a new conditional order with full channel settings linkage.
     
@@ -11123,8 +11132,8 @@ def create_conditional_order(
                 stop_loss_fixed, stop_loss_pct, target_ranges, status,
                 exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
                 trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
-                limit_cap_enabled, limit_cap_pct, limit_price, author_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
@@ -11133,7 +11142,7 @@ def create_conditional_order(
             stop_loss_fixed, stop_loss_pct, target_ranges,
             exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
             trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
-            limit_cap_enabled, limit_cap_pct, limit_price, author_name
+            limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id
         ))
         
         order_id = cursor.lastrowid
@@ -11443,6 +11452,30 @@ def get_conditional_order_by_id(order_id: int) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         print(f"[DATABASE] Error getting conditional order {order_id}: {e}")
+        return None
+
+
+def get_conditional_order_by_message_id(message_id: str) -> Optional[Dict[str, Any]]:
+    """Get an active conditional order by its Discord message ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT co.*, c.trigger_offset_percent, c.broker_override, c.exit_strategy_mode,
+                   c.default_quantity, c.position_size_pct
+            FROM conditional_orders co
+            LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
+            WHERE co.message_id = ?
+            AND co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+        ''', (message_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting conditional order by message_id {message_id}: {e}")
         return None
 
 

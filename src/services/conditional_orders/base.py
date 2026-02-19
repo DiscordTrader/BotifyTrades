@@ -850,6 +850,7 @@ class BaseConditionalOrderService(ABC):
             limit_cap_enabled=limit_cap_enabled,
             limit_cap_pct=limit_cap_pct,
             limit_price=limit_price,
+            message_id=parsed_signal.get('message_id'),
         )
         
         if order_id:
