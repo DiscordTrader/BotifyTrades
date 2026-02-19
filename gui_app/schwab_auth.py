@@ -889,10 +889,14 @@ def schwab_status():
     token_manager = get_token_manager()
     token_status = token_manager.get_token_status()
     
+    creds = get_schwab_credentials()
+    dry_run = creds.get('dry_run', True) if creds else True
+    
     return jsonify({
         'configured': is_schwab_configured(),
         'authenticated': is_schwab_authenticated(),
         'redirect_uri': get_default_redirect_uri(),
+        'dry_run': dry_run,
         'token_status': token_status
     })
 

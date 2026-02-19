@@ -844,7 +844,7 @@ input:checked + .slider:before {
         
         <div class="form-group">
             <label style="display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" id="schwab-dry-run" checked style="width: auto;">
+                <input type="checkbox" id="schwab-dry-run" style="width: auto;">
                 <span>Dry Run Mode (Log orders without executing)</span>
             </label>
             <p class="help-text" style="color: #ffc107;">When enabled, orders are logged but NOT sent to Schwab. Disable for real trading.</p>
@@ -2267,6 +2267,7 @@ async function loadSchwabStatus() {
         const refreshBtn = document.getElementById('refresh-schwab-token');
         
         document.getElementById('schwab-redirect-uri').value = data.redirect_uri || '';
+        document.getElementById('schwab-dry-run').checked = data.dry_run !== undefined ? data.dry_run : true;
         
         if (data.authenticated) {
             statusEl.className = 'connection-status connected';

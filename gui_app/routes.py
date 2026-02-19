@@ -17055,7 +17055,9 @@ def register_routes(app):
             credentials = creds.get('credentials', {})
             masked = {}
             for key, value in credentials.items():
-                if value and len(str(value)) > 4:
+                if isinstance(value, bool):
+                    masked[key] = value
+                elif value and len(str(value)) > 4:
                     masked[key] = '••••' + str(value)[-4:]
                 elif value:
                     masked[key] = '••••'
