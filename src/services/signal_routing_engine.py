@@ -756,7 +756,8 @@ class SignalRoutingEngine:
                             _quote_fail_counts.pop(pos_key, None)
                         else:
                             _quote_fail_counts[pos_key] = fail_count + 1
-                        if loop_count <= 3:
+                        should_log_detail = loop_count <= 3 or loop_count % 20 == 0
+                        if should_log_detail or not quote_result.success:
                             error_info = quote_result.error if not quote_result.success else ""
                             sys.stderr.write(f"[ROUTING_ENGINE] {position.symbol} {position.strike}{position.option_type} {expiry_fmt}: price={price} (entry={position.entry_price}) brokers={connected_brokers} {error_info}\n")
                             sys.stderr.flush()
@@ -771,21 +772,21 @@ class SignalRoutingEngine:
                     
                     can_eval, reason = self.can_evaluate_risk(position)
                     if not can_eval:
-                        if loop_count <= 3:
+                        if should_log_detail:
                             sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: SKIP risk eval - {reason}\n")
                             sys.stderr.flush()
                         continue
                     
                     config = self.get_routing_config(position.routing_mapping_id)
                     if not config:
-                        if loop_count <= 3:
+                        if should_log_detail:
                             sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: SKIP - no config for mapping {position.routing_mapping_id}\n")
                             sys.stderr.flush()
                         continue
                     
                     exit_reason, pnl_pct = self.evaluate_position_risk(position, config)
-                    if loop_count <= 3:
-                        sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: pnl={pnl_pct:.1f}% exit_reason={exit_reason}\n")
+                    if should_log_detail:
+                        sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: pnl={pnl_pct:.1f}% exit_reason={exit_reason} (SL={config.stop_loss_pct}% PT1={config.pt1_pct}%)\n")
                         sys.stderr.flush()
                     
                     if exit_reason:

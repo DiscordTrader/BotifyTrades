@@ -1427,11 +1427,12 @@ class BrokerSyncService:
             if t.get('channel_id')
         ]
         
-        # RECOVERY: Try to repair orphaned trades by linking them to matching Discord signals
+        # RECOVERY: Try to repair orphaned trades by linking them to matching Discord signals or routing ledger
         if orphaned_trades_by_key:
             print(f"[SYNC] 🔧 Found {len(orphaned_trades_by_key)} orphaned {broker_name} trades - attempting recovery...")
             for orphan_key, orphan_trade in orphaned_trades_by_key.items():
-                # Try to find a matching Discord trade with channel_id
+                recovered = False
+                # Pass 1: Try to find a matching Discord trade with channel_id
                 for discord_trade in discord_trades_with_channel:
                     discord_key = self._build_position_key(
                         discord_trade['symbol'],
@@ -1441,7 +1442,6 @@ class BrokerSyncService:
                         discord_trade.get('call_put')
                     )
                     if discord_key == orphan_key and discord_trade.get('channel_id'):
-                        # Found a matching Discord trade - link the orphan to its channel
                         orphan_id = orphan_trade.get('id')
                         channel_id = discord_trade.get('channel_id')
                         print(f"[SYNC] ✓ Recovered orphan #{orphan_id} ({orphan_trade['symbol']}) → channel_id={channel_id}")
@@ -1449,7 +1449,39 @@ class BrokerSyncService:
                             self.db.update_trade(orphan_id, channel_id=channel_id, source='sync_discord', hide_in_ui=0)
                         except Exception as e:
                             print(f"[SYNC] ⚠️ Failed to update orphan #{orphan_id}: {e}")
+                        recovered = True
                         break
+                
+                # Pass 2: Try signal routing position ledger
+                if not recovered:
+                    try:
+                        from src.services.signal_routing_engine import get_position_ledger
+                        ledger = get_position_ledger()
+                        if ledger:
+                            open_positions = ledger.get_open_positions()
+                            sym = orphan_trade.get('symbol')
+                            cp = orphan_trade.get('call_put')
+                            st = orphan_trade.get('strike')
+                            for lp in open_positions:
+                                if (lp.symbol == sym and lp.option_type == cp and lp.remaining_qty > 0):
+                                    lp_strike = float(lp.strike) if lp.strike else None
+                                    pos_strike = float(st) if st else None
+                                    if lp_strike == pos_strike and lp.routing_mapping_id:
+                                        orphan_id = orphan_trade.get('id')
+                                        print(f"[SYNC] ✓ Recovered orphan #{orphan_id} ({sym}) via routing ledger → mapping_id={lp.routing_mapping_id}, channel={lp.source_channel_id}")
+                                        try:
+                                            self.db.update_trade(
+                                                orphan_id, 
+                                                channel_id=lp.source_channel_id, 
+                                                routing_mapping_id=lp.routing_mapping_id,
+                                                source='sync_routing', 
+                                                hide_in_ui=0
+                                            )
+                                        except Exception as e:
+                                            print(f"[SYNC] ⚠️ Failed to update orphan #{orphan_id}: {e}")
+                                        break
+                    except Exception as e:
+                        print(f"[SYNC] ⚠️ Routing ledger orphan recovery failed: {e}")
         
         # Build broker_override lookup for Pass 3 fallback
         # Maps broker_name -> [(channel_discord_id, channel_db_id), ...]
@@ -1541,6 +1573,27 @@ class BrokerSyncService:
                 # Try to find origin channel_id using multi-pass matching
                 origin_channel_id = find_origin_channel(position)
                 
+                routing_mapping_id = None
+                if not origin_channel_id:
+                    try:
+                        from src.services.signal_routing_engine import get_position_ledger
+                        ledger = get_position_ledger()
+                        if ledger:
+                            open_positions = ledger.get_open_positions()
+                            for lp in open_positions:
+                                if (lp.symbol == symbol and 
+                                    lp.option_type == call_put and
+                                    lp.remaining_qty > 0):
+                                    lp_strike = float(lp.strike) if lp.strike else None
+                                    pos_strike = float(strike) if strike else None
+                                    if lp_strike == pos_strike and lp.routing_mapping_id:
+                                        origin_channel_id = lp.source_channel_id
+                                        routing_mapping_id = lp.routing_mapping_id
+                                        print(f"[SYNC] ✓ Linked orphan to signal routing: {symbol} → mapping_id={routing_mapping_id}, channel={origin_channel_id}")
+                                        break
+                    except Exception as e:
+                        print(f"[SYNC] ⚠️ Signal routing ledger lookup failed: {e}")
+                
                 if origin_channel_id:
                     print(f"[SYNC] 📥 Importing {broker_name} position: {symbol} ({asset_type}, qty={position['quantity']}, key={pos_key}) - inherited channel_id={origin_channel_id}")
                 else:
@@ -1583,13 +1636,14 @@ class BrokerSyncService:
                     'asset_type': asset_type,
                     'executed_at': datetime.now().isoformat(),
                     'message_id': None,
-                    'channel_id': origin_channel_id,  # Inherit from Discord origin if available
+                    'channel_id': origin_channel_id,
                     'order_id': position.get('position_id'),
                     'profit_target_percent': 0,
                     'stop_loss_percent': 0,
                     'trailing_stop_enabled': 0,
-                    'source': 'sync' if not origin_channel_id else 'sync_discord',  # Mark source type
-                    'hide_in_ui': 1 if not origin_channel_id else 0  # Hide manual imports without channel
+                    'source': 'sync_routing' if routing_mapping_id else ('sync' if not origin_channel_id else 'sync_discord'),
+                    'hide_in_ui': 1 if not origin_channel_id else 0,
+                    'routing_mapping_id': routing_mapping_id
                 }
                 
                 # Add option-specific fields if it's an option
