@@ -85,7 +85,119 @@
 .btn-panic { background: rgba(255,59,48,0.2); color: #ff3b30; border: 1px solid rgba(255,59,48,0.4); font-weight: 700; }
 .btn-panic:hover { background: rgba(255,59,48,0.4); }
 .close-all-confirm { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: rgba(255,59,48,0.1); border-radius: 6px; }
+
+.qt-panel { background: linear-gradient(180deg, #161B22 0%, #0E1117 100%); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; margin-bottom: 20px; overflow: hidden; }
+.qt-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; cursor: pointer; user-select: none; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
+.qt-header:hover { background: rgba(255,255,255,0.04); }
+.qt-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: #E6EDF3; letter-spacing: -0.3px; }
+.qt-title-icon { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #0FF0B3 0%, #7C3AED 100%); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.qt-toggle { font-size: 12px; color: #8B949E; transition: transform 0.3s; }
+.qt-panel.collapsed .qt-body { display: none; }
+.qt-panel.collapsed .qt-toggle { transform: rotate(-90deg); }
+.qt-body { padding: 16px 20px; }
+.qt-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.qt-input { background: #1C2128; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #E6EDF3; padding: 9px 14px; font-size: 13px; font-weight: 600; outline: none; transition: border-color 0.2s; }
+.qt-input:focus { border-color: #0FF0B3; box-shadow: 0 0 0 2px rgba(15,240,179,0.12); }
+.qt-input.symbol { width: 90px; text-transform: uppercase; font-size: 15px; letter-spacing: 0.5px; }
+.qt-select { background: #1C2128; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #E6EDF3; padding: 9px 12px; font-size: 12px; font-weight: 600; cursor: pointer; outline: none; min-width: 130px; }
+.qt-select:focus { border-color: #0FF0B3; }
+.qt-select option { background: #1C2128; color: #E6EDF3; }
+.qt-btn { padding: 9px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.5px; }
+.qt-btn:hover { transform: translateY(-1px); }
+.qt-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.qt-btn-load { background: linear-gradient(135deg, #0FF0B3 0%, #00D4AA 100%); color: #0E1117; }
+.qt-btn-load:hover { box-shadow: 0 4px 16px rgba(15,240,179,0.3); }
+.qt-label { font-size: 11px; font-weight: 600; color: #8B949E; text-transform: uppercase; letter-spacing: 0.8px; }
+.qt-price-badge { font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 6px; }
+.qt-price-badge.stock { background: rgba(88,166,255,0.12); color: #58A6FF; }
+
+.qt-chain { width: 100%; border-collapse: separate; border-spacing: 0; }
+.qt-chain-wrapper { border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden; }
+.qt-chain th { background: #1C2128; padding: 8px 10px; font-size: 10px; font-weight: 700; color: #8B949E; text-transform: uppercase; letter-spacing: 0.8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); white-space: nowrap; }
+.qt-chain th.call-header { color: #3FB950; }
+.qt-chain th.put-header { color: #F85149; }
+.qt-chain th.strike-header { background: #21262D; color: #E6EDF3; min-width: 70px; }
+.qt-chain td { padding: 6px 8px; text-align: center; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+.qt-chain tr:last-child td { border-bottom: none; }
+.qt-chain tr:hover td { background: rgba(255,255,255,0.03); }
+.qt-chain tr.atm-row td { background: rgba(15,240,179,0.06); }
+.qt-chain tr.atm-row:hover td { background: rgba(15,240,179,0.1); }
+.qt-chain .strike-cell { font-weight: 700; color: #E6EDF3; font-size: 13px; background: rgba(33,38,45,0.6); position: relative; }
+.qt-chain .strike-cell .moneyness { font-size: 9px; font-weight: 600; display: block; margin-top: 1px; }
+.qt-chain .strike-cell .moneyness.itm { color: #3FB950; }
+.qt-chain .strike-cell .moneyness.atm { color: #0FF0B3; }
+.qt-chain .strike-cell .moneyness.otm { color: #F85149; }
+.qt-price { cursor: pointer; padding: 3px 6px; border-radius: 4px; font-weight: 600; transition: all 0.15s; font-size: 11px; display: inline-block; min-width: 48px; }
+.qt-price:hover { transform: scale(1.05); }
+.qt-price.bid { color: #58A6FF; }
+.qt-price.bid:hover { background: rgba(88,166,255,0.15); }
+.qt-price.mid { color: #D29922; font-weight: 700; }
+.qt-price.mid:hover { background: rgba(210,153,34,0.15); }
+.qt-price.ask { color: #F85149; }
+.qt-price.ask:hover { background: rgba(248,81,73,0.15); }
+.qt-action-btn { padding: 4px 8px; border-radius: 5px; font-size: 10px; font-weight: 800; cursor: pointer; border: 1px solid; transition: all 0.12s; letter-spacing: 0.3px; }
+.qt-action-btn:hover { transform: translateY(-1px); }
+.qt-action-btn.bto { background: rgba(63,185,80,0.15); color: #3FB950; border-color: rgba(63,185,80,0.3); }
+.qt-action-btn.bto:hover { background: rgba(63,185,80,0.3); }
+.qt-action-btn.stc { background: rgba(248,81,73,0.15); color: #F85149; border-color: rgba(248,81,73,0.3); }
+.qt-action-btn.stc:hover { background: rgba(248,81,73,0.3); }
+.qt-action-btn.webhook { background: rgba(124,58,237,0.15); color: #A78BFA; border-color: rgba(124,58,237,0.3); font-size: 9px; }
+.qt-action-btn.webhook:hover { background: rgba(124,58,237,0.3); }
+.qt-qty-input { width: 40px; background: #1C2128; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #E6EDF3; text-align: center; font-size: 12px; font-weight: 600; padding: 3px 2px; }
+.qt-qty-input:focus { border-color: #0FF0B3; outline: none; }
+.qt-loading { text-align: center; padding: 30px; color: #8B949E; }
+.qt-loading .spinner { width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.1); border-top: 2px solid #0FF0B3; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.qt-empty { text-align: center; padding: 24px; color: #6E7681; font-size: 13px; }
+.qt-source { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+.qt-source.webull { background: rgba(0,200,83,0.12); color: #00c853; }
+.qt-source.alpaca { background: rgba(88,166,255,0.12); color: #58A6FF; }
+.qt-bottom-bar { display: flex; gap: 10px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap; }
 </style>
+
+<!-- Quick Trade Panel -->
+<div class="qt-panel" id="qtPanel">
+    <div class="qt-header" onclick="toggleQuickTrade()">
+        <div class="qt-title">
+            <div class="qt-title-icon">&#x26A1;</div>
+            Quick Trade - Options Chain
+        </div>
+        <span class="qt-toggle">&#x25BC;</span>
+    </div>
+    <div class="qt-body">
+        <div class="qt-controls">
+            <input type="text" class="qt-input symbol" id="qt-symbol" placeholder="SPY" maxlength="6" autocomplete="off">
+            <select class="qt-select" id="qt-broker" style="min-width: 150px;">
+                <option value="WEBULL">Webull LIVE</option>
+                <option value="WEBULL_PAPER">Webull PAPER</option>
+                <option value="ALPACA_PAPER" selected>Alpaca PAPER</option>
+                <option value="TASTYTRADE_LIVE">Tastytrade LIVE</option>
+                <option value="TASTYTRADE_PAPER">Tastytrade PAPER</option>
+                <option value="SCHWAB">Charles Schwab</option>
+                <option value="ROBINHOOD">Robinhood</option>
+                <option value="IBKR">IBKR</option>
+            </select>
+            <select class="qt-select" id="qt-expiry" style="min-width: 160px;">
+                <option value="">Select expiry...</option>
+            </select>
+            <button class="qt-btn qt-btn-load" id="qt-load-btn" onclick="qtLoadChain()">Load Chain</button>
+            <span id="qt-stock-price"></span>
+            <span id="qt-data-source"></span>
+            <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+                <span class="qt-label">Qty:</span>
+                <input type="number" class="qt-qty-input" id="qt-qty" value="1" min="1" max="999" style="width: 50px;">
+                <span class="qt-label">Channel:</span>
+                <select class="qt-select" id="qt-webhook-channel" style="min-width: 120px; font-size: 11px;">
+                    <option value="">None</option>
+                </select>
+            </div>
+        </div>
+        <div id="qt-chain-container">
+            <div class="qt-empty">Enter a symbol and press Load Chain to view ATM-centered options</div>
+        </div>
+    </div>
+</div>
+
 <!-- Stats Summary -->
 <div class="stats-grid" style="margin-bottom: 24px;">
     <div class="stat-card">
@@ -1700,5 +1812,337 @@ async function clearOrderEvents() {
         console.error('Failed to clear events:', error);
     }
 }
+
+// ============ QUICK TRADE PANEL ============
+let qtChainData = null;
+let qtWebhookChannels = [];
+let qtRefreshTimer = null;
+let qtSelectedPrice = {};
+
+function toggleQuickTrade() {
+    document.getElementById('qtPanel').classList.toggle('collapsed');
+}
+
+document.getElementById('qt-symbol').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { this.value = this.value.toUpperCase(); qtLoadExpirations(); }
+});
+document.getElementById('qt-symbol').addEventListener('blur', function() {
+    if (this.value.trim()) { this.value = this.value.toUpperCase(); qtLoadExpirations(); }
+});
+document.getElementById('qt-expiry').addEventListener('change', function() {
+    if (this.value) qtLoadChain();
+});
+document.getElementById('qt-broker').addEventListener('change', function() {
+    const sym = document.getElementById('qt-symbol').value.trim();
+    if (sym) qtLoadExpirations();
+});
+
+async function qtLoadExpirations() {
+    const symbol = document.getElementById('qt-symbol').value.trim().toUpperCase();
+    const broker = document.getElementById('qt-broker').value;
+    const expirySelect = document.getElementById('qt-expiry');
+    if (!symbol) return;
+    expirySelect.innerHTML = '<option value="">Loading...</option>';
+    try {
+        const r = await fetch(`/api/options/expirations?symbol=${symbol}&broker=${broker}`, { credentials: 'include' });
+        const data = await r.json();
+        if (data.error || !data.expirations || data.expirations.length === 0) {
+            expirySelect.innerHTML = '<option value="">No expirations</option>';
+            return;
+        }
+        expirySelect.innerHTML = '';
+        const today = new Date().toISOString().split('T')[0];
+        let selectedIdx = 0;
+        data.expirations.forEach((exp, idx) => {
+            const d = typeof exp === 'object' ? exp.date : exp;
+            const label = typeof exp === 'object' ? exp.label : d;
+            const opt = document.createElement('option');
+            opt.value = d;
+            const isToday = d === today;
+            opt.textContent = isToday ? label + ' (0DTE)' : label;
+            if (isToday) selectedIdx = idx;
+            expirySelect.appendChild(opt);
+        });
+        expirySelect.selectedIndex = selectedIdx;
+        qtLoadChain();
+    } catch (e) {
+        expirySelect.innerHTML = '<option value="">Error loading</option>';
+    }
+}
+
+async function qtLoadChain() {
+    const symbol = document.getElementById('qt-symbol').value.trim().toUpperCase();
+    const broker = document.getElementById('qt-broker').value;
+    const expiry = document.getElementById('qt-expiry').value;
+    const container = document.getElementById('qt-chain-container');
+    if (!symbol || !expiry) {
+        container.innerHTML = '<div class="qt-empty">Select symbol and expiry</div>';
+        return;
+    }
+    container.innerHTML = '<div class="qt-loading"><div class="spinner"></div>Loading chain...</div>';
+    document.getElementById('qt-load-btn').disabled = true;
+    try {
+        const r = await fetch(`/api/options/quick-chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}&count=2`, { credentials: 'include' });
+        const data = await r.json();
+        document.getElementById('qt-load-btn').disabled = false;
+        if (data.error) {
+            container.innerHTML = `<div class="qt-empty" style="color:#F85149;">${data.error}</div>`;
+            return;
+        }
+        qtChainData = data;
+        document.getElementById('qt-stock-price').innerHTML = data.stock_price > 0
+            ? `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`
+            : '';
+        const src = (data.data_source || '').toLowerCase();
+        document.getElementById('qt-data-source').innerHTML = data.data_source
+            ? `<span class="qt-source ${src.includes('alpaca') ? 'alpaca' : 'webull'}">${data.data_source}</span>`
+            : '';
+        qtRenderChain(data);
+        qtStartAutoRefresh();
+    } catch (e) {
+        document.getElementById('qt-load-btn').disabled = false;
+        container.innerHTML = `<div class="qt-empty" style="color:#F85149;">Failed: ${e.message}</div>`;
+    }
+}
+
+function qtRenderChain(data) {
+    const container = document.getElementById('qt-chain-container');
+    const strikes = data.strikes || [];
+    if (strikes.length === 0) {
+        container.innerHTML = '<div class="qt-empty">No strikes found</div>';
+        return;
+    }
+    let html = '<div class="qt-chain-wrapper"><table class="qt-chain"><thead><tr>';
+    html += '<th class="call-header">BTO</th><th class="call-header">STC</th>';
+    html += '<th class="call-header">Bid</th><th class="call-header">Mid</th><th class="call-header">Ask</th>';
+    html += '<th class="call-header" style="border-right:2px solid rgba(255,255,255,0.1);">CALLS</th>';
+    html += '<th class="strike-header">Strike</th>';
+    html += '<th class="put-header" style="border-left:2px solid rgba(255,255,255,0.1);">PUTS</th>';
+    html += '<th class="put-header">Bid</th><th class="put-header">Mid</th><th class="put-header">Ask</th>';
+    html += '<th class="put-header">BTO</th><th class="put-header">STC</th>';
+    html += '</tr></thead><tbody>';
+
+    strikes.forEach((s, idx) => {
+        const isATM = s.is_atm || false;
+        const rowClass = isATM ? 'atm-row' : '';
+        const c = s.call || {}, p = s.put || {};
+        const cBid = c.bid || 0, cAsk = c.ask || 0, cMid = c.mid || 0;
+        const pBid = p.bid || 0, pAsk = p.ask || 0, pMid = p.mid || 0;
+        const cIV = c.iv ? (c.iv * 100).toFixed(0) + '%' : '';
+        const pIV = p.iv ? (p.iv * 100).toFixed(0) + '%' : '';
+        const cDelta = c.delta ? Math.abs(c.delta).toFixed(2) : '';
+        const pDelta = p.delta ? Math.abs(p.delta).toFixed(2) : '';
+        const strikeDisplay = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
+        const callMoneyClass = (s.call_moneyness || 'OTM').toLowerCase();
+        const putMoneyClass = (s.put_moneyness || 'OTM').toLowerCase();
+
+        html += `<tr class="${rowClass}" data-strike-idx="${idx}">`;
+        html += `<td><button class="qt-action-btn bto" onclick="qtExecute(${idx},'CALL','BUY')" title="Buy to Open Call">BTO</button></td>`;
+        html += `<td><button class="qt-action-btn stc" onclick="qtExecute(${idx},'CALL','SELL')" title="Sell to Close Call">STC</button></td>`;
+        html += `<td><span class="qt-price bid" onclick="qtSetPrice(${idx},'CALL','bid')" title="Select bid price">$${cBid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price mid" onclick="qtSetPrice(${idx},'CALL','mid')" title="Select mid price">$${cMid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price ask" onclick="qtSetPrice(${idx},'CALL','ask')" title="Select ask price">$${cAsk.toFixed(2)}</span></td>`;
+        html += `<td style="border-right:2px solid rgba(255,255,255,0.1); font-size:10px; color:#6E7681;"><span class="moneyness ${callMoneyClass}">${s.call_moneyness || ''}</span> ${cDelta ? 'D:'+cDelta : ''}</td>`;
+        html += `<td class="strike-cell"><strong>$${strikeDisplay}</strong></td>`;
+        html += `<td style="border-left:2px solid rgba(255,255,255,0.1); font-size:10px; color:#6E7681;"><span class="moneyness ${putMoneyClass}">${s.put_moneyness || ''}</span> ${pDelta ? 'D:'+pDelta : ''}</td>`;
+        html += `<td><span class="qt-price bid" onclick="qtSetPrice(${idx},'PUT','bid')" title="Select bid price">$${pBid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price mid" onclick="qtSetPrice(${idx},'PUT','mid')" title="Select mid price">$${pMid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price ask" onclick="qtSetPrice(${idx},'PUT','ask')" title="Select ask price">$${pAsk.toFixed(2)}</span></td>`;
+        html += `<td><button class="qt-action-btn bto" onclick="qtExecute(${idx},'PUT','BUY')" title="Buy to Open Put">BTO</button></td>`;
+        html += `<td><button class="qt-action-btn stc" onclick="qtExecute(${idx},'PUT','SELL')" title="Sell to Close Put">STC</button></td>`;
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    html += '<div class="qt-bottom-bar">';
+    html += '<span class="qt-label" style="color:#A78BFA;">Webhook Signal:</span>';
+    html += '<select class="qt-select" id="qt-signal-strike" style="min-width:100px; font-size:11px;">';
+    strikes.forEach((s, idx) => {
+        const d = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
+        html += `<option value="${idx}">$${d} ${s.moneyness}</option>`;
+    });
+    html += '</select>';
+    html += '<select class="qt-select" id="qt-signal-type" style="min-width:70px; font-size:11px;"><option value="CALL">Call</option><option value="PUT">Put</option></select>';
+    html += '<button class="qt-action-btn webhook" onclick="qtSendWebhook(\'BTO\')" style="padding:6px 12px; font-size:11px;">BTO Signal</button>';
+    html += '<button class="qt-action-btn webhook" onclick="qtSendWebhook(\'STC\')" style="padding:6px 12px; font-size:11px;">STC Signal</button>';
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+function qtSetPrice(idx, optType, priceType) {
+    if (!qtChainData) return;
+    const s = qtChainData.strikes[idx];
+    const opt = (optType === 'CALL' ? s.call : s.put) || {};
+    const price = priceType === 'bid' ? (opt.bid||0) : priceType === 'ask' ? (opt.ask||0) : (opt.mid||0);
+    if (price <= 0) { showToast('No valid price', 'error'); return; }
+    const key = `${idx}_${optType}`;
+    qtSelectedPrice[key] = { price: price, type: priceType };
+    const qty = parseInt(document.getElementById('qt-qty').value) || 1;
+    const total = (price * qty * 100).toFixed(0);
+    const strikeD = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
+    showToast(`Selected ${optType} $${strikeD} ${priceType.toUpperCase()}: $${price.toFixed(2)} x ${qty} = $${total}`, 'info');
+}
+
+async function qtExecute(idx, optType, side) {
+    if (!qtChainData) return;
+    const s = qtChainData.strikes[idx];
+    const opt = (optType === 'CALL' ? s.call : s.put) || {};
+    const key = `${idx}_${optType}`;
+    const selected = qtSelectedPrice[key];
+    const price = selected ? selected.price : ((opt.mid||0) > 0 ? opt.mid : ((opt.ask||0) > 0 ? opt.ask : (opt.bid||0)));
+    const qty = parseInt(document.getElementById('qt-qty').value) || 1;
+    const broker = document.getElementById('qt-broker').value;
+    const trackingChannel = document.getElementById('qt-webhook-channel').value;
+    const symbol = qtChainData.symbol;
+    const expiry = qtChainData.expiry;
+    const strikeD = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
+    const actionLabel = side === 'BUY' ? 'BTO' : 'STC';
+
+    if (price <= 0) {
+        showToast('No valid price available for this strike', 'error');
+        return;
+    }
+
+    const total = (price * qty * 100).toFixed(0);
+    showToast(`${actionLabel} ${qty}x ${symbol} $${strikeD}${optType[0]} @ $${price.toFixed(2)} ($${total}) via ${broker}...`, 'info');
+
+    try {
+        const r = await fetch('/api/options/order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                symbol: symbol,
+                strike: s.strike,
+                expiry: expiry,
+                option_type: optType,
+                side: side,
+                quantity: qty,
+                price: price,
+                option_id: opt.option_id || '',
+                broker: broker,
+                tracking_channel_id: trackingChannel || null
+            })
+        });
+        const result = await r.json();
+        if (result.success) {
+            showToast(`${actionLabel} filled: ${qty}x ${symbol} $${strikeD}${optType[0]} @ $${price.toFixed(2)}`, 'success');
+            if (trackingChannel) {
+                qtSendWebhookForOrder(actionLabel, symbol, s.strike, optType, expiry, price, qty);
+            }
+        } else {
+            showToast(result.error || 'Order failed', 'error');
+        }
+    } catch (e) {
+        showToast('Order error: ' + e.message, 'error');
+    }
+}
+
+async function qtSendWebhook(action) {
+    if (!qtChainData) return;
+    const idxSel = document.getElementById('qt-signal-strike');
+    const typeSel = document.getElementById('qt-signal-type');
+    if (!idxSel || !typeSel) return;
+    const idx = parseInt(idxSel.value);
+    const optType = typeSel.value;
+    const s = qtChainData.strikes[idx];
+    const opt = (optType === 'CALL' ? s.call : s.put) || {};
+    const price = (opt.mid||0) > 0 ? opt.mid : ((opt.ask||0) > 0 ? opt.ask : (opt.bid||0));
+    if (price <= 0) { showToast('No valid price for signal', 'error'); return; }
+    const qty = parseInt(document.getElementById('qt-qty').value) || 1;
+    const symbol = qtChainData.symbol;
+    const expiry = qtChainData.expiry;
+    qtSendWebhookForOrder(action, symbol, s.strike, optType, expiry, price, qty);
+}
+
+async function qtSendWebhookForOrder(action, symbol, strike, optType, expiry, price, qty) {
+    const channelId = document.getElementById('qt-webhook-channel').value;
+    let expiryFormatted = expiry;
+    if (expiry && expiry.includes('-')) {
+        const parts = expiry.split('-');
+        if (parts.length === 3) expiryFormatted = `${parts[1]}/${parts[2]}`;
+    }
+    const strikeD = strike % 1 === 0 ? Math.round(strike) : strike.toFixed(2);
+    const signal = `${action} ${qty} ${symbol} ${strikeD}${optType[0].toLowerCase()} ${expiryFormatted} @ ${price.toFixed(2)}`;
+
+    try {
+        const payload = { signal: signal };
+        if (channelId) payload.channel_id = channelId;
+        const r = await fetch('/api/discord/send-signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
+        });
+        const result = await r.json();
+        if (result.success) {
+            showToast(`Signal sent: ${signal}`, 'success');
+        } else {
+            showToast(result.error || 'Failed to send signal', 'error');
+        }
+    } catch (e) {
+        showToast('Signal send error: ' + e.message, 'error');
+    }
+}
+
+function qtStartAutoRefresh() {
+    if (qtRefreshTimer) clearInterval(qtRefreshTimer);
+    qtRefreshTimer = setInterval(async () => {
+        if (!qtChainData) return;
+        const symbol = document.getElementById('qt-symbol').value.trim().toUpperCase();
+        const broker = document.getElementById('qt-broker').value;
+        const expiry = document.getElementById('qt-expiry').value;
+        if (!symbol || !expiry) return;
+        try {
+            const r = await fetch(`/api/options/quick-chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}&count=2`, { credentials: 'include' });
+            const data = await r.json();
+            if (data.error || !data.strikes) return;
+            qtChainData = data;
+            const rows = document.querySelectorAll('.qt-chain tbody tr');
+            data.strikes.forEach((s, idx) => {
+                const row = rows[idx];
+                if (!row) return;
+                const prices = row.querySelectorAll('.qt-price');
+                if (prices.length >= 6) {
+                    const newVals = [s.call.bid, s.call.mid, s.call.ask, s.put.bid, s.put.mid, s.put.ask];
+                    prices.forEach((el, i) => {
+                        const newText = '$' + newVals[i].toFixed(2);
+                        if (el.textContent !== newText) {
+                            el.textContent = newText;
+                            el.style.transition = 'opacity 0.2s';
+                            el.style.opacity = '0.6';
+                            setTimeout(() => { el.style.opacity = '1'; }, 200);
+                        }
+                    });
+                }
+            });
+            if (data.stock_price > 0) {
+                document.getElementById('qt-stock-price').innerHTML = `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`;
+            }
+        } catch (e) { /* silent */ }
+    }, 3000);
+}
+
+async function qtLoadWebhookChannels() {
+    try {
+        const r = await fetch('/api/webhook/channels', { credentials: 'include' });
+        const data = await r.json();
+        if (data.success && data.channels) {
+            qtWebhookChannels = data.channels;
+            const sel = document.getElementById('qt-webhook-channel');
+            sel.innerHTML = '<option value="">None</option>';
+            data.channels.forEach(ch => {
+                const opt = document.createElement('option');
+                opt.value = ch.id;
+                opt.textContent = ch.name;
+                sel.appendChild(opt);
+            });
+        }
+    } catch (e) { /* silent */ }
+}
+
+qtLoadWebhookChannels();
 </script>
 {% endblock %}

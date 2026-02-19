@@ -9651,6 +9651,106 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/options/quick-chain', methods=['GET'])
+    def api_get_quick_chain():
+        """Get ATM-centered option chain (2 ITM + ATM + 2 OTM) for quick trading panel"""
+        try:
+            symbol = request.args.get('symbol', '').upper()
+            expiry = request.args.get('expiry', '')
+            broker = request.args.get('broker', 'WEBULL').upper()
+            count = int(request.args.get('count', 2))
+            
+            if not symbol:
+                return jsonify({'error': 'Symbol is required'}), 400
+            
+            if not expiry or expiry in ['undefined', 'null', '']:
+                return jsonify({'error': 'Expiration date is required'}), 400
+            
+            chain = get_option_chain_for_broker(symbol, expiry, broker)
+            
+            if not chain or (not chain.get('calls') and not chain.get('puts')):
+                return jsonify({'error': f'No option chain data for {symbol} {expiry}'}), 404
+            
+            stock_price = chain.get('stock_price') or chain.get('underlying_price') or 0
+            calls = chain.get('calls', [])
+            puts = chain.get('puts', [])
+            
+            all_strikes = sorted(set([o['strike'] for o in calls] + [o['strike'] for o in puts]))
+            
+            if not all_strikes:
+                return jsonify({'error': 'No strikes available'}), 404
+            
+            if stock_price and stock_price > 0:
+                atm_strike = min(all_strikes, key=lambda x: abs(x - stock_price))
+            else:
+                atm_strike = all_strikes[len(all_strikes) // 2]
+            
+            atm_idx = all_strikes.index(atm_strike)
+            start = max(0, atm_idx - count)
+            end = min(len(all_strikes), atm_idx + count + 1)
+            selected_strikes = all_strikes[start:end]
+            
+            calls_map = {o['strike']: o for o in calls}
+            puts_map = {o['strike']: o for o in puts}
+            
+            strikes_data = []
+            for s in selected_strikes:
+                call = calls_map.get(s, {})
+                put = puts_map.get(s, {})
+                
+                c_bid = float(call.get('bid', 0) or 0)
+                c_ask = float(call.get('ask', 0) or 0)
+                c_mid = round((c_bid + c_ask) / 2, 2) if c_bid > 0 and c_ask > 0 else float(call.get('last', 0) or 0)
+                
+                p_bid = float(put.get('bid', 0) or 0)
+                p_ask = float(put.get('ask', 0) or 0)
+                p_mid = round((p_bid + p_ask) / 2, 2) if p_bid > 0 and p_ask > 0 else float(put.get('last', 0) or 0)
+                
+                call_moneyness = 'ATM' if s == atm_strike else ('ITM' if s < atm_strike else 'OTM')
+                put_moneyness = 'ATM' if s == atm_strike else ('ITM' if s > atm_strike else 'OTM')
+                
+                strikes_data.append({
+                    'strike': s,
+                    'call_moneyness': call_moneyness,
+                    'put_moneyness': put_moneyness,
+                    'is_atm': s == atm_strike,
+                    'call': {
+                        'bid': c_bid, 'ask': c_ask, 'mid': c_mid,
+                        'last': float(call.get('last', 0) or 0),
+                        'volume': call.get('volume', 0),
+                        'oi': call.get('open_interest', 0),
+                        'iv': call.get('iv', 0),
+                        'delta': call.get('delta'),
+                        'option_id': call.get('option_id', '')
+                    },
+                    'put': {
+                        'bid': p_bid, 'ask': p_ask, 'mid': p_mid,
+                        'last': float(put.get('last', 0) or 0),
+                        'volume': put.get('volume', 0),
+                        'oi': put.get('open_interest', 0),
+                        'iv': put.get('iv', 0),
+                        'delta': put.get('delta'),
+                        'option_id': put.get('option_id', '')
+                    }
+                })
+            
+            return jsonify({
+                'success': True,
+                'symbol': symbol,
+                'expiry': expiry,
+                'stock_price': stock_price,
+                'atm_strike': atm_strike,
+                'strikes': strikes_data,
+                'data_source': chain.get('data_source', 'Unknown'),
+                'all_expiries_count': len(all_strikes)
+            })
+            
+        except Exception as e:
+            print(f"[API] Quick chain error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/options/order', methods=['POST'])
     def api_place_option_order():
         """Place an option order (buy call/put) - routes to selected broker"""
