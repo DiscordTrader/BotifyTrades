@@ -1813,6 +1813,29 @@ async function clearOrderEvents() {
     }
 }
 
+// ============ TOAST NOTIFICATIONS ============
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:400px;';
+        document.body.appendChild(container);
+    }
+    const colors = { success: '#3FB950', error: '#F85149', info: '#58A6FF', warning: '#D29922' };
+    const icons = { success: '\u2713', error: '\u2717', info: '\u2139', warning: '\u26A0' };
+    const toast = document.createElement('div');
+    toast.style.cssText = `display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;background:#161B22;border:1px solid ${colors[type] || colors.info};box-shadow:0 8px 24px rgba(0,0,0,0.4);color:#E6EDF3;font-size:13px;font-weight:500;animation:slideIn 0.3s ease;min-width:250px;`;
+    toast.innerHTML = `<span style="color:${colors[type]};font-size:16px;font-weight:700;">${icons[type] || icons.info}</span><span style="flex:1;">${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(20px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
 // ============ QUICK TRADE PANEL ============
 let qtChainData = null;
 let qtWebhookChannels = [];
@@ -2126,21 +2149,24 @@ function qtStartAutoRefresh() {
 }
 
 async function qtLoadWebhookChannels() {
+    const sel = document.getElementById('qt-webhook-channel');
+    sel.innerHTML = '<option value="">None (use global webhook)</option>';
     try {
         const r = await fetch('/api/webhook/channels', { credentials: 'include' });
         const data = await r.json();
-        if (data.success && data.channels) {
+        if (data.success && data.channels && data.channels.length > 0) {
             qtWebhookChannels = data.channels;
-            const sel = document.getElementById('qt-webhook-channel');
-            sel.innerHTML = '<option value="">None</option>';
             data.channels.forEach(ch => {
+                if (!ch.enabled) return;
                 const opt = document.createElement('option');
                 opt.value = ch.id;
-                opt.textContent = ch.name;
+                opt.textContent = ch.name || `Channel ${ch.id}`;
                 sel.appendChild(opt);
             });
         }
-    } catch (e) { /* silent */ }
+    } catch (e) {
+        console.log('[QT] Webhook channels load skipped:', e.message);
+    }
 }
 
 qtLoadWebhookChannels();

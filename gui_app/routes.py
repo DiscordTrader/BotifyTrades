@@ -8951,36 +8951,52 @@ def register_routes(app):
     
     @app.route('/api/discord/send-signal', methods=['POST'])
     def api_send_discord_signal():
-        """Send a trading signal to Discord via webhook"""
+        """Send a trading signal to Discord via webhook - supports global webhook or per-channel webhook"""
         try:
             import requests as http_requests
-            from .config_service import get_discord_notifications
             
             data = request.json
             signal = data.get('signal', '').strip()
+            channel_id = data.get('channel_id')
             
             if not signal:
                 return jsonify({'success': False, 'error': 'Signal message is required'}), 400
             
-            # Get webhook URL from settings
-            settings = get_discord_notifications()
-            webhook_url = settings.get('webhook_url', '')
+            webhook_url = None
+            bot_name = 'BotifyTrades'
+            
+            if channel_id:
+                try:
+                    from . import webhook_service
+                    channel = webhook_service.get_webhook_channel(int(channel_id))
+                    if channel and channel.get('webhook_url'):
+                        webhook_url = channel['webhook_url']
+                        bot_name = channel.get('bot_name', 'BotifyTrades')
+                        print(f"[DISCORD] Using webhook channel: {channel.get('name', 'Unknown')}")
+                    else:
+                        return jsonify({'success': False, 'error': f'Webhook channel {channel_id} not found or has no URL'}), 400
+                except Exception as e:
+                    print(f"[DISCORD] Channel lookup failed: {e}")
             
             if not webhook_url:
-                return jsonify({'success': False, 'error': 'Discord webhook URL not configured. Go to Settings → Notifications to set it up.'}), 400
+                from .config_service import get_discord_notifications
+                settings = get_discord_notifications()
+                webhook_url = settings.get('webhook_url', '')
+                
+                if not webhook_url:
+                    return jsonify({'success': False, 'error': 'No webhook URL available. Either select a webhook channel or configure a global webhook in Settings → Notifications.'}), 400
+                
+                if not settings.get('enabled', True):
+                    return jsonify({'success': False, 'error': 'Discord notifications are disabled. Enable them in Settings → Notifications.'}), 400
             
-            if not settings.get('enabled', True):
-                return jsonify({'success': False, 'error': 'Discord notifications are disabled. Enable them in Settings → Notifications.'}), 400
-            
-            # Send plain text signal (bot-readable format)
             payload = {
                 "content": signal,
-                "username": "BotifyTrades"
+                "username": bot_name
             }
             
             response = http_requests.post(webhook_url, json=payload, timeout=5)
             
-            if response.status_code == 204:
+            if response.status_code in [200, 204]:
                 print(f"[DISCORD] Signal sent: {signal}")
                 return jsonify({'success': True, 'message': 'Signal sent to Discord'})
             else:
@@ -9832,6 +9848,27 @@ def register_routes(app):
                     broker_name = 'TASTYTRADE_PAPER'
                 else:
                     return jsonify({'error': 'Tastytrade PAPER broker not connected'}), 503
+            
+            elif selected_broker == 'SCHWAB':
+                if hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                    broker_to_use = _bot_instance.schwab_broker
+                    broker_name = 'SCHWAB'
+                else:
+                    return jsonify({'error': 'Schwab broker not connected'}), 503
+            
+            elif selected_broker == 'ROBINHOOD':
+                if hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                    broker_to_use = _bot_instance.robinhood_broker
+                    broker_name = 'ROBINHOOD'
+                else:
+                    return jsonify({'error': 'Robinhood broker not connected'}), 503
+            
+            elif selected_broker == 'IBKR':
+                if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+                    broker_to_use = _bot_instance.ibkr_broker
+                    broker_name = 'IBKR'
+                else:
+                    return jsonify({'error': 'IBKR broker not connected. Ensure TWS is running.'}), 503
                 
             else:
                 return jsonify({'error': f'Unknown broker: {selected_broker}'}), 400
@@ -9842,10 +9879,9 @@ def register_routes(app):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                # Tastytrade uses different method signature
-                if broker_name in ['TASTYTRADE_LIVE', 'TASTYTRADE_PAPER']:
-                    # Convert side to action format (BUY -> BTO, SELL -> STC)
-                    action_code = "BTO" if side == "BUY" else "STC"
+                action_code = "BTO" if side == "BUY" else "STC"
+                
+                if broker_name in ['TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'SCHWAB', 'ROBINHOOD', 'IBKR']:
                     result = loop.run_until_complete(
                         broker_to_use.place_option_order(
                             symbol=symbol,
@@ -9857,7 +9893,7 @@ def register_routes(app):
                             price=price
                         )
                     )
-                else:
+                elif hasattr(broker_to_use, 'place_option_order_simple'):
                     result = loop.run_until_complete(
                         broker_to_use.place_option_order_simple(
                             symbol=symbol,
@@ -9868,6 +9904,18 @@ def register_routes(app):
                             side=side,
                             price=price,
                             option_id=option_id
+                        )
+                    )
+                else:
+                    result = loop.run_until_complete(
+                        broker_to_use.place_option_order(
+                            symbol=symbol,
+                            strike=strike,
+                            expiry=expiry,
+                            option_type=option_type,
+                            action=action_code,
+                            quantity=quantity,
+                            price=price
                         )
                     )
                 
