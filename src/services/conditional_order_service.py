@@ -302,9 +302,16 @@ class BrokerPriceMonitor(PriceMonitor):
             
             elif self.broker_name.lower() == 'schwab':
                 if hasattr(self.broker_instance, 'get_quote'):
-                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    import asyncio as _aio
+                    result = self.broker_instance.get_quote(self.symbol)
+                    if _aio.iscoroutine(result):
+                        quote = await result
+                    else:
+                        quote = await loop.run_in_executor(None, lambda: result)
                     if quote:
-                        if isinstance(quote, dict) and 'lastPrice' in quote:
+                        if isinstance(quote, (int, float)) and quote > 0:
+                            return float(quote)
+                        elif isinstance(quote, dict) and 'lastPrice' in quote:
                             return float(quote['lastPrice'])
                         elif hasattr(quote, 'lastPrice'):
                             return float(quote.lastPrice)
