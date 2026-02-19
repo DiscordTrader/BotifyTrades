@@ -10105,7 +10105,8 @@ def register_routes(app):
                             'order_id': order_id,
                             'trade_id': trade_id if 'trade_id' in dir() else None,
                             'broker': broker_name,
-                            'message': f'Order placed on {broker_name}: {side} {quantity} {symbol} ${strike}{option_type[0]}',
+                            'order_status': 'PENDING',
+                            'message': f'Order submitted to {broker_name}: {side} {quantity} {symbol} ${strike}{option_type[0]} — pending fill',
                             'tracked': tracking_db_channel_id is not None if 'tracking_db_channel_id' in dir() else False,
                             'tracking_channel': tracking_discord_id if 'tracking_discord_id' in dir() else None,
                             'risk_management': {

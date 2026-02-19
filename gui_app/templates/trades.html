@@ -2051,7 +2051,7 @@ async function qtExecute(idx, optType, side) {
         });
         const result = await r.json();
         if (result.success) {
-            showToast(`${actionLabel} filled: ${qty}x ${symbol} $${strikeD}${optType[0]} @ $${price.toFixed(2)}`, 'success');
+            showToast(`${actionLabel} submitted: ${qty}x ${symbol} $${strikeD}${optType[0]} @ $${price.toFixed(2)} — order pending fill`, 'success');
             if (trackingChannel) {
                 qtSendWebhookForOrder(actionLabel, symbol, s.strike, optType, expiry, price, qty);
             }
