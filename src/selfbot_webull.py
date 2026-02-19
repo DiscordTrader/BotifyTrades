@@ -6508,7 +6508,7 @@ class SelfClient(discord.Client):
                     'client_id': schwab_creds.get('client_id'),
                     'client_secret': schwab_creds.get('client_secret'),
                     'redirect_uri': schwab_creds.get('redirect_uri', 'https://127.0.0.1'),
-                    'dry_run': schwab_creds.get('dry_run', True)
+                    'dry_run': schwab_creds.get('dry_run', False)
                 })
                 
                 # Add timeout to prevent blocking
@@ -6519,7 +6519,7 @@ class SelfClient(discord.Client):
                     self.schwab_broker = None
                     connected = False
                 if connected:
-                    mode = "PAPER" if schwab_creds.get('dry_run', True) else "LIVE"
+                    mode = "PAPER" if schwab_creds.get('dry_run', False) else "LIVE"
                     _original_print(f"[SCHWAB] ✓ Connected successfully ({mode})", flush=True)
                     try:
                         from gui_app.database import update_broker_connection_status
@@ -13616,7 +13616,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[MULTI-BROKER] Queuing Robinhood LIVE broker (WARNING: NO PAPER MODE)")
                         # Charles Schwab: 'schwab', 'SCHWAB', 'schwab_live', 'SCHWAB_LIVE', 'schwab_paper', 'SCHWAB_PAPER'
                         elif broker_name_lower in ('schwab', 'schwab_live', 'schwab_paper') and self.schwab_broker and self.schwab_broker.connected:
-                            is_paper = getattr(self.schwab_broker, 'dry_run', True)
+                            is_paper = getattr(self.schwab_broker, 'dry_run', False)
                             mode = "PAPER" if is_paper else "LIVE"
                             broker_instance = self.schwab_broker
                             _original_print(f"[MULTI-BROKER] Queuing Schwab {mode} broker")

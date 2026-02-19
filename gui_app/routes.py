@@ -3674,7 +3674,7 @@ def register_routes(app):
                 'client_id': creds.get('client_id'),
                 'client_secret': creds.get('client_secret'),
                 'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
-                'dry_run': creds.get('dry_run', True)
+                'dry_run': creds.get('dry_run', False)
             }
             
             broker = SchwabBroker(config)
@@ -3877,7 +3877,7 @@ def register_routes(app):
                 'client_id': creds.get('client_id'),
                 'client_secret': creds.get('client_secret'),
                 'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
-                'dry_run': creds.get('dry_run', True)
+                'dry_run': creds.get('dry_run', False)
             }
             
             broker = SchwabBroker(config)
@@ -15184,7 +15184,7 @@ def register_routes(app):
             broker_status['schwab'] = {
                 'connected': schwab_connected,
                 'status': 'connected' if schwab_connected else ('configured' if schwab_configured else 'not_configured'),
-                'account_type': 'PAPER' if (schwab_creds.get('dry_run', True) if schwab_creds else True) else 'LIVE',
+                'account_type': 'PAPER' if (schwab_creds.get('dry_run', False) if schwab_creds else True) else 'LIVE',
                 'buying_power': schwab_buying_power,
                 'positions': schwab_positions,
                 'token_expiry': schwab_token_expiry,
