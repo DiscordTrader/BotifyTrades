@@ -1654,8 +1654,8 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
                     response_parts.append(line)
                 response_parts.append("")
             
-            recent_timeline = events[:10]
-            response_parts.append("**Recent Timeline:**")
+            recent_timeline = sorted(events[:10], key=lambda e: e.get('timestamp') or '0000-00-00')
+            response_parts.append("**Recent Timeline (chronological):**")
             for evt in recent_timeline:
                 response_parts.append(_format_event_row(evt))
             if total > 10:
@@ -1691,14 +1691,19 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
             if trades:
                 symbol_trades = [t for t in trades if symbol.upper() in (t.get('symbol', '') or '').upper()]
                 if symbol_trades:
-                    response_parts.append(f"**Trade History** ({len(symbol_trades)} trades):")
-                    for t in symbol_trades[:8]:
+                    symbol_trades_sorted = sorted(
+                        symbol_trades,
+                        key=lambda t: t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '0000-00-00'
+                    )
+                    display_trades = symbol_trades_sorted[-8:]
+                    response_parts.append(f"**Trade History** ({len(symbol_trades)} trades, chronological):")
+                    for t in display_trades:
                         action = t.get('action', t.get('side', '?'))
                         qty = t.get('quantity', t.get('qty', 0))
                         price = t.get('price', t.get('fill_price', 0))
                         status = t.get('status', '')
                         broker = t.get('broker', '')
-                        ts = (t.get('filled_at') or t.get('created_at') or '')[:16]
+                        ts = (t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '')[:16]
                         line = f"- [{ts}] {action} x{qty} @ ${price}"
                         if status:
                             line += f" [{status}]"
