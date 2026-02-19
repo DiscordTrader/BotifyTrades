@@ -8272,7 +8272,59 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             elif market == 'INDIA' and order.get('lots'):
                                 signal['qty'] = int(order['lots'])
                             else:
-                                signal['qty'] = 1
+                                # No explicit sizing - apply tiered default for conditional orders
+                                # (channel position_size_pct → channel default_qty → global default → max_position_size → 1)
+                                conditional_qty = 1
+                                try:
+                                    cond_ch = None
+                                    if channel_id:
+                                        try:
+                                            cond_ch = get_channel_by_discord_id(str(channel_id))
+                                        except Exception:
+                                            pass
+                                    if cond_ch:
+                                        ch_position_size_pct = cond_ch.get('position_size_pct')
+                                        ch_default_qty = cond_ch.get('default_quantity')
+                                        if ch_position_size_pct:
+                                            signal['_position_size_pct'] = float(ch_position_size_pct)
+                                            signal['_pct_from_channel'] = True
+                                            signal['_calculate_qty'] = True
+                                            sys.stderr.write(f"[CONDITIONAL EXEC] Position sizing: channel {ch_position_size_pct}% (will calculate from buying power)\n")
+                                            sys.stderr.flush()
+                                        elif ch_default_qty:
+                                            conditional_qty = int(ch_default_qty)
+                                            sys.stderr.write(f"[CONDITIONAL EXEC] Using channel default qty: {conditional_qty}\n")
+                                            sys.stderr.flush()
+                                        else:
+                                            from gui_app.database import get_trading_settings
+                                            _trading_settings = get_trading_settings()
+                                            global_default_qty = _trading_settings.get('global_default_quantity')
+                                            if global_default_qty:
+                                                conditional_qty = int(global_default_qty)
+                                                sys.stderr.write(f"[CONDITIONAL EXEC] Using global default qty: {conditional_qty}\n")
+                                                sys.stderr.flush()
+                                            elif _trading_settings.get('max_position_size_enabled', True):
+                                                max_pos = _trading_settings['max_position_size']
+                                                sig_price = signal.get('price', 0) or 0
+                                                if sig_price > 0:
+                                                    conditional_qty = max(1, int(max_pos / sig_price))
+                                                    sys.stderr.write(f"[CONDITIONAL EXEC] Using max_position_size: {conditional_qty} ({max_pos}/{sig_price:.2f})\n")
+                                                    sys.stderr.flush()
+                                    else:
+                                        from gui_app.database import get_trading_settings
+                                        _trading_settings = get_trading_settings()
+                                        global_default_qty = _trading_settings.get('global_default_quantity')
+                                        if global_default_qty:
+                                            conditional_qty = int(global_default_qty)
+                                        elif _trading_settings.get('max_position_size_enabled', True):
+                                            max_pos = _trading_settings['max_position_size']
+                                            sig_price = signal.get('price', 0) or 0
+                                            if sig_price > 0:
+                                                conditional_qty = max(1, int(max_pos / sig_price))
+                                except Exception as sizing_err:
+                                    sys.stderr.write(f"[CONDITIONAL EXEC] Sizing error: {sizing_err}, defaulting to 1\n")
+                                    sys.stderr.flush()
+                                signal['qty'] = conditional_qty
                         
                         # Add stop loss and profit targets
                         import json
@@ -14455,13 +14507,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             order_id_val = resp.get('orderId')
                         elif hasattr(resp, 'order_id'):
                             order_id_val = resp.order_id
+                        executed_qty = signal.get('qty') or (resp.get('executed_qty') if isinstance(resp, dict) else None)
                         record_order_event(
                             'ORDER_PLACED',
                             symbol=signal.get('symbol'),
-                            broker=signal.get('broker', 'Unknown'),
+                            broker=broker_name or signal.get('broker', 'Unknown'),
                             direction=signal.get('action'),
                             asset_type=signal.get('asset') or signal.get('asset_type'),
-                            quantity=signal.get('qty'),
+                            quantity=executed_qty,
                             price=signal.get('price'),
                             order_id=str(order_id_val) if order_id_val else None,
                             channel_id=signal.get('channel_id'),
