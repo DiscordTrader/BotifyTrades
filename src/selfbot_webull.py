@@ -1930,6 +1930,9 @@ class WebullBroker:
         self._tokens_valid = False
         self.connected = False
         self._custom_credentials = credentials
+        self._option_id_cache = {}
+        self._option_id_cache_ttl = 300
+        self._token_refresh_task = None
     
     def is_authenticated(self) -> bool:
         """Check if Webull is actually authenticated (tokens valid).
@@ -1937,6 +1940,72 @@ class WebullBroker:
         This is different from '_logged_in' which may stay True after token expiration.
         """
         return self._tokens_valid and self._logged_in
+    
+    def cache_option_id(self, symbol: str, strike: float, expiry: str, option_type: str, option_id: str):
+        """Cache an option_id for faster exit order lookups"""
+        import time as _time
+        cache_key = f"{symbol}_{float(strike):.2f}_{expiry}_{option_type.upper()}"
+        self._option_id_cache[cache_key] = {
+            'option_id': option_id,
+            'cached_at': _time.time()
+        }
+        print(f"[{self.name}] [CACHE] Stored option_id={option_id} for {cache_key}")
+    
+    def get_cached_option_id(self, symbol: str, strike: float, expiry: str, option_type: str) -> str:
+        """Retrieve a cached option_id if still valid"""
+        import time as _time
+        cache_key = f"{symbol}_{float(strike):.2f}_{expiry}_{option_type.upper()}"
+        entry = self._option_id_cache.get(cache_key)
+        if entry and (_time.time() - entry['cached_at']) < self._option_id_cache_ttl:
+            print(f"[{self.name}] [CACHE] Hit for {cache_key} → option_id={entry['option_id']}")
+            return entry['option_id']
+        if entry:
+            del self._option_id_cache[cache_key]
+        return None
+    
+    def _start_proactive_token_refresh(self):
+        """Start background task to refresh tokens every 10 minutes during market hours"""
+        if self._token_refresh_task and not self._token_refresh_task.done():
+            return
+        try:
+            self._token_refresh_task = self.loop.create_task(self._proactive_refresh_loop())
+            print(f"[{self.name}] ✓ Proactive token refresh started (every 10 min during market hours)")
+        except Exception as e:
+            print(f"[{self.name}] Could not start proactive refresh: {e}")
+    
+    async def _proactive_refresh_loop(self):
+        """Background loop that refreshes tokens proactively to prevent mid-trade expiry"""
+        REFRESH_INTERVAL = 600
+        while self._logged_in and self._tokens_valid:
+            try:
+                await asyncio.sleep(REFRESH_INTERVAL)
+                if not self._logged_in or not self._tokens_valid:
+                    break
+                if self._is_market_hours_or_premarket():
+                    print(f"[{self.name}] [PROACTIVE] Refreshing trade token...")
+                    success = self._refresh_trade_token_sync()
+                    if success:
+                        print(f"[{self.name}] [PROACTIVE] ✓ Token refreshed successfully")
+                    else:
+                        print(f"[{self.name}] [PROACTIVE] ⚠️ Token refresh failed - will retry next cycle")
+            except asyncio.CancelledError:
+                print(f"[{self.name}] [PROACTIVE] Token refresh task cancelled")
+                break
+            except Exception as e:
+                print(f"[{self.name}] [PROACTIVE] Error in refresh loop: {e}")
+                await asyncio.sleep(60)
+    
+    def _is_market_hours_or_premarket(self) -> bool:
+        """Check if current time is within extended trading window (4 AM - 8 PM ET)"""
+        try:
+            from datetime import timezone, timedelta
+            et = timezone(timedelta(hours=-5))
+            now = datetime.now(et)
+            if now.weekday() >= 5:
+                return False
+            return 4 <= now.hour < 20
+        except Exception:
+            return True
     
     def _refresh_trade_token_sync(self) -> bool:
         """Synchronously refresh the Webull trade token when it expires.
@@ -2188,10 +2257,10 @@ class WebullBroker:
         self._client = await self.loop.run_in_executor(None, _blocking_login)
         if self._client is not None:
             self._logged_in = True
-            self._tokens_valid = True  # Tokens are valid after successful login
-            self.connected = True  # Mark as connected for broker health monitor
-            # Apply monkey-patch to fix the startTime date bug in webull library
+            self._tokens_valid = True
+            self.connected = True
             self._patch_order_history_urls(self._client)
+            self._start_proactive_token_refresh()
         else:
             self._logged_in = False
             self._tokens_valid = False
@@ -2881,6 +2950,14 @@ class WebullBroker:
             option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
             print(f"[WEBULL] ✓ Got option_id={option_id}, ticker_id={tId} for {symbol}")
             sys.stdout.flush()
+            if option_id and hasattr(self, 'cache_option_id'):
+                _yr = expiry_year or datetime.now().strftime('%Y')
+                if '/' in expiry_mmdd:
+                    _parts = expiry_mmdd.split('/')
+                    full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
+                else:
+                    full_expiry = expiry_mmdd
+                self.cache_option_id(symbol, float(strike), full_expiry, opt_type, str(option_id))
             side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
             
             adjusted_qty = qty
@@ -3256,10 +3333,25 @@ class WebullBroker:
             
             print(f"[DEBUG] Starting order placement for {action} {quantity} {symbol} ${strike}{opt_type} {expiry_mmdd}/{expiry_year} @{price}")
             
-            # Get option ID
             try:
-                option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
-                print(f"[DEBUG] ✓ Option ID resolved: {option_id}, tId: {tId}")
+                _yr = expiry_year or datetime.now().strftime('%Y')
+                if '/' in expiry_mmdd:
+                    _parts = expiry_mmdd.split('/')
+                    full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
+                else:
+                    full_expiry = expiry_mmdd
+                
+                cached_oid = self.get_cached_option_id(symbol, float(strike), full_expiry, opt_type)
+                
+                if cached_oid:
+                    option_id = int(cached_oid)
+                    tId = 0
+                    print(f"[DEBUG] ✓ Option ID from cache: {option_id} (fast exit)")
+                else:
+                    option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
+                    print(f"[DEBUG] ✓ Option ID resolved: {option_id}, tId: {tId}")
+                    if option_id:
+                        self.cache_option_id(symbol, float(strike), full_expiry, opt_type, str(option_id))
             except Exception as e:
                 print(f"[DEBUG] ✗ Failed to get option ID: {e}")
                 raise

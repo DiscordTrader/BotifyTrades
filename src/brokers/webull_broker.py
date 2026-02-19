@@ -26,7 +26,10 @@ class WebullBroker(BrokerInterface):
         self.name = "WEBULL"
         self.wb = None
         self.paper_trade = config.get('paper_trade', False)
-        self._tokens_valid = False  # Start as invalid until successful authentication
+        self._tokens_valid = False
+        self._token_refresh_task = None
+        self._option_id_cache = {}
+        self._option_id_cache_ttl = 300
     
     async def connect(self) -> bool:
         """Connect to Webull"""
@@ -51,15 +54,14 @@ class WebullBroker(BrokerInterface):
                 if did:
                     self.wb.did = did
                 
-                # Verify connection
                 account = await asyncio.to_thread(self.wb.get_account)
                 if account:
                     self.connected = True
                     self._tokens_valid = True
                     print(f"[{self.name}] ✓ Connected successfully (token auth)")
+                    self._start_proactive_token_refresh()
                     return True
             
-            # Fall back to username/password
             username = self.config.get('username')
             password = self.config.get('password')
             
@@ -73,6 +75,7 @@ class WebullBroker(BrokerInterface):
                     self.connected = True
                     self._tokens_valid = True
                     print(f"[{self.name}] ✓ Connected successfully (password auth)")
+                    self._start_proactive_token_refresh()
                     return True
             
             print(f"[{self.name}] ❌ Failed to connect - no valid credentials")
@@ -84,8 +87,16 @@ class WebullBroker(BrokerInterface):
     
     async def disconnect(self):
         """Disconnect from Webull"""
+        if self._token_refresh_task and not self._token_refresh_task.done():
+            self._token_refresh_task.cancel()
+            try:
+                await self._token_refresh_task
+            except asyncio.CancelledError:
+                pass
+        self._token_refresh_task = None
         self.connected = False
         self._tokens_valid = False
+        self._option_id_cache.clear()
         print(f"[{self.name}] Disconnected")
     
     def is_authenticated(self) -> bool:
@@ -165,6 +176,79 @@ class WebullBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Token refresh error: {e}")
             return False
+    
+    def _start_proactive_token_refresh(self):
+        """Start background task to refresh tokens every 10 minutes during market hours"""
+        if self._token_refresh_task and not self._token_refresh_task.done():
+            return
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                self._token_refresh_task = loop.create_task(self._proactive_refresh_loop())
+            else:
+                self._token_refresh_task = asyncio.ensure_future(self._proactive_refresh_loop())
+            print(f"[{self.name}] ✓ Proactive token refresh started (every 10 min during market hours)")
+        except Exception as e:
+            print(f"[{self.name}] Could not start proactive refresh: {e}")
+    
+    async def _proactive_refresh_loop(self):
+        """Background loop that refreshes tokens proactively to prevent mid-trade expiry"""
+        REFRESH_INTERVAL = 600
+        while self.connected and self._tokens_valid:
+            try:
+                await asyncio.sleep(REFRESH_INTERVAL)
+                
+                if not self.connected or not self._tokens_valid:
+                    break
+                
+                if self._is_market_hours_or_premarket():
+                    print(f"[{self.name}] [PROACTIVE] Refreshing trade token...")
+                    success = await self._refresh_trade_token()
+                    if success:
+                        print(f"[{self.name}] [PROACTIVE] ✓ Token refreshed successfully")
+                    else:
+                        print(f"[{self.name}] [PROACTIVE] ⚠️ Token refresh failed - will retry next cycle")
+                        
+            except asyncio.CancelledError:
+                print(f"[{self.name}] [PROACTIVE] Token refresh task cancelled")
+                break
+            except Exception as e:
+                print(f"[{self.name}] [PROACTIVE] Error in refresh loop: {e}")
+                await asyncio.sleep(60)
+    
+    def _is_market_hours_or_premarket(self) -> bool:
+        """Check if current time is within extended trading window (4 AM - 8 PM ET)"""
+        try:
+            from datetime import timezone, timedelta
+            et = timezone(timedelta(hours=-5))
+            now = datetime.now(et)
+            if now.weekday() >= 5:
+                return False
+            hour = now.hour
+            return 4 <= hour < 20
+        except Exception:
+            return True
+    
+    def cache_option_id(self, symbol: str, strike: float, expiry: str, option_type: str, option_id: str):
+        """Cache an option_id for faster exit order lookups"""
+        import time
+        cache_key = f"{symbol}_{strike}_{expiry}_{option_type.upper()}"
+        self._option_id_cache[cache_key] = {
+            'option_id': option_id,
+            'cached_at': time.time()
+        }
+    
+    def get_cached_option_id(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[str]:
+        """Retrieve a cached option_id if still valid"""
+        import time
+        cache_key = f"{symbol}_{strike}_{expiry}_{option_type.upper()}"
+        entry = self._option_id_cache.get(cache_key)
+        if entry and (time.time() - entry['cached_at']) < self._option_id_cache_ttl:
+            return entry['option_id']
+        if entry:
+            del self._option_id_cache[cache_key]
+        return None
     
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information"""
@@ -358,6 +442,12 @@ class WebullBroker(BrokerInterface):
                         except:
                             expiry_mmdd = expiry
                     
+                    opt_id_val = pos.get('optionId', 0)
+                    opt_direction = 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else '')
+                    
+                    if opt_id_val and expiry and opt_direction:
+                        self.cache_option_id(symbol, strike, expiry, opt_direction, str(opt_id_val))
+                    
                     positions.append({
                         'asset': 'option',
                         'symbol': symbol,
@@ -365,11 +455,11 @@ class WebullBroker(BrokerInterface):
                         'avg_cost': float(pos.get('costPrice', 0)),
                         'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
                         'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
-                        'option_id': pos.get('optionId', 0),
+                        'option_id': opt_id_val,
                         'strike': strike,
                         'expiry': expiry_mmdd,
                         'expiry_full': expiry,
-                        'direction': 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else ''),
+                        'direction': opt_direction,
                         'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
                     })
                 else:
