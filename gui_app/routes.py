@@ -5803,9 +5803,8 @@ def register_routes(app):
             
             # ========== ALPACA BROKER CLOSE ==========
             if 'ALPACA' in broker:
-                print(f"[API] Routing to Alpaca broker for close...")
+                print(f"[API] Routing to Alpaca broker for close (direct SDK)...")
                 
-                # Get quantity from trade or request
                 trade_qty = int(trade.get('quantity') or 1)
                 quantity_to_close = trade_qty
                 if requested_quantity is not None:
@@ -5814,12 +5813,14 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         pass
                 
-                # For Alpaca options, construct OCC symbol
+                alpaca_broker = getattr(_bot_instance, 'paper_broker', None)
+                if not alpaca_broker or not hasattr(alpaca_broker, 'trading_client'):
+                    return jsonify({'success': False, 'error': 'Alpaca broker not initialized'}), 500
+                
+                close_symbol = symbol
                 if asset_type == 'option':
-                    # Build OCC symbol: TSLA251219C00502500
                     try:
                         from datetime import datetime
-                        # Parse expiry - handle various formats
                         exp_str = expiry or ''
                         if '/' in exp_str:
                             parts = exp_str.split('/')
@@ -5834,62 +5835,70 @@ def register_routes(app):
                         else:
                             return jsonify({'success': False, 'error': f'Could not parse expiry: {expiry}'}), 400
                         
-                        # Format strike for OCC: 8 digits, price * 1000
                         strike_val = float(strike or 0)
                         strike_occ = str(int(strike_val * 1000)).zfill(8)
-                        
-                        occ_symbol = f"{symbol}{year}{month}{day}{call_put[0]}{strike_occ}"
-                        print(f"[CLOSE] Alpaca OCC symbol: {occ_symbol}")
-                        
-                        # Close via Alpaca broker
-                        async def _alpaca_close():
-                            return await _bot_instance.paper_broker.close_position(occ_symbol, quantity_to_close, requested_limit_price)
-                        
-                        future = asyncio.run_coroutine_threadsafe(_alpaca_close(), _bot_instance.loop)
-                        result = future.result(timeout=15)
-                        
-                        if result.success:
-                            # Update trade status in database
-                            db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
-                            return jsonify({
-                                'success': True,
-                                'message': f"Position closed: {quantity_to_close} {symbol} {strike}{call_put} @ {order_type}"
-                            })
-                        else:
-                            return jsonify({
-                                'success': False,
-                                'error': f'Alpaca close failed: {result.message}'
-                            }), 500
+                        close_symbol = f"{symbol}{year}{month}{day}{call_put[0]}{strike_occ}"
+                        print(f"[CLOSE] Alpaca OCC symbol: {close_symbol}")
                     except Exception as e:
-                        print(f"[CLOSE] Alpaca option close error: {e}")
-                        import traceback
-                        traceback.print_exc()
                         return jsonify({'success': False, 'error': f'Alpaca close error: {str(e)}'}), 500
-                else:
-                    # Stock close on Alpaca
-                    async def _alpaca_close_stock():
-                        return await _bot_instance.paper_broker.close_position(symbol, quantity_to_close, requested_limit_price)
+                
+                def _alpaca_close_direct():
+                    tc = alpaca_broker.trading_client
+                    try:
+                        position = tc.get_open_position(close_symbol)
+                    except Exception:
+                        return {'success': False, 'error': f'No open position found for {close_symbol}'}
+                    if not position:
+                        return {'success': False, 'error': f'No position found for {close_symbol}'}
                     
-                    future = asyncio.run_coroutine_threadsafe(_alpaca_close_stock(), _bot_instance.loop)
-                    result = future.result(timeout=15)
+                    position_qty = float(position.qty)
+                    is_short = position_qty < 0
+                    abs_qty = abs(int(position_qty))
+                    qty = quantity_to_close if quantity_to_close else abs_qty
                     
-                    if result.success:
-                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
-                        return jsonify({
-                            'success': True,
-                            'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"
-                        })
+                    if qty == abs_qty and requested_limit_price is None:
+                        result = tc.close_position(close_symbol)
+                        if result:
+                            return {'success': True, 'fill_price': 0, 'message': f'Closed {qty} {close_symbol}'}
                     else:
-                        return jsonify({
-                            'success': False,
-                            'error': f'Alpaca close failed: {result.message}'
-                        }), 500
+                        from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest
+                        from alpaca.trading.enums import OrderSide, TimeInForce
+                        side = OrderSide.BUY if is_short else OrderSide.SELL
+                        import re
+                        is_opt = hasattr(position, 'asset_class') and 'option' in str(getattr(position, 'asset_class', '')).lower()
+                        if not is_opt:
+                            is_opt = bool(re.match(r'^[A-Z]{1,6}\d{6}[CP]\d{8}$', close_symbol))
+                        tif = TimeInForce.DAY if is_opt else TimeInForce.GTC
+                        if requested_limit_price:
+                            order_data = LimitOrderRequest(symbol=close_symbol, qty=qty, side=side, time_in_force=tif, limit_price=requested_limit_price)
+                        else:
+                            order_data = MarketOrderRequest(symbol=close_symbol, qty=qty, side=side, time_in_force=TimeInForce.DAY)
+                        result = tc.submit_order(order_data)
+                        if result:
+                            return {'success': True, 'fill_price': 0, 'order_id': str(result.id) if hasattr(result, 'id') else None}
+                    return {'success': False, 'error': 'Alpaca order submission failed'}
+                
+                try:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        result = executor.submit(_alpaca_close_direct).result(timeout=10)
+                    
+                    if result.get('success'):
+                        db.close_trade(trade_id, result.get('fill_price', 0) or requested_limit_price or 0, 'manual_close')
+                        return jsonify({'success': True, 'message': f"Position closed: {quantity_to_close} {close_symbol} @ {order_type}"})
+                    else:
+                        return jsonify({'success': False, 'error': result.get('error', 'Alpaca close failed')}), 500
+                except Exception as e:
+                    print(f"[CLOSE] Alpaca close error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return jsonify({'success': False, 'error': f'Alpaca close error: {str(e)}'}), 500
             
             # ========== ROBINHOOD BROKER CLOSE ==========
             if 'ROBINHOOD' in broker:
-                print(f"[API] Routing to Robinhood broker for close (LIVE ONLY)...")
+                print(f"[API] Routing to Robinhood broker for close (direct SDK)...")
                 
-                if not hasattr(_bot_instance, 'robinhood_broker') or not _bot_instance.robinhood_broker:
+                rh_broker = getattr(_bot_instance, 'robinhood_broker', None)
+                if not rh_broker:
                     return jsonify({'success': False, 'error': 'Robinhood broker not initialized'}), 500
                 
                 trade_qty = int(trade.get('quantity') or 1)
@@ -5900,33 +5909,52 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         pass
                 
-                try:
+                def _rh_close_direct():
+                    import robin_stocks.robinhood as rh
+                    extended_hours = rh_broker._get_extended_hours_enabled() if hasattr(rh_broker, '_get_extended_hours_enabled') else False
                     if asset_type == 'option':
-                        future = asyncio.run_coroutine_threadsafe(
-                            _bot_instance.robinhood_broker.place_option_order(
-                                symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price
-                            ),
-                            _bot_instance.loop
+                        expiry_date = rh_broker._normalize_expiry(expiry) if hasattr(rh_broker, '_normalize_expiry') else expiry
+                        opt_type = 'call' if str(call_put).upper().startswith('C') else 'put'
+                        price = requested_limit_price
+                        if not price or price <= 0:
+                            price = 0.01
+                        return rh.orders.order_sell_option_limit(
+                            positionEffect='close', creditOrDebit='credit',
+                            price=price, symbol=symbol, quantity=quantity_to_close,
+                            expirationDate=expiry_date, strike=float(strike or 0),
+                            optionType=opt_type, timeInForce='gtc'
                         )
                     else:
-                        future = asyncio.run_coroutine_threadsafe(
-                            _bot_instance.robinhood_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
-                            _bot_instance.loop
-                        )
+                        if requested_limit_price:
+                            return rh.orders.order_sell_limit(symbol=symbol, quantity=quantity_to_close, limitPrice=requested_limit_price, timeInForce='gtc', extendedHours=extended_hours)
+                        else:
+                            return rh.orders.order_sell_market(symbol=symbol, quantity=quantity_to_close, timeInForce='gtc', extendedHours=extended_hours)
+                
+                try:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(_rh_close_direct)
+                        raw_result = future.result(timeout=15)
                     
-                    result = future.result(timeout=30)
+                    success = False
+                    fill_price = 0
+                    error_msg = ''
+                    if hasattr(raw_result, 'success'):
+                        success = raw_result.success
+                        fill_price = getattr(raw_result, 'fill_price', 0) or 0
+                        error_msg = getattr(raw_result, 'message', '') or ''
+                    elif isinstance(raw_result, dict):
+                        if raw_result.get('id') or raw_result.get('order_id'):
+                            success = True
+                        elif raw_result.get('detail'):
+                            error_msg = raw_result['detail']
+                        else:
+                            success = True
                     
-                    if result and result.success:
-                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
-                        return jsonify({
-                            'success': True,
-                            'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"
-                        })
+                    if success:
+                        db.close_trade(trade_id, fill_price or requested_limit_price or 0, 'manual_close')
+                        return jsonify({'success': True, 'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
-                        return jsonify({
-                            'success': False,
-                            'error': f'Robinhood close failed: {result.message if result else "Unknown error"}'
-                        }), 500
+                        return jsonify({'success': False, 'error': f'Robinhood close failed: {error_msg or "Unknown error"}'}), 500
                 except Exception as e:
                     print(f"[CLOSE] Robinhood close error: {e}")
                     import traceback
@@ -5935,7 +5963,7 @@ def register_routes(app):
             
             # ========== SCHWAB BROKER CLOSE ==========
             if 'SCHWAB' in broker:
-                print(f"[API] Routing to Schwab broker for close...")
+                print(f"[API] Routing to Schwab broker for close (isolated loop)...")
                 schwab_broker = None
                 if hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
                     schwab_broker = _bot_instance.schwab_broker
@@ -5953,31 +5981,25 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         pass
                 
+                def _schwab_close_direct():
+                    loop = asyncio.new_event_loop()
+                    try:
+                        if asset_type == 'option':
+                            return loop.run_until_complete(schwab_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price))
+                        else:
+                            return loop.run_until_complete(schwab_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price))
+                    finally:
+                        loop.close()
+                
                 try:
-                    if asset_type == 'option':
-                        future = asyncio.run_coroutine_threadsafe(
-                            schwab_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
-                            _bot_instance.loop
-                        )
-                    else:
-                        future = asyncio.run_coroutine_threadsafe(
-                            schwab_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
-                            _bot_instance.loop
-                        )
-                    
-                    result = future.result(timeout=30)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        result = executor.submit(_schwab_close_direct).result(timeout=15)
                     
                     if result and result.success:
                         db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
-                        return jsonify({
-                            'success': True,
-                            'message': f"Schwab position closed: {quantity_to_close} {symbol} @ {order_type}"
-                        })
+                        return jsonify({'success': True, 'message': f"Schwab position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
-                        return jsonify({
-                            'success': False,
-                            'error': f'Schwab close failed: {result.message if result else "Unknown error"}'
-                        }), 500
+                        return jsonify({'success': False, 'error': f'Schwab close failed: {result.message if result else "Unknown error"}'}), 500
                 except Exception as e:
                     print(f"[CLOSE] Schwab close error: {e}")
                     import traceback
@@ -5986,7 +6008,7 @@ def register_routes(app):
             
             # ========== IBKR BROKER CLOSE ==========
             if 'IBKR' in broker or 'INTERACTIVE' in broker:
-                print(f"[API] Routing to IBKR broker for close...")
+                print(f"[API] Routing to IBKR broker for close (isolated loop)...")
                 ibkr_broker = None
                 if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
                     ibkr_broker = _bot_instance.ibkr_broker
@@ -6004,31 +6026,25 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         pass
                 
+                def _ibkr_close_direct():
+                    loop = asyncio.new_event_loop()
+                    try:
+                        if asset_type == 'option':
+                            return loop.run_until_complete(ibkr_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price))
+                        else:
+                            return loop.run_until_complete(ibkr_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price))
+                    finally:
+                        loop.close()
+                
                 try:
-                    if asset_type == 'option':
-                        future = asyncio.run_coroutine_threadsafe(
-                            ibkr_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
-                            _bot_instance.loop
-                        )
-                    else:
-                        future = asyncio.run_coroutine_threadsafe(
-                            ibkr_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
-                            _bot_instance.loop
-                        )
-                    
-                    result = future.result(timeout=30)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        result = executor.submit(_ibkr_close_direct).result(timeout=15)
                     
                     if result and result.success:
                         db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
-                        return jsonify({
-                            'success': True,
-                            'message': f"IBKR position closed: {quantity_to_close} {symbol} @ {order_type}"
-                        })
+                        return jsonify({'success': True, 'message': f"IBKR position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
-                        return jsonify({
-                            'success': False,
-                            'error': f'IBKR close failed: {result.message if result else "Unknown error"}'
-                        }), 500
+                        return jsonify({'success': False, 'error': f'IBKR close failed: {result.message if result else "Unknown error"}'}), 500
                 except Exception as e:
                     print(f"[CLOSE] IBKR close error: {e}")
                     import traceback
@@ -6037,7 +6053,7 @@ def register_routes(app):
             
             # ========== TASTYTRADE BROKER CLOSE ==========
             if 'TASTYTRADE' in broker or 'TASTY' in broker:
-                print(f"[API] Routing to Tastytrade broker for close...")
+                print(f"[API] Routing to Tastytrade broker for close (isolated loop)...")
                 tt_broker = None
                 if hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
                     tt_broker = _bot_instance.tastytrade_broker
@@ -6055,230 +6071,235 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         pass
                 
+                def _tt_close_direct():
+                    loop = asyncio.new_event_loop()
+                    try:
+                        if asset_type == 'option':
+                            return loop.run_until_complete(tt_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price))
+                        else:
+                            return loop.run_until_complete(tt_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price))
+                    finally:
+                        loop.close()
+                
                 try:
-                    if asset_type == 'option':
-                        future = asyncio.run_coroutine_threadsafe(
-                            tt_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
-                            _bot_instance.loop
-                        )
-                    else:
-                        future = asyncio.run_coroutine_threadsafe(
-                            tt_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
-                            _bot_instance.loop
-                        )
-                    
-                    result = future.result(timeout=30)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        result = executor.submit(_tt_close_direct).result(timeout=15)
                     
                     if result and result.success:
                         db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
-                        return jsonify({
-                            'success': True,
-                            'message': f"Tastytrade position closed: {quantity_to_close} {symbol} @ {order_type}"
-                        })
+                        return jsonify({'success': True, 'message': f"Tastytrade position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
-                        return jsonify({
-                            'success': False,
-                            'error': f'Tastytrade close failed: {result.message if result else "Unknown error"}'
-                        }), 500
+                        return jsonify({'success': False, 'error': f'Tastytrade close failed: {result.message if result else "Unknown error"}'}), 500
                 except Exception as e:
                     print(f"[CLOSE] Tastytrade close error: {e}")
                     import traceback
                     traceback.print_exc()
                     return jsonify({'success': False, 'error': f'Tastytrade close error: {str(e)}'}), 500
             
-            # ========== WEBULL BROKER CLOSE (original logic / fallback) ==========
-            print(f"[API] Entering Webull close section for {symbol}", flush=True)
+            # ========== WEBULL BROKER CLOSE (direct SDK - zero event loop) ==========
+            print(f"[API] Entering Webull close section for {symbol} (direct SDK)", flush=True)
             
-            # For options, we need the optionId to match positions
-            # The trades table might not have option_id, so get it from live positions
             option_id = trade.get('option_id')
             print(f"[API] option_id from trade: {option_id}, asset_type: {asset_type}", flush=True)
             
-            # If option_id is missing from database, get it from live broker positions
-            if asset_type == 'option' and not option_id:
-                print(f"[API] option_id missing in database, fetching from live positions...", flush=True)
-                print(f"[API] Looking for: symbol={symbol}, strike={strike}, expiry={expiry}, call_put={call_put}", flush=True)
-                positions_future = asyncio.run_coroutine_threadsafe(
-                    _get_webull_positions(),
-                    _bot_instance.loop
-                )
-                live_positions = positions_future.result(timeout=10) or []
+            wb_broker = getattr(_bot_instance, 'broker', None)
+            if not wb_broker:
+                return jsonify({'success': False, 'error': 'Webull broker not initialized'}), 500
+            wb = getattr(wb_broker, '_client', None) or getattr(wb_broker, 'wb', None)
+            if not wb:
+                return jsonify({'success': False, 'error': 'Webull client not available'}), 500
+            
+            def _webull_close_all_in_one():
+                """Single synchronous function: lookup + validate + check pending + close"""
+                import requests as req_lib
+                import uuid
+                import time as time_mod
                 
-                # Normalize DB values for comparison
-                db_strike = float(strike) if strike else 0
-                db_call_put = str(call_put).upper()[0] if call_put else ''  # 'C' or 'P'
+                _option_id = option_id
                 
-                # Find the position by symbol + strike + call/put (expiry format varies too much)
-                for pos in live_positions:
-                    pos_asset = (pos.get('asset') or '').lower()
-                    if pos_asset != 'option':
-                        continue
-                    if pos.get('symbol') != symbol:
-                        continue
+                # Step 1: If option and no option_id, find it from live positions
+                if asset_type == 'option' and not _option_id:
+                    print(f"[WEBULL-CLOSE] Looking up option_id from live positions...", flush=True)
+                    try:
+                        account = wb.get_account()
+                        positions = (account or {}).get('positions', []) or []
+                    except Exception as e:
+                        return {'success': False, 'error': f'Failed to fetch positions: {e}'}
                     
-                    # Normalize position values
-                    pos_strike = float(pos.get('strike') or 0)
-                    pos_direction = str(pos.get('direction') or '').upper()
-                    if pos_direction in ['CALL', 'C']:
-                        pos_direction = 'C'
-                    elif pos_direction in ['PUT', 'P']:
-                        pos_direction = 'P'
+                    db_strike = float(strike) if strike else 0
+                    db_call_put = str(call_put).upper()[0] if call_put else ''
                     
-                    print(f"[API] Checking option: strike={pos_strike} vs {db_strike}, dir={pos_direction} vs {db_call_put}, option_id={pos.get('option_id')}", flush=True)
+                    for p in positions:
+                        p_asset = (p.get('assetType') or '').lower()
+                        if p_asset != 'option':
+                            continue
+                        ticker_data = p.get('ticker', {}) or {}
+                        pos_symbol = ticker_data.get('symbol', '')
+                        if pos_symbol != symbol:
+                            continue
+                        pos_strike = float(ticker_data.get('strikePrice', 0) or 0)
+                        pos_direction = str(ticker_data.get('direction', '') or '').upper()
+                        if pos_direction in ['CALL', 'C']:
+                            pos_direction = 'C'
+                        elif pos_direction in ['PUT', 'P']:
+                            pos_direction = 'P'
+                        
+                        if abs(pos_strike - db_strike) < 0.01 and pos_direction == db_call_put:
+                            _option_id = p.get('tickerId')
+                            print(f"[WEBULL-CLOSE] Found option_id={_option_id}", flush=True)
+                            break
                     
-                    # Match by symbol + strike + call/put
-                    if abs(pos_strike - db_strike) < 0.01 and pos_direction == db_call_put:
-                        option_id = pos.get('option_id')
-                        print(f"[API] FOUND option_id={option_id} from live positions!", flush=True)
-                        break
+                    if not _option_id:
+                        return {'success': False, 'error': f'Could not find option_id for {symbol} {strike}{call_put}'}
                 
-                if not option_id:
-                    print(f"[API] No matching option found in {len(live_positions)} positions", flush=True)
-                    return jsonify({
-                        'success': False,
-                        'error': f'Could not find option_id for {symbol} {strike}{call_put} {expiry}'
-                    }), 404
-            
-            print(f"[API] About to fetch live positions for quantity check...", flush=True)
-            
-            # Get LIVE broker position to get actual quantity
-            # This prevents trying to close more contracts than exist
-            try:
-                positions_future = asyncio.run_coroutine_threadsafe(
-                    _get_webull_positions(),
-                    _bot_instance.loop
-                )
-                print(f"[API] Waiting for positions future (timeout=10s)...", flush=True)
-                live_positions = positions_future.result(timeout=10) or []
-                print(f"[API] Got {len(live_positions)} live positions", flush=True)
-            except Exception as pos_err:
-                print(f"[API] ERROR fetching positions: {pos_err}", flush=True)
-                import traceback
-                traceback.print_exc()
-                return jsonify({'success': False, 'error': f'Failed to fetch positions: {str(pos_err)}'}), 500
-            for i, pos in enumerate(live_positions):
-                print(f"[API] Position {i}: asset={pos.get('asset')}, symbol={pos.get('symbol')}, qty={pos.get('quantity')}", flush=True)
-            
-            # Find matching live position
-            live_quantity = None
-            for pos in live_positions:
-                if asset_type == 'option':
-                    # Match by optionId (stored as tickerId in Webull positions)
-                    pos_asset = (pos.get('asset') or '').lower()
-                    pos_option_id = pos.get('option_id')  # This is tickerId from Webull
-                    
-                    if pos_asset == 'option' and pos_option_id == option_id:
-                        print(f"[API] FOUND MATCH! option_id={option_id}", flush=True)
-                        live_quantity = int(pos.get('quantity', 0))
-                        break
-                else:
-                    # Stock - match by symbol only
-                    if pos.get('symbol') == symbol and pos.get('asset') == 'stock':
-                        print(f"[API] FOUND STOCK MATCH! {symbol}, qty={pos.get('quantity')}", flush=True)
-                        live_quantity = int(pos.get('quantity', 0))
-                        break
-            
-            print(f"[API] After position search: live_quantity={live_quantity}", flush=True)
-            
-            if live_quantity is None or live_quantity <= 0:
-                return jsonify({
-                    'success': False,
-                    'error': f'No live position found for {symbol}. Position may already be closed.'
-                }), 404
-            
-            # Use requested quantity if provided, otherwise use full live quantity
-            quantity_to_close = live_quantity
-            if requested_quantity is not None:
+                # Step 2: Get live quantity
                 try:
-                    requested_qty = int(requested_quantity)
-                    if requested_qty <= 0:
-                        return jsonify({'success': False, 'error': 'Quantity must be positive'}), 400
-                    if requested_qty > live_quantity:
-                        return jsonify({
-                            'success': False,
-                            'error': f'Cannot close {requested_qty}. Only {live_quantity} available.'
-                        }), 400
-                    quantity_to_close = requested_qty
-                except (ValueError, TypeError):
-                    return jsonify({'success': False, 'error': 'Invalid quantity format'}), 400
-            
-            print(f"[API] Closing {quantity_to_close} of {live_quantity} for {symbol}", flush=True)
-            
-            # ========== CRITICAL: CHECK FOR EXISTING PENDING ORDERS ==========
-            # This prevents duplicate SELL orders that accumulate at Webull
-            print(f"[API] Checking for existing pending SELL orders for {symbol}...", flush=True)
-            pending_orders_future = asyncio.run_coroutine_threadsafe(
-                _get_webull_open_orders(),
-                _bot_instance.loop
-            )
-            pending_orders = pending_orders_future.result(timeout=10) or []
-            
-            # Filter for SELL orders matching this position
-            matching_pending = []
-            for order in pending_orders:
-                # Match by symbol and action=SELL
-                if (order.get('symbol') == symbol and 
-                    order.get('action') == 'SELL' and
-                    order.get('status') in ['Submitted', 'Working', 'Pending', 'Accepted']):
-                    
-                    # For options, also check option_id if available
+                    account = wb.get_account()
+                    positions = (account or {}).get('positions', []) or []
+                except Exception as e:
+                    return {'success': False, 'error': f'Failed to fetch positions: {e}'}
+                
+                live_quantity = None
+                for p in positions:
                     if asset_type == 'option':
-                        if order.get('option_id') == option_id or order.get('ticker_id') == option_id:
-                            matching_pending.append(order)
+                        p_asset = (p.get('assetType') or '').lower()
+                        pos_ticker_id = p.get('tickerId')
+                        if p_asset == 'option' and str(pos_ticker_id) == str(_option_id) and float(p.get('position', 0)) > 0:
+                            live_quantity = int(float(p.get('position', 0)))
+                            break
                     else:
-                        matching_pending.append(order)
+                        ticker_data = p.get('ticker', {}) or {}
+                        if ticker_data.get('symbol') == symbol and (p.get('assetType') or '').lower() == 'stock':
+                            live_quantity = int(float(p.get('position', 0)))
+                            break
+                
+                if live_quantity is None or live_quantity <= 0:
+                    return {'success': False, 'error': f'No live position found for {symbol}. Position may already be closed.'}
+                
+                qty_to_close = live_quantity
+                if requested_quantity is not None:
+                    try:
+                        rq = int(requested_quantity)
+                        if rq <= 0:
+                            return {'success': False, 'error': 'Quantity must be positive'}
+                        if rq > live_quantity:
+                            return {'success': False, 'error': f'Cannot close {rq}. Only {live_quantity} available.'}
+                        qty_to_close = rq
+                    except (ValueError, TypeError):
+                        return {'success': False, 'error': 'Invalid quantity format'}
+                
+                # Step 3: Check pending orders
+                try:
+                    pending = wb.get_current_orders() or []
+                    for order in pending:
+                        order_action = (order.get('action') or '').upper()
+                        order_status = (order.get('status') or '').upper()
+                        if order_action != 'SELL' or order_status not in ['SUBMITTED', 'WORKING', 'PENDING', 'ACCEPTED', 'MANUALFILLED']:
+                            continue
+                        order_ticker_id = order.get('ticker', {}).get('tickerId')
+                        if asset_type == 'option' and str(order_ticker_id) == str(_option_id):
+                            oid = order.get('orderId', 'Unknown')
+                            return {'success': False, 'error': f'Pending SELL order already exists (ID: {oid}). Cancel it first in Pending Orders tab.'}
+                        elif asset_type == 'stock':
+                            order_sym = order.get('ticker', {}).get('symbol', '')
+                            if order_sym == symbol:
+                                oid = order.get('orderId', 'Unknown')
+                                return {'success': False, 'error': f'Pending SELL order already exists (ID: {oid}). Cancel it first in Pending Orders tab.'}
+                except Exception as pe:
+                    print(f"[WEBULL-CLOSE] Pending order check failed (non-fatal): {pe}", flush=True)
+                
+                # Step 4: Execute close
+                print(f"[WEBULL-CLOSE] Closing {qty_to_close} {symbol} (asset={asset_type})", flush=True)
+                
+                if asset_type == 'stock':
+                    if requested_limit_price:
+                        result = wb.place_order(stock=symbol, price=float(requested_limit_price), action='SELL', orderType='LMT', enforce='GTC', quant=qty_to_close)
+                    else:
+                        result = wb.place_order(stock=symbol, price=0, action='SELL', orderType='MKT', enforce='DAY', quant=qty_to_close)
+                    if isinstance(result, dict) and result.get('msg'):
+                        return {'success': False, 'error': f"Webull error: {result.get('msg')}"}
+                    return {'success': True, 'result': result, 'quantity': qty_to_close}
+                
+                elif asset_type == 'option':
+                    try:
+                        wb.get_trade_token(password=wb._trading_pin)
+                    except Exception:
+                        pass
+                    
+                    option_position = None
+                    for p in positions:
+                        if p.get('tickerId') == _option_id or str(p.get('tickerId')) == str(_option_id):
+                            option_position = p
+                            break
+                    
+                    if requested_limit_price:
+                        limit_price = float(requested_limit_price)
+                    else:
+                        last_price = float(
+                            (option_position or {}).get('lastPrice') or
+                            (option_position or {}).get('price') or
+                            (option_position or {}).get('avgPrice') or 0
+                        )
+                        limit_price = max(0.01, round(last_price * 0.95, 2)) if last_price > 0 else 0.01
+                    
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            headers = wb.build_req_headers(include_trade_token=True, include_time=True)
+                            api_payload = {
+                                'orderType': 'LMT',
+                                'serialId': str(uuid.uuid4()),
+                                'timeInForce': 'GTC',
+                                'orders': [{'quantity': int(qty_to_close), 'action': 'SELL', 'tickerId': int(_option_id), 'tickerType': 'OPTION'}],
+                                'lmtPrice': float(limit_price)
+                            }
+                            api_url = wb._urls.place_option_orders(wb._account_id)
+                            api_response = req_lib.post(api_url, json=api_payload, headers=headers, timeout=wb.timeout)
+                            
+                            if api_response.status_code == 200:
+                                return {'success': True, 'result': api_response.json(), 'quantity': qty_to_close}
+                            elif 'system is busy' in api_response.text.lower() and attempt < max_retries - 1:
+                                time_mod.sleep(2)
+                                continue
+                            else:
+                                break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                time_mod.sleep(1)
+                                continue
+                            break
+                    
+                    try:
+                        result = wb.place_order_option(optionId=int(_option_id), lmtPrice=float(limit_price), stpPrice=None, action='SELL', orderType='LMT', enforce='GTC', quant=int(qty_to_close))
+                        if result and isinstance(result, dict) and result.get('msg'):
+                            return {'success': False, 'error': f"Webull error: {result.get('msg')}"}
+                        return {'success': True, 'result': result, 'quantity': qty_to_close}
+                    except Exception as e:
+                        return {'success': False, 'error': f"Webull API error: {str(e)}"}
+                
+                return {'success': False, 'error': f'Unsupported asset_type: {asset_type}'}
             
-            if matching_pending:
-                # Found existing pending SELL orders - REJECT this request
-                order_count = len(matching_pending)
-                order_ids = [o.get('order_id', 'Unknown') for o in matching_pending]
-                print(f"[API] BLOCKED: Found {order_count} existing pending SELL order(s): {order_ids}", flush=True)
-                return jsonify({
-                    'success': False,
-                    'error': f'⚠️ Cannot close position - {order_count} pending SELL order(s) already exist.\n\nGo to "⏳ Pending Orders" tab and cancel existing orders first.\n\nOrder IDs: {", ".join(order_ids[:3])}'
-                }), 409  # 409 Conflict
-            
-            print(f"[API] ✓ No pending orders found, proceeding with Webull close...", flush=True)
-            # ==================================================================
-            
-            # Call the close position helper with quantity, optionId, and limit price
-            print(f"[API] Calling _close_webull_position(symbol={symbol}, qty={quantity_to_close}, asset_type={asset_type})...", flush=True)
             try:
-                future = asyncio.run_coroutine_threadsafe(
-                    _close_webull_position(symbol, quantity_to_close, asset_type, option_id=option_id, user_limit_price=requested_limit_price),
-                    _bot_instance.loop
-                )
-                print(f"[API] Waiting for close future (timeout=20s)...", flush=True)
-                result = future.result(timeout=20)
-                print(f"[API] Close result received: {result}", flush=True)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    result = executor.submit(_webull_close_all_in_one).result(timeout=20)
+                print(f"[API] Webull close result: {result}", flush=True)
             except Exception as close_err:
-                print(f"[API] ERROR in close call: {close_err}", flush=True)
+                print(f"[API] ERROR in Webull close: {close_err}", flush=True)
                 import traceback
                 traceback.print_exc()
                 return jsonify({'success': False, 'error': f'Close failed: {str(close_err)}'}), 500
             
             if result.get('success'):
-                # NOTE: We intentionally do NOT send STC webhook notification for manual GUI closes
-                # because it would create a feedback loop - the webhook message gets picked up
-                # by the signal parser and re-executes the trade again.
-                # STC notifications are only sent for signal-based exits from Discord.
-                
-                # Differentiate message based on order type
+                qty_closed = result.get('quantity', requested_quantity or 0)
                 if order_type == 'MARKET':
-                    message = f"Position closed: {quantity_to_close} {symbol} @ MARKET"
+                    message = f"Position closed: {qty_closed} {symbol} @ MARKET"
                 else:
-                    # Limit order - pending fill
-                    message = f"Limit order submitted: SELL {quantity_to_close} {symbol} @ ${requested_limit_price}\n\nOrder is pending fill. Check 'Pending Orders' tab for status."
-                
-                return jsonify({
-                    'success': True,
-                    'message': message
-                })
+                    message = f"Limit order submitted: SELL {qty_closed} {symbol} @ ${requested_limit_price}\n\nOrder is pending fill. Check 'Pending Orders' tab for status."
+                return jsonify({'success': True, 'message': message})
             else:
-                return jsonify({
-                    'success': False,
-                    'error': result.get('error', 'Failed to close position')
-                }), 500
+                error = result.get('error', 'Failed to close position')
+                status_code = 409 if 'pending' in error.lower() else (404 if 'not found' in error.lower() else 500)
+                return jsonify({'success': False, 'error': error}), status_code
         
         except Exception as e:
             print(f"[API] Error closing position by ID: {e}")
