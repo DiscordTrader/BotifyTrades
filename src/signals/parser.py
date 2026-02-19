@@ -332,7 +332,7 @@ CONDITIONAL_SL_PERCENT_PATTERN = re.compile(
 )
 
 CONDITIONAL_SL_FIXED_PATTERN = re.compile(
-    r'(?:SL|stop\s*loss|stop)\s*[:\s@]*\$?([\d.]+)(?!\s*%)',
+    r'(?:SL|stop\s*loss|stop)\s*[:\s@]*\$?(\d+(?:\.\d+)?)(?!\s*%)(?!\.\d)',
     re.IGNORECASE
 )
 
@@ -915,37 +915,46 @@ def parse_conditional_order_signal(text: str) -> Optional[Dict[str, Any]]:
         return None
     
     symbol = trigger_match.group(1).upper()
-    trigger_price = float(trigger_match.group(2))
+    try:
+        trigger_price = float(trigger_match.group(2))
+    except (ValueError, TypeError):
+        print(f"[PARSER] ⚠️ Invalid trigger price: '{trigger_match.group(2)}'")
+        return None
     
-    # Parse stop loss - check for hybrid first (e.g., "SL 8.15 or 6%")
     stop_loss_type = None
     stop_loss_value = None
     stop_loss_fixed = None
     stop_loss_pct = None
     
-    hybrid_sl_match = HYBRID_SL_PATTERN.search(text)
-    if hybrid_sl_match:
-        # Hybrid SL: both fixed and percent
-        fixed = hybrid_sl_match.group('fixed') or hybrid_sl_match.group('fixed_second')
-        pct = hybrid_sl_match.group('pct') or hybrid_sl_match.group('pct_first')
-        if fixed and pct:
-            stop_loss_type = 'hybrid'
-            stop_loss_fixed = float(fixed)
-            stop_loss_pct = float(pct)
-            stop_loss_value = stop_loss_fixed  # Primary value for backwards compatibility
-    
-    if not stop_loss_type:
-        sl_pct_match = CONDITIONAL_SL_PERCENT_PATTERN.search(text)
-        if sl_pct_match:
-            stop_loss_type = 'percent'
-            stop_loss_value = float(sl_pct_match.group(1))
-            stop_loss_pct = stop_loss_value
-        else:
-            sl_fixed_match = CONDITIONAL_SL_FIXED_PATTERN.search(text)
-            if sl_fixed_match:
-                stop_loss_type = 'fixed'
-                stop_loss_value = float(sl_fixed_match.group(1))
-                stop_loss_fixed = stop_loss_value
+    try:
+        hybrid_sl_match = HYBRID_SL_PATTERN.search(text)
+        if hybrid_sl_match:
+            fixed = hybrid_sl_match.group('fixed') or hybrid_sl_match.group('fixed_second')
+            pct = hybrid_sl_match.group('pct') or hybrid_sl_match.group('pct_first')
+            if fixed and pct:
+                stop_loss_type = 'hybrid'
+                stop_loss_fixed = float(fixed)
+                stop_loss_pct = float(pct)
+                stop_loss_value = stop_loss_fixed
+        
+        if not stop_loss_type:
+            sl_pct_match = CONDITIONAL_SL_PERCENT_PATTERN.search(text)
+            if sl_pct_match:
+                stop_loss_type = 'percent'
+                stop_loss_value = float(sl_pct_match.group(1))
+                stop_loss_pct = stop_loss_value
+            else:
+                sl_fixed_match = CONDITIONAL_SL_FIXED_PATTERN.search(text)
+                if sl_fixed_match:
+                    stop_loss_type = 'fixed'
+                    stop_loss_value = float(sl_fixed_match.group(1))
+                    stop_loss_fixed = stop_loss_value
+    except (ValueError, TypeError) as e:
+        print(f"[PARSER] ⚠️ Could not parse stop loss value (typo?): {e} - continuing without SL")
+        stop_loss_type = None
+        stop_loss_value = None
+        stop_loss_fixed = None
+        stop_loss_pct = None
     
     # Parse profit targets - check for ranges first (e.g., "first target 16.60-17")
     profit_targets = []
