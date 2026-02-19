@@ -343,26 +343,61 @@ async function loadTrades() {
     
     try {
         const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
-        const mergedResponse = await fetch(`/api/trades/merged${brokerParam}`).then(r => r.json());
-        const trades = mergedResponse.trades || [];
         
-        allTrades = trades;
-        if (!initialLoadDone) {
-            filterAndDisplayTrades();
-            initialLoadDone = true;
-        } else {
-            let filteredTrades = [];
-            if (currentTab === 'live') {
-                filteredTrades = allTrades.filter(t => t.status === 'OPEN' || t.source === 'live_brokerage');
-            } else if (currentTab === 'pending') {
-                filteredTrades = allTrades.filter(t => {
-                    const fillStatus = t.fill_status || '';
-                    const status = t.status || '';
-                    return status === 'PENDING' || fillStatus === 'Submitted' || fillStatus === 'Working' || fillStatus === 'Partially Filled';
-                });
+        if (currentTab === 'live' || currentTab === 'pending') {
+            const snapshotResponse = await fetch(`/api/trades/live-snapshot${brokerParam}`).then(r => r.json());
+            if (snapshotResponse.success) {
+                const positions = snapshotResponse.positions || [];
+                const pending = snapshotResponse.pending || [];
+                const prices = snapshotResponse.prices || {};
+                const riskStates = snapshotResponse.risk_states || {};
+                
+                if (currentTab === 'live') {
+                    allTrades = positions;
+                    currentTrades = positions;
+                } else {
+                    allTrades = pending;
+                    currentTrades = pending;
+                }
+                
+                if (!initialLoadDone) {
+                    displayTradesTable(currentTrades);
+                    initialLoadDone = true;
+                } else {
+                    updateTradesInPlace(currentTrades);
+                }
+                
+                updatePricesInTable(prices);
+                if (riskStates && Object.keys(riskStates).length > 0) {
+                    updateRiskBadges(riskStates);
+                }
+                updateStalenessIndicator(snapshotResponse.snapshot_age || 0);
+            } else {
+                console.warn('[TRADES] Snapshot failed, falling back to merged:', snapshotResponse.error);
+                const mergedResponse = await fetch(`/api/trades/merged${brokerParam}`).then(r => r.json());
+                allTrades = mergedResponse.trades || [];
+                filterAndDisplayTrades();
+                initialLoadDone = true;
             }
-            currentTrades = filteredTrades;
-            updateTradesInPlace(filteredTrades);
+        } else {
+            const mergedResponse = await fetch(`/api/trades/merged${brokerParam}`).then(r => r.json());
+            const trades = mergedResponse.trades || [];
+            allTrades = trades;
+            if (!initialLoadDone) {
+                filterAndDisplayTrades();
+                initialLoadDone = true;
+            } else {
+                let filteredTrades = [];
+                if (currentTab === 'filled') {
+                    filteredTrades = allTrades.filter(t => t.status === 'CLOSED' || t.status === 'FILLED');
+                } else if (currentTab === 'signals') {
+                    filteredTrades = allTrades;
+                } else {
+                    filteredTrades = allTrades;
+                }
+                currentTrades = filteredTrades;
+                updateTradesInPlace(filteredTrades);
+            }
         }
         updateSummaryStats();
         

@@ -33,7 +33,9 @@ _daemon_started = False
 
 
 def _log(msg: str):
-    print(f"[SNAPSHOT] {msg}", flush=True)
+    import sys
+    sys.stderr.write(f"[SNAPSHOT] {msg}\n")
+    sys.stderr.flush()
 
 
 def _make_position(
@@ -88,40 +90,66 @@ def _fetch_webull(bot) -> List[Dict]:
     try:
         if not hasattr(bot, 'broker') or bot.broker is None:
             return []
-        if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
-            return []
 
         broker = bot.broker
+        webull_broker = None
+        if hasattr(broker, 'brokers'):
+            webull_broker = broker.brokers.get('Webull')
+        elif hasattr(broker, 'wb'):
+            webull_broker = broker
 
-        async def _get_positions():
-            if hasattr(broker, 'brokers'):
-                webull_broker = broker.brokers.get('Webull')
-                if webull_broker and hasattr(webull_broker, 'get_positions_detailed'):
-                    return await webull_broker.get_positions_detailed()
-            elif hasattr(broker, 'get_positions_detailed'):
-                return await broker.get_positions_detailed()
+        if not webull_broker or not hasattr(webull_broker, 'wb'):
             return []
 
-        future = asyncio.run_coroutine_threadsafe(_get_positions(), bot.loop)
-        raw = future.result(timeout=10) or []
+        positions_raw = webull_broker.wb.get_positions() or []
 
         positions = []
-        for pos in raw:
-            qty = float(pos.get('quantity', 0))
-            avg_cost = float(pos.get('avg_cost', 0))
-            cur_price = float(pos.get('current_price', 0))
-            unrealized = float(pos.get('unrealized_pl', 0))
+        for pos in positions_raw:
+            position_qty = float(pos.get('position', 0))
+            if position_qty <= 0:
+                continue
+
+            symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+            asset_type = pos.get('assetType', 'unknown')
+            is_option = (
+                'optionId' in pos or
+                'strikePrice' in pos or
+                asset_type.lower() in ('option', 'opt')
+            )
+
+            strike = None
+            expiry = None
+            call_put = None
+            if is_option:
+                strike = float(pos.get('strikePrice', 0))
+                direction = pos.get('direction', '').upper()
+                call_put = 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else '')
+                raw_expiry = pos.get('expireDate', '')
+                if raw_expiry and '-' in raw_expiry:
+                    from datetime import datetime
+                    try:
+                        exp_date = datetime.strptime(raw_expiry, '%Y-%m-%d')
+                        expiry = exp_date.strftime('%m/%d')
+                    except Exception:
+                        expiry = raw_expiry
+                else:
+                    expiry = raw_expiry
+
+            avg_cost = float(pos.get('costPrice', 0))
+            cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
+            unrealized = (cur_price - avg_cost) * position_qty
+            if is_option:
+                unrealized *= 100
             pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
-            asset = pos.get('asset', 'stock')
 
             positions.append(_make_position(
-                pos_id=pos.get('position_id', f"WB_{pos.get('symbol', '')}"),
-                symbol=pos.get('symbol', ''),
-                asset_type='option' if asset == 'option' else 'stock',
-                strike=pos.get('strike'),
-                expiry=pos.get('expiry'),
-                call_put=pos.get('direction') or pos.get('call_put'),
-                quantity=qty,
+                pos_id=pos.get('position_id', f"WB_{symbol}"),
+                symbol=symbol,
+                asset_type='option' if is_option else 'stock',
+                strike=strike,
+                expiry=expiry,
+                call_put=call_put,
+                quantity=position_qty,
                 entry_price=avg_cost,
                 current_price=cur_price,
                 bid=float(pos.get('bid', 0)),
@@ -141,53 +169,44 @@ def _fetch_webull(bot) -> List[Dict]:
 
 def _fetch_alpaca(bot) -> List[Dict]:
     try:
-        if not hasattr(bot, 'paper_broker') or bot.paper_broker is None:
-            return []
-        if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
-            return []
+        paper_broker = None
+        if hasattr(bot, 'paper_broker') and bot.paper_broker is not None:
+            paper_broker = bot.paper_broker
+        elif hasattr(bot, 'broker') and hasattr(bot.broker, 'brokers'):
+            paper_broker = bot.broker.brokers.get('Alpaca') or bot.broker.brokers.get('ALPACA_PAPER')
 
-        paper_broker = bot.paper_broker
+        if not paper_broker:
+            return []
         if not hasattr(paper_broker, 'trading_client') or not paper_broker.trading_client:
             return []
 
-        async def _get_data():
-            def _blocking():
-                try:
-                    positions_raw = paper_broker.trading_client.get_all_positions()
-                    results = []
-                    for pos in positions_raw:
-                        symbol = str(getattr(pos, 'symbol', ''))
-                        qty = float(getattr(pos, 'qty', 0))
-                        avg_entry = float(getattr(pos, 'avg_entry_price', 0))
-                        current = float(getattr(pos, 'current_price', 0))
-                        unrealized = float(getattr(pos, 'unrealized_pl', 0))
-                        asset_class = str(getattr(pos, 'asset_class', 'us_equity')).lower()
-                        is_option = 'option' in asset_class
+        positions_raw = paper_broker.trading_client.get_all_positions()
+        results = []
+        for pos in positions_raw:
+            symbol = str(getattr(pos, 'symbol', ''))
+            qty = float(getattr(pos, 'qty', 0))
+            avg_entry = float(getattr(pos, 'avg_entry_price', 0))
+            current = float(getattr(pos, 'current_price', 0))
+            unrealized = float(getattr(pos, 'unrealized_pl', 0))
+            asset_class = str(getattr(pos, 'asset_class', 'us_equity')).lower()
+            is_option = 'option' in asset_class
 
-                        pnl_pct = ((current - avg_entry) / avg_entry * 100) if avg_entry > 0 else 0.0
+            pnl_pct = ((current - avg_entry) / avg_entry * 100) if avg_entry > 0 else 0.0
 
-                        results.append(_make_position(
-                            pos_id=str(getattr(pos, 'asset_id', f"ALP_{symbol}")),
-                            symbol=symbol,
-                            asset_type='option' if is_option else 'stock',
-                            quantity=qty,
-                            entry_price=avg_entry,
-                            current_price=current,
-                            last=current,
-                            unrealized_pnl=unrealized,
-                            pnl_pct=pnl_pct,
-                            broker='ALPACA_PAPER',
-                            source='live_brokerage',
-                        ))
-                    return results
-                except Exception as inner_e:
-                    _log(f"Alpaca blocking call error: {inner_e}")
-                    return []
-
-            return await asyncio.to_thread(_blocking)
-
-        future = asyncio.run_coroutine_threadsafe(_get_data(), bot.loop)
-        return future.result(timeout=10) or []
+            results.append(_make_position(
+                pos_id=str(getattr(pos, 'asset_id', f"ALP_{symbol}")),
+                symbol=symbol,
+                asset_type='option' if is_option else 'stock',
+                quantity=qty,
+                entry_price=avg_entry,
+                current_price=current,
+                last=current,
+                unrealized_pnl=unrealized,
+                pnl_pct=pnl_pct,
+                broker='ALPACA_PAPER',
+                source='live_brokerage',
+            ))
+        return results
     except Exception as e:
         _log(f"Alpaca fetch error: {e}")
         return []

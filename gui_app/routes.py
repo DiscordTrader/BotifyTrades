@@ -684,11 +684,19 @@ def set_bot_instance(bot: Any) -> None:
     """Set the bot instance for API access"""
     global _bot_instance
     _bot_instance = bot
+    import sys
+    sys.stdout.write("[SNAPSHOT] Attempting to start snapshot daemon...\n")
+    sys.stdout.flush()
     try:
-        from .live_snapshot import start_snapshot_daemon
+        from gui_app.live_snapshot import start_snapshot_daemon
         start_snapshot_daemon(bot, interval=5)
+        sys.stdout.write("[SNAPSHOT] ✓ Snapshot daemon started successfully\n")
+        sys.stdout.flush()
     except Exception as e:
-        print(f"[SNAPSHOT] Failed to start snapshot daemon: {e}")
+        sys.stdout.write(f"[SNAPSHOT] Failed to start snapshot daemon: {e}\n")
+        sys.stdout.flush()
+        import traceback
+        traceback.print_exc()
 
 def cached_api_call(cache_key: str, ttl: Optional[int] = None) -> Callable:
     """Decorator to cache API responses with TTL"""
@@ -3160,34 +3168,47 @@ def register_routes(app):
             return result
         
         try:
-            # Run async get_account in the bot's event loop
-            future = asyncio.run_coroutine_threadsafe(
-                _get_webull_account(),
-                _bot_instance.loop
-            )
-            account_data = future.result(timeout=10)
+            import concurrent.futures
+            
+            def _direct_webull_balance():
+                elapsed = time.time() - _startup_time
+                if elapsed < _startup_delay_seconds:
+                    return None
+                if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+                    return None
+                wb = getattr(_bot_instance.broker, '_client', None)
+                if not wb:
+                    return None
+                account_info = wb.get_account()
+                if isinstance(account_info, dict) and account_info.get('code') == 'auth.token.expire':
+                    return None
+                if not account_info:
+                    return None
+                buying_power = float(account_info.get('dayBuyingPower', 0) or account_info.get('usableCash', 0) or 0)
+                cash_balance = float(account_info.get('cashBalance', 0) or account_info.get('usableCash', 0) or 0)
+                net_liq = float(account_info.get('netLiquidation', 0) or account_info.get('totalMarketValue', 0) or 0)
+                total_pl = float(account_info.get('unrealizedProfitLoss', 0) or 0)
+                day_pl = float(account_info.get('dayProfitLoss', 0) or 0)
+                settled = float(account_info.get('settledCash', 0) or 0)
+                unsettled = float(account_info.get('unsettledCash', 0) or 0)
+                return {
+                    'buying_power': buying_power, 'cash_balance': cash_balance,
+                    'net_liquidation': net_liq, 'total_profit_loss': total_pl,
+                    'day_profit_loss': day_pl, 'settled_cash': settled,
+                    'unsettled_cash': unsettled, 'status': 'ok'
+                }
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                account_data = executor.submit(_direct_webull_balance).result(timeout=10)
             
             if account_data:
-                result = jsonify({
-                    'buying_power': account_data.get('buying_power', 0),
-                    'cash_balance': account_data.get('cash_balance', 0),
-                    'net_liquidation': account_data.get('net_liquidation', 0),
-                    'total_profit_loss': account_data.get('total_profit_loss', 0),
-                    'day_profit_loss': account_data.get('day_profit_loss', 0),
-                    'settled_cash': account_data.get('settled_cash', 0),
-                    'unsettled_cash': account_data.get('unsettled_cash', 0),
-                    'status': 'ok'
-                })
+                result = jsonify(account_data)
                 _api_cache[cache_key] = (result, time.time())
                 return result
             else:
                 result = jsonify({
-                    'buying_power': 0,
-                    'cash_balance': 0,
-                    'net_liquidation': 0,
-                    'total_profit_loss': 0,
-                    'day_profit_loss': 0,
-                    'status': 'loading'
+                    'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                    'total_profit_loss': 0, 'day_profit_loss': 0, 'status': 'loading'
                 })
                 _api_cache[cache_key] = (result, time.time())
                 return result
@@ -3199,13 +3220,9 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             result = jsonify({
-                'buying_power': 0,
-                'cash_balance': 0,
-                'net_liquidation': 0,
-                'total_profit_loss': 0,
-                'day_profit_loss': 0,
-                'status': 'error',
-                'error': f"{err_type}: {err_msg}"
+                'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                'total_profit_loss': 0, 'day_profit_loss': 0,
+                'status': 'error', 'error': f"{err_type}: {err_msg}"
             })
             _api_cache[cache_key] = (result, time.time())
             return result
@@ -3235,24 +3252,6 @@ def register_routes(app):
             return result
 
         if getattr(paper_broker, '_tokens_valid', True) is False:
-            if hasattr(paper_broker, 'get_account_info') and _bot_instance and hasattr(_bot_instance, 'loop'):
-                try:
-                    future = asyncio.run_coroutine_threadsafe(
-                        paper_broker.get_account_info(),
-                        _bot_instance.loop
-                    )
-                    acct_info = future.result(timeout=10)
-                    if acct_info and acct_info.get('buying_power', 0) > 0:
-                        result = jsonify({
-                            'buying_power': acct_info.get('buying_power', 0),
-                            'cash_balance': acct_info.get('cash', 0),
-                            'net_liquidation': acct_info.get('portfolio_value', 0),
-                            'total_profit_loss': 0, 'day_profit_loss': 0,
-                            'settled_cash': 0, 'unsettled_cash': 0, 'status': 'ok'
-                        })
-                        return result
-                except Exception:
-                    pass
             return jsonify({
                 'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
                 'total_profit_loss': 0, 'day_profit_loss': 0,
@@ -3376,30 +3375,6 @@ def register_routes(app):
                 _api_cache[cache_key] = (result, time.time())
                 return result
             
-            if paper_broker and hasattr(paper_broker, 'get_account_info') and _bot_instance and hasattr(_bot_instance, 'loop'):
-                try:
-                    future = asyncio.run_coroutine_threadsafe(
-                        paper_broker.get_account_info(),
-                        _bot_instance.loop
-                    )
-                    acct_info = future.result(timeout=10)
-                    if acct_info:
-                        fallback_data = {
-                            'buying_power': acct_info.get('buying_power', 0),
-                            'cash_balance': acct_info.get('cash', 0),
-                            'net_liquidation': acct_info.get('portfolio_value', 0),
-                            'total_profit_loss': 0,
-                            'day_profit_loss': 0,
-                            'settled_cash': 0,
-                            'unsettled_cash': 0,
-                            'status': 'ok'
-                        }
-                        result = jsonify(fallback_data)
-                        _api_cache[cache_key] = (result, time.time())
-                        return result
-                except Exception:
-                    pass
-            
             result = jsonify({
                 'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
                 'total_profit_loss': 0, 'day_profit_loss': 0,
@@ -3445,35 +3420,46 @@ def register_routes(app):
             return result
         
         try:
-            # Run async get paper account in the bot's event loop
-            future = asyncio.run_coroutine_threadsafe(
-                _get_paper_account_data(),
-                _bot_instance.loop
-            )
-            account_data = future.result(timeout=10)
+            import concurrent.futures
             
-            if account_data and account_data.get('balance'):
-                balance = account_data.get('balance', {})
-                result = jsonify({
-                    'buying_power': balance.get('buying_power', 0),
-                    'cash_balance': balance.get('cash_balance', 0),
-                    'net_liquidation': balance.get('net_liquidation', 0),
-                    'equity': balance.get('net_liquidation', 0),
-                    'unrealized_pnl': balance.get('unrealized_pnl', 0),
-                    'positions': account_data.get('positions', []),
-                    'orders': account_data.get('orders', []),
-                    'status': 'ok'
-                })
+            def _direct_alpaca_balance():
+                paper_broker = _bot_instance.paper_broker
+                if not hasattr(paper_broker, 'trading_client') or not paper_broker.trading_client:
+                    return None
+                try:
+                    from pydantic import ValidationError
+                    try:
+                        account = paper_broker.trading_client.get_account()
+                    except ValidationError:
+                        return None
+                    
+                    buying_power = float(account.buying_power)
+                    cash = float(account.cash)
+                    equity = float(account.equity)
+                    unrealized_pnl = 0.0
+                    if hasattr(account, 'unrealized_plpc') and account.unrealized_plpc:
+                        unrealized_pnl = float(equity) * (float(account.unrealized_plpc) / 100.0)
+                    
+                    return {
+                        'buying_power': buying_power, 'cash_balance': cash,
+                        'net_liquidation': equity, 'equity': equity,
+                        'unrealized_pnl': unrealized_pnl, 'status': 'ok'
+                    }
+                except Exception as inner_e:
+                    print(f"[API] Alpaca direct balance error: {inner_e}")
+                    return None
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                account_data = executor.submit(_direct_alpaca_balance).result(timeout=10)
+            
+            if account_data:
+                result = jsonify(account_data)
                 _api_cache[cache_key] = (result, time.time())
                 return result
             else:
                 result = jsonify({
-                    'buying_power': 0,
-                    'cash_balance': 0,
-                    'net_liquidation': 0,
-                    'equity': 0,
-                    'unrealized_pnl': 0,
-                    'status': 'loading'
+                    'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                    'equity': 0, 'unrealized_pnl': 0, 'status': 'loading'
                 })
                 _api_cache[cache_key] = (result, time.time())
                 return result
@@ -3772,13 +3758,25 @@ def register_routes(app):
                 if broker.connected:
                     import asyncio
                     
-                    # Use run_coroutine_threadsafe for proper async handling
                     try:
-                        account_future = asyncio.run_coroutine_threadsafe(
-                            broker.get_account_info(),
-                            _bot_instance.loop
-                        )
-                        account_info = account_future.result(timeout=10)
+                        import concurrent.futures
+                        def _rh_account():
+                            try:
+                                import robin_stocks.robinhood as r
+                                profile = r.profiles.load_account_profile()
+                                portfolio = r.profiles.load_portfolio_profile()
+                                return {
+                                    'buying_power': float(profile.get('buying_power', 0) if profile else 0),
+                                    'cash': float(profile.get('cash', 0) if profile else 0),
+                                    'portfolio_value': float(portfolio.get('equity', 0) if portfolio else 0),
+                                    'equity': float(portfolio.get('equity', 0) if portfolio else 0),
+                                    'unrealized_pnl': float(portfolio.get('equity', 0) or 0) - float(portfolio.get('adjusted_equity_previous_close', 0) or 0) if portfolio else 0,
+                                }
+                            except Exception as inner_e:
+                                print(f"[API] Robinhood direct account error: {inner_e}")
+                                return {}
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                            account_info = executor.submit(_rh_account).result(timeout=10)
                     except Exception as e:
                         print(f"[API] Robinhood account_info error: {e}")
                         account_info = {}
@@ -6563,7 +6561,7 @@ def register_routes(app):
         Returns cached data from background daemon thread (<50ms response).
         """
         try:
-            from .live_snapshot import get_live_snapshot, get_snapshot_age
+            from gui_app.live_snapshot import get_live_snapshot, get_snapshot_age
             snapshot = get_live_snapshot()
             broker_filter = request.args.get('broker', '').upper()
             
@@ -6598,7 +6596,7 @@ def register_routes(app):
             return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
         
         try:
-            from .live_snapshot import get_live_snapshot
+            from gui_app.live_snapshot import get_live_snapshot
             snapshot = get_live_snapshot()
             open_positions = [p for p in snapshot.get('positions', []) if p.get('status') in ('OPEN', None) or p.get('source') == 'live_brokerage']
             
@@ -6733,31 +6731,76 @@ def register_routes(app):
             broker_filter_upper = broker_filter.upper() if broker_filter else None
             
             if not broker_filter_upper or broker_filter_upper in ['WEBULL', 'WEBULL_PAPER']:
-                # Get live Webull positions AND open orders
-                positions_future = asyncio.run_coroutine_threadsafe(
-                    _get_webull_positions(),
-                    _bot_instance.loop
-                )
-                live_positions = positions_future.result(timeout=15)
+                import concurrent.futures
+                def _fetch_webull_positions_direct():
+                    try:
+                        if not hasattr(_bot_instance, 'broker') or not _bot_instance.broker:
+                            return [], []
+                        wb = getattr(_bot_instance.broker, '_client', None)
+                        if not wb:
+                            return [], []
+                        positions = wb.get_positions() or []
+                        orders = wb.get_current_orders() or []
+                        return positions, orders
+                    except Exception as e:
+                        print(f"[API] Direct Webull positions error: {e}")
+                        return [], []
                 
-                # Get Webull open orders to determine fill status
-                orders_future = asyncio.run_coroutine_threadsafe(
-                    _get_webull_open_orders(),
-                    _bot_instance.loop
-                )
-                webull_orders = orders_future.result(timeout=10) or []
-            
-            # Fetch Alpaca positions if broker filter is ALPACA or ALPACA_PAPER
-            if broker_filter_upper in ['ALPACA', 'ALPACA_PAPER']:
                 try:
-                    alpaca_future = asyncio.run_coroutine_threadsafe(
-                        _get_paper_account_data(),
-                        _bot_instance.loop
-                    )
-                    alpaca_data = alpaca_future.result(timeout=15)
-                    if alpaca_data:
-                        alpaca_positions = alpaca_data.get('positions', [])
-                        alpaca_orders = alpaca_data.get('orders', [])
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        wb_positions, wb_orders = executor.submit(_fetch_webull_positions_direct).result(timeout=10)
+                    live_positions = wb_positions or []
+                    webull_orders = wb_orders or []
+                except Exception as e:
+                    print(f"[API] Webull positions fetch error: {e}")
+            
+            if broker_filter_upper in ['ALPACA', 'ALPACA_PAPER']:
+                import concurrent.futures
+                def _fetch_alpaca_positions_direct():
+                    try:
+                        paper_broker = getattr(_bot_instance, 'paper_broker', None)
+                        if not paper_broker or not hasattr(paper_broker, 'trading_client'):
+                            return [], []
+                        positions_raw = paper_broker.trading_client.get_all_positions()
+                        positions = []
+                        for pos in positions_raw:
+                            qty = float(pos.qty)
+                            positions.append({
+                                'symbol': pos.symbol,
+                                'quantity': abs(qty),
+                                'raw_quantity': qty,
+                                'side': 'SHORT' if qty < 0 else 'LONG',
+                                'asset_type': 'stock',
+                                'avg_price': float(pos.avg_entry_price),
+                                'current_price': float(pos.current_price),
+                                'pnl': float(pos.unrealized_pl)
+                            })
+                        from alpaca.trading.enums import QueryOrderStatus
+                        from alpaca.trading.requests import GetOrdersRequest
+                        req = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+                        orders_raw = paper_broker.trading_client.get_orders(filter=req)
+                        orders = []
+                        for order in orders_raw:
+                            order_status = order.status.value.lower() if hasattr(order.status, 'value') else str(order.status).lower()
+                            if order_status in ('pending_cancel', 'canceled', 'cancelled', 'expired', 'rejected'):
+                                continue
+                            orders.append({
+                                'order_id': order.id,
+                                'symbol': order.symbol,
+                                'action': 'BUY' if order.side.value == 'buy' else 'SELL',
+                                'quantity': float(order.qty),
+                                'filled': float(order.filled_qty or 0),
+                                'status': order.status.value,
+                                'price': float(order.limit_price) if order.limit_price else 0
+                            })
+                        return positions, orders
+                    except Exception as e:
+                        print(f"[API] Direct Alpaca positions error: {e}")
+                        return [], []
+                
+                try:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        alpaca_positions, alpaca_orders = executor.submit(_fetch_alpaca_positions_direct).result(timeout=10)
                 except Exception as e:
                     print(f"[API] Error fetching Alpaca positions: {e}")
             
