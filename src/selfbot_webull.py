@@ -15267,7 +15267,8 @@ def run_bot_startup(progress_callback=None):
     # Guard: Prevent duplicate startup calls (critical for PyInstaller builds with lifecycle watchdog)
     if _startup_in_progress:
         _original_print("[STARTUP] ⚠️ DUPLICATE STARTUP BLOCKED - startup already in progress")
-        return None, None, None
+        default_port = int(os.environ.get('GUI_PORT', 5000))
+        return None, None, default_port
     _startup_in_progress = True
     _original_print("[STARTUP] ✓ Startup guard acquired (single instance)")
     
@@ -15716,7 +15717,7 @@ Environment Variables:
                     splash.close()
                     if startup_state['error'] is None:
                         tray = setup_system_tray()
-                        tray.web_panel_port = startup_state['gui_port']
+                        tray.web_panel_port = startup_state.get('gui_port') or 5000
                         tray.set_status("running", "Bot is active and monitoring signals")
                         tray.show_notification(
                             "BotifyTrades",
@@ -15727,7 +15728,8 @@ Environment Variables:
                         
                         import webbrowser
                         import subprocess
-                        url = f"http://localhost:{startup_state['gui_port']}"
+                        _gui_port = startup_state.get('gui_port') or 5000
+                        url = f"http://localhost:{_gui_port}"
                         _original_print(f"[GUI] Opening control panel in browser: {url}")
                         try:
                             if sys.platform == 'win32':

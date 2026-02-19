@@ -174,7 +174,8 @@ class TrayIconManager(QObject):
     def _open_web_panel(self):
         """Open the web control panel in browser"""
         import subprocess
-        url = f"http://localhost:{self.web_panel_port}"
+        port = self.web_panel_port or 5000
+        url = f"http://localhost:{port}"
         try:
             if sys.platform == 'win32':
                 subprocess.Popen(['cmd', '/c', 'start', '', url],
