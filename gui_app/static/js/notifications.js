@@ -497,7 +497,12 @@
                 giveback_guard: { icon: '🛡️', color: '#a855f7', label: 'GIVEBACK GUARD', accent: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.4)' },
                 broker_disconnect: { icon: '🔌', color: '#ef4444', label: 'DISCONNECTED', accent: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)' },
                 broker_reconnect: { icon: '✅', color: '#22c55e', label: 'RECONNECTED', accent: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)' },
-                early_trailing: { icon: '📈', color: '#06b6d4', label: 'EARLY TRAIL', accent: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.4)' }
+                early_trailing: { icon: '📈', color: '#06b6d4', label: 'EARLY TRAIL', accent: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.4)' },
+                risk_monitoring: { icon: '🔍', color: '#00f5ff', label: 'RISK ENGINE', accent: 'rgba(0, 245, 255, 0.12)', border: 'rgba(0, 245, 255, 0.3)' },
+                profit_locked: { icon: '🔒', color: '#22c55e', label: 'PROFIT LOCK', accent: 'rgba(34, 197, 94, 0.12)', border: 'rgba(34, 197, 94, 0.35)' },
+                profit_target: { icon: '🎯', color: '#30d158', label: 'TARGET HIT', accent: 'rgba(48, 209, 88, 0.12)', border: 'rgba(48, 209, 88, 0.35)' },
+                dynamic_sl: { icon: '📊', color: '#ff9500', label: 'SL ESCALATED', accent: 'rgba(255, 149, 0, 0.12)', border: 'rgba(255, 149, 0, 0.35)' },
+                position_closing: { icon: '🚪', color: '#ff3b30', label: 'CLOSING', accent: 'rgba(255, 59, 48, 0.12)', border: 'rgba(255, 59, 48, 0.35)' }
             };
             return configs[type] || { icon: '🔔', color: '#00F5FF', label: 'ALERT', accent: 'rgba(0, 245, 255, 0.15)', border: 'rgba(0, 245, 255, 0.4)' };
         },

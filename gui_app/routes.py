@@ -6411,6 +6411,19 @@ def register_routes(app):
             print(f"[API] Error updating risk settings: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/risk-status', methods=['GET'])
+    @login_required
+    def api_get_risk_status():
+        """Get live risk engine state for all monitored positions."""
+        try:
+            from src.risk.position_cache import get_position_cache
+            cache = get_position_cache()
+            states = cache.get_all_risk_states()
+            return jsonify({'success': True, 'risk_states': states})
+        except Exception as e:
+            print(f"[API] Error fetching risk status: {e}")
+            return jsonify({'success': False, 'risk_states': {}, 'error': str(e)})
+
     @app.route('/api/trades/merged', methods=['GET'])
     def get_merged_trades():
         """Get trades merged with live Webull positions"""

@@ -3,6 +3,60 @@
 {% block title %}Trades - Ψ∿ BotifyTrades{% endblock %}
 
 {% block content %}
+<style>
+.risk-badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 260px; }
+.risk-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.3px; white-space: nowrap; border: 1px solid;
+    transition: all 0.3s ease;
+}
+.risk-badge.rb-monitoring { background: rgba(0,245,255,0.08); color: #00f5ff; border-color: rgba(0,245,255,0.25); }
+.risk-badge.rb-sl { background: rgba(255,59,48,0.1); color: #ff3b30; border-color: rgba(255,59,48,0.3); }
+.risk-badge.rb-pt { background: rgba(48,209,88,0.1); color: #30d158; border-color: rgba(48,209,88,0.3); }
+.risk-badge.rb-pt-hit { background: rgba(48,209,88,0.25); color: #30d158; border-color: rgba(48,209,88,0.5); }
+.risk-badge.rb-trail-ready { background: rgba(175,130,255,0.08); color: rgba(175,130,255,0.5); border-color: rgba(175,130,255,0.15); }
+.risk-badge.rb-trail-active { background: rgba(175,130,255,0.18); color: #af82ff; border-color: rgba(175,130,255,0.4); animation: riskPulse 2s ease-in-out infinite; }
+.risk-badge.rb-early-ready { background: rgba(6,182,212,0.08); color: rgba(6,182,212,0.5); border-color: rgba(6,182,212,0.15); }
+.risk-badge.rb-early-breakeven { background: rgba(6,182,212,0.18); color: #06b6d4; border-color: rgba(6,182,212,0.4); animation: riskPulse 2s ease-in-out infinite; }
+.risk-badge.rb-early-profit { background: rgba(34,197,94,0.2); color: #22c55e; border-color: rgba(34,197,94,0.45); animation: riskPulse 1.5s ease-in-out infinite; }
+.risk-badge.rb-giveback-ready { background: rgba(251,191,36,0.08); color: rgba(251,191,36,0.5); border-color: rgba(251,191,36,0.15); }
+.risk-badge.rb-giveback-armed { background: rgba(251,191,36,0.2); color: #fbbf24; border-color: rgba(251,191,36,0.45); animation: riskPulse 2s ease-in-out infinite; }
+.risk-badge.rb-dynamic-sl { background: rgba(255,149,0,0.12); color: #ff9500; border-color: rgba(255,149,0,0.3); }
+.risk-badge.rb-closing { background: rgba(255,59,48,0.25); color: #ff3b30; border-color: rgba(255,59,48,0.5); animation: riskPulse 0.8s ease-in-out infinite; }
+.risk-badge .rb-dot {
+    width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+}
+.risk-badge.rb-monitoring .rb-dot { background: #00f5ff; box-shadow: 0 0 4px #00f5ff; }
+.risk-badge.rb-sl .rb-dot { background: #ff3b30; }
+.risk-badge.rb-pt .rb-dot { background: #30d158; }
+.risk-badge.rb-trail-active .rb-dot { background: #af82ff; box-shadow: 0 0 4px #af82ff; }
+.risk-badge.rb-early-breakeven .rb-dot { background: #06b6d4; box-shadow: 0 0 4px #06b6d4; }
+.risk-badge.rb-early-profit .rb-dot { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.risk-badge.rb-giveback-armed .rb-dot { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
+.risk-badge.rb-closing .rb-dot { background: #ff3b30; box-shadow: 0 0 6px #ff3b30; }
+@keyframes riskPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+.risk-tooltip {
+    position: relative; cursor: help;
+}
+.risk-tooltip .risk-tooltip-text {
+    visibility: hidden; opacity: 0;
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: #1a1d23; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
+    padding: 10px 14px; min-width: 220px; max-width: 300px; z-index: 1000;
+    font-size: 11px; color: #c9d1d9; line-height: 1.5; white-space: normal;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5); transition: all 0.2s ease;
+    pointer-events: none;
+}
+.risk-tooltip:hover .risk-tooltip-text { visibility: visible; opacity: 1; }
+.risk-tooltip-text .rtt-row { display: flex; justify-content: space-between; padding: 2px 0; }
+.risk-tooltip-text .rtt-label { color: #8b8fa3; }
+.risk-tooltip-text .rtt-value { color: #e6edf3; font-weight: 600; }
+.risk-tooltip-text .rtt-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 4px 0; }
+</style>
 <!-- Stats Summary -->
 <div class="stats-grid" style="margin-bottom: 24px;">
     <div class="stat-card">
@@ -378,8 +432,11 @@ function displayTradesTable(trades) {
         return;
     }
     
+    const isLiveTab = currentTab === 'live';
     let tableHTML = '<table class="data-table"><thead><tr>';
-    tableHTML += '<th>Symbol</th><th>Type</th><th>Qty</th><th>Entry</th><th>Current</th><th>P/L</th><th>P/L%</th><th>Status</th><th>Actions</th>';
+    tableHTML += '<th>Symbol</th><th>Type</th><th>Qty</th><th>Entry</th><th>Current</th><th>P/L</th><th>P/L%</th>';
+    if (isLiveTab) tableHTML += '<th style="min-width: 180px;">Risk Engine</th>';
+    tableHTML += '<th>Status</th><th>Actions</th>';
     tableHTML += '</tr></thead><tbody>';
     
     trades.forEach(trade => {
@@ -405,8 +462,17 @@ function displayTradesTable(trades) {
             <td>$${entry.toFixed(2)}</td>
             <td class="price-last">$${current.toFixed(2)}</td>
             <td class="${pnlClass} pnl-cash"><strong>$${pnl.toFixed(2)}</strong></td>
-            <td class="${pnlClass} pnl-percent">${pnlPercent.toFixed(1)}%</td>
-            <td><span class="badge">${trade.status || 'UNKNOWN'}</span></td>
+            <td class="${pnlClass} pnl-percent">${pnlPercent.toFixed(1)}%</td>`;
+        
+        if (isLiveTab) {
+            tableHTML += `<td class="risk-status-cell" data-risk-trade-id="${trade.id}">
+                <div class="risk-badges">
+                    <span class="risk-badge" style="background: rgba(255,255,255,0.03); color: #555; border-color: rgba(255,255,255,0.06); font-size: 9px;">Loading...</span>
+                </div>
+            </td>`;
+        }
+        
+        tableHTML += `<td><span class="badge">${trade.status || 'UNKNOWN'}</span></td>
             <td>
                 ${trade.status === 'OPEN' ? `
                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -421,6 +487,10 @@ function displayTradesTable(trades) {
     
     tableHTML += '</tbody></table>';
     container.innerHTML = tableHTML;
+    
+    if (isLiveTab) {
+        fetchAndRenderRiskStatus();
+    }
 }
 
 function displayFilledOrdersTable(orders) {
@@ -961,6 +1031,190 @@ function displaySignalMessagesTable(messages) {
     container.innerHTML = html;
 }
 
+let previousRiskStates = {};
+let riskPollInterval = null;
+
+function buildRiskBadges(rs) {
+    if (!rs || !rs.monitoring) return '<span style="color:#555; font-size: 10px;">Not Monitored</span>';
+    let badges = [];
+    
+    badges.push(`<span class="risk-badge rb-monitoring"><span class="rb-dot"></span>ACTIVE</span>`);
+    
+    if (rs.closing) {
+        badges.push(`<span class="risk-badge rb-closing"><span class="rb-dot"></span>CLOSING</span>`);
+    }
+    
+    if (rs.stop_loss_active) {
+        badges.push(`<span class="risk-badge rb-sl" title="SL @ $${rs.stop_loss_price ? rs.stop_loss_price.toFixed(2) : '?'}">🛑 SL</span>`);
+    }
+    
+    if (rs.profit_target_active) {
+        const ptLabel = rs.tiers_hit && rs.tiers_hit.length > 0 ? `PT${rs.tiers_hit[rs.tiers_hit.length-1]}✓` : 'PT';
+        const ptClass = rs.tiers_hit && rs.tiers_hit.length > 0 ? 'rb-pt-hit' : 'rb-pt';
+        badges.push(`<span class="risk-badge ${ptClass}" title="Target @ $${rs.profit_target_price ? rs.profit_target_price.toFixed(2) : '?'}">🎯 ${ptLabel}</span>`);
+    }
+    
+    if (rs.dynamic_sl_enabled && rs.dynamic_sl_price) {
+        badges.push(`<span class="risk-badge rb-dynamic-sl" title="Dynamic SL escalated to $${rs.dynamic_sl_price.toFixed(2)}">📊 DSL $${rs.dynamic_sl_price.toFixed(2)}</span>`);
+    }
+    
+    if (rs.trailing_enabled) {
+        if (rs.trailing_activated) {
+            const tsp = rs.trailing_stop_price ? `$${rs.trailing_stop_price.toFixed(2)}` : '...';
+            badges.push(`<span class="risk-badge rb-trail-active"><span class="rb-dot"></span>TRAIL ${tsp}</span>`);
+        } else {
+            badges.push(`<span class="risk-badge rb-trail-ready">📉 Trail</span>`);
+        }
+    }
+    
+    if (rs.early_trail_enabled) {
+        if (rs.early_trailing_active) {
+            const steps = rs.early_steps_locked || 0;
+            if (steps > 0) {
+                const esp = rs.early_stop_price ? `$${rs.early_stop_price.toFixed(2)}` : '';
+                badges.push(`<span class="risk-badge rb-early-profit"><span class="rb-dot"></span>PROFIT LOCKED ×${steps} ${esp}</span>`);
+            } else {
+                badges.push(`<span class="risk-badge rb-early-breakeven"><span class="rb-dot"></span>BREAKEVEN</span>`);
+            }
+        } else {
+            const actPct = rs.early_activation_pct ? `@${rs.early_activation_pct}%` : '';
+            badges.push(`<span class="risk-badge rb-early-ready">⚡ Early ${actPct}</span>`);
+        }
+    }
+    
+    if (rs.giveback_enabled) {
+        if (rs.giveback_guard_active) {
+            const gbPct = rs.giveback_allowed_pct ? `${rs.giveback_allowed_pct}%` : '';
+            badges.push(`<span class="risk-badge rb-giveback-armed"><span class="rb-dot"></span>GIVEBACK ARMED ${gbPct}</span>`);
+        } else {
+            badges.push(`<span class="risk-badge rb-giveback-ready">🛡️ Giveback</span>`);
+        }
+    }
+    
+    if (rs.max_pnl_seen > 0) {
+        badges.push(`<span class="risk-badge" style="background:rgba(255,255,255,0.03); color:#6b7280; border-color:rgba(255,255,255,0.06); font-size:9px;" title="Peak P&L seen">Peak: +${rs.max_pnl_seen.toFixed(1)}%</span>`);
+    }
+    
+    return badges.join('');
+}
+
+function buildRiskTooltip(rs) {
+    if (!rs) return '';
+    let rows = '';
+    rows += `<div class="rtt-row"><span class="rtt-label">Entry</span><span class="rtt-value">$${rs.entry_price ? rs.entry_price.toFixed(2) : '?'}</span></div>`;
+    if (rs.current_price) rows += `<div class="rtt-row"><span class="rtt-label">Current</span><span class="rtt-value">$${rs.current_price.toFixed(2)}</span></div>`;
+    rows += `<div class="rtt-row"><span class="rtt-label">P&L</span><span class="rtt-value" style="color:${rs.current_pnl_pct >= 0 ? '#30d158' : '#ff3b30'}">${rs.current_pnl_pct >= 0 ? '+' : ''}${rs.current_pnl_pct}%</span></div>`;
+    if (rs.max_pnl_seen > 0) rows += `<div class="rtt-row"><span class="rtt-label">Peak P&L</span><span class="rtt-value" style="color:#30d158">+${rs.max_pnl_seen.toFixed(1)}%</span></div>`;
+    rows += '<div class="rtt-divider"></div>';
+    if (rs.stop_loss_price) rows += `<div class="rtt-row"><span class="rtt-label">🛑 Stop Loss</span><span class="rtt-value">$${rs.stop_loss_price.toFixed(2)}</span></div>`;
+    if (rs.profit_target_price) rows += `<div class="rtt-row"><span class="rtt-label">🎯 Profit Target</span><span class="rtt-value">$${rs.profit_target_price.toFixed(2)}</span></div>`;
+    if (rs.dynamic_sl_price) rows += `<div class="rtt-row"><span class="rtt-label">📊 Dynamic SL</span><span class="rtt-value">$${rs.dynamic_sl_price.toFixed(2)}</span></div>`;
+    if (rs.trailing_stop_price) rows += `<div class="rtt-row"><span class="rtt-label">📉 Trail Stop</span><span class="rtt-value">$${rs.trailing_stop_price.toFixed(2)}</span></div>`;
+    if (rs.early_stop_price) rows += `<div class="rtt-row"><span class="rtt-label">⚡ Early Stop</span><span class="rtt-value">$${rs.early_stop_price.toFixed(2)}</span></div>`;
+    if (rs.tiers_hit && rs.tiers_hit.length > 0) rows += `<div class="rtt-row"><span class="rtt-label">Tiers Hit</span><span class="rtt-value">${rs.tiers_hit.map(t => 'PT'+t).join(', ')}</span></div>`;
+    if (rs.highest_price) rows += `<div class="rtt-row"><span class="rtt-label">Highest</span><span class="rtt-value">$${rs.highest_price.toFixed(2)}</span></div>`;
+    return rows;
+}
+
+async function fetchAndRenderRiskStatus() {
+    try {
+        const response = await fetch('/api/risk-status');
+        const data = await response.json();
+        if (!data.success) return;
+        
+        const states = data.risk_states || {};
+        
+        document.querySelectorAll('.risk-status-cell').forEach(cell => {
+            const tradeId = cell.getAttribute('data-risk-trade-id');
+            const rs = states[tradeId];
+            const badgesHTML = buildRiskBadges(rs);
+            const tooltipHTML = rs ? buildRiskTooltip(rs) : '';
+            
+            if (rs && tooltipHTML) {
+                cell.innerHTML = `<div class="risk-tooltip"><div class="risk-badges">${badgesHTML}</div><div class="risk-tooltip-text">${tooltipHTML}</div></div>`;
+            } else {
+                cell.innerHTML = `<div class="risk-badges">${badgesHTML}</div>`;
+            }
+        });
+        
+        detectRiskStateChanges(states);
+        previousRiskStates = JSON.parse(JSON.stringify(states));
+        
+    } catch (error) {
+        console.error('[RISK-UI] Failed to fetch risk status:', error);
+    }
+}
+
+function detectRiskStateChanges(newStates) {
+    if (!window.NotificationSystem || !window.NotificationSystem.showToast) return;
+    if (Object.keys(previousRiskStates).length === 0) return;
+    
+    for (const [tradeId, ns] of Object.entries(newStates)) {
+        const ps = previousRiskStates[tradeId];
+        if (!ps) {
+            showRiskToast('risk_monitoring', `Risk Engine Active`, `Position ${ns.position_key ? ns.position_key.split('_')[1] : tradeId} is now being monitored by the risk engine.`, tradeId);
+            continue;
+        }
+        
+        const sym = ns.position_key ? ns.position_key.split('_')[1] : tradeId;
+        
+        if (ns.early_trailing_active && !ps.early_trailing_active) {
+            showRiskToast('early_trailing', `Breakeven Locked: ${sym}`, `Early trailing activated — stop moved to entry price. Position is now risk-free.`, tradeId);
+        }
+        
+        if ((ns.early_steps_locked || 0) > (ps.early_steps_locked || 0)) {
+            const stopPrice = ns.early_stop_price ? `$${ns.early_stop_price.toFixed(2)}` : '';
+            showRiskToast('profit_locked', `Profit Locked: ${sym}`, `Step ${ns.early_steps_locked} locked — trailing stop raised to ${stopPrice}`, tradeId);
+        }
+        
+        if (ns.giveback_guard_active && !ps.giveback_guard_active) {
+            showRiskToast('giveback_guard', `Giveback Guard Armed: ${sym}`, `Max profit reached +${ns.max_pnl_seen.toFixed(1)}%. Guard will exit if price gives back ${ns.giveback_allowed_pct || 30}%.`, tradeId);
+        }
+        
+        if (ns.trailing_activated && !ps.trailing_activated) {
+            const tsp = ns.trailing_stop_price ? `$${ns.trailing_stop_price.toFixed(2)}` : '';
+            showRiskToast('trailing_stop', `Trailing Stop Active: ${sym}`, `Legacy trailing stop now tracking. Current stop: ${tsp}`, tradeId);
+        }
+        
+        if (ns.tiers_hit && ps.tiers_hit && ns.tiers_hit.length > ps.tiers_hit.length) {
+            const newTier = ns.tiers_hit[ns.tiers_hit.length - 1];
+            showRiskToast('profit_target', `PT${newTier} Hit: ${sym}`, `Profit target tier ${newTier} reached! Partial exit executed.`, tradeId);
+        }
+        
+        if (ns.dynamic_sl_price && (!ps.dynamic_sl_price || ns.dynamic_sl_price > ps.dynamic_sl_price)) {
+            showRiskToast('dynamic_sl', `SL Escalated: ${sym}`, `Dynamic stop loss raised to $${ns.dynamic_sl_price.toFixed(2)}`, tradeId);
+        }
+        
+        if (ns.closing && !ps.closing) {
+            showRiskToast('position_closing', `Closing: ${sym}`, `Risk engine is closing this position.`, tradeId);
+        }
+    }
+}
+
+function showRiskToast(type, title, message, tradeId) {
+    const configs = {
+        risk_monitoring: { icon: '🔍', color: '#00f5ff', label: 'RISK ENGINE', accent: 'rgba(0,245,255,0.12)', border: 'rgba(0,245,255,0.3)' },
+        early_trailing: { icon: '⚡', color: '#06b6d4', label: 'BREAKEVEN', accent: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.35)' },
+        profit_locked: { icon: '🔒', color: '#22c55e', label: 'PROFIT LOCK', accent: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.35)' },
+        giveback_guard: { icon: '🛡️', color: '#fbbf24', label: 'GIVEBACK', accent: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.35)' },
+        trailing_stop: { icon: '📉', color: '#af82ff', label: 'TRAILING', accent: 'rgba(175,130,255,0.12)', border: 'rgba(175,130,255,0.35)' },
+        profit_target: { icon: '🎯', color: '#30d158', label: 'TARGET HIT', accent: 'rgba(48,209,88,0.12)', border: 'rgba(48,209,88,0.35)' },
+        dynamic_sl: { icon: '📊', color: '#ff9500', label: 'SL ESCALATED', accent: 'rgba(255,149,0,0.12)', border: 'rgba(255,149,0,0.35)' },
+        position_closing: { icon: '🚪', color: '#ff3b30', label: 'CLOSING', accent: 'rgba(255,59,48,0.12)', border: 'rgba(255,59,48,0.35)' }
+    };
+    
+    const cfg = configs[type] || configs.risk_monitoring;
+    
+    NotificationSystem.showToast({
+        type: type,
+        title: title,
+        message: message,
+        timestamp: new Date().toLocaleTimeString(),
+        broker: '',
+        datetime: `risk_${type}_${tradeId}_${Date.now()}`
+    });
+}
+
 // Load trades initially
 loadTrades();
 
@@ -971,11 +1225,16 @@ priceRefreshInterval = setInterval(() => {
     }
 }, 10000);
 
-// Clean up interval on page unload
-window.addEventListener('beforeunload', () => {
-    if (priceRefreshInterval) {
-        clearInterval(priceRefreshInterval);
+riskPollInterval = setInterval(() => {
+    if (currentTab === 'live' && currentTrades.filter(t => t.status === 'OPEN').length > 0) {
+        fetchAndRenderRiskStatus();
     }
+}, 5000);
+
+// Clean up intervals on page unload
+window.addEventListener('beforeunload', () => {
+    if (priceRefreshInterval) clearInterval(priceRefreshInterval);
+    if (riskPollInterval) clearInterval(riskPollInterval);
 });
 
 let eventFilterTimeout = null;

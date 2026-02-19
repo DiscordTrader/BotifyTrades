@@ -749,6 +749,69 @@ class PositionCache:
                 except Exception as e:
                     print(f"[RISK] Warning: Could not persist enhanced risk state: {e}")
     
+    def get_all_risk_states(self) -> dict:
+        """Export all monitored position risk states for the UI dashboard.
+        Returns a dict keyed by trade_id with risk state details."""
+        result = {}
+        for pos_key, entry in self._cache.items():
+            trade_id = self._trade_id_map.get(pos_key)
+            if not trade_id:
+                continue
+            
+            cs = entry.channel_settings
+            has_stop_loss = entry.stop_loss_price is not None
+            has_profit_target = entry.profit_target_price is not None
+            
+            early_trail_enabled = bool(cs and cs.enable_early_trailing) if cs else False
+            giveback_enabled = bool(cs and cs.enable_giveback_guard) if cs else False
+            trailing_enabled = bool(cs and cs.trailing_stop_pct and cs.trailing_stop_pct > 0) if cs else False
+            dynamic_sl_enabled = bool(cs and cs.enable_dynamic_sl) if cs else False
+            
+            current_pnl_pct = 0.0
+            if entry.entry_price and entry.entry_price > 0 and entry.last_evaluated_price:
+                current_pnl_pct = ((entry.last_evaluated_price - entry.entry_price) / entry.entry_price) * 100
+            
+            tiers_hit = []
+            if entry.tier1_hit:
+                tiers_hit.append(1)
+            if entry.tier2_hit:
+                tiers_hit.append(2)
+            if entry.tier3_hit:
+                tiers_hit.append(3)
+            if entry.tier4_hit:
+                tiers_hit.append(4)
+            
+            result[str(trade_id)] = {
+                'position_key': pos_key,
+                'monitoring': True,
+                'entry_price': entry.entry_price,
+                'highest_price': entry.highest_price,
+                'current_price': entry.last_evaluated_price,
+                'current_pnl_pct': round(current_pnl_pct, 2),
+                'max_pnl_seen': round(entry.max_pnl_seen, 2),
+                'stop_loss_active': has_stop_loss,
+                'stop_loss_price': entry.stop_loss_price,
+                'profit_target_active': has_profit_target,
+                'profit_target_price': entry.profit_target_price,
+                'trailing_enabled': trailing_enabled,
+                'trailing_activated': entry.trailing_activated,
+                'trailing_stop_price': entry.trailing_stop_price,
+                'early_trail_enabled': early_trail_enabled,
+                'early_trailing_active': entry.early_trailing_active,
+                'early_stop_price': entry.early_stop_price,
+                'early_steps_locked': entry.early_steps_locked or 0,
+                'early_activation_pct': cs.early_trailing_activation_pct if cs and hasattr(cs, 'early_trailing_activation_pct') else None,
+                'early_step_pct': cs.early_trailing_step_pct if cs and hasattr(cs, 'early_trailing_step_pct') else None,
+                'giveback_enabled': giveback_enabled,
+                'giveback_guard_active': entry.giveback_guard_active,
+                'giveback_allowed_pct': cs.giveback_allowed_pct if cs else None,
+                'dynamic_sl_enabled': dynamic_sl_enabled,
+                'dynamic_sl_price': entry.dynamic_sl_price,
+                'tiers_hit': tiers_hit,
+                'closing': entry.closing,
+            }
+        return result
+
     def persist_early_trailing_state(self, position_key: str) -> None:
         """
         Persist early trailing stop state to database for restart resilience.
