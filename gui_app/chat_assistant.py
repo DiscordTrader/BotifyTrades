@@ -1620,12 +1620,17 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
                     if ts and len(ts) > 16:
                         ts = ts[5:16]
                     reason = f_evt.get('reason', 'No reason provided')
+                    details = f_evt.get('details', '')
                     broker = f_evt.get('broker', '')
                     evt_type = f_evt.get('event_type', '')
                     line = f"- [{ts}] {evt_type}"
                     if broker:
                         line += f" ({broker})"
                     line += f": {reason}"
+                    if details and 'Error type: ORDER_FAILED' not in details:
+                        line += f"\n  Details: {details}"
+                    elif details and '|' in details:
+                        line += f"\n  Details: {details}"
                     response_parts.append(line)
                 if len(failures) > 5:
                     response_parts.append(f"  *...and {len(failures) - 5} more failures*")
@@ -1770,6 +1775,10 @@ def _format_event_row(event: Dict) -> str:
         line += f" | #{channel}"
     if reason:
         line += f"\n  Reason: {reason}"
+    
+    details = event.get('details', '')
+    if details and severity in ('error', 'critical') and details != f"Error type: {event_type}":
+        line += f"\n  Details: {details}"
     
     return line
 

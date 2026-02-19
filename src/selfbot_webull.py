@@ -13437,9 +13437,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[ORDER_CHASER] ℹ️ Skipped tracking - order chase disabled for channel")
                     else:
                         _original_print(f"[MULTI-BROKER] ❌ All brokers failed")
+                        broker_errors = []
+                        for fail_resp in failures:
+                            fb = fail_resp.get('broker', '?')
+                            fe = fail_resp.get('msg') or fail_resp.get('message') or fail_resp.get('error') or 'Unknown'
+                            broker_errors.append(f"{fb}: {fe}")
+                            _original_print(f"[MULTI-BROKER] ❌ {fb} → {fe}")
+                        combined_error = '; '.join(broker_errors) if broker_errors else 'No error details'
                         resp = {
                             'success': False,
-                            'msg': 'All brokers failed',
+                            'msg': f"All brokers failed - {combined_error}",
+                            'message': combined_error,
                             '_multi_broker_results': responses
                         }
                     
@@ -14311,6 +14319,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
+                    # Build detailed failure info for multi-broker results
+                    detail_parts = [f"Error type: {error_type}"]
+                    multi_results = resp.get('_multi_broker_results') if isinstance(resp, dict) else None
+                    if multi_results:
+                        for mr in multi_results:
+                            if not (mr.get('success') or mr.get('orderId')):
+                                mb = mr.get('broker', '?')
+                                me = mr.get('msg') or mr.get('message') or mr.get('error') or '?'
+                                detail_parts.append(f"[{mb}] {me}")
+                    
                     try:
                         from gui_app.database import record_order_event
                         record_order_event(
@@ -14325,7 +14343,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             channel_name=signal.get('_channel_name'),
                             status='FAILED',
                             reason=error_msg[:500],
-                            details=f"Error type: {error_type}",
+                            details=' | '.join(detail_parts)[:1000],
                             severity='error',
                             source='risk_manager' if signal.get('_risk_management_order') else 'signal',
                             position_key=signal.get('_position_key')
