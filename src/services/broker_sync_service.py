@@ -1740,24 +1740,39 @@ class BrokerSyncService:
                     elif side == 'STC':
                         exit_source = 'SIGNAL'
                         stc_channel_id = None
+                        stc_asset_type = order.get('asset_type', 'stock')
                         try:
-                            from gui_app.database import find_open_bto_trade, map_risk_trigger_to_exit_source
-                            conn = get_connection()
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                SELECT risk_trigger, channel_id FROM trades
-                                WHERE symbol = ? AND broker = ? AND direction = 'STC'
-                                AND risk_trigger IS NOT NULL AND risk_trigger != ''
-                                ORDER BY id DESC LIMIT 1
-                            """, (order.get('symbol', ''), broker_name))
-                            stc_row = cursor.fetchone()
-                            if stc_row and stc_row['risk_trigger']:
-                                exit_source = map_risk_trigger_to_exit_source(stc_row['risk_trigger'])
-                                stc_channel_id = stc_row['channel_id']
-                            elif not stc_channel_id:
+                            from gui_app.database import find_open_bto_trade, map_risk_trigger_to_exit_source, get_pending_order_metadata, update_pending_order_status
+                            
+                            stc_meta = get_pending_order_metadata(broker=broker_name, broker_order_id=str(order.get('order_id', '')))
+                            if stc_meta:
+                                if stc_meta.get('exit_source'):
+                                    exit_source = stc_meta['exit_source']
+                                    print(f"[SYNC] ✓ Exit source from metadata: {exit_source} for {order.get('symbol', '')}")
+                                if stc_meta.get('channel_id') and stc_meta['channel_id'] != 'UNKNOWN':
+                                    stc_channel_id = stc_meta['channel_id']
+                                if stc_meta.get('asset_type'):
+                                    stc_asset_type = stc_meta['asset_type']
+                                update_pending_order_status(broker_name, str(order.get('order_id', '')), 'FILLED')
+                            
+                            if exit_source == 'SIGNAL':
+                                conn = get_connection()
+                                cursor = conn.cursor()
+                                cursor.execute("""
+                                    SELECT risk_trigger, channel_id FROM trades
+                                    WHERE symbol = ? AND broker = ? AND direction = 'STC'
+                                    AND risk_trigger IS NOT NULL AND risk_trigger != ''
+                                    ORDER BY id DESC LIMIT 1
+                                """, (order.get('symbol', ''), broker_name))
+                                stc_row = cursor.fetchone()
+                                if stc_row and stc_row['risk_trigger']:
+                                    exit_source = map_risk_trigger_to_exit_source(stc_row['risk_trigger'])
+                                    stc_channel_id = stc_channel_id or stc_row['channel_id']
+                            
+                            if not stc_channel_id:
                                 bto_trade = find_open_bto_trade(
                                     symbol=order.get('symbol', ''),
-                                    asset_type=order.get('asset_type', 'stock'),
+                                    asset_type=stc_asset_type,
                                     broker=broker_name,
                                     strike=order.get('strike'),
                                     expiry=order.get('expiry'),
@@ -1772,7 +1787,7 @@ class BrokerSyncService:
                             broker=broker_name,
                             broker_order_id=str(order.get('order_id', '')),
                             symbol=order.get('symbol', ''),
-                            asset_type=order.get('asset_type', 'stock'),
+                            asset_type=stc_asset_type,
                             strike=order.get('strike'),
                             expiry=order.get('expiry'),
                             call_put=order.get('direction'),
@@ -1955,6 +1970,15 @@ class BrokerSyncService:
                 final_order_submitted = order_submitted_at or (meta['order_submitted_at'] if meta else None)
                 sizing_details = meta['sizing_details'] if meta else None
                 
+                final_asset_type = asset_type
+                if meta and meta.get('asset_type'):
+                    final_asset_type = meta['asset_type']
+                    if final_asset_type != asset_type:
+                        print(f"[SYNC] ✓ Corrected asset_type from '{asset_type}' to '{final_asset_type}' (from signal metadata)")
+                if final_asset_type == 'option' and not strike and not expiry and not call_put:
+                    final_asset_type = 'stock'
+                    print(f"[SYNC] ✓ Corrected asset_type to 'stock' (no strike/expiry/call_put data)")
+                
                 # Mark pending metadata as filled
                 if meta:
                     update_pending_order_status(broker, broker_order_id, 'FILLED')
@@ -2002,7 +2026,7 @@ class BrokerSyncService:
                     broker=broker,
                     broker_order_id=broker_order_id,
                     symbol=symbol,
-                    asset_type=asset_type,
+                    asset_type=final_asset_type,
                     strike=strike,
                     expiry=expiry,
                     call_put=call_put,

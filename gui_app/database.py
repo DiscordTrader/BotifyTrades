@@ -1973,6 +1973,11 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_pending_meta_status ON pending_order_metadata(status)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_pending_meta_channel ON pending_order_metadata(channel_id)')
     
+    try:
+        cursor.execute('ALTER TABLE pending_order_metadata ADD COLUMN exit_source TEXT DEFAULT NULL')
+    except Exception:
+        pass
+    
     print("[DATABASE] ✓ Execution tracking tables ready")
     
     # Seed common known issues
@@ -5149,7 +5154,8 @@ def save_pending_order_metadata(
     broker_order_id: str = None, client_order_id: str = None, message_id: str = None,
     signal_lot_id: int = None, signal_price: float = None, analyst_qty: int = None,
     sizing_mode: str = None, sizing_details: str = None,
-    signal_detected_at = None, signal_parsed_at = None
+    signal_detected_at = None, signal_parsed_at = None,
+    exit_source: str = None
 ):
     """Save signal context when order is placed for later hydration by BrokerSyncService"""
     conn = get_connection()
@@ -5161,13 +5167,13 @@ def save_pending_order_metadata(
                 broker, broker_order_id, client_order_id, channel_id, message_id,
                 signal_lot_id, symbol, asset_type, action, quantity, signal_price,
                 analyst_qty, sizing_mode, sizing_details,
-                signal_detected_at, signal_parsed_at, order_submitted_at, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'PENDING')
+                signal_detected_at, signal_parsed_at, order_submitted_at, status, exit_source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'PENDING', ?)
         ''', (
             broker, broker_order_id, client_order_id, str(channel_id), message_id,
             signal_lot_id, symbol, asset_type, action, quantity, signal_price,
             analyst_qty, sizing_mode, sizing_details,
-            signal_detected_at, signal_parsed_at
+            signal_detected_at, signal_parsed_at, exit_source
         ))
         conn.commit()
         return cursor.lastrowid
@@ -5276,10 +5282,13 @@ def record_execution_closure_atomic(
     cursor = conn.cursor()
     
     try:
+        if asset_type == 'option' and not strike and not expiry and not call_put:
+            asset_type = 'stock'
+        
         # BEGIN IMMEDIATE for exclusive write lock
         cursor.execute('BEGIN IMMEDIATE')
         
-        # Find matching execution lot (FIFO)
+        # Find matching execution lot (FIFO) - try exact asset_type first, fallback to any
         query = '''
             SELECT * FROM execution_lots 
             WHERE broker = ? AND symbol = ? AND asset_type = ? 
@@ -5302,13 +5311,27 @@ def record_execution_closure_atomic(
         cursor.execute(query, params)
         exec_lot = cursor.fetchone()
         
+        if not exec_lot and asset_type == 'stock':
+            cursor.execute('''
+                SELECT * FROM execution_lots 
+                WHERE broker = ? AND symbol = ? 
+                AND status IN ('OPEN', 'PARTIAL') AND remaining_qty > 0
+                ORDER BY order_filled_at ASC LIMIT 1
+            ''', (broker, symbol))
+            exec_lot = cursor.fetchone()
+            if exec_lot and exec_lot['asset_type'] != asset_type:
+                print(f"[DATABASE] ⚠️ Lot asset_type mismatch: lot={exec_lot['asset_type']}, closure={asset_type} for {symbol} - using lot's type")
+        
         if not exec_lot:
             cursor.execute('ROLLBACK')
             return None, None
         
-        # Calculate P&L
+        # Calculate P&L using the LOT's asset_type (canonical source)
         entry_price = exec_lot['fill_price']
-        multiplier = 100 if asset_type == 'option' else 1
+        lot_asset_type = exec_lot['asset_type']
+        if lot_asset_type == 'option' and not exec_lot['strike'] and not exec_lot['expiry']:
+            lot_asset_type = 'stock'
+        multiplier = 100 if lot_asset_type == 'option' else 1
         pnl = (fill_price - entry_price) * closed_qty * multiplier
         pnl_percent = ((fill_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
         

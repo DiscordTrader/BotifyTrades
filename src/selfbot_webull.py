@@ -44,7 +44,7 @@ import ssl
 # ADMIN = Full features (Channel Mappings, Debug tools, etc.) - for developer use
 # USER = Limited features - for end-user distribution
 # This line is automatically updated by scripts/release.sh
-BUILD_TYPE = 'ADMIN'  # Set by release.sh
+BUILD_TYPE = 'USER'  # Set by release.sh
 
 def is_admin_build():
     """Check if this is an admin build with full features"""
@@ -12663,7 +12663,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except Exception as notify_err:
                         _original_print(f"[NOTIFY] Warning: Could not send stock order placed notification: {notify_err}", flush=True)
             
-            # Save pending order metadata for execution tracking (only for BTO orders)
+            # Save pending order metadata for execution tracking
             if resp.get('success') or resp.get('orderId'):
                 order_id = resp.get('orderId') or resp.get('order_id')
                 if order_id and signal.get('action', '').upper() in ('BTO', 'BUY'):
@@ -12689,8 +12689,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     except Exception as meta_err:
                         _original_print(f"[EXEC] Warning: Could not save order metadata: {meta_err}")
-                    
-                    # Track BTO orders for unfilled order chasing (entry chase)
+                elif order_id and signal.get('action', '').upper() in ('STC', 'SELL'):
+                    try:
+                        from gui_app.database import save_pending_order_metadata, map_risk_trigger_to_exit_source
+                        risk_trigger = signal.get('risk_trigger', '')
+                        tier = signal.get('_tier_to_mark')
+                        exit_source = map_risk_trigger_to_exit_source(risk_trigger, tier) if risk_trigger else 'SIGNAL'
+                        if signal.get('_manual_exit'):
+                            exit_source = 'MANUAL'
+                        save_pending_order_metadata(
+                            broker=broker_name,
+                            broker_order_id=str(order_id),
+                            channel_id=str(signal.get('channel_id', 'UNKNOWN')),
+                            symbol=signal.get('symbol', ''),
+                            asset_type=signal.get('asset') or signal.get('asset_type', 'stock'),
+                            action='STC',
+                            quantity=signal.get('qty', 1),
+                            signal_price=signal.get('price'),
+                            exit_source=exit_source
+                        )
+                    except Exception as meta_err:
+                        _original_print(f"[EXEC] Warning: Could not save STC metadata: {meta_err}")
+                
+                # Track BTO orders for unfilled order chasing (entry chase)
+                if order_id and signal.get('action', '').upper() in ('BTO', 'BUY'):
                     try:
                         order_chaser = get_order_chaser()
                         if order_chaser:
@@ -14547,6 +14569,62 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     except Exception:
                         pass
+                    
+                    # Save pending order metadata for execution P&L tracking (live trade path)
+                    try:
+                        from gui_app.database import save_pending_order_metadata, map_risk_trigger_to_exit_source
+                        action_upper = signal.get('action', '').upper()
+                        
+                        meta_order_ids = []
+                        meta_broker_names = []
+                        if isinstance(resp, dict) and resp.get('_multi_broker_results'):
+                            for mr in resp['_multi_broker_results']:
+                                oid = mr.get('orderId') or mr.get('order_id')
+                                if oid and (mr.get('success') or 'orderId' in mr):
+                                    meta_order_ids.append(str(oid))
+                                    meta_broker_names.append(mr.get('broker', broker_name or 'Unknown'))
+                        elif order_id_val:
+                            meta_order_ids.append(str(order_id_val))
+                            meta_broker_names.append(broker_name or signal.get('broker', 'Unknown'))
+                        
+                        for idx, (m_oid, m_broker) in enumerate(zip(meta_order_ids, meta_broker_names)):
+                            if action_upper in ('STC', 'SELL'):
+                                risk_trigger = signal.get('risk_trigger', '')
+                                tier = signal.get('_tier_to_mark')
+                                exit_src = map_risk_trigger_to_exit_source(risk_trigger, tier) if risk_trigger else 'SIGNAL'
+                                if signal.get('_manual_exit'):
+                                    exit_src = 'MANUAL'
+                                save_pending_order_metadata(
+                                    broker=m_broker,
+                                    broker_order_id=m_oid,
+                                    channel_id=str(signal.get('channel_id', 'UNKNOWN')),
+                                    symbol=signal.get('symbol', ''),
+                                    asset_type=signal.get('asset') or signal.get('asset_type', 'stock'),
+                                    action='STC',
+                                    quantity=signal.get('qty', 1),
+                                    signal_price=signal.get('price'),
+                                    exit_source=exit_src
+                                )
+                            elif action_upper in ('BTO', 'BUY'):
+                                save_pending_order_metadata(
+                                    broker=m_broker,
+                                    broker_order_id=m_oid,
+                                    channel_id=str(signal.get('channel_id', 'UNKNOWN')),
+                                    message_id=str(signal.get('message_id', '')),
+                                    symbol=signal.get('symbol', ''),
+                                    asset_type=signal.get('asset') or signal.get('asset_type', 'stock'),
+                                    action='BTO',
+                                    quantity=signal.get('qty', 1),
+                                    signal_price=signal.get('price'),
+                                    analyst_qty=signal.get('original_qty') or signal.get('qty'),
+                                    sizing_mode=signal.get('sizing_mode'),
+                                    sizing_details=signal.get('sizing_details'),
+                                    signal_detected_at=signal.get('detected_at'),
+                                    signal_parsed_at=signal.get('parsed_at'),
+                                    signal_lot_id=signal.get('lot_id')
+                                )
+                    except Exception as meta_err:
+                        _original_print(f"[EXEC] Warning: Could not save live trade metadata: {meta_err}")
                     
                     # Update conditional order status to EXECUTED if this was a conditional order
                     cond_order_id = signal.get('_conditional_order_id')
