@@ -5,7 +5,7 @@ Smart FAQ + Intent-Based Help System with Error Monitoring
 import re
 from typing import Dict, List, Tuple, Optional
 from difflib import SequenceMatcher
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 KNOWLEDGE_BASE = {
     "getting_started": {
@@ -1616,9 +1616,7 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
             if failures:
                 response_parts.append(f"**Failures & Errors ({len(failures)}):**")
                 for f_evt in failures[:5]:
-                    ts = f_evt.get('timestamp', '')
-                    if ts and len(ts) > 16:
-                        ts = ts[5:16]
+                    ts = _utc_to_est(f_evt.get('timestamp', ''))
                     reason = f_evt.get('reason', 'No reason provided')
                     details = f_evt.get('details', '')
                     broker = f_evt.get('broker', '')
@@ -1640,9 +1638,7 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
             if risk_events:
                 response_parts.append(f"**Risk Triggers ({len(risk_events)}):**")
                 for r_evt in risk_events[:5]:
-                    ts = r_evt.get('timestamp', '')
-                    if ts and len(ts) > 16:
-                        ts = ts[5:16]
+                    ts = _utc_to_est(r_evt.get('timestamp', ''))
                     evt_type = r_evt.get('event_type', '')
                     reason = r_evt.get('reason', '')
                     price = r_evt.get('price', '')
@@ -1703,7 +1699,8 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
                         price = t.get('price', t.get('fill_price', 0))
                         status = t.get('status', '')
                         broker = t.get('broker', '')
-                        ts = (t.get('executed_at') or t.get('filled_at') or t.get('created_at') or '')[:16]
+                        raw_ts = t.get('executed_at') or t.get('filled_at') or t.get('created_at') or ''
+                        ts = _utc_to_est(raw_ts)
                         line = f"- [{ts}] {action} x{qty} @ ${price}"
                         if status:
                             line += f" [{status}]"
@@ -1746,11 +1743,32 @@ def _investigate_symbol(symbol: str, original_query: str) -> Dict:
         }
 
 
+def _utc_to_est(ts_str: str) -> str:
+    """Convert a UTC timestamp string to EST/EDT display format (MM-DD HH:MM)."""
+    if not ts_str or len(ts_str) < 16:
+        return ts_str or ''
+    try:
+        ts_clean = ts_str.replace('T', ' ').replace('Z', '')
+        if '.' in ts_clean:
+            ts_clean = ts_clean.split('.')[0]
+        utc_dt = datetime.strptime(ts_clean[:19], '%Y-%m-%d %H:%M:%S')
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+        try:
+            from zoneinfo import ZoneInfo
+            est_dt = utc_dt.astimezone(ZoneInfo('America/New_York'))
+        except ImportError:
+            est_offset = timezone(timedelta(hours=-5))
+            est_dt = utc_dt.astimezone(est_offset)
+        return est_dt.strftime('%m-%d %H:%M')
+    except Exception:
+        if len(ts_str) > 16:
+            return ts_str[5:16]
+        return ts_str
+
+
 def _format_event_row(event: Dict) -> str:
     """Format a single event row for display."""
-    timestamp = event.get('timestamp', '')
-    if timestamp and len(timestamp) > 16:
-        timestamp = timestamp[5:16]
+    timestamp = _utc_to_est(event.get('timestamp', ''))
     
     event_type = event.get('event_type', 'UNKNOWN')
     symbol = event.get('symbol', '')
