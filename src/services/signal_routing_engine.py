@@ -765,6 +765,14 @@ class SignalRoutingEngine:
                             self.ledger.update_price(position.id, price, staleness_sec=0)
                             position.current_price = price
                             position.price_staleness_sec = 0
+                        else:
+                            staleness = position.price_staleness_sec + 5
+                            self.ledger.update_price(position.id, position.current_price, staleness_sec=staleness)
+                            position.price_staleness_sec = staleness
+                            if should_log_detail:
+                                sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: No live price - staleness {staleness}s, skipping risk eval\n")
+                                sys.stderr.flush()
+                            continue
                     except Exception as price_err:
                         sys.stderr.write(f"[ROUTING_ENGINE] ⚠️ Price fetch failed for {position.option_key}: {price_err}\n")
                         sys.stderr.flush()
