@@ -56,6 +56,35 @@
 .risk-tooltip-text .rtt-label { color: #8b8fa3; }
 .risk-tooltip-text .rtt-value { color: #e6edf3; font-weight: 600; }
 .risk-tooltip-text .rtt-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 4px 0; }
+.btn-quick-close {
+    padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700;
+    cursor: pointer; border: 1px solid; transition: all 0.15s;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.btn-bid { background: rgba(0,136,255,0.15); color: #0088ff; border-color: rgba(0,136,255,0.3); }
+.btn-bid:hover { background: rgba(0,136,255,0.3); }
+.btn-mid { background: rgba(255,165,0,0.15); color: #ffa500; border-color: rgba(255,165,0,0.3); }
+.btn-mid:hover { background: rgba(255,165,0,0.3); }
+.btn-market { background: rgba(255,59,48,0.15); color: #ff3b30; border-color: rgba(255,59,48,0.3); }
+.btn-market:hover { background: rgba(255,59,48,0.3); }
+.btn-quick-close:disabled { opacity: 0.4; cursor: not-allowed; }
+.price-flash-up { animation: flashUp 0.5s ease-out; }
+.price-flash-down { animation: flashDown 0.5s ease-out; }
+@keyframes flashUp { 0% { background: rgba(48,209,88,0.3); } 100% { background: transparent; } }
+@keyframes flashDown { 0% { background: rgba(255,59,48,0.3); } 100% { background: transparent; } }
+.toast-container { position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; color: white; opacity: 0; transform: translateX(100px); transition: all 0.3s ease; max-width: 350px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast-success { background: rgba(48,209,88,0.95); }
+.toast-error { background: rgba(255,59,48,0.95); }
+.toast-info { background: rgba(0,136,255,0.95); }
+.staleness-badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
+.staleness-fresh { background: rgba(48,209,88,0.15); color: #30d158; }
+.staleness-stale { background: rgba(255,165,0,0.15); color: #ffa500; }
+.staleness-old { background: rgba(255,59,48,0.15); color: #ff3b30; }
+.btn-panic { background: rgba(255,59,48,0.2); color: #ff3b30; border: 1px solid rgba(255,59,48,0.4); font-weight: 700; }
+.btn-panic:hover { background: rgba(255,59,48,0.4); }
+.close-all-confirm { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: rgba(255,59,48,0.1); border-radius: 6px; }
 </style>
 <!-- Stats Summary -->
 <div class="stats-grid" style="margin-bottom: 24px;">
@@ -99,6 +128,11 @@
             <button onclick="refreshPrices()" class="btn btn-primary btn-small">
                 🔄 Refresh Prices
             </button>
+            <span id="staleness-indicator" class="staleness-badge staleness-fresh" style="display:none;">Updated just now</span>
+            <button onclick="closeAllPositions()" class="btn btn-small btn-panic" title="Emergency: Close all positions">
+                ⚡ Close All
+            </button>
+            <span id="close-all-confirm-container"></span>
         </div>
     </div>
     
@@ -215,6 +249,10 @@ let allTrades = [];
 let currentTrades = [];
 let priceRefreshInterval = null;
 let isClosingPosition = false;
+let initialLoadDone = false;
+let previousPrices = {};
+let unifiedPollInterval = null;
+let lastSnapshotAge = 0;
 
 function onBrokerChange(value) {
     currentBroker = value;
@@ -299,7 +337,9 @@ function filterAndDisplayTrades() {
 
 async function loadTrades() {
     const container = document.getElementById('trades-table-container');
-    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    if (!initialLoadDone) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    }
     
     try {
         const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
@@ -307,13 +347,53 @@ async function loadTrades() {
         const trades = mergedResponse.trades || [];
         
         allTrades = trades;
-        filterAndDisplayTrades();
+        if (!initialLoadDone) {
+            filterAndDisplayTrades();
+            initialLoadDone = true;
+        } else {
+            let filteredTrades = [];
+            if (currentTab === 'live') {
+                filteredTrades = allTrades.filter(t => t.status === 'OPEN' || t.source === 'live_brokerage');
+            } else if (currentTab === 'pending') {
+                filteredTrades = allTrades.filter(t => {
+                    const fillStatus = t.fill_status || '';
+                    const status = t.status || '';
+                    return status === 'PENDING' || fillStatus === 'Submitted' || fillStatus === 'Working' || fillStatus === 'Partially Filled';
+                });
+            }
+            currentTrades = filteredTrades;
+            updateTradesInPlace(filteredTrades);
+        }
         updateSummaryStats();
         
     } catch (error) {
         console.error('Failed to load trades:', error);
-        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load trades</div>';
+        if (!initialLoadDone) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load trades</div>';
+        }
     }
+}
+
+function updateTradesInPlace(trades) {
+    const container = document.getElementById('trades-table-container');
+    const existingTable = container.querySelector('table');
+    if (!existingTable) {
+        displayTradesTable(trades);
+        return;
+    }
+    const existingIds = new Set();
+    container.querySelectorAll('tr[data-trade-id]').forEach(r => existingIds.add(r.getAttribute('data-trade-id')));
+    const newIds = new Set(trades.map(t => String(t.id)));
+    if (existingIds.size !== newIds.size || [...existingIds].some(id => !newIds.has(id))) {
+        displayTradesTable(trades);
+        return;
+    }
+    trades.forEach(trade => {
+        const row = container.querySelector(`tr[data-trade-id="${trade.id}"]`);
+        if (!row) return;
+        const statusBadge = row.querySelector('.badge');
+        if (statusBadge) statusBadge.textContent = trade.status || 'UNKNOWN';
+    });
 }
 
 function updateSummaryStats() {
@@ -379,24 +459,50 @@ function updatePricesInTable(prices) {
         const row = document.querySelector(`tr[data-trade-id="${tradeId}"]`);
         if (!row) continue;
         
-        // Update bid/ask/mid/last
+        const prev = previousPrices[tradeId] || {};
+        
         const bidCell = row.querySelector('.price-bid');
         const askCell = row.querySelector('.price-ask');
         const midCell = row.querySelector('.price-mid');
         const lastCell = row.querySelector('.price-last');
         
-        if (bidCell) bidCell.textContent = `$${priceData.bid.toFixed(2)}`;
-        if (askCell) askCell.textContent = `$${priceData.ask.toFixed(2)}`;
-        if (midCell) midCell.textContent = `$${priceData.mid.toFixed(2)}`;
-        if (lastCell) lastCell.textContent = `$${priceData.last.toFixed(2)}`;
+        function flashCell(cell, newVal, oldVal) {
+            if (!cell || oldVal === undefined || oldVal === null) return;
+            if (newVal > oldVal) {
+                cell.classList.remove('price-flash-down');
+                cell.classList.add('price-flash-up');
+                setTimeout(() => cell.classList.remove('price-flash-up'), 500);
+            } else if (newVal < oldVal) {
+                cell.classList.remove('price-flash-up');
+                cell.classList.add('price-flash-down');
+                setTimeout(() => cell.classList.remove('price-flash-down'), 500);
+            }
+        }
         
-        // Calculate and update P&L using mid price
+        if (bidCell && priceData.bid != null) {
+            flashCell(bidCell, priceData.bid, prev.bid);
+            bidCell.textContent = `$${priceData.bid.toFixed(2)}`;
+        }
+        if (askCell && priceData.ask != null) {
+            flashCell(askCell, priceData.ask, prev.ask);
+            askCell.textContent = `$${priceData.ask.toFixed(2)}`;
+        }
+        if (midCell && priceData.mid != null) {
+            flashCell(midCell, priceData.mid, prev.mid);
+            midCell.textContent = `$${priceData.mid.toFixed(2)}`;
+        }
+        if (lastCell && priceData.last != null) {
+            flashCell(lastCell, priceData.last, prev.last);
+            lastCell.textContent = `$${priceData.last.toFixed(2)}`;
+        }
+        
+        previousPrices[tradeId] = { bid: priceData.bid, ask: priceData.ask, mid: priceData.mid, last: priceData.last };
+        
         const trade = currentTrades.find(t => t.id == tradeId);
         if (trade) {
-            // Use entry_price for live brokerage positions, executed_price for bot-tracked trades
             const entryPrice = trade.entry_price || trade.executed_price;
             if (entryPrice) {
-                const currentPrice = priceData.mid;
+                const currentPrice = priceData.mid || priceData.last || entryPrice;
                 const quantity = trade.quantity;
                 
                 const pnl = (currentPrice - entryPrice) * quantity * (trade.asset_type === 'option' ? 100 : 1);
@@ -406,13 +512,13 @@ function updatePricesInTable(prices) {
                 const pnlPercentCell = row.querySelector('.pnl-percent');
                 
                 if (pnlCashCell) {
-                    pnlCashCell.textContent = `$${pnl.toFixed(2)}`;
-                    pnlCashCell.className = 'pnl-cash ' + (pnl >= 0 ? 'profit' : 'loss');
+                    pnlCashCell.innerHTML = `<strong>$${pnl.toFixed(2)}</strong>`;
+                    pnlCashCell.className = 'pnl-cash ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
                 }
                 
                 if (pnlPercentCell) {
                     pnlPercentCell.textContent = `${pnlPercent.toFixed(1)}%`;
-                    pnlPercentCell.className = 'pnl-percent ' + (pnl >= 0 ? 'profit' : 'loss');
+                    pnlPercentCell.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
                 }
             }
         }
@@ -434,9 +540,9 @@ function displayTradesTable(trades) {
     
     const isLiveTab = currentTab === 'live';
     let tableHTML = '<table class="data-table"><thead><tr>';
-    tableHTML += '<th>Symbol</th><th>Type</th><th>Qty</th><th>Entry</th><th>Current</th><th>P/L</th><th>P/L%</th>';
+    tableHTML += '<th>Symbol</th><th>Type</th><th>Qty</th><th>Entry</th><th>Bid</th><th>Ask</th><th>Mid</th><th>Last</th><th>P/L</th><th>P/L%</th>';
     if (isLiveTab) tableHTML += '<th style="min-width: 180px;">Risk Engine</th>';
-    tableHTML += '<th>Status</th><th>Actions</th>';
+    tableHTML += '<th>Actions</th>';
     tableHTML += '</tr></thead><tbody>';
     
     trades.forEach(trade => {
@@ -460,6 +566,9 @@ function displayTradesTable(trades) {
             <td>${trade.asset_type || 'stock'}</td>
             <td>${qty}</td>
             <td>$${entry.toFixed(2)}</td>
+            <td class="price-bid" style="color: var(--text-secondary);">-</td>
+            <td class="price-ask" style="color: var(--text-secondary);">-</td>
+            <td class="price-mid" style="color: var(--text-secondary);">-</td>
             <td class="price-last">$${current.toFixed(2)}</td>
             <td class="${pnlClass} pnl-cash"><strong>$${pnl.toFixed(2)}</strong></td>
             <td class="${pnlClass} pnl-percent">${pnlPercent.toFixed(1)}%</td>`;
@@ -472,13 +581,14 @@ function displayTradesTable(trades) {
             </td>`;
         }
         
-        tableHTML += `<td><span class="badge">${trade.status || 'UNKNOWN'}</span></td>
-            <td>
+        tableHTML += `<td>
                 ${trade.status === 'OPEN' ? `
-                    <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
                         <input type="number" id="qty-${trade.id}" value="${qty}" min="1" max="${qty}" 
-                               style="width: 50px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: 11px; text-align: center;">
-                        <button id="close-btn-${trade.id}" class="btn btn-danger btn-small" onclick="closePosition(event, '${trade.id}', '${trade.symbol}', ${qty}, '${trade.asset_type}')">Close</button>
+                               style="width: 45px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: 11px; text-align: center;">
+                        <button class="btn-quick-close btn-bid" data-close-btn="${trade.id}" onclick="quickClose(event, '${trade.id}', '${trade.symbol}', ${qty}, 'bid')" title="Close at Bid">Bid</button>
+                        <button class="btn-quick-close btn-mid" data-close-btn="${trade.id}" onclick="quickClose(event, '${trade.id}', '${trade.symbol}', ${qty}, 'mid')" title="Close at Mid">Mid</button>
+                        <button class="btn-quick-close btn-market" data-close-btn="${trade.id}" onclick="quickClose(event, '${trade.id}', '${trade.symbol}', ${qty}, 'market')" title="Close at Market">Mkt</button>
                     </div>
                 ` : trade.status === 'PENDING' ? `<button class="btn btn-danger btn-small" onclick="cancelOrder('${trade.order_id}', '${trade.symbol}', '${trade.broker || currentBroker}')">Cancel</button>` : '-'}
             </td>
@@ -1215,23 +1325,180 @@ function showRiskToast(type, title, message, tradeId) {
     });
 }
 
-// Load trades initially
+function showTradeToast(type, message) {
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => { toast.classList.add('show'); });
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+    }, 3000);
+}
+
+async function quickClose(evt, tradeId, symbol, maxQuantity, priceType) {
+    if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+    if (isClosingPosition) {
+        showTradeToast('info', 'Another close operation in progress...');
+        return;
+    }
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    const qtyToClose = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
+    if (isNaN(qtyToClose) || qtyToClose <= 0 || qtyToClose > maxQuantity) {
+        showTradeToast('error', `Invalid quantity: ${qtyToClose}`);
+        return;
+    }
+    isClosingPosition = true;
+    const btns = document.querySelectorAll(`[data-close-btn="${tradeId}"]`);
+    const clickedBtn = evt ? evt.target : null;
+    btns.forEach(b => { b.disabled = true; });
+    if (clickedBtn) clickedBtn.textContent = '...';
+    
+    let limitPrice = null;
+    if (priceType === 'bid' || priceType === 'mid') {
+        const row = document.querySelector(`tr[data-trade-id="${tradeId}"]`);
+        if (row) {
+            const cell = row.querySelector(priceType === 'bid' ? '.price-bid' : '.price-mid');
+            if (cell) {
+                const txt = cell.textContent.replace('$', '').trim();
+                const parsed = parseFloat(txt);
+                if (!isNaN(parsed) && parsed > 0) limitPrice = parsed;
+            }
+        }
+    }
+    
+    try {
+        const body = { quantity: qtyToClose };
+        if (limitPrice) body.limit_price = limitPrice;
+        const response = await fetch(`/api/trades/${tradeId}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        if (response.ok && result.success) {
+            showTradeToast('success', `✅ Closed ${qtyToClose} ${symbol} at ${priceType.toUpperCase()}`);
+            loadTrades();
+        } else {
+            showTradeToast('error', `❌ ${result.error || 'Failed to close'}`);
+            btns.forEach(b => { b.disabled = false; });
+            if (clickedBtn) clickedBtn.textContent = priceType === 'bid' ? 'Bid' : priceType === 'mid' ? 'Mid' : 'Mkt';
+        }
+    } catch (err) {
+        showTradeToast('error', `❌ Network error closing ${symbol}`);
+        btns.forEach(b => { b.disabled = false; });
+        if (clickedBtn) clickedBtn.textContent = priceType === 'bid' ? 'Bid' : priceType === 'mid' ? 'Mid' : 'Mkt';
+    } finally {
+        isClosingPosition = false;
+    }
+}
+
+function closeAllPositions() {
+    const openTrades = currentTrades.filter(t => t.status === 'OPEN');
+    if (openTrades.length === 0) {
+        showTradeToast('info', 'No open positions to close');
+        return;
+    }
+    const container = document.getElementById('close-all-confirm-container');
+    container.innerHTML = `
+        <span class="close-all-confirm">
+            <span style="font-size: 12px; color: #ff3b30;">Close ${openTrades.length} positions?</span>
+            <button class="btn-quick-close btn-market" onclick="executeCloseAll()" style="font-size: 11px;">YES</button>
+            <button class="btn-quick-close" onclick="document.getElementById('close-all-confirm-container').innerHTML=''" style="font-size: 11px; background: rgba(255,255,255,0.1); color: #aaa; border-color: rgba(255,255,255,0.2);">No</button>
+        </span>
+    `;
+}
+
+async function executeCloseAll() {
+    const container = document.getElementById('close-all-confirm-container');
+    container.innerHTML = '<span style="font-size: 11px; color: #ffa500;">⏳ Closing all...</span>';
+    showTradeToast('info', '⚡ Closing all positions...');
+    try {
+        const response = await fetch('/api/trades/close-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_type: 'market' })
+        });
+        const result = await response.json();
+        if (response.ok && result.success) {
+            showTradeToast('success', `✅ ${result.message || 'All positions closed'}`);
+            container.innerHTML = '';
+            loadTrades();
+        } else {
+            showTradeToast('error', `❌ ${result.error || 'Failed to close all'}`);
+            container.innerHTML = '';
+        }
+    } catch (err) {
+        showTradeToast('error', '❌ Network error closing positions');
+        container.innerHTML = '';
+    }
+}
+
+function updateStalenessIndicator(snapshotAge) {
+    const el = document.getElementById('staleness-indicator');
+    if (!el) return;
+    lastSnapshotAge = snapshotAge || 0;
+    const ageSec = Math.round(lastSnapshotAge);
+    el.style.display = 'inline';
+    el.textContent = ageSec < 2 ? 'Updated just now' : `Updated ${ageSec}s ago`;
+    el.className = 'staleness-badge ' + (ageSec < 5 ? 'staleness-fresh' : ageSec < 15 ? 'staleness-stale' : 'staleness-old');
+}
+
+async function unifiedLivePoll() {
+    if (currentTab !== 'live') return;
+    const openTrades = currentTrades.filter(t => t.status === 'OPEN');
+    if (openTrades.length === 0) return;
+    
+    try {
+        const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
+        const response = await fetch(`/api/trades/live-snapshot${brokerParam}`);
+        const data = await response.json();
+        
+        if (data.prices) {
+            updatePricesInTable(data.prices);
+        }
+        if (data.risk_states) {
+            const states = data.risk_states;
+            document.querySelectorAll('.risk-status-cell').forEach(cell => {
+                const tradeId = cell.getAttribute('data-risk-trade-id');
+                const rs = states[tradeId];
+                const badgesHTML = buildRiskBadges(rs);
+                const tooltipHTML = rs ? buildRiskTooltip(rs) : '';
+                if (rs && tooltipHTML) {
+                    cell.innerHTML = `<div class="risk-tooltip"><div class="risk-badges">${badgesHTML}</div><div class="risk-tooltip-text">${tooltipHTML}</div></div>`;
+                } else {
+                    cell.innerHTML = `<div class="risk-badges">${badgesHTML}</div>`;
+                }
+            });
+            detectRiskStateChanges(states);
+            previousRiskStates = JSON.parse(JSON.stringify(states));
+        }
+        if (data.positions) {
+            allTrades = data.positions;
+            const newFiltered = allTrades.filter(t => t.status === 'OPEN' || t.source === 'live_brokerage');
+            currentTrades = newFiltered;
+            updateTradesInPlace(newFiltered);
+            updateSummaryStats();
+        }
+        updateStalenessIndicator(data.snapshot_age);
+    } catch (error) {
+        console.error('[POLL] Unified live poll error:', error);
+    }
+}
+
 loadTrades();
 
-// Auto-refresh prices every 10 seconds for open positions
-priceRefreshInterval = setInterval(() => {
-    if (currentTrades.filter(t => t.status === 'OPEN').length > 0) {
-        refreshPrices();
-    }
-}, 10000);
-
 riskPollInterval = setInterval(() => {
-    if (currentTab === 'live' && currentTrades.filter(t => t.status === 'OPEN').length > 0) {
-        fetchAndRenderRiskStatus();
-    }
-}, 5000);
+    unifiedLivePoll();
+}, 4000);
 
-// Clean up intervals on page unload
 window.addEventListener('beforeunload', () => {
     if (priceRefreshInterval) clearInterval(priceRefreshInterval);
     if (riskPollInterval) clearInterval(riskPollInterval);

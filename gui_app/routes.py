@@ -684,6 +684,11 @@ def set_bot_instance(bot: Any) -> None:
     """Set the bot instance for API access"""
     global _bot_instance
     _bot_instance = bot
+    try:
+        from .live_snapshot import start_snapshot_daemon
+        start_snapshot_daemon(bot, interval=5)
+    except Exception as e:
+        print(f"[SNAPSHOT] Failed to start snapshot daemon: {e}")
 
 def cached_api_call(cache_key: str, ttl: Optional[int] = None) -> Callable:
     """Decorator to cache API responses with TTL"""
@@ -5933,32 +5938,155 @@ def register_routes(app):
             # ========== SCHWAB BROKER CLOSE ==========
             if 'SCHWAB' in broker:
                 print(f"[API] Routing to Schwab broker for close...")
-                # Schwab has a dedicated close endpoint - redirect user to use that
-                return jsonify({
-                    'success': False,
-                    'error': f'For Schwab positions, please use the Schwab-specific close button in the Schwab Analytics section, or close directly in the Schwab app.',
-                    'redirect_hint': f'/api/schwab/positions/{symbol}/close'
-                }), 400
+                schwab_broker = None
+                if hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                    schwab_broker = _bot_instance.schwab_broker
+                elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'schwab_broker'):
+                    schwab_broker = _bot_instance.broker_manager.schwab_broker
+                
+                if not schwab_broker or not schwab_broker.is_authenticated():
+                    return jsonify({'success': False, 'error': 'Schwab broker not connected or not authenticated'}), 500
+                
+                trade_qty = int(trade.get('quantity') or 1)
+                quantity_to_close = trade_qty
+                if requested_quantity is not None:
+                    try:
+                        quantity_to_close = int(requested_quantity)
+                    except (ValueError, TypeError):
+                        pass
+                
+                try:
+                    if asset_type == 'option':
+                        future = asyncio.run_coroutine_threadsafe(
+                            schwab_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            schwab_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    
+                    result = future.result(timeout=30)
+                    
+                    if result and result.success:
+                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        return jsonify({
+                            'success': True,
+                            'message': f"Schwab position closed: {quantity_to_close} {symbol} @ {order_type}"
+                        })
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': f'Schwab close failed: {result.message if result else "Unknown error"}'
+                        }), 500
+                except Exception as e:
+                    print(f"[CLOSE] Schwab close error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return jsonify({'success': False, 'error': f'Schwab close error: {str(e)}'}), 500
             
             # ========== IBKR BROKER CLOSE ==========
             if 'IBKR' in broker or 'INTERACTIVE' in broker:
                 print(f"[API] Routing to IBKR broker for close...")
-                # IBKR has a dedicated close endpoint
-                return jsonify({
-                    'success': False,
-                    'error': f'For IBKR positions, please use the IBKR-specific close button in the IBKR Analytics section, or close directly in TWS/Gateway.',
-                    'redirect_hint': f'/api/ibkr/positions/{symbol}/close'
-                }), 400
+                ibkr_broker = None
+                if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+                    ibkr_broker = _bot_instance.ibkr_broker
+                elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'ibkr_broker'):
+                    ibkr_broker = _bot_instance.broker_manager.ibkr_broker
+                
+                if not ibkr_broker:
+                    return jsonify({'success': False, 'error': 'IBKR broker not connected'}), 500
+                
+                trade_qty = int(trade.get('quantity') or 1)
+                quantity_to_close = trade_qty
+                if requested_quantity is not None:
+                    try:
+                        quantity_to_close = int(requested_quantity)
+                    except (ValueError, TypeError):
+                        pass
+                
+                try:
+                    if asset_type == 'option':
+                        future = asyncio.run_coroutine_threadsafe(
+                            ibkr_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            ibkr_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    
+                    result = future.result(timeout=30)
+                    
+                    if result and result.success:
+                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        return jsonify({
+                            'success': True,
+                            'message': f"IBKR position closed: {quantity_to_close} {symbol} @ {order_type}"
+                        })
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': f'IBKR close failed: {result.message if result else "Unknown error"}'
+                        }), 500
+                except Exception as e:
+                    print(f"[CLOSE] IBKR close error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return jsonify({'success': False, 'error': f'IBKR close error: {str(e)}'}), 500
             
             # ========== TASTYTRADE BROKER CLOSE ==========
             if 'TASTYTRADE' in broker or 'TASTY' in broker:
                 print(f"[API] Routing to Tastytrade broker for close...")
-                # Tastytrade has a dedicated close endpoint
-                return jsonify({
-                    'success': False,
-                    'error': f'For Tastytrade positions, please use the Tastytrade-specific close button in the Tastytrade Analytics section, or close directly in the broker app.',
-                    'redirect_hint': f'/api/tastytrade/positions/{symbol}/close'
-                }), 400
+                tt_broker = None
+                if hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
+                    tt_broker = _bot_instance.tastytrade_broker
+                elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'tastytrade_broker'):
+                    tt_broker = _bot_instance.broker_manager.tastytrade_broker
+                
+                if not tt_broker:
+                    return jsonify({'success': False, 'error': 'Tastytrade broker not connected'}), 500
+                
+                trade_qty = int(trade.get('quantity') or 1)
+                quantity_to_close = trade_qty
+                if requested_quantity is not None:
+                    try:
+                        quantity_to_close = int(requested_quantity)
+                    except (ValueError, TypeError):
+                        pass
+                
+                try:
+                    if asset_type == 'option':
+                        future = asyncio.run_coroutine_threadsafe(
+                            tt_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            tt_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    
+                    result = future.result(timeout=30)
+                    
+                    if result and result.success:
+                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        return jsonify({
+                            'success': True,
+                            'message': f"Tastytrade position closed: {quantity_to_close} {symbol} @ {order_type}"
+                        })
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': f'Tastytrade close failed: {result.message if result else "Unknown error"}'
+                        }), 500
+                except Exception as e:
+                    print(f"[CLOSE] Tastytrade close error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return jsonify({'success': False, 'error': f'Tastytrade close error: {str(e)}'}), 500
             
             # ========== WEBULL BROKER CLOSE (original logic / fallback) ==========
             print(f"[API] Entering Webull close section for {symbol}", flush=True)
@@ -6427,6 +6555,144 @@ def register_routes(app):
         except Exception as e:
             print(f"[API] Error fetching risk status: {e}")
             return jsonify({'success': False, 'risk_states': {}, 'error': str(e)})
+
+    @app.route('/api/trades/live-snapshot', methods=['GET'])
+    @login_required
+    def api_live_snapshot():
+        """Instant cached snapshot of all live positions + prices + risk status.
+        Returns cached data from background daemon thread (<50ms response).
+        """
+        try:
+            from .live_snapshot import get_live_snapshot, get_snapshot_age
+            snapshot = get_live_snapshot()
+            broker_filter = request.args.get('broker', '').upper()
+            
+            positions = snapshot.get('positions', [])
+            if broker_filter:
+                positions = [p for p in positions if broker_filter in p.get('broker', '').upper()]
+            
+            open_positions = [p for p in positions if p.get('status') in ('OPEN', None) or p.get('source') == 'live_brokerage']
+            pending_positions = [p for p in positions if p.get('fill_status') in ('Submitted', 'Working', 'Partially Filled') or p.get('status') == 'PENDING']
+            
+            return jsonify({
+                'success': True,
+                'positions': open_positions,
+                'pending': pending_positions,
+                'prices': snapshot.get('prices', {}),
+                'risk_states': snapshot.get('risk_states', {}),
+                'broker_status': snapshot.get('broker_status', {}),
+                'last_updated': snapshot.get('last_updated', 0),
+                'snapshot_age': round(get_snapshot_age(), 1),
+            })
+        except Exception as e:
+            print(f"[API] Live snapshot error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'positions': [], 'prices': {}, 'risk_states': {}, 'error': str(e)})
+
+    @app.route('/api/trades/close-all', methods=['POST'])
+    @login_required
+    def api_close_all_positions():
+        """Close all open positions across all brokers in parallel."""
+        if _bot_instance is None:
+            return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
+        
+        try:
+            from .live_snapshot import get_live_snapshot
+            snapshot = get_live_snapshot()
+            open_positions = [p for p in snapshot.get('positions', []) if p.get('status') in ('OPEN', None) or p.get('source') == 'live_brokerage']
+            
+            if not open_positions:
+                return jsonify({'success': True, 'message': 'No open positions to close', 'results': []})
+            
+            data = request.get_json(silent=True) or {}
+            order_type = data.get('order_type', 'market')
+            
+            results = []
+            import concurrent.futures
+            
+            def _close_single(pos):
+                trade_id = pos.get('id')
+                symbol = pos.get('symbol', 'Unknown')
+                broker = str(pos.get('broker', '')).upper()
+                quantity = int(pos.get('quantity') or 1)
+                asset_type = pos.get('asset_type', 'stock')
+                limit_price = None
+                if order_type == 'bid' and pos.get('bid', 0) > 0:
+                    limit_price = pos['bid']
+                elif order_type == 'mid' and pos.get('mid', 0) > 0:
+                    limit_price = pos['mid']
+                
+                try:
+                    broker_obj = None
+                    broker_attr_map = {
+                        'SCHWAB': 'schwab_broker',
+                        'IBKR': 'ibkr_broker',
+                        'INTERACTIVE': 'ibkr_broker',
+                        'TASTYTRADE': 'tastytrade_broker',
+                        'TASTY': 'tastytrade_broker',
+                        'ROBINHOOD': 'robinhood_broker',
+                        'ALPACA': 'alpaca_paper_broker',
+                    }
+                    
+                    for key, attr in broker_attr_map.items():
+                        if key in broker:
+                            broker_obj = getattr(_bot_instance, attr, None) or getattr(getattr(_bot_instance, 'broker_manager', None), attr, None)
+                            break
+                    
+                    if 'WEBULL' in broker:
+                        wb = getattr(_bot_instance, 'webull_live', None) or getattr(_bot_instance, 'webull_paper', None)
+                        if wb:
+                            if asset_type == 'option':
+                                result = wb.place_option_order(symbol, pos.get('strike'), pos.get('expiry'), pos.get('call_put'), 'STC', quantity, limit_price)
+                            else:
+                                result = wb.place_order(symbol=symbol, action='SELL', quant=quantity, price=limit_price)
+                            db.close_trade(trade_id, limit_price or 0, 'manual_close_all')
+                            return {'trade_id': trade_id, 'symbol': symbol, 'success': True, 'message': 'Webull close sent'}
+                    
+                    if broker_obj:
+                        if asset_type == 'option':
+                            future = asyncio.run_coroutine_threadsafe(
+                                broker_obj.place_option_order(symbol, pos.get('strike'), pos.get('expiry'), pos.get('call_put'), 'STC', quantity, limit_price),
+                                _bot_instance.loop
+                            )
+                        else:
+                            future = asyncio.run_coroutine_threadsafe(
+                                broker_obj.place_stock_order(symbol, 'STC', quantity, limit_price),
+                                _bot_instance.loop
+                            )
+                        result = future.result(timeout=25)
+                        if result and result.success:
+                            db.close_trade(trade_id, result.fill_price or limit_price or 0, 'manual_close_all')
+                            return {'trade_id': trade_id, 'symbol': symbol, 'success': True, 'message': f'{broker} close sent'}
+                        else:
+                            return {'trade_id': trade_id, 'symbol': symbol, 'success': False, 'message': f'{broker} close failed: {result.message if result else "Unknown"}'}
+                    
+                    db.close_trade(trade_id, limit_price or 0, 'manual_close_all')
+                    return {'trade_id': trade_id, 'symbol': symbol, 'success': True, 'message': 'DB position closed (no broker match)'}
+                except Exception as e:
+                    return {'trade_id': trade_id, 'symbol': symbol, 'success': False, 'message': str(e)}
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                futures = {executor.submit(_close_single, pos): pos for pos in open_positions}
+                for f in concurrent.futures.as_completed(futures, timeout=30):
+                    try:
+                        results.append(f.result(timeout=25))
+                    except Exception as e:
+                        pos = futures[f]
+                        results.append({'trade_id': pos.get('id'), 'symbol': pos.get('symbol'), 'success': False, 'message': str(e)})
+            
+            success_count = sum(1 for r in results if r.get('success'))
+            return jsonify({
+                'success': True,
+                'message': f'Closed {success_count}/{len(results)} positions',
+                'results': results
+            })
+        except Exception as e:
+            print(f"[API] Close-all error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/trades/merged', methods=['GET'])
     def get_merged_trades():
