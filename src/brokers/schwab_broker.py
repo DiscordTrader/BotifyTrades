@@ -458,26 +458,47 @@ class SchwabBroker(BrokerInterface):
                     account = data.get('securitiesAccount', {})
                     balances = account.get('currentBalances', {})
                     
-                    buying_power = float(balances.get('buyingPower', 0))
+                    print(f"[{self.name}] Raw currentBalances keys: {list(balances.keys())}")
+                    
+                    raw_buying_power = float(balances.get('buyingPower', 0))
                     cash_balance = float(balances.get('cashBalance', 0))
                     portfolio_value = float(balances.get('liquidationValue', 0))
                     
-                    # SETTLED CASH: Schwab provides several relevant fields
-                    # - cashAvailableForTrading: Most conservative (settled funds)
-                    # - availableFunds: May include unsettled
-                    # - moneyMarketFund: Cash in money market
                     cash_available_for_trading = float(balances.get('cashAvailableForTrading', 0))
                     available_funds = float(balances.get('availableFunds', 0))
+                    available_funds_non_margin = float(balances.get('availableFundsNonMarginableTrade', 0))
+                    option_buying_power = float(balances.get('optionBuyingPower', 0))
+                    buying_power_non_margin = float(balances.get('buyingPowerNonMarginableTrade', 0))
                     
-                    # Use cashAvailableForTrading as settled cash if available, else fall back to availableFunds
+                    buying_power = raw_buying_power
+                    if buying_power <= 0:
+                        for fallback_name, fallback_val in [
+                            ('availableFunds', available_funds),
+                            ('cashAvailableForTrading', cash_available_for_trading),
+                            ('availableFundsNonMarginableTrade', available_funds_non_margin),
+                            ('buyingPowerNonMarginableTrade', buying_power_non_margin),
+                            ('optionBuyingPower', option_buying_power),
+                        ]:
+                            if fallback_val > 0:
+                                print(f"[{self.name}] buyingPower=0, using fallback '{fallback_name}'=${fallback_val:.2f}")
+                                buying_power = fallback_val
+                                break
+                    
+                    if option_buying_power <= 0:
+                        option_buying_power = buying_power
+                    
                     if cash_available_for_trading > 0:
                         settled_cash = cash_available_for_trading
+                    elif available_funds > 0:
+                        settled_cash = available_funds
+                    elif available_funds_non_margin > 0:
+                        settled_cash = available_funds_non_margin
                     else:
-                        # Fall back: use the more conservative of availableFunds or cashBalance
-                        settled_cash = min(available_funds, cash_balance) if available_funds > 0 else cash_balance
+                        settled_cash = min(buying_power, cash_balance) if buying_power > 0 else cash_balance
                     
-                    # Unsettled = total cash - settled
                     unsettled_cash = max(0, cash_balance - settled_cash)
+                    
+                    print(f"[{self.name}] Account: BP=${buying_power:.2f}, Cash=${cash_balance:.2f}, Settled=${settled_cash:.2f}, Unsettled=${unsettled_cash:.2f}, OptionsBP=${option_buying_power:.2f}")
                     
                     return {
                         'buying_power': buying_power,
@@ -488,7 +509,7 @@ class SchwabBroker(BrokerInterface):
                         'unsettled_cash': unsettled_cash,
                         'cashAvailableForTrading': cash_available_for_trading,
                         'availableFunds': available_funds,
-                        'options_buying_power': float(balances.get('optionBuyingPower', buying_power)),
+                        'options_buying_power': option_buying_power,
                         'account_type': account.get('type', 'UNKNOWN'),
                         'account_id': self.account_number or ''
                     }

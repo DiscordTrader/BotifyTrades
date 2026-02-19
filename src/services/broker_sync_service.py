@@ -821,10 +821,14 @@ class BrokerSyncService:
                             'buying_power': float(raw.get('buying_power', 0) or 0),
                             'cash': float(raw.get('cash', 0) or 0),
                             'options_buying_power': float(raw.get('options_buying_power', 0) or raw.get('buying_power', 0) or 0),
+                            'settled_cash': float(raw.get('settled_cash', 0) or 0),
+                            'unsettled_cash': float(raw.get('unsettled_cash', 0) or 0),
+                            'cashAvailableForTrading': float(raw.get('cashAvailableForTrading', 0) or 0),
+                            'availableFunds': float(raw.get('availableFunds', 0) or 0),
                             'account_id': raw.get('account_id', ''),
                             'account_type': raw.get('account_type', '')
                         }
-                        print(f"[SYNC] Schwab account info: buying_power=${account_info.get('buying_power')}, portfolio=${account_info.get('portfolio_value')}")
+                        print(f"[SYNC] Schwab account info: buying_power=${account_info.get('buying_power')}, settled=${account_info.get('settled_cash')}, portfolio=${account_info.get('portfolio_value')}")
             
             elif broker_name == 'ROBINHOOD':
                 if hasattr(broker_instance, 'get_account_info'):
