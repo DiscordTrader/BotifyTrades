@@ -12869,13 +12869,67 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     else:
                         resp = {'broker': broker_name, 'result': resp, 'executed_qty': signal['qty']}
             elif signal['asset'] == 'option':
-                # Handle different broker parameter names for options
-                # Modern brokers (Alpaca, Robinhood, Schwab, IBKR, Tastytrade): symbol, strike, expiry, option_type, action, quantity, price
-                # Webull uses: action, qty, symbol, strike, opt_type, expiry_mmdd, limit_price
-                # Indian brokers (Upstox, Zerodha, DhanQ) use Webull-style + lots parameter
                 broker_upper = broker_name.upper()
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL'])
                 india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
+                
+                if signal['action'] == 'STC' and hasattr(broker_instance, 'get_positions_detailed'):
+                    try:
+                        pos_list = await broker_instance.get_positions_detailed()
+                        sig_symbol = signal.get('symbol', '').upper()
+                        sig_strike = float(signal.get('strike', 0))
+                        sig_opt = signal.get('opt_type', '').upper()[:1]
+                        sig_expiry = signal.get('expiry', '')
+                        
+                        def _normalize_expiry(exp_str):
+                            """Normalize expiry to YYYY-MM-DD for comparison"""
+                            if not exp_str:
+                                return ''
+                            exp_str = str(exp_str).strip()
+                            if len(exp_str) == 10 and '-' in exp_str:
+                                return exp_str
+                            if '/' in exp_str:
+                                parts = exp_str.split('/')
+                                if len(parts) == 2:
+                                    from datetime import datetime as dt
+                                    m, d = parts
+                                    return f"{dt.now().year}-{int(m):02d}-{int(d):02d}"
+                                elif len(parts) == 3:
+                                    m, d, y = parts
+                                    if len(y) == 2:
+                                        y = f"20{y}"
+                                    return f"{y}-{int(m):02d}-{int(d):02d}"
+                            return exp_str
+                        
+                        norm_sig_expiry = _normalize_expiry(sig_expiry)
+                        
+                        matched_qty = 0
+                        for p in pos_list:
+                            if p.get('asset') != 'option':
+                                continue
+                            p_sym = p.get('symbol', '').upper()
+                            p_strike = float(p.get('strike', 0))
+                            p_dir = p.get('direction', '').upper()[:1]
+                            p_exp = _normalize_expiry(p.get('expiry', ''))
+                            
+                            expiry_match = (not norm_sig_expiry or not p_exp or norm_sig_expiry == p_exp)
+                            
+                            if (p_sym == sig_symbol and 
+                                abs(p_strike - sig_strike) < 0.01 and 
+                                p_dir == sig_opt and
+                                expiry_match):
+                                matched_qty = int(p.get('quantity', 0))
+                                break
+                        
+                        if matched_qty <= 0:
+                            _original_print(f"[{broker_name}] ⚠️ STC rejected: No matching position for {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}")
+                            return {'success': False, 'msg': f'No matching position for {sig_symbol} ${sig_strike}{sig_opt} on {broker_name}', 'broker': broker_name}
+                        
+                        if signal['qty'] > matched_qty:
+                            _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
+                            signal['qty'] = matched_qty
+                    except Exception as e:
+                        _original_print(f"[{broker_name}] Position check for STC failed (proceeding): {e}")
                 
                 # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
                 use_market_order = signal.get('_use_market_order', False)

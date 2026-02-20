@@ -8,6 +8,8 @@ import sys
 import json
 import asyncio
 import logging
+import time
+import threading
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
@@ -48,6 +50,13 @@ class SchwabBroker(BrokerInterface):
         self.client_secret = config.get('client_secret', '')
         self.redirect_uri = config.get('redirect_uri', 'https://127.0.0.1')
         self.token_file = config.get('token_file', 'schwab_token.json')
+        
+        self._api_rate_lock = threading.Lock()
+        self._last_api_call = 0
+        self._min_api_interval = 0.5
+        self._last_valid_positions = []
+        self._last_valid_positions_time = 0
+        self._position_cache_ttl = 30
     
     async def connect(self) -> bool:
         """Connect to Schwab using stored tokens"""
@@ -462,6 +471,7 @@ class SchwabBroker(BrokerInterface):
             if not await self._ensure_valid_token():
                 return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
             
+            await self._async_rate_limit()
             import httpx
             
             headers = {
@@ -542,12 +552,32 @@ class SchwabBroker(BrokerInterface):
         
         return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
     
+    def _rate_limit(self):
+        """Enforce minimum interval between Schwab API calls to prevent 429 errors"""
+        with self._api_rate_lock:
+            now = time.time()
+            elapsed = now - self._last_api_call
+            if elapsed < self._min_api_interval:
+                self._last_api_call = now + self._min_api_interval
+            else:
+                self._last_api_call = now
+    
+    async def _async_rate_limit(self):
+        """Non-blocking rate limit for async contexts"""
+        with self._api_rate_lock:
+            now = time.time()
+            wait_time = self._min_api_interval - (now - self._last_api_call)
+            self._last_api_call = max(now, self._last_api_call + self._min_api_interval)
+        if wait_time > 0:
+            await asyncio.sleep(wait_time)
+    
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""
         try:
             if not await self._ensure_valid_token():
                 return {}
             
+            await self._async_rate_limit()
             import httpx
             
             headers = {
@@ -562,6 +592,10 @@ class SchwabBroker(BrokerInterface):
                     params={'fields': 'positions'}
                 )
                 
+                if response.status_code == 429:
+                    print(f"[{self.name}] ⚠️ Rate limited (429) on get_positions - using cached data")
+                    return {p.get('symbol', ''): int(p.get('quantity', 0)) for p in self._last_valid_positions if p.get('symbol')}
+                
                 if response.status_code == 200:
                     data = response.json()
                     account = data.get('securitiesAccount', {})
@@ -573,11 +607,20 @@ class SchwabBroker(BrokerInterface):
                         qty = pos.get('longQuantity', 0) - pos.get('shortQuantity', 0)
                         if symbol:
                             result[symbol] = int(qty)
+                    
+                    if len(result) > 0 or not self._last_valid_positions:
+                        self._last_positions_simple = dict(result)
+                    elif len(result) == 0 and hasattr(self, '_last_positions_simple') and self._last_positions_simple:
+                        if (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                            print(f"[{self.name}] ⚠️ get_positions returned 0 but cache exists - using cached")
+                            return dict(self._last_positions_simple)
                     return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting positions: {e}")
         
+        if hasattr(self, '_last_positions_simple') and self._last_positions_simple:
+            return dict(self._last_positions_simple)
         return {}
     
     async def place_stock_order(
@@ -1099,12 +1142,16 @@ class SchwabBroker(BrokerInterface):
         """Get detailed positions for sync service"""
         try:
             if not await self._ensure_valid_token():
+                if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                    print(f"[{self.name}] Token refresh pending - returning {len(self._last_valid_positions)} cached positions")
+                    return list(self._last_valid_positions)
                 return []
             
             if not self.account_hash:
                 print(f"[{self.name}] No account_hash - cannot fetch positions")
                 return []
             
+            await self._async_rate_limit()
             import httpx
             
             headers = {
@@ -1118,6 +1165,10 @@ class SchwabBroker(BrokerInterface):
                     headers=headers,
                     params={'fields': 'positions'}
                 )
+                
+                if response.status_code == 429:
+                    print(f"[{self.name}] ⚠️ Rate limited (429) on get_positions_detailed - returning {len(self._last_valid_positions)} cached positions")
+                    return list(self._last_valid_positions)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -1137,9 +1188,10 @@ class SchwabBroker(BrokerInterface):
                         avg_price = pos.get('averagePrice', 0)
                         market_value = pos.get('marketValue', 0)
                         
-                        # For options, marketValue is total position value; divide by 100 to get per-contract price
                         if asset_type == 'option':
                             current_price = market_value / (qty * 100) if qty else 0
+                            if avg_price > 0 and current_price > 0 and avg_price > current_price * 50:
+                                avg_price = avg_price / 100.0
                         else:
                             current_price = market_value / qty if qty else 0
                         
@@ -1178,10 +1230,20 @@ class SchwabBroker(BrokerInterface):
                         
                         result.append(position_data)
                     
+                    if len(result) > 0:
+                        self._last_valid_positions = list(result)
+                        self._last_valid_positions_time = time.time()
+                    elif len(result) == 0 and self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                        print(f"[{self.name}] ⚠️ API returned 0 positions but cache has {len(self._last_valid_positions)} - returning cached data")
+                        return list(self._last_valid_positions)
+                    
                     return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting detailed positions: {e}")
+            if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                print(f"[{self.name}] Returning {len(self._last_valid_positions)} cached positions after error")
+                return list(self._last_valid_positions)
         
         return []
     

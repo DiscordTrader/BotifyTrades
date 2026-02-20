@@ -289,8 +289,15 @@ def _fetch_schwab(bot) -> List[Dict]:
             avg_cost = float(pos.get('avg_cost', 0))
             cur_price = float(pos.get('current_price', 0))
             unrealized = float(pos.get('unrealized_pl', 0))
-            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
             asset = pos.get('asset', 'stock')
+            
+            if avg_cost > 0 and qty != 0:
+                cost_basis = avg_cost * abs(qty)
+                if asset == 'option':
+                    cost_basis *= 100
+                pnl_pct = (unrealized / cost_basis * 100) if cost_basis > 0 else 0.0
+            else:
+                pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
 
             positions.append(_make_position(
                 pos_id=pos.get('position_id', f"SCH_{pos.get('symbol', '')}"),
