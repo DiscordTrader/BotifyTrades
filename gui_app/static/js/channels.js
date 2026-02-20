@@ -1333,7 +1333,8 @@ async function saveRiskManagement(channelId) {
                 giveback_allowed_pct: givebackAllowedPct ? parseFloat(givebackAllowedPct) : 30.0,
                 enable_early_trailing: enableEarlyTrailing,
                 early_trailing_activation_pct: earlyTrailingActivationPct ? parseFloat(earlyTrailingActivationPct) : 5.0,
-                early_trailing_step_pct: earlyTrailingStepPct ? parseFloat(earlyTrailingStepPct) : 3.0
+                early_trailing_step_pct: earlyTrailingStepPct ? parseFloat(earlyTrailingStepPct) : 3.0,
+                use_global_risk_settings: 0
             })
         });
         
