@@ -457,7 +457,8 @@ class RiskDBAdapter:
                 leave_runner_pct = row[10] if len(row) > 10 and row[10] else 25.0
                 
                 # Extract exit strategy mode BEFORE applying overrides
-                exit_mode = row[18] if len(row) > 18 and row[18] else 'signal'
+                # Default to 'hybrid' (matches DB schema default) - NOT 'signal' which skips all automated risk
+                exit_mode = row[18] if len(row) > 18 and row[18] else 'hybrid'
                 
                 # Apply trade-level SL/PT overrides ONLY when exit mode allows it
                 # exit_mode='risk' → channel settings are authoritative, signal values ignored

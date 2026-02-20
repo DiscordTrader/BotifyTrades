@@ -518,6 +518,11 @@ def init_db():
     # Options: 'signal' (follow trader's trims/stops), 'risk' (use risk management auto-exits), 'hybrid' (both)
     try:
         cursor.execute('SELECT exit_strategy_mode FROM channels LIMIT 1')
+        # Backfill: ensure NULL values default to 'hybrid' (prevents position monitor from treating NULL as 'signal')
+        cursor.execute("UPDATE channels SET exit_strategy_mode = 'hybrid' WHERE exit_strategy_mode IS NULL")
+        if cursor.rowcount > 0:
+            conn.commit()
+            print(f"[DATABASE] ✓ Backfilled {cursor.rowcount} channels with exit_strategy_mode='hybrid' (was NULL)")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE channels ADD COLUMN exit_strategy_mode TEXT DEFAULT 'hybrid'")
         conn.commit()

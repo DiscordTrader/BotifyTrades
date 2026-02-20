@@ -1276,7 +1276,7 @@ function renderChannels() {
                 <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; background: rgba(139,161,199,0.08); border-top: 1px solid rgba(139,161,199,0.08);">
                     <div style="background: #0F1319; padding: 8px 10px;">
                         <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Exit Mode</span>
-                        <select style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                        <select id="exit-strategy-mode-${channel.id}" style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
                                 onchange="updateExitStrategy(${channel.id}, this.value)">
                             <option value="signal" ${channel.exit_strategy_mode === 'signal' ? 'selected' : ''}>Signal</option>
                             <option value="risk" ${channel.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk</option>
