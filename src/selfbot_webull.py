@@ -11792,6 +11792,39 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     opt['_broker_override'] = channel_info.get('broker_override')
                     print(f"[DATABASE] ✓ Added channel_record_id={opt['channel_record_id']} for trade tracking")
                 
+                # Attach channel risk config for LIVE execution (mirrors paper trading config)
+                # This ensures the RiskManager has all channel-level risk settings for monitoring
+                if channel_info:
+                    opt['_channel_risk_config'] = {
+                        'profit_target_1_pct': channel_info.get('profit_target_1_pct'),
+                        'profit_target_2_pct': channel_info.get('profit_target_2_pct'),
+                        'profit_target_3_pct': channel_info.get('profit_target_3_pct'),
+                        'profit_target_4_pct': channel_info.get('profit_target_4_pct'),
+                        'profit_target_qty_1': channel_info.get('profit_target_qty_1'),
+                        'profit_target_qty_2': channel_info.get('profit_target_qty_2'),
+                        'profit_target_qty_3': channel_info.get('profit_target_qty_3'),
+                        'profit_target_qty_4': channel_info.get('profit_target_qty_4'),
+                        'stop_loss_pct': channel_info.get('stop_loss_pct'),
+                        'trailing_stop_pct': channel_info.get('trailing_stop_pct'),
+                        'trailing_activation_pct': channel_info.get('trailing_activation_pct'),
+                        'leave_runner_enabled': channel_info.get('leave_runner_enabled'),
+                        'leave_runner_pct': channel_info.get('leave_runner_pct'),
+                        'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
+                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01),
+                        'trim_limit_offset_mode': channel_info.get('trim_limit_offset_mode', 'dollar'),
+                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0),
+                        'sl_order_mode': channel_info.get('sl_order_mode', 'limit'),
+                        'sl_limit_offset': channel_info.get('sl_limit_offset', 0.03),
+                        'entry_order_mode': channel_info.get('entry_order_mode', 'limit'),
+                        'enable_early_trailing': channel_info.get('enable_early_trailing', 0),
+                        'early_trailing_activation_pct': channel_info.get('early_trailing_activation_pct', 5.0),
+                        'early_trailing_step_pct': channel_info.get('early_trailing_step_pct', 3.0),
+                        'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
+                        'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
+                        'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
+                    }
+                    print(f"[RISK CONFIG] ✓ Channel risk settings attached for LIVE execution")
+                
                 # GAP FIX: Check circuit breaker before execution (same as conditional orders)
                 try:
                     from gui_app.database import is_circuit_breaker_tripped
@@ -12181,6 +12214,58 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stk['_channel_name'] = channel_info.get('name', message.channel.name)
                     stk['_broker_override'] = channel_info.get('broker_override')
                     print(f"[DATABASE] ✓ Added channel_record_id={stk['channel_record_id']} for trade tracking")
+                
+                # Attach channel risk config for LIVE execution (mirrors paper trading config)
+                if channel_info:
+                    stk['_channel_risk_config'] = {
+                        'profit_target_1_pct': channel_info.get('profit_target_1_pct'),
+                        'profit_target_2_pct': channel_info.get('profit_target_2_pct'),
+                        'profit_target_3_pct': channel_info.get('profit_target_3_pct'),
+                        'profit_target_4_pct': channel_info.get('profit_target_4_pct'),
+                        'profit_target_qty_1': channel_info.get('profit_target_qty_1'),
+                        'profit_target_qty_2': channel_info.get('profit_target_qty_2'),
+                        'profit_target_qty_3': channel_info.get('profit_target_qty_3'),
+                        'profit_target_qty_4': channel_info.get('profit_target_qty_4'),
+                        'stop_loss_pct': channel_info.get('stop_loss_pct'),
+                        'trailing_stop_pct': channel_info.get('trailing_stop_pct'),
+                        'trailing_activation_pct': channel_info.get('trailing_activation_pct'),
+                        'leave_runner_enabled': channel_info.get('leave_runner_enabled'),
+                        'leave_runner_pct': channel_info.get('leave_runner_pct'),
+                        'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
+                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01),
+                        'trim_limit_offset_mode': channel_info.get('trim_limit_offset_mode', 'dollar'),
+                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0),
+                        'sl_order_mode': channel_info.get('sl_order_mode', 'limit'),
+                        'sl_limit_offset': channel_info.get('sl_limit_offset', 0.03),
+                        'entry_order_mode': channel_info.get('entry_order_mode', 'limit'),
+                        'enable_early_trailing': channel_info.get('enable_early_trailing', 0),
+                        'early_trailing_activation_pct': channel_info.get('early_trailing_activation_pct', 5.0),
+                        'early_trailing_step_pct': channel_info.get('early_trailing_step_pct', 3.0),
+                        'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
+                        'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
+                        'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
+                    }
+                    print(f"[RISK CONFIG] ✓ Channel risk settings attached for LIVE stock execution")
+                
+                # Auto-generate bracket order prices from channel risk settings (stock BTO only)
+                # When signal doesn't include SL/PT but channel has them configured, compute dollar prices
+                if channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price'):
+                    entry_price = float(stk['price'])
+                    
+                    if not stk.get('stop_loss_price'):
+                        ch_sl_pct = channel_info.get('stop_loss_pct')
+                        if ch_sl_pct and float(ch_sl_pct) > 0:
+                            sl_price = round(entry_price * (1 - float(ch_sl_pct) / 100), 2)
+                            stk['stop_loss_price'] = sl_price
+                            print(f"[BRACKET AUTO] ✓ Channel SL {ch_sl_pct}% → ${sl_price:.2f} (entry: ${entry_price:.2f})")
+                    
+                    if not stk.get('profit_target_price'):
+                        ch_pt_pct = channel_info.get('profit_target_1_pct')
+                        if ch_pt_pct and float(ch_pt_pct) > 0:
+                            pt_price = round(entry_price * (1 + float(ch_pt_pct) / 100), 2)
+                            stk['profit_target_price'] = pt_price
+                            stk['_pt_from_channel'] = True
+                            print(f"[BRACKET AUTO] ✓ Channel PT1 {ch_pt_pct}% → ${pt_price:.2f} (entry: ${entry_price:.2f})")
                 
                 await self.order_queue.put(stk)
                 print(f"[QUEUE] ✓ Signal queued for LIVE execution")
@@ -12688,30 +12773,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             _original_print(f"[{broker_name}] Executing {signal['action']} {signal['qty']} {signal['symbol']}")
             
-            # Check if we should use bracket orders (stocks with stop loss or profit target)
+            # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
             use_bracket = (
-                signal['asset'] == 'stock' and 
                 signal['action'] == 'BTO' and
                 (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
                 hasattr(broker_instance, 'place_bracket_order')
             )
             
             if use_bracket:
-                # Use bracket order (entry + stop + target all at once)
-                _original_print(f"[{broker_name}] Using BRACKET order (entry + risk management)...")
+                asset_label = signal['asset'].upper()
+                _original_print(f"[{broker_name}] Using BRACKET order for {asset_label} (entry + risk management)...")
                 if signal.get('stop_loss_price'):
                     _original_print(f"[{broker_name}]   Stop Loss: ${signal['stop_loss_price']}")
                 if signal.get('profit_target_price'):
                     _original_print(f"[{broker_name}]   Profit Target: ${signal['profit_target_price']}")
                 
-                result = await broker_instance.place_bracket_order(
-                    symbol=signal['symbol'],
-                    action=signal['action'],
-                    quantity=signal['qty'],
-                    stop_loss_price=signal.get('stop_loss_price'),
-                    profit_target_price=signal.get('profit_target_price'),
-                    entry_price=signal.get('price')  # None for market order
-                )
+                bracket_kwargs = {
+                    'symbol': signal['symbol'],
+                    'action': signal['action'],
+                    'quantity': signal['qty'],
+                    'stop_loss_price': signal.get('stop_loss_price'),
+                    'profit_target_price': signal.get('profit_target_price'),
+                    'entry_price': signal.get('price'),
+                }
+                
+                if signal['asset'] == 'option':
+                    bracket_kwargs['asset_type'] = 'OPTION'
+                    bracket_kwargs['strike'] = signal.get('strike')
+                    bracket_kwargs['expiry'] = signal.get('expiry')
+                    bracket_kwargs['option_type'] = signal.get('opt_type')
+                    _original_print(f"[{broker_name}]   Option: {signal['symbol']} ${signal.get('strike')}{signal.get('opt_type')} {signal.get('expiry')}")
+                
+                result = await broker_instance.place_bracket_order(**bracket_kwargs)
                 
                 # Convert Alpaca OrderResult to dict format for consistency
                 if hasattr(result, 'success'):

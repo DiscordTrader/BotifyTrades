@@ -1740,31 +1740,56 @@ class SchwabBroker(BrokerInterface):
         quantity: int,
         stop_loss_price: Optional[float] = None,
         profit_target_price: Optional[float] = None,
-        entry_price: Optional[float] = None
+        entry_price: Optional[float] = None,
+        asset_type: str = 'EQUITY',
+        strike: Optional[float] = None,
+        expiry: Optional[str] = None,
+        option_type: Optional[str] = None
     ) -> OrderResult:
         """Place a bracket order (entry + stop loss + profit target).
         
         Uses Schwab's TRIGGER orderStrategyType with nested OCO child orders.
         Entry order triggers, then OCO (stop loss + profit target) activates.
+        Supports both stocks (EQUITY) and options (OPTION).
         
         Args:
-            symbol: Stock ticker
+            symbol: Stock ticker or OCC option symbol
             action: BTO (buy) or STC (sell)
-            quantity: Number of shares
+            quantity: Number of shares/contracts
             stop_loss_price: Stop loss price
             profit_target_price: Profit target price
             entry_price: Entry limit price (None for market order)
+            asset_type: 'EQUITY' or 'OPTION'
+            strike: Option strike price (required for options)
+            expiry: Option expiry in YYYY-MM-DD format (required for options)
+            option_type: 'C' or 'P' (required for options)
         """
         try:
             if not await self._ensure_valid_token():
                 return OrderResult(success=False, message="Not authenticated with Schwab", symbol=symbol, action=action)
 
-            if action.upper() == "BTO":
-                entry_instruction = "BUY"
-                exit_instruction = "SELL"
+            is_option = asset_type.upper() == 'OPTION'
+
+            if is_option:
+                if action.upper() == "BTO":
+                    entry_instruction = "BUY_TO_OPEN"
+                    exit_instruction = "SELL_TO_CLOSE"
+                else:
+                    entry_instruction = "SELL_TO_OPEN"
+                    exit_instruction = "BUY_TO_CLOSE"
+                occ_symbol = self._build_option_symbol(symbol, expiry, strike, option_type)
+                instrument_symbol = occ_symbol
+                instrument_asset_type = "OPTION"
+                print(f"[{self.name}] Option bracket: {occ_symbol} ({symbol} ${strike}{option_type} {expiry})")
             else:
-                entry_instruction = "SELL"
-                exit_instruction = "BUY"
+                if action.upper() == "BTO":
+                    entry_instruction = "BUY"
+                    exit_instruction = "SELL"
+                else:
+                    entry_instruction = "SELL"
+                    exit_instruction = "BUY"
+                instrument_symbol = symbol
+                instrument_asset_type = "EQUITY"
 
             session = self._get_session_type()
             entry_order_type = "LIMIT" if entry_price else "MARKET"
@@ -1778,8 +1803,8 @@ class SchwabBroker(BrokerInterface):
                     "instruction": entry_instruction,
                     "quantity": quantity,
                     "instrument": {
-                        "symbol": symbol,
-                        "assetType": "EQUITY"
+                        "symbol": instrument_symbol,
+                        "assetType": instrument_asset_type
                     }
                 }]
             }
@@ -1801,7 +1826,7 @@ class SchwabBroker(BrokerInterface):
                     "orderLegCollection": [{
                         "instruction": exit_instruction,
                         "quantity": quantity,
-                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                        "instrument": {"assetType": instrument_asset_type, "symbol": instrument_symbol}
                     }]
                 }
                 stop_leg = {
@@ -1813,7 +1838,7 @@ class SchwabBroker(BrokerInterface):
                     "orderLegCollection": [{
                         "instruction": exit_instruction,
                         "quantity": quantity,
-                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                        "instrument": {"assetType": instrument_asset_type, "symbol": instrument_symbol}
                     }]
                 }
                 entry_payload["childOrderStrategies"] = [{
@@ -1831,7 +1856,7 @@ class SchwabBroker(BrokerInterface):
                     "orderLegCollection": [{
                         "instruction": exit_instruction,
                         "quantity": quantity,
-                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                        "instrument": {"assetType": instrument_asset_type, "symbol": instrument_symbol}
                     }]
                 }
                 entry_payload["childOrderStrategies"] = [stop_child]
@@ -1846,7 +1871,7 @@ class SchwabBroker(BrokerInterface):
                     "orderLegCollection": [{
                         "instruction": exit_instruction,
                         "quantity": quantity,
-                        "instrument": {"assetType": "EQUITY", "symbol": symbol}
+                        "instrument": {"assetType": instrument_asset_type, "symbol": instrument_symbol}
                     }]
                 }
                 entry_payload["childOrderStrategies"] = [pt_child]
