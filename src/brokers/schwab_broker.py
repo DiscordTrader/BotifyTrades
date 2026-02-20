@@ -585,7 +585,8 @@ class SchwabBroker(BrokerInterface):
         symbol: str,
         action: str,
         quantity: int,
-        price: Optional[float] = None
+        price: Optional[float] = None,
+        **kwargs
     ) -> OrderResult:
         """Place a stock order"""
         try:
@@ -691,7 +692,8 @@ class SchwabBroker(BrokerInterface):
         option_type: str,
         action: str,
         quantity: int,
-        price: Optional[float] = None
+        price: Optional[float] = None,
+        **kwargs
     ) -> OrderResult:
         """Place an options order"""
         try:
