@@ -13789,6 +13789,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             fe = fail_resp.get('msg') or fail_resp.get('message') or fail_resp.get('error') or 'Unknown'
                             broker_errors.append(f"{fb}: {fe}")
                             _original_print(f"[MULTI-BROKER] ❌ {fb} → {fe}")
+                            try:
+                                from gui_app.discord_notifier import notify_order_failed
+                                notify_order_failed(
+                                    symbol=signal.get('symbol', '?'),
+                                    action=signal.get('action', 'BTO'),
+                                    broker=fb,
+                                    error_message=fe,
+                                    quantity=int(signal.get('quantity', 1)),
+                                    price=float(signal.get('price') or 0)
+                                )
+                                _original_print(f"[NOTIFY] ✓ Sent order failed notification for {fb}")
+                            except Exception as ne:
+                                _original_print(f"[NOTIFY] ⚠️ Failed to send notification for {fb}: {ne}")
                         combined_error = '; '.join(broker_errors) if broker_errors else 'No error details'
                         resp = {
                             'success': False,
