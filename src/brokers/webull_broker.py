@@ -653,7 +653,8 @@ class WebullBroker(BrokerInterface):
         symbol: str,
         action: str,
         quantity: int,
-        price: Optional[float] = None
+        price: Optional[float] = None,
+        _skip_internal_retry: bool = False
     ) -> OrderResult:
         """Place a stock order"""
         try:
@@ -693,7 +694,7 @@ class WebullBroker(BrokerInterface):
                     )
             
             TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
-            MAX_TRANSIENT_RETRIES = 3
+            MAX_TRANSIENT_RETRIES = 1 if _skip_internal_retry else 3
             TRANSIENT_RETRY_DELAY = 3
             
             response = None
@@ -959,7 +960,8 @@ class WebullBroker(BrokerInterface):
         action: str,
         quantity: int,
         price: Optional[float] = None,
-        option_id: Optional[str] = None
+        option_id: Optional[str] = None,
+        _skip_internal_retry: bool = False
     ) -> OrderResult:
         """Place an options order"""
         try:
@@ -1008,7 +1010,7 @@ class WebullBroker(BrokerInterface):
                     )
             
             TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
-            MAX_TRANSIENT_RETRIES = 3
+            MAX_TRANSIENT_RETRIES = 1 if _skip_internal_retry else 3
             TRANSIENT_RETRY_DELAY = 3
             
             response = None

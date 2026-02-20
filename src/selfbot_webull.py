@@ -3151,7 +3151,8 @@ class WebullBroker:
             option_enforce = 'GTC'
             
             TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
-            MAX_TRANSIENT_RETRIES = 3
+            _is_risk_order = kwargs.get('_risk_management_order', False)
+            MAX_TRANSIENT_RETRIES = 1 if _is_risk_order else 3
             TRANSIENT_RETRY_DELAY = 2
 
             def _place_single_order(wb_inst, opt_id_val, s, adj_q, eff_p, attempt_label=""):
@@ -12519,6 +12520,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
         try:
+            # Order Resilience Layer: Pre-flight circuit breaker check
+            _resilience_ctx = None
+            try:
+                from src.services.order_resilience import get_resilience_layer, OrderContext
+                _resilience_layer = get_resilience_layer()
+                _resilience_ctx = OrderContext(
+                    broker_name=broker_name,
+                    symbol=signal.get('symbol', ''),
+                    action=signal.get('action', ''),
+                    asset=signal.get('asset', 'stock'),
+                    strike=float(signal.get('strike', 0) or 0),
+                    expiry=signal.get('expiry', ''),
+                    opt_type=signal.get('opt_type', ''),
+                    is_risk_order=signal.get('_risk_management_order', False),
+                    is_emergency=signal.get('_use_market_order', False),
+                    channel_id=signal.get('channel_id', ''),
+                    position_key=signal.get('_position_key', '')
+                )
+                allowed, cb_reason = _resilience_layer.pre_check(_resilience_ctx)
+                if not allowed:
+                    _original_print(f"[{broker_name}] [ORDER-CB] Order blocked: {cb_reason}")
+                    return {
+                        'success': False,
+                        'message': f'Circuit breaker: {cb_reason}',
+                        'broker': broker_name,
+                        '_circuit_breaker_blocked': True
+                    }
+            except ImportError:
+                pass
+            except Exception as resilience_err:
+                _original_print(f"[{broker_name}] [ORDER-CB] Pre-check error (continuing): {resilience_err}")
+
             # Pre-trade validation: Check broker health and buying power
             try:
                 from src.services.broker_health_monitor import get_health_monitor
@@ -12968,8 +13001,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${order_price}")
                 
                 if uses_modern_signature:
-                    # Modern brokers use: symbol, strike, expiry, option_type, action, quantity, price
-                    result = await broker_instance.place_option_order(
+                    _skip_retry = bool(_resilience_ctx and _resilience_ctx.is_risk_order) if _resilience_ctx else False
+                    # Build common kwargs for modern brokers
+                    _option_kwargs = dict(
                         symbol=signal['symbol'],
                         strike=signal['strike'],
                         expiry=signal['expiry'],
@@ -12981,8 +13015,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _is_market_order=signal.get('is_market_order', False),
                         _qot_price=signal.get('_qot_price'),
                         _trigger_price=signal.get('_trigger_price'),
-                        _risk_management_order=signal.get('_risk_management_order', False)
+                        _risk_management_order=signal.get('_risk_management_order', False),
                     )
+                    # Only Webull accepts _skip_internal_retry (prevents retry storm)
+                    if 'WEBULL' in broker_upper and _skip_retry:
+                        _option_kwargs['_skip_internal_retry'] = True
+                    result = await broker_instance.place_option_order(**_option_kwargs)
                 elif broker_upper in india_brokers:
                     # Indian brokers (Zerodha, Upstox, DhanQ) use standardized interface
                     # They accept both Alpaca-style and Webull-style parameters
@@ -13323,6 +13361,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except Exception as chase_err:
                         _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
             
+            # Order Resilience Layer: Post-process result for circuit breaker tracking
+            if _resilience_ctx:
+                try:
+                    _resilience_layer.post_process(_resilience_ctx, result)
+                except Exception as post_err:
+                    _original_print(f"[{broker_name}] [ORDER-CB] Post-process error (non-fatal): {post_err}")
+
             return resp
         
         except Exception as e:
