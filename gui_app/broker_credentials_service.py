@@ -287,7 +287,7 @@ def save_schwab_credentials(
     client_id: str = '',
     client_secret: str = '',
     redirect_uri: str = 'https://127.0.0.1',
-    dry_run: bool = True
+    dry_run: bool = False
 ):
     """Save Charles Schwab broker credentials (OAuth2)"""
     save_config('schwab_credentials', {
@@ -304,7 +304,7 @@ def get_schwab_credentials() -> Dict[str, Any]:
         'client_id': '',
         'client_secret': '',
         'redirect_uri': 'https://127.0.0.1',
-        'dry_run': True
+        'dry_run': False
     }
 
 
@@ -314,7 +314,7 @@ def clear_schwab_credentials():
         'client_id': '',
         'client_secret': '',
         'redirect_uri': 'https://127.0.0.1',
-        'dry_run': True
+        'dry_run': False
     })
 
 
