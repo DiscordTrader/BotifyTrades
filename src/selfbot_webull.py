@@ -3113,7 +3113,10 @@ class WebullBroker:
             import requests
             import uuid
             
-            if not self._check_order_dedupe(symbol, strike, opt_type, expiry_mmdd, side, adjusted_qty, limit_price):
+            is_risk_order = kwargs.get('_risk_management_order', False)
+            if is_risk_order:
+                print(f"[{self.name}] ✓ Risk management order - bypassing dedupe check")
+            elif not self._check_order_dedupe(symbol, strike, opt_type, expiry_mmdd, side, adjusted_qty, limit_price):
                 print(f"[{self.name}] ❌ Order BLOCKED by order-level deduplication")
                 return {
                     'success': False,
@@ -12874,12 +12877,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL'])
                 india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
                 
-                # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
-                # The limit_price acts as a ceiling - order fills at market or better, up to limit
-                order_price = signal.get('price')
-                if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
-                    order_price = signal['_limit_price']
-                    _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${order_price:.4f} (max allowed)")
+                # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
+                use_market_order = signal.get('_use_market_order', False)
+                # Webull requires a limit price for options - pass actual price, not None
+                # Other brokers (Alpaca, Schwab, etc.) support true market orders
+                is_webull_broker = 'WEBULL' in broker_upper
+                if use_market_order:
+                    if is_webull_broker:
+                        order_price = signal.get('price')
+                        _original_print(f"[{broker_name}] ⚡ MARKET ORDER for option {signal.get('action', 'STC')} - using limit price ${order_price} (Webull requires limit)")
+                    else:
+                        order_price = None
+                        _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for option {signal.get('action', 'STC')} (risk: {signal.get('risk_trigger', 'N/A')})")
+                else:
+                    # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
+                    # The limit_price acts as a ceiling - order fills at market or better, up to limit
+                    order_price = signal.get('price')
+                    if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
+                        order_price = signal['_limit_price']
+                        _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${order_price:.4f} (max allowed)")
                 
                 # FIX: For conditional option market orders, the price is the STOCK trigger price
                 # (e.g. $602.10), not the option premium. Use market order (None) instead of
@@ -12940,7 +12956,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _conditional_order_id=signal.get('_conditional_order_id'),
                         _is_market_order=signal.get('is_market_order', False),
                         _qot_price=signal.get('_qot_price'),
-                        _trigger_price=signal.get('_trigger_price')
+                        _trigger_price=signal.get('_trigger_price'),
+                        _risk_management_order=signal.get('_risk_management_order', False)
                     )
                 
                 # Log the result for debugging (applies to all option orders)
@@ -14679,7 +14696,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'strike': signal['strike'],
                                 'opt_type': signal['opt_type'],
                                 'expiry_mmdd': signal['expiry'],
-                                'limit_price': None if use_market_order else signal.get('price')  # None for market orders
+                                'limit_price': None if use_market_order else signal.get('price'),  # None for market orders
+                                '_risk_management_order': signal.get('_risk_management_order', False),
                             }
                             
                             # For India brokers, determine lots to use
