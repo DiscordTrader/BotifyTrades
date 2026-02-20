@@ -13688,6 +13688,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         resp['_multi_broker_results'] = responses
                         signal['_multi_broker_has_success'] = True
                         
+                        # Send notifications for each successful broker
+                        for success_resp in successes:
+                            try:
+                                from gui_app.discord_notifier import notify_order_placed
+                                placed_order_id = success_resp.get('orderId') or success_resp.get('order_id')
+                                broker_label = success_resp.get('broker', 'UNKNOWN')
+                                notify_order_placed(
+                                    symbol=signal['symbol'],
+                                    action=signal['action'],
+                                    broker=broker_label,
+                                    quantity=success_resp.get('executed_qty', signal.get('qty', 1)),
+                                    price=signal.get('price', 0),
+                                    order_id=placed_order_id,
+                                    strike=signal.get('strike'),
+                                    expiry=signal.get('expiry'),
+                                    opt_type=signal.get('opt_type')
+                                )
+                                _original_print(f"[NOTIFY] ✓ Sent order placed notification for {broker_label}")
+                            except Exception as notify_err:
+                                _original_print(f"[NOTIFY] ⚠️ Could not send notification for {success_resp.get('broker', '?')}: {notify_err}")
+                        
+                        # Also notify about failed brokers
+                        for fail_resp in failures:
+                            try:
+                                from gui_app.discord_notifier import notify_order_failed
+                                fb = fail_resp.get('broker', 'UNKNOWN')
+                                fe = fail_resp.get('msg') or fail_resp.get('message') or fail_resp.get('error') or 'Unknown error'
+                                notify_order_failed(
+                                    symbol=signal['symbol'],
+                                    action=signal['action'],
+                                    broker=fb,
+                                    reason=fe
+                                )
+                            except Exception:
+                                pass
+                        
                         # Track exit orders for unfilled order chasing (multi-broker)
                         if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
                             # Check if order chase is enabled: mapping → channel → global

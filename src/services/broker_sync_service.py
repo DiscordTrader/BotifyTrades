@@ -1136,6 +1136,32 @@ class BrokerSyncService:
             # Brokers remove closed positions entirely, so absence means it's gone
             else:
                 if current_status == 'PENDING':
+                    # PAPER_SIM orders are simulated and won't appear in broker pending list
+                    order_id_val = trade.get('order_id', '') or ''
+                    if order_id_val.startswith('PAPER_SIM'):
+                        print(f"[SYNC] Trade #{trade_id} ({symbol}) is PAPER_SIM order - auto-filling")
+                        self.db.update_trade(
+                            trade_id,
+                            status='OPEN',
+                            executed_price=trade.get('price') or trade.get('executed_price'),
+                            executed_at=datetime.now().isoformat()
+                        )
+                        try:
+                            from gui_app.discord_notifier import notify_order_filled
+                            notify_order_filled(
+                                symbol=symbol,
+                                action=trade.get('action', 'BTO'),
+                                broker=broker_name,
+                                quantity=int(trade.get('quantity', 1)),
+                                price=float(trade.get('price') or trade.get('executed_price') or 0),
+                                strike=trade.get('strike'),
+                                expiry=trade.get('expiry'),
+                                opt_type=trade.get('call_put') or trade.get('opt_type')
+                            )
+                        except Exception:
+                            pass
+                        continue
+                    
                     # GRACE PERIOD: Don't close PENDING trades too quickly (prevents race condition)
                     # Wait at least 60 seconds after trade creation before marking as cancelled
                     trade_created_at = trade.get('created_at') or trade.get('executed_at')
@@ -1184,7 +1210,7 @@ class BrokerSyncService:
                     
                     try:
                         if hasattr(self, '_risk_manager') and self._risk_manager:
-                            pos_key = f"{broker_name}_{symbol}_{asset_type}"
+                            pos_key = f"{broker_name}_{symbol}_{trade.get('asset_type', 'stock')}"
                             if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
                                 if pos_key in self._risk_manager.cache._cache:
                                     self._risk_manager.cache.remove(pos_key)
@@ -1236,7 +1262,7 @@ class BrokerSyncService:
                     
                     try:
                         if hasattr(self, '_risk_manager') and self._risk_manager:
-                            pos_key = f"{broker_name}_{symbol}_{asset_type}"
+                            pos_key = f"{broker_name}_{symbol}_{trade.get('asset_type', 'stock')}"
                             if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
                                 if pos_key in self._risk_manager.cache._cache:
                                     self._risk_manager.cache.remove(pos_key)
