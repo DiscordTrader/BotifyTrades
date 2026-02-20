@@ -1650,6 +1650,7 @@ def register_routes(app):
                 'ibkr_paper': {'region': 'USA', 'display_name': 'IBKR (Paper)', 'is_paper': True},
                 'tastytrade_live': {'region': 'USA', 'display_name': 'Tastytrade (Live)', 'is_paper': False},
                 'tastytrade_paper': {'region': 'USA', 'display_name': 'Tastytrade (Paper)', 'is_paper': True},
+                'schwab': {'region': 'USA', 'display_name': 'Schwab', 'is_paper': False},
             }
             
             # Get centralized broker status

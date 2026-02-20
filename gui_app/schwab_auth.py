@@ -730,6 +730,7 @@ def schwab_callback():
             print(f"[SCHWAB CALLBACK] ✓ Token exchange successful!")
             flash("Successfully connected to Schwab!", "success")
             db.update_broker_connection_status('SCHWAB', True)
+            _hot_connect_schwab_broker(creds)
         else:
             last_error = get_last_exchange_error()
             print(f"[SCHWAB CALLBACK] ✗ Token exchange failed: {last_error}")
@@ -877,6 +878,64 @@ def exchange_code_for_tokens(
         traceback.print_exc()
         _last_exchange_error = str(e)
         return False
+
+
+def _hot_connect_schwab_broker(creds: dict):
+    """Hot-connect the Schwab broker to the running bot after OAuth succeeds."""
+    try:
+        from gui_app.routes import _bot_instance
+        if not _bot_instance:
+            print("[SCHWAB HOT-CONNECT] No bot instance running - will connect on next restart")
+            return
+        
+        if _bot_instance.schwab_broker and getattr(_bot_instance.schwab_broker, 'connected', False):
+            print("[SCHWAB HOT-CONNECT] Broker already connected, refreshing tokens only")
+            if hasattr(_bot_instance.schwab_broker, 'reset_token_auth'):
+                _bot_instance.schwab_broker.reset_token_auth()
+            return
+        
+        from src.brokers.schwab_broker import SchwabBroker
+        import asyncio
+        
+        schwab_broker = SchwabBroker({
+            'client_id': creds.get('client_id'),
+            'client_secret': creds.get('client_secret'),
+            'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
+            'dry_run': creds.get('dry_run', False)
+        })
+        
+        loop = asyncio.new_event_loop()
+        try:
+            connected = loop.run_until_complete(asyncio.wait_for(schwab_broker.connect(), timeout=15.0))
+        except asyncio.TimeoutError:
+            print("[SCHWAB HOT-CONNECT] Connection timeout (15s)")
+            connected = False
+        finally:
+            loop.close()
+        
+        if connected:
+            _bot_instance.schwab_broker = schwab_broker
+            mode = "PAPER" if creds.get('dry_run', False) else "LIVE"
+            print(f"[SCHWAB HOT-CONNECT] ✓ Broker connected ({mode}) - ready for trading")
+            
+            try:
+                from gui_app.broker_credentials_service import set_broker_status
+                set_broker_status('schwab', True, 'connected')
+            except Exception:
+                pass
+            
+            try:
+                from gui_app.discord_notifier import notify_broker_reconnected
+                notify_broker_reconnected(f'Schwab {mode}')
+            except Exception:
+                pass
+        else:
+            print("[SCHWAB HOT-CONNECT] ⚠️ Connection failed - tokens saved but broker not ready")
+            
+    except Exception as e:
+        print(f"[SCHWAB HOT-CONNECT] Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def get_last_exchange_error() -> str | None:

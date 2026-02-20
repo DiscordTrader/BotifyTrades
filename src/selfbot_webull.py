@@ -3081,9 +3081,9 @@ class WebullBroker:
                             
                             pos_expiry = pos.get('expireDate', '')
                             if pos_expiry:
-                                from datetime import datetime
                                 try:
-                                    exp_date = datetime.strptime(pos_expiry, '%Y-%m-%d')
+                                    from datetime import datetime as _dt_parse
+                                    exp_date = _dt_parse.strptime(pos_expiry, '%Y-%m-%d')
                                     pos_expiry_mmdd = exp_date.strftime('%m/%d')
                                 except:
                                     pos_expiry_mmdd = ''
