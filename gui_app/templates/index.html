@@ -402,6 +402,211 @@
     user-select: none;
 }
 
+/* Risk Engine Badges for Position Cards */
+.risk-engine-strip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 20px;
+    background: linear-gradient(90deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.12) 100%);
+    border-top: 1px solid rgba(255,255,255,0.04);
+    min-height: 32px;
+    flex-wrap: wrap;
+}
+.risk-engine-strip .re-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #5a5f70;
+    margin-right: 4px;
+    white-space: nowrap;
+}
+.risk-engine-strip .re-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+.re-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    border: 1px solid;
+    transition: all 0.3s ease;
+}
+.re-badge .re-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.re-badge.re-active {
+    background: rgba(0,245,255,0.08);
+    color: #00f5ff;
+    border-color: rgba(0,245,255,0.25);
+}
+.re-badge.re-active .re-dot {
+    background: #00f5ff;
+    box-shadow: 0 0 6px #00f5ff;
+    animation: reDotPulse 2s ease-in-out infinite;
+}
+.re-badge.re-closing {
+    background: rgba(255,59,48,0.2);
+    color: #ff3b30;
+    border-color: rgba(255,59,48,0.4);
+    animation: reClosePulse 0.8s ease-in-out infinite;
+}
+.re-badge.re-closing .re-dot {
+    background: #ff3b30;
+    box-shadow: 0 0 6px #ff3b30;
+}
+.re-badge.re-sl {
+    background: rgba(255,59,48,0.1);
+    color: #ff3b30;
+    border-color: rgba(255,59,48,0.3);
+}
+.re-badge.re-pt {
+    background: rgba(48,209,88,0.1);
+    color: #30d158;
+    border-color: rgba(48,209,88,0.3);
+}
+.re-badge.re-pt-hit {
+    background: rgba(48,209,88,0.25);
+    color: #30d158;
+    border-color: rgba(48,209,88,0.5);
+}
+.re-badge.re-trail-ready {
+    background: rgba(175,130,255,0.06);
+    color: rgba(175,130,255,0.45);
+    border-color: rgba(175,130,255,0.12);
+}
+.re-badge.re-trail-active {
+    background: rgba(175,130,255,0.18);
+    color: #af82ff;
+    border-color: rgba(175,130,255,0.4);
+    animation: reClosePulse 2s ease-in-out infinite;
+}
+.re-badge.re-trail-active .re-dot {
+    background: #af82ff;
+    box-shadow: 0 0 4px #af82ff;
+}
+.re-badge.re-early-ready {
+    background: rgba(6,182,212,0.06);
+    color: rgba(6,182,212,0.45);
+    border-color: rgba(6,182,212,0.12);
+}
+.re-badge.re-early-breakeven {
+    background: rgba(6,182,212,0.18);
+    color: #06b6d4;
+    border-color: rgba(6,182,212,0.4);
+    animation: reClosePulse 2s ease-in-out infinite;
+}
+.re-badge.re-early-breakeven .re-dot {
+    background: #06b6d4;
+    box-shadow: 0 0 4px #06b6d4;
+}
+.re-badge.re-early-profit {
+    background: rgba(34,197,94,0.2);
+    color: #22c55e;
+    border-color: rgba(34,197,94,0.45);
+    animation: reClosePulse 1.5s ease-in-out infinite;
+}
+.re-badge.re-early-profit .re-dot {
+    background: #22c55e;
+    box-shadow: 0 0 6px #22c55e;
+}
+.re-badge.re-giveback-ready {
+    background: rgba(251,191,36,0.06);
+    color: rgba(251,191,36,0.45);
+    border-color: rgba(251,191,36,0.12);
+}
+.re-badge.re-giveback-armed {
+    background: rgba(251,191,36,0.2);
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.45);
+    animation: reClosePulse 2s ease-in-out infinite;
+}
+.re-badge.re-giveback-armed .re-dot {
+    background: #fbbf24;
+    box-shadow: 0 0 4px #fbbf24;
+}
+.re-badge.re-dsl {
+    background: rgba(255,149,0,0.12);
+    color: #ff9500;
+    border-color: rgba(255,149,0,0.3);
+}
+.re-badge.re-peak {
+    background: rgba(255,255,255,0.03);
+    color: #6b7280;
+    border-color: rgba(255,255,255,0.06);
+    font-size: 9px;
+}
+.re-badge.re-not-monitored {
+    background: rgba(255,255,255,0.02);
+    color: #3a3f50;
+    border-color: rgba(255,255,255,0.04);
+    font-style: italic;
+    font-weight: 500;
+}
+.re-badge.re-loading {
+    background: rgba(255,255,255,0.02);
+    color: #444;
+    border-color: rgba(255,255,255,0.04);
+    font-size: 9px;
+}
+@keyframes reDotPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px currentColor; }
+    50% { opacity: 0.5; box-shadow: 0 0 2px currentColor; }
+}
+@keyframes reClosePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+.re-tooltip {
+    position: relative;
+    cursor: help;
+}
+.re-tooltip .re-tooltip-content {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    background: #12141a;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 220px;
+    max-width: 300px;
+    z-index: 1000;
+    font-size: 11px;
+    color: #c9d1d9;
+    line-height: 1.5;
+    white-space: normal;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    transition: all 0.2s ease;
+    pointer-events: none;
+}
+.re-tooltip:hover .re-tooltip-content {
+    visibility: visible;
+    opacity: 1;
+}
+.re-tooltip-content .ret-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+}
+.re-tooltip-content .ret-label { color: #8b8fa3; }
+.re-tooltip-content .ret-value { color: #e6edf3; font-weight: 600; }
+.re-tooltip-content .ret-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 4px 0; }
+
 /* Position Card System */
 .positions-grid {
     display: flex;
@@ -913,6 +1118,150 @@ let currentBroker = null;  // Will be set from dropdown or BrokerStore on page l
 let currentRegion = localStorage.getItem('selectedRegion') || 'USA';
 let isPrivacyMode = false;
 let isClosingPosition = false;
+let dashboardRiskStates = {};
+let dashboardRiskPollTimer = null;
+
+function buildDashboardRiskBadges(rs) {
+    if (!rs || !rs.monitoring) {
+        return '<span class="re-badge re-not-monitored">Not Monitored</span>';
+    }
+    let badges = [];
+    
+    badges.push('<span class="re-badge re-active"><span class="re-dot"></span>ACTIVE</span>');
+    
+    if (rs.closing) {
+        badges.push('<span class="re-badge re-closing"><span class="re-dot"></span>CLOSING</span>');
+    }
+    
+    if (rs.stop_loss_active) {
+        const slTitle = rs.stop_loss_price ? `SL @ $${rs.stop_loss_price.toFixed(2)}` : 'Stop Loss';
+        badges.push(`<span class="re-badge re-sl" title="${slTitle}">SL</span>`);
+    }
+    
+    if (rs.profit_target_active) {
+        const ptLabel = rs.tiers_hit && rs.tiers_hit.length > 0 ? `PT${rs.tiers_hit[rs.tiers_hit.length-1]}` : 'PT';
+        const ptClass = rs.tiers_hit && rs.tiers_hit.length > 0 ? 're-pt-hit' : 're-pt';
+        const ptTitle = rs.profit_target_price ? `Target @ $${rs.profit_target_price.toFixed(2)}` : 'Profit Target';
+        badges.push(`<span class="re-badge ${ptClass}" title="${ptTitle}">${ptLabel}</span>`);
+    }
+    
+    if (rs.dynamic_sl_enabled && rs.dynamic_sl_price) {
+        badges.push(`<span class="re-badge re-dsl" title="Dynamic SL @ $${rs.dynamic_sl_price.toFixed(2)}">DSL $${rs.dynamic_sl_price.toFixed(2)}</span>`);
+    }
+    
+    if (rs.trailing_enabled) {
+        if (rs.trailing_activated) {
+            const tsp = rs.trailing_stop_price ? `$${rs.trailing_stop_price.toFixed(2)}` : '...';
+            badges.push(`<span class="re-badge re-trail-active"><span class="re-dot"></span>TRAIL ${tsp}</span>`);
+        } else {
+            badges.push('<span class="re-badge re-trail-ready">Trail</span>');
+        }
+    }
+    
+    if (rs.early_trail_enabled) {
+        if (rs.early_trailing_active) {
+            const steps = rs.early_steps_locked || 0;
+            if (steps > 0) {
+                const esp = rs.early_stop_price ? ` $${rs.early_stop_price.toFixed(2)}` : '';
+                badges.push(`<span class="re-badge re-early-profit"><span class="re-dot"></span>LOCKED x${steps}${esp}</span>`);
+            } else {
+                badges.push('<span class="re-badge re-early-breakeven"><span class="re-dot"></span>BREAKEVEN</span>');
+            }
+        } else {
+            const actPct = rs.early_activation_pct ? `@${rs.early_activation_pct}%` : '';
+            badges.push(`<span class="re-badge re-early-ready">Early ${actPct}</span>`);
+        }
+    }
+    
+    if (rs.giveback_enabled) {
+        if (rs.giveback_guard_active) {
+            const gbPct = rs.giveback_allowed_pct ? `${rs.giveback_allowed_pct}%` : '';
+            badges.push(`<span class="re-badge re-giveback-armed"><span class="re-dot"></span>GIVEBACK ${gbPct}</span>`);
+        } else {
+            badges.push('<span class="re-badge re-giveback-ready">Giveback</span>');
+        }
+    }
+    
+    if (rs.max_pnl_seen > 0) {
+        badges.push(`<span class="re-badge re-peak" title="Peak P&L observed by risk engine">Peak: +${rs.max_pnl_seen.toFixed(1)}%</span>`);
+    }
+    
+    return badges.join('');
+}
+
+function buildDashboardRiskTooltip(rs) {
+    if (!rs) return '';
+    let rows = '';
+    rows += `<div class="ret-row"><span class="ret-label">Entry</span><span class="ret-value">$${rs.entry_price ? rs.entry_price.toFixed(2) : '?'}</span></div>`;
+    if (rs.current_price) rows += `<div class="ret-row"><span class="ret-label">Current</span><span class="ret-value">$${rs.current_price.toFixed(2)}</span></div>`;
+    rows += `<div class="ret-row"><span class="ret-label">P&L</span><span class="ret-value" style="color:${rs.current_pnl_pct >= 0 ? '#30d158' : '#ff3b30'}">${rs.current_pnl_pct >= 0 ? '+' : ''}${rs.current_pnl_pct}%</span></div>`;
+    if (rs.max_pnl_seen > 0) rows += `<div class="ret-row"><span class="ret-label">Peak P&L</span><span class="ret-value" style="color:#30d158">+${rs.max_pnl_seen.toFixed(1)}%</span></div>`;
+    rows += '<div class="ret-divider"></div>';
+    if (rs.stop_loss_price) rows += `<div class="ret-row"><span class="ret-label">Stop Loss</span><span class="ret-value" style="color:#ff3b30">$${rs.stop_loss_price.toFixed(2)}</span></div>`;
+    if (rs.profit_target_price) rows += `<div class="ret-row"><span class="ret-label">Profit Target</span><span class="ret-value" style="color:#30d158">$${rs.profit_target_price.toFixed(2)}</span></div>`;
+    if (rs.dynamic_sl_price) rows += `<div class="ret-row"><span class="ret-label">Dynamic SL</span><span class="ret-value" style="color:#ff9500">$${rs.dynamic_sl_price.toFixed(2)}</span></div>`;
+    if (rs.trailing_stop_price) rows += `<div class="ret-row"><span class="ret-label">Trail Stop</span><span class="ret-value" style="color:#af82ff">$${rs.trailing_stop_price.toFixed(2)}</span></div>`;
+    if (rs.early_stop_price) rows += `<div class="ret-row"><span class="ret-label">Early Stop</span><span class="ret-value" style="color:#06b6d4">$${rs.early_stop_price.toFixed(2)}</span></div>`;
+    if (rs.tiers_hit && rs.tiers_hit.length > 0) rows += `<div class="ret-row"><span class="ret-label">Tiers Hit</span><span class="ret-value">${rs.tiers_hit.map(t => 'PT'+t).join(', ')}</span></div>`;
+    if (rs.highest_price) rows += `<div class="ret-row"><span class="ret-label">Highest</span><span class="ret-value">$${rs.highest_price.toFixed(2)}</span></div>`;
+    return rows;
+}
+
+function computePositionKey(trade) {
+    const broker = (trade.broker || 'Unknown').toUpperCase().replace(/\s+/g, '_');
+    const symbol = (trade.symbol || '').toUpperCase();
+    if (trade.asset_type === 'option' && trade.strike) {
+        const cp = (trade.call_put || 'C').toUpperCase().charAt(0);
+        const expiry = trade.expiry || '';
+        return `${broker}_${symbol}_${trade.strike}_${expiry}_${cp}`;
+    }
+    return `${broker}_${symbol}_stock`;
+}
+
+function matchRiskStateForCard(strip, states) {
+    const tradeId = strip.getAttribute('data-re-trade-id');
+    if (tradeId && states[tradeId]) return states[tradeId];
+    
+    const posKey = strip.getAttribute('data-re-pos-key') || '';
+    if (posKey && states[posKey]) return states[posKey];
+    
+    const posKeyUpper = posKey.toUpperCase();
+    for (const [key, val] of Object.entries(states)) {
+        if (!val || !val.position_key) continue;
+        if (val.position_key.toUpperCase() === posKeyUpper) return val;
+    }
+    
+    return null;
+}
+
+async function fetchDashboardRiskStates() {
+    try {
+        const response = await fetch('/api/risk-status');
+        const data = await response.json();
+        if (!data.success) return;
+        
+        const states = data.risk_states || {};
+        dashboardRiskStates = states;
+        
+        document.querySelectorAll('.risk-engine-strip').forEach(strip => {
+            const rs = matchRiskStateForCard(strip, states);
+            
+            const badgesContainer = strip.querySelector('.re-badges');
+            if (!badgesContainer) return;
+            
+            const badgesHTML = buildDashboardRiskBadges(rs);
+            const tooltipHTML = rs && rs.monitoring ? buildDashboardRiskTooltip(rs) : '';
+            
+            if (tooltipHTML) {
+                badgesContainer.innerHTML = `<div class="re-tooltip">${badgesHTML}<div class="re-tooltip-content">${tooltipHTML}</div></div>`;
+            } else {
+                badgesContainer.innerHTML = badgesHTML;
+            }
+        });
+    } catch (err) {
+        console.error('[Dashboard] Risk status fetch failed:', err);
+    }
+}
 
 function switchRegion(region) {
     currentRegion = region;
@@ -1386,9 +1735,9 @@ async function loadTrades() {
             return;
         }
         
-        // Use card layout for live positions, table for others
         if (currentTab === 'live') {
             container.innerHTML = renderPositionCards(filteredTrades);
+            fetchDashboardRiskStates();
         } else {
             container.innerHTML = renderTradesTable(filteredTrades);
         }
@@ -1573,6 +1922,15 @@ function renderPositionCards(trades) {
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+            
+            <div class="risk-engine-strip" id="re-strip-${trade.id}" 
+                 data-re-trade-id="${trade.id || ''}"
+                 data-re-pos-key="${computePositionKey(trade)}">
+                <span class="re-label">Risk Engine</span>
+                <div class="re-badges">
+                    <span class="re-badge re-loading">Loading...</span>
                 </div>
             </div>
         </div>

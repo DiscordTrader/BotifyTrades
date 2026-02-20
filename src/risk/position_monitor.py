@@ -563,6 +563,9 @@ class RiskDBAdapter:
         if not self._db:
             return None
         
+        broker = (broker or '').strip()
+        symbol = (symbol or '').strip().upper()
+        
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor()
@@ -1351,6 +1354,16 @@ class RiskManager:
             )
             if trade_id:
                 self.cache.set_trade_id(pos_key, trade_id)
+            else:
+                if not hasattr(self, '_logged_missing_trades'):
+                    self._logged_missing_trades = set()
+                if pos_key not in self._logged_missing_trades:
+                    self._logged_missing_trades.add(pos_key)
+                    print(f"[RISK] No trade row found in DB for live position: {pos_key} "
+                          f"(broker={position.broker}, symbol={position.symbol}, "
+                          f"asset={position.asset}"
+                          f"{f', strike={position.strike}, expiry={position.expiry}' if position.asset == 'option' else ''}"
+                          f") — using global risk settings as fallback")
         
         self.cache.update_highest_price(pos_key, position.current_price, trade_id=trade_id)
         

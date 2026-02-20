@@ -751,12 +751,11 @@ class PositionCache:
     
     def get_all_risk_states(self) -> dict:
         """Export all monitored position risk states for the UI dashboard.
-        Returns a dict keyed by trade_id with risk state details."""
+        Returns a dict keyed by trade_id (or pos_key fallback) with risk state details."""
         result = {}
         for pos_key, entry in self._cache.items():
             trade_id = self._trade_id_map.get(pos_key)
-            if not trade_id:
-                continue
+            state_key = str(trade_id) if trade_id else pos_key
             
             cs = entry.channel_settings
             has_stop_loss = entry.stop_loss_price is not None
@@ -781,7 +780,7 @@ class PositionCache:
             if entry.tier4_hit:
                 tiers_hit.append(4)
             
-            result[str(trade_id)] = {
+            result[state_key] = {
                 'position_key': pos_key,
                 'monitoring': True,
                 'entry_price': entry.entry_price,
