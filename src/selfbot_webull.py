@@ -1614,10 +1614,7 @@ ALLOW_ORDER_WHEN_NO_QUOTE = cfg.getboolean('price_slippage', 'allow_when_no_quot
 
 if ENABLE_SLIPPAGE_PROTECTION:
     print(f"[CONFIG] ✓ Price slippage protection ENABLED")
-    print(f"[CONFIG]   - Immediate fill threshold: ±{MAX_IMMEDIATE_SLIPPAGE_PCT}%")
-    print(f"[CONFIG]   - High slippage threshold: ±{HIGH_SLIPPAGE_THRESHOLD_PCT}%")
-    print(f"[CONFIG]   - Wait time: {SLIPPAGE_WAIT_MINUTES} minutes")
-    print(f"[CONFIG]   - Retry interval: {SLIPPAGE_RETRY_INTERVAL} seconds")
+    print(f"[CONFIG]   - Global slippage threshold: ±{HIGH_SLIPPAGE_THRESHOLD_PCT}% (per-channel overrides apply)")
     print(f"[CONFIG]   - Allow order when no quote: {ALLOW_ORDER_WHEN_NO_QUOTE}")
     print(f"[CONFIG]   - Source: {'DATABASE' if DATABASE_MODULE_AVAILABLE else 'config.ini'}")
 else:
@@ -2766,7 +2763,9 @@ class WebullBroker:
     
     def _evaluate_slippage(self, signal_price: float, current_price: Optional[float], threshold_override: Optional[float] = None) -> Tuple[SlippageDecision, float]:
         """
-        Evaluate price slippage and return decision
+        Evaluate price slippage and return decision.
+        Uses a single threshold from channel or global settings - no hardcoded values.
+        Under threshold = fill immediately, over threshold = abort.
         Args:
             signal_price: Price from signal
             current_price: Current market price
@@ -2774,7 +2773,6 @@ class WebullBroker:
         Returns: (SlippageDecision, slippage_percentage)
         """
         if current_price is None or current_price <= 0:
-            # No quote data - check if we should proceed anyway
             if ALLOW_ORDER_WHEN_NO_QUOTE:
                 print(f"[SLIPPAGE] ⚠️  No valid current price - proceeding anyway (allow_when_no_quote=true)")
                 return (SlippageDecision.IMMEDIATE, 0.0)
@@ -2782,23 +2780,18 @@ class WebullBroker:
                 print(f"[SLIPPAGE] ❌ No valid current price - marking as ABORT (illiquid)")
                 return (SlippageDecision.ABORT, 0.0)
         
-        # Calculate slippage percentage
         slippage_pct = abs(current_price - signal_price) / signal_price * 100
         
-        # Use override threshold if provided, otherwise use global
-        high_threshold = threshold_override if threshold_override is not None else HIGH_SLIPPAGE_THRESHOLD_PCT
+        threshold = threshold_override if threshold_override is not None else HIGH_SLIPPAGE_THRESHOLD_PCT
         
         print(f"[SLIPPAGE] Signal price: ${signal_price:.2f}, Current price: ${current_price:.2f}")
-        print(f"[SLIPPAGE] Slippage: {slippage_pct:.2f}%")
+        print(f"[SLIPPAGE] Slippage: {slippage_pct:.2f}% (threshold: {threshold}%)")
         
-        if slippage_pct <= MAX_IMMEDIATE_SLIPPAGE_PCT:
-            print(f"[SLIPPAGE] ✅ IMMEDIATE fill - slippage {slippage_pct:.2f}% <= {MAX_IMMEDIATE_SLIPPAGE_PCT}%")
+        if slippage_pct <= threshold:
+            print(f"[SLIPPAGE] ✅ FILL - slippage {slippage_pct:.2f}% <= {threshold}%")
             return (SlippageDecision.IMMEDIATE, slippage_pct)
-        elif slippage_pct <= high_threshold:
-            print(f"[SLIPPAGE] ⏸️  WAIT - slippage {slippage_pct:.2f}% between {MAX_IMMEDIATE_SLIPPAGE_PCT}% and {high_threshold}%")
-            return (SlippageDecision.WAIT, slippage_pct)
         else:
-            print(f"[SLIPPAGE] ❌ ABORT - slippage {slippage_pct:.2f}% > {high_threshold}%")
+            print(f"[SLIPPAGE] ❌ ABORT - slippage {slippage_pct:.2f}% > {threshold}%")
             return (SlippageDecision.ABORT, slippage_pct)
     
     async def _wait_for_better_price(self, signal: dict, get_current_price_func) -> Tuple[SlippageDecision, Optional[float]]:
