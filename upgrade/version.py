@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict
 
 
-APP_VERSION = "5.1.16"
+APP_VERSION = "5.1.17"
 BUILD_DATE = "2026-02-20"
 
 
