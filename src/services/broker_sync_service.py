@@ -1250,6 +1250,11 @@ class BrokerSyncService:
                     except Exception as cache_err:
                         print(f"[SYNC] Warning: Could not clean up cache: {cache_err}")
                 elif current_status == 'OPEN':
+                    # PAPER_SIM orders don't have real broker positions - skip reconciliation
+                    order_id_val = trade.get('order_id', '') or ''
+                    if order_id_val.startswith('PAPER_SIM'):
+                        continue
+                    
                     # Open position no longer exists = broker closed it (manual close, stop/target hit, or liquidation)
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in positions: OPEN → CLOSED (broker closed)")
                     

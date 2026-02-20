@@ -427,18 +427,20 @@ class RiskDBAdapter:
                         print(f"[RISK] Using signal routing risk settings for routed trade (mapping_id={routing_mapping_id})")
                         return routing_settings
                 
-                # PRIORITY 2: Channel-level risk settings (existing behavior - PRESERVED)
-                # Check if channel wants to use global risk settings instead of its own
-                use_global = row[34] if len(row) > 34 else 1  # Default: use global (backwards compat)
-                if use_global:
-                    print(f"[RISK] Channel '{row[7]}' uses global risk settings (use_global_risk_settings=1)")
-                    return None  # Return None so global RiskSettings apply
-                
-                # Check if risk management is explicitly enabled for this channel
+                # PRIORITY 2: Channel-level risk settings
+                # If risk management is explicitly enabled at channel level, use channel settings
+                # This takes priority over use_global_risk_settings flag
                 risk_enabled = row[8] if len(row) > 8 else 0
+                use_global = row[34] if len(row) > 34 else 1  # Default: use global (backwards compat)
                 
-                # Only apply risk management if explicitly enabled
-                if not risk_enabled:
+                if risk_enabled:
+                    # Channel has its own risk management enabled - use channel settings
+                    pass  # Fall through to extract channel settings below
+                elif use_global:
+                    # Channel doesn't have own risk management but wants global settings
+                    return None  # Return None so global RiskSettings apply
+                else:
+                    # No risk management at channel level and not using global
                     return None
                 
                 # Extract trade-level SL/PT overrides (from conditional orders or parsed signals)
