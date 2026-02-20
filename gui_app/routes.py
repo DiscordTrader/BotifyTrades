@@ -6765,9 +6765,71 @@ def register_routes(app):
                         wb = getattr(_bot_instance.broker, '_client', None)
                         if not wb:
                             return [], []
-                        positions = wb.get_positions() or []
+                        raw_positions = wb.get_positions() or []
                         orders = wb.get_current_orders() or []
-                        return positions, orders
+                        
+                        normalized = []
+                        for pos in raw_positions:
+                            try:
+                                position_qty = float(pos.get('position', 0))
+                            except (ValueError, TypeError):
+                                position_qty = 0
+                            if position_qty <= 0:
+                                continue
+                            
+                            symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+                            raw_asset = pos.get('assetType', 'unknown')
+                            is_option = (
+                                'optionId' in pos or
+                                'strikePrice' in pos or
+                                'expireDate' in pos or
+                                raw_asset.lower() in ('option', 'opt')
+                            )
+                            
+                            strike = None
+                            expiry = None
+                            call_put = None
+                            if is_option:
+                                strike = float(pos.get('strikePrice', 0))
+                                direction = pos.get('direction', '').upper()
+                                call_put = 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else '')
+                                raw_expiry = pos.get('expireDate', '')
+                                if raw_expiry and '-' in raw_expiry:
+                                    from datetime import datetime as dt_parse
+                                    try:
+                                        exp_date = dt_parse.strptime(raw_expiry, '%Y-%m-%d')
+                                        expiry = exp_date.strftime('%m/%d')
+                                    except Exception:
+                                        expiry = raw_expiry
+                                else:
+                                    expiry = raw_expiry
+                            
+                            avg_cost = float(pos.get('costPrice', 0))
+                            cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
+                            unrealized = (cur_price - avg_cost) * position_qty
+                            if is_option:
+                                unrealized *= 100
+                            
+                            normalized.append({
+                                'symbol': symbol,
+                                'asset': 'option' if is_option else 'stock',
+                                'asset_type': 'option' if is_option else 'stock',
+                                'strike': strike,
+                                'expiry': expiry,
+                                'call_put': call_put,
+                                'direction': call_put or '',
+                                'quantity': position_qty,
+                                'avg_cost': avg_cost,
+                                'current_price': cur_price,
+                                'unrealized_pl': unrealized,
+                                'broker': 'WEBULL',
+                                'bid': float(pos.get('bid', 0) or 0),
+                                'ask': float(pos.get('ask', 0) or 0),
+                                'mid': float(pos.get('mid', 0) or 0),
+                                'last': float(pos.get('last', cur_price) or cur_price),
+                            })
+                        
+                        return normalized, orders
                     except Exception as e:
                         print(f"[API] Direct Webull positions error: {e}")
                         return [], []
@@ -6999,7 +7061,8 @@ def register_routes(app):
                 call_put_norm = normalize_call_put(direction)
                 expiry_norm = normalize_expiry(pos.get('expiry', ''))
                 
-                if pos['asset'] == 'option':
+                pos_asset = pos.get('asset', pos.get('asset_type', 'stock'))
+                if pos_asset == 'option':
                     pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                 else:
                     pos_key = f"{pos['symbol']}_stock"
@@ -7135,7 +7198,8 @@ def register_routes(app):
                 call_put_norm = normalize_call_put(direction)
                 expiry_norm = normalize_expiry(pos.get('expiry', ''))
                 
-                if pos['asset'] == 'option':
+                pos_asset = pos.get('asset', pos.get('asset_type', 'stock'))
+                if pos_asset == 'option':
                     pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                 else:
                     pos_key = f"{pos['symbol']}_stock"
@@ -7149,7 +7213,7 @@ def register_routes(app):
                     live_pos_trade = {
                         'id': stable_id,
                         'symbol': pos['symbol'],
-                        'asset_type': pos['asset'],
+                        'asset_type': pos_asset,
                         'side': 'BTO',
                         'quantity': int(pos['quantity']),
                         'entry_price': pos['avg_cost'],

@@ -95,13 +95,17 @@ def _fetch_webull(bot) -> List[Dict]:
         webull_broker = None
         if hasattr(broker, 'brokers'):
             webull_broker = broker.brokers.get('Webull')
-        elif hasattr(broker, 'wb'):
+        elif hasattr(broker, '_client') or hasattr(broker, 'wb'):
             webull_broker = broker
 
-        if not webull_broker or not hasattr(webull_broker, 'wb'):
+        if not webull_broker:
             return []
 
-        positions_raw = webull_broker.wb.get_positions() or []
+        wb_client = getattr(webull_broker, '_client', None) or getattr(webull_broker, 'wb', None)
+        if not wb_client:
+            return []
+
+        positions_raw = wb_client.get_positions() or []
 
         positions = []
         for pos in positions_raw:
