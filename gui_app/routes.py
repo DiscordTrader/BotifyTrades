@@ -3143,15 +3143,30 @@ def register_routes(app):
                     if login_result.get('success'):
                         account_result = auth.get_account_info()
                         if account_result.get('success'):
-                            account = account_result.get('account', {})
+                            raw_acct = account_result.get('account', {})
+                            acct_data = {}
+                            acct_members = raw_acct.get('accountMembers', [])
+                            if acct_members and isinstance(acct_members, list):
+                                for item in acct_members:
+                                    if isinstance(item, dict) and 'key' in item and 'value' in item:
+                                        acct_data[item['key']] = item['value']
+                            for k, v in raw_acct.items():
+                                if k != 'accountMembers' and k not in acct_data:
+                                    acct_data[k] = v
+                            def _sf(keys, fb=0.0):
+                                for key in keys:
+                                    if key in acct_data:
+                                        try: return float(acct_data[key])
+                                        except: pass
+                                return fb
                             result = jsonify({
-                                'buying_power': float(account.get('dayBuyingPower', 0) or account.get('usableCash', 0) or 0),
-                                'cash_balance': float(account.get('cashBalance', 0) or account.get('usableCash', 0) or 0),
-                                'net_liquidation': float(account.get('netLiquidation', 0) or account.get('totalMarketValue', 0) or 0),
-                                'total_profit_loss': float(account.get('unrealizedProfitLoss', 0) or 0),
-                                'day_profit_loss': float(account.get('dayProfitLoss', 0) or 0),
-                                'settled_cash': float(account.get('settledCash', 0) or 0),
-                                'unsettled_cash': float(account.get('unsettledCash', 0) or 0),
+                                'buying_power': _sf(['buyingPower', 'dayBuyingPower', 'usableCash']),
+                                'cash_balance': _sf(['cashBalance', 'totalCashValue', 'usableCash']),
+                                'net_liquidation': _sf(['netLiquidation', 'totalMarketValue']),
+                                'total_profit_loss': _sf(['unrealizedProfitLoss']),
+                                'day_profit_loss': _sf(['dayProfitLoss']),
+                                'settled_cash': _sf(['settledCash', 'settledFunds']),
+                                'unsettled_cash': _sf(['unsettledCash', 'unsettledFunds']),
                                 'status': 'ok'
                             })
                             _api_cache[cache_key] = (result, time.time())
@@ -3184,23 +3199,49 @@ def register_routes(app):
                 wb = getattr(_bot_instance.broker, '_client', None)
                 if not wb:
                     return None
-                account_info = wb.get_account()
-                if isinstance(account_info, dict) and account_info.get('code') == 'auth.token.expire':
+                raw_account = wb.get_account()
+                if isinstance(raw_account, dict) and raw_account.get('code') == 'auth.token.expire':
                     return None
-                if not account_info:
+                if not raw_account:
                     return None
-                buying_power = float(account_info.get('dayBuyingPower', 0) or account_info.get('usableCash', 0) or 0)
-                cash_balance = float(account_info.get('cashBalance', 0) or account_info.get('usableCash', 0) or 0)
-                net_liq = float(account_info.get('netLiquidation', 0) or account_info.get('totalMarketValue', 0) or 0)
-                total_pl = float(account_info.get('unrealizedProfitLoss', 0) or 0)
-                day_pl = float(account_info.get('dayProfitLoss', 0) or 0)
-                settled = float(account_info.get('settledCash', 0) or 0)
-                unsettled = float(account_info.get('unsettledCash', 0) or 0)
+                
+                account_data = {}
+                account_members = raw_account.get('accountMembers', [])
+                if account_members and isinstance(account_members, list):
+                    for item in account_members:
+                        if isinstance(item, dict) and 'key' in item and 'value' in item:
+                            account_data[item['key']] = item['value']
+                for k, v in raw_account.items():
+                    if k != 'accountMembers' and k not in account_data:
+                        account_data[k] = v
+                
+                def _safe_float(keys, fallback=0.0):
+                    for key in keys:
+                        if key in account_data:
+                            try:
+                                val = float(account_data[key])
+                                return val
+                            except (ValueError, TypeError):
+                                pass
+                    return fallback
+                
+                buying_power = _safe_float(['buyingPower', 'dayBuyingPower', 'usableCash', 'cashAvailableForTrade'])
+                cash_balance = _safe_float(['cashBalance', 'totalCashValue', 'usableCash', 'cash'])
+                net_liq = _safe_float(['netLiquidation', 'totalMarketValue', 'accountValue'])
+                total_pl = _safe_float(['unrealizedProfitLoss', 'unrealizedPL'])
+                day_pl = _safe_float(['dayProfitLoss', 'dayPnl'])
+                settled = _safe_float(['settledCash', 'settledFunds'])
+                unsettled = _safe_float(['unsettledCash', 'unsettledFunds'])
+                options_bp = _safe_float(['optionBuyingPower'])
+                if options_bp <= 0:
+                    options_bp = buying_power
+                
                 return {
                     'buying_power': buying_power, 'cash_balance': cash_balance,
                     'net_liquidation': net_liq, 'total_profit_loss': total_pl,
                     'day_profit_loss': day_pl, 'settled_cash': settled,
-                    'unsettled_cash': unsettled, 'status': 'ok'
+                    'unsettled_cash': unsettled, 'options_buying_power': options_bp,
+                    'status': 'ok'
                 }
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
