@@ -442,6 +442,9 @@ class OrderResilienceLayer:
         self._initialized = True
 
     def pre_check(self, ctx: OrderContext) -> tuple:
+        if ctx.action.upper() in ('STC', 'SELL') or ctx.is_risk_order:
+            return (True, 'exit_order_bypass')
+
         allowed, reason = self.circuit_breaker.check_allowed(
             broker_name=ctx.broker_name,
             symbol=ctx.symbol,
@@ -459,6 +462,8 @@ class OrderResilienceLayer:
         expiry = ctx.expiry if ctx.asset == 'option' else None
         opt_type = ctx.opt_type if ctx.asset == 'option' else None
 
+        is_exit = ctx.action.upper() in ('STC', 'SELL') or ctx.is_risk_order
+
         if category == ErrorCategory.SUCCESS:
             self.circuit_breaker.record_success(
                 ctx.broker_name, ctx.symbol, strike, expiry, opt_type
@@ -466,9 +471,10 @@ class OrderResilienceLayer:
             with self._stats_lock:
                 self._order_stats[f"{ctx.broker_name}_success"] += 1
         elif category in (ErrorCategory.TRANSIENT_BUSY, ErrorCategory.RATE_LIMIT, ErrorCategory.PENDING_CONFLICT):
-            self.circuit_breaker.record_failure(
-                ctx.broker_name, ctx.symbol, category, strike, expiry, opt_type
-            )
+            if not is_exit:
+                self.circuit_breaker.record_failure(
+                    ctx.broker_name, ctx.symbol, category, strike, expiry, opt_type
+                )
             with self._stats_lock:
                 self._order_stats[f"{ctx.broker_name}_{category.value}"] += 1
 
