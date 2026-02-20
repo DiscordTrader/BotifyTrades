@@ -3147,36 +3147,76 @@ class WebullBroker:
             
             option_enforce = 'GTC'
             
+            TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
+            MAX_TRANSIENT_RETRIES = 3
+            TRANSIENT_RETRY_DELAY = 2
+
             def _place_single_order(wb_inst, opt_id_val, s, adj_q, eff_p, attempt_label=""):
                 import requests as req_lib
                 import uuid as uuid_lib
-                hdrs = wb_inst.build_req_headers(include_trade_token=True, include_time=True)
-                payload = {
-                    'orderType': 'LMT',
-                    'serialId': str(uuid_lib.uuid4()),
-                    'timeInForce': option_enforce,
-                    'orders': [{'quantity': int(adj_q), 'action': s, 'tickerId': int(opt_id_val), 'tickerType': 'OPTION'}],
-                    'lmtPrice': float(eff_p)
-                }
-                print(f"[{self.name}] {attempt_label}Placing order: {s} {int(adj_q)} @ ${eff_p:.2f}", flush=True)
-                try:
-                    url = wb_inst._urls.place_option_orders(wb_inst._account_id)
-                    resp = req_lib.post(url, json=payload, headers=hdrs, timeout=wb_inst.timeout)
-                    if resp.status_code == 200:
-                        rj = resp.json()
-                        print(f"[{self.name}] {attempt_label}✓ Order placed: orderId={rj.get('orderId')}", flush=True)
-                        return rj
-                    else:
-                        emsg = f"Webull API Error {resp.status_code}: {resp.reason}"
-                        try:
-                            emsg += f" - {resp.json()}"
-                        except:
-                            emsg += f" - {resp.text}"
-                        print(f"[{self.name}] {attempt_label}❌ Order failed: {emsg}", flush=True)
-                        return {'success': False, 'msg': emsg, 'error': 'WEBULL_API_ERROR', 'status_code': resp.status_code}
-                except Exception as e:
-                    print(f"[{self.name}] {attempt_label}❌ API call failed: {e}", flush=True)
-                    return {'success': False, 'msg': str(e), 'error': 'API_EXCEPTION'}
+                import time as _t
+
+                last_result = None
+                for t_attempt in range(1, MAX_TRANSIENT_RETRIES + 1):
+                    hdrs = wb_inst.build_req_headers(include_trade_token=True, include_time=True)
+                    payload = {
+                        'orderType': 'LMT',
+                        'serialId': str(uuid_lib.uuid4()),
+                        'timeInForce': option_enforce,
+                        'orders': [{'quantity': int(adj_q), 'action': s, 'tickerId': int(opt_id_val), 'tickerType': 'OPTION'}],
+                        'lmtPrice': float(eff_p)
+                    }
+                    retry_label = f"[Try {t_attempt}/{MAX_TRANSIENT_RETRIES}] " if MAX_TRANSIENT_RETRIES > 1 else ""
+                    print(f"[{self.name}] {attempt_label}{retry_label}Placing order: {s} {int(adj_q)} @ ${eff_p:.2f}", flush=True)
+                    try:
+                        url = wb_inst._urls.place_option_orders(wb_inst._account_id)
+                        resp = req_lib.post(url, json=payload, headers=hdrs, timeout=wb_inst.timeout)
+                        if resp.status_code == 200:
+                            rj = resp.json()
+                            if rj.get('msg') and not rj.get('orderId'):
+                                error_code = rj.get('code', '')
+                                is_transient = error_code in TRANSIENT_CODES or ('system' in str(rj.get('msg', '')).lower() and 'busy' in str(rj.get('msg', '')).lower())
+                                if is_transient and t_attempt < MAX_TRANSIENT_RETRIES:
+                                    print(f"[{self.name}] {attempt_label}⚠️ Transient error: {rj.get('msg')} - refreshing trade token & retrying in {TRANSIENT_RETRY_DELAY}s...", flush=True)
+                                    try:
+                                        self._refresh_trade_token_sync()
+                                    except Exception:
+                                        pass
+                                    _t.sleep(TRANSIENT_RETRY_DELAY)
+                                    continue
+                                emsg = f"Webull API: {rj.get('msg', 'Unknown error')}"
+                                print(f"[{self.name}] {attempt_label}❌ Order failed: {emsg}", flush=True)
+                                return {'success': False, 'msg': emsg, 'error': 'WEBULL_API_ERROR', 'code': error_code}
+                            print(f"[{self.name}] {attempt_label}✓ Order placed: orderId={rj.get('orderId')}", flush=True)
+                            return rj
+                        else:
+                            emsg = f"Webull API Error {resp.status_code}: {resp.reason}"
+                            resp_data = {}
+                            try:
+                                resp_data = resp.json()
+                                emsg += f" - {resp_data}"
+                            except:
+                                emsg += f" - {resp.text}"
+                            error_code = resp_data.get('code', '') if isinstance(resp_data, dict) else ''
+                            is_transient = error_code in TRANSIENT_CODES or ('system' in str(resp_data.get('msg', '') if isinstance(resp_data, dict) else '').lower() and 'busy' in str(resp_data.get('msg', '') if isinstance(resp_data, dict) else '').lower())
+                            if (resp.status_code == 500 or is_transient) and t_attempt < MAX_TRANSIENT_RETRIES:
+                                print(f"[{self.name}] {attempt_label}⚠️ Server error (attempt {t_attempt}) - refreshing trade token & retrying in {TRANSIENT_RETRY_DELAY}s...", flush=True)
+                                try:
+                                    self._refresh_trade_token_sync()
+                                except Exception:
+                                    pass
+                                _t.sleep(TRANSIENT_RETRY_DELAY)
+                                continue
+                            print(f"[{self.name}] {attempt_label}❌ Order failed: {emsg}", flush=True)
+                            last_result = {'success': False, 'msg': emsg, 'error': 'WEBULL_API_ERROR', 'status_code': resp.status_code}
+                            return last_result
+                    except Exception as e:
+                        print(f"[{self.name}] {attempt_label}❌ API call failed: {e}", flush=True)
+                        if t_attempt < MAX_TRANSIENT_RETRIES:
+                            _t.sleep(TRANSIENT_RETRY_DELAY)
+                            continue
+                        return {'success': False, 'msg': str(e), 'error': 'API_EXCEPTION'}
+                return last_result or {'success': False, 'msg': 'All transient retries exhausted', 'error': 'TRANSIENT_EXHAUSTED'}
             
             order_mode_label = "MARKET-MODE (aggressive limit)" if is_market_mode else "LIMIT"
             print(f"[{self.name}] Placing {order_mode_label} option order via direct API")
@@ -3246,16 +3286,19 @@ class WebullBroker:
 
         resp = await self.loop.run_in_executor(None, _blocking_place)
         
-        # Check for trade token expiration and auto-refresh
-        if resp and isinstance(resp, dict) and resp.get('code') == 'trade.token.expire':
-            print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
+        _TOKEN_RETRY_CODES = {'trade.token.expire', 'trade.system.exception', 'trade.busy', 'system.busy'}
+        resp_code = resp.get('code', '') if resp and isinstance(resp, dict) else ''
+        resp_msg = str(resp.get('msg', '')) if resp and isinstance(resp, dict) else ''
+        _needs_token_retry = resp_code in _TOKEN_RETRY_CODES or ('system' in resp_msg.lower() and 'busy' in resp_msg.lower())
+        
+        if resp and isinstance(resp, dict) and _needs_token_retry and not resp.get('orderId'):
+            print(f"[{self.name}] Trade token issue detected (code={resp_code}) - attempting auto-refresh...")
             refresh_success = await self._refresh_trade_token()
             if refresh_success:
                 print(f"[{self.name}] Token refreshed, retrying option order...")
                 resp = await self.loop.run_in_executor(None, _blocking_place)
             else:
                 self._tokens_valid = False
-                # Send notification about token expiration
                 try:
                     from gui_app.discord_notifier import notify_token_expired
                     notify_token_expired(broker='Webull')
