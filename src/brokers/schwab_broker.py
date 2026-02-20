@@ -53,10 +53,15 @@ class SchwabBroker(BrokerInterface):
         
         self._api_rate_lock = threading.Lock()
         self._last_api_call = 0
-        self._min_api_interval = 0.5
+        self._min_api_interval = 1.0
         self._last_valid_positions = []
         self._last_valid_positions_time = 0
-        self._position_cache_ttl = 30
+        self._position_cache_ttl = 60
+        
+        self._global_429_until = 0
+        self._global_429_lock = threading.Lock()
+        self._consecutive_429s = 0
+        self._last_successful_call = 0
     
     async def connect(self) -> bool:
         """Connect to Schwab using stored tokens"""
@@ -383,9 +388,11 @@ class SchwabBroker(BrokerInterface):
             truncated = math.floor(price * 100) / 100
             return f"{truncated:.2f}"
 
-    async def _make_request(self, method, url, **kwargs):
+    async def _make_request(self, method, url, is_exit_order: bool = False, **kwargs):
         """Make HTTP request with rate limit and token refresh handling"""
         import httpx
+
+        await self._async_rate_limit(is_exit_order=is_exit_order)
 
         headers = kwargs.pop('headers', {})
         if 'Authorization' not in headers:
@@ -398,11 +405,24 @@ class SchwabBroker(BrokerInterface):
 
             if response.status_code == 429:
                 retry_after = int(response.headers.get('Retry-After', '60'))
-                print(f"[{self.name}] Rate limited, waiting {retry_after}s...")
-                await asyncio.sleep(retry_after)
+                self._register_429(retry_after)
+                
+                if is_exit_order:
+                    wait = min(retry_after, 10)
+                    print(f"[{self.name}] 🔴 EXIT ORDER 429 - short wait {wait}s then retry")
+                    await asyncio.sleep(wait)
+                else:
+                    await asyncio.sleep(retry_after)
+                
                 await self._ensure_valid_token()
                 headers['Authorization'] = f'Bearer {self.access_token}'
                 response = await client.request(method, url, headers=headers, **kwargs)
+                
+                if response.status_code == 429:
+                    self._register_429(retry_after)
+                    return response
+                else:
+                    self._register_success()
 
             elif response.status_code == 401:
                 async with self._token_refresh_lock:
@@ -410,6 +430,9 @@ class SchwabBroker(BrokerInterface):
                 if refreshed:
                     headers['Authorization'] = f'Bearer {self.access_token}'
                     response = await client.request(method, url, headers=headers, **kwargs)
+            
+            elif response.status_code in [200, 201, 202]:
+                self._register_success()
 
             return response
     
@@ -468,89 +491,106 @@ class SchwabBroker(BrokerInterface):
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information including settled cash for good faith violation prevention"""
         try:
+            if self._should_skip_non_critical():
+                if hasattr(self, '_last_account_info') and self._last_account_info:
+                    return dict(self._last_account_info)
+            
             if not await self._ensure_valid_token():
                 return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
             
-            await self._async_rate_limit()
-            import httpx
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}",
+                params={'fields': 'positions'}
+            )
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}",
-                    headers=headers,
-                    params={'fields': 'positions'}
-                )
+            if response.status_code == 200:
+                data = response.json()
+                account = data.get('securitiesAccount', {})
+                balances = account.get('currentBalances', {})
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    account = data.get('securitiesAccount', {})
-                    balances = account.get('currentBalances', {})
-                    
-                    print(f"[{self.name}] Raw currentBalances keys: {list(balances.keys())}")
-                    
-                    raw_buying_power = float(balances.get('buyingPower', 0))
-                    cash_balance = float(balances.get('cashBalance', 0))
-                    portfolio_value = float(balances.get('liquidationValue', 0))
-                    
-                    cash_available_for_trading = float(balances.get('cashAvailableForTrading', 0))
-                    available_funds = float(balances.get('availableFunds', 0))
-                    available_funds_non_margin = float(balances.get('availableFundsNonMarginableTrade', 0))
-                    option_buying_power = float(balances.get('optionBuyingPower', 0))
-                    buying_power_non_margin = float(balances.get('buyingPowerNonMarginableTrade', 0))
-                    
-                    buying_power = raw_buying_power
-                    if buying_power <= 0:
-                        for fallback_name, fallback_val in [
-                            ('availableFunds', available_funds),
-                            ('cashAvailableForTrading', cash_available_for_trading),
-                            ('availableFundsNonMarginableTrade', available_funds_non_margin),
-                            ('buyingPowerNonMarginableTrade', buying_power_non_margin),
-                            ('optionBuyingPower', option_buying_power),
-                        ]:
-                            if fallback_val > 0:
-                                print(f"[{self.name}] buyingPower=0, using fallback '{fallback_name}'=${fallback_val:.2f}")
-                                buying_power = fallback_val
-                                break
-                    
-                    if option_buying_power <= 0:
-                        option_buying_power = buying_power
-                    
-                    if cash_available_for_trading > 0:
-                        settled_cash = cash_available_for_trading
-                    elif available_funds > 0:
-                        settled_cash = available_funds
-                    elif available_funds_non_margin > 0:
-                        settled_cash = available_funds_non_margin
-                    else:
-                        settled_cash = min(buying_power, cash_balance) if buying_power > 0 else cash_balance
-                    
-                    unsettled_cash = max(0, cash_balance - settled_cash)
-                    
-                    print(f"[{self.name}] Account: BP=${buying_power:.2f}, Cash=${cash_balance:.2f}, Settled=${settled_cash:.2f}, Unsettled=${unsettled_cash:.2f}, OptionsBP=${option_buying_power:.2f}")
-                    
-                    return {
-                        'buying_power': buying_power,
-                        'cash': cash_balance,
-                        'cash_balance': cash_balance,
-                        'portfolio_value': portfolio_value,
-                        'settled_cash': settled_cash,
-                        'unsettled_cash': unsettled_cash,
-                        'cashAvailableForTrading': cash_available_for_trading,
-                        'availableFunds': available_funds,
-                        'options_buying_power': option_buying_power,
-                        'account_type': account.get('type', 'UNKNOWN'),
-                        'account_id': self.account_number or ''
-                    }
+                print(f"[{self.name}] Raw currentBalances keys: {list(balances.keys())}")
+                
+                raw_buying_power = float(balances.get('buyingPower', 0))
+                cash_balance = float(balances.get('cashBalance', 0))
+                portfolio_value = float(balances.get('liquidationValue', 0))
+                
+                cash_available_for_trading = float(balances.get('cashAvailableForTrading', 0))
+                available_funds = float(balances.get('availableFunds', 0))
+                available_funds_non_margin = float(balances.get('availableFundsNonMarginableTrade', 0))
+                option_buying_power = float(balances.get('optionBuyingPower', 0))
+                buying_power_non_margin = float(balances.get('buyingPowerNonMarginableTrade', 0))
+                
+                buying_power = raw_buying_power
+                if buying_power <= 0:
+                    for fallback_name, fallback_val in [
+                        ('availableFunds', available_funds),
+                        ('cashAvailableForTrading', cash_available_for_trading),
+                        ('availableFundsNonMarginableTrade', available_funds_non_margin),
+                        ('buyingPowerNonMarginableTrade', buying_power_non_margin),
+                        ('optionBuyingPower', option_buying_power),
+                    ]:
+                        if fallback_val > 0:
+                            print(f"[{self.name}] buyingPower=0, using fallback '{fallback_name}'=${fallback_val:.2f}")
+                            buying_power = fallback_val
+                            break
+                
+                if option_buying_power <= 0:
+                    option_buying_power = buying_power
+                
+                if cash_available_for_trading > 0:
+                    settled_cash = cash_available_for_trading
+                elif available_funds > 0:
+                    settled_cash = available_funds
+                elif available_funds_non_margin > 0:
+                    settled_cash = available_funds_non_margin
+                else:
+                    settled_cash = min(buying_power, cash_balance) if buying_power > 0 else cash_balance
+                
+                unsettled_cash = max(0, cash_balance - settled_cash)
+                
+                print(f"[{self.name}] Account: BP=${buying_power:.2f}, Cash=${cash_balance:.2f}, Settled=${settled_cash:.2f}, Unsettled=${unsettled_cash:.2f}, OptionsBP=${option_buying_power:.2f}")
+                
+                result = {
+                    'buying_power': buying_power,
+                    'cash': cash_balance,
+                    'cash_balance': cash_balance,
+                    'portfolio_value': portfolio_value,
+                    'settled_cash': settled_cash,
+                    'unsettled_cash': unsettled_cash,
+                    'cashAvailableForTrading': cash_available_for_trading,
+                    'availableFunds': available_funds,
+                    'options_buying_power': option_buying_power,
+                    'account_type': account.get('type', 'UNKNOWN'),
+                    'account_id': self.account_number or ''
+                }
+                self._last_account_info = result
+                return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
         
         return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
+    
+    def _register_429(self, retry_after: int = 60):
+        """Register a 429 error - sets global backoff for ALL Schwab API calls"""
+        with self._global_429_lock:
+            self._consecutive_429s += 1
+            backoff = min(retry_after * (1 + 0.5 * (self._consecutive_429s - 1)), 180)
+            self._global_429_until = time.time() + backoff
+            print(f"[{self.name}] ⚠️ GLOBAL 429 BACKOFF: {backoff:.0f}s (consecutive: {self._consecutive_429s})")
+    
+    def _register_success(self):
+        """Register a successful API call - resets 429 counter"""
+        with self._global_429_lock:
+            self._consecutive_429s = 0
+            self._last_successful_call = time.time()
+    
+    def _is_in_429_backoff(self) -> float:
+        """Check if we're in global 429 backoff. Returns seconds remaining, 0 if clear."""
+        with self._global_429_lock:
+            remaining = self._global_429_until - time.time()
+            return max(0, remaining)
     
     def _rate_limit(self):
         """Enforce minimum interval between Schwab API calls to prevent 429 errors"""
@@ -562,8 +602,18 @@ class SchwabBroker(BrokerInterface):
             else:
                 self._last_api_call = now
     
-    async def _async_rate_limit(self):
-        """Non-blocking rate limit for async contexts"""
+    async def _async_rate_limit(self, is_exit_order: bool = False):
+        """Non-blocking rate limit for async contexts with global 429 awareness"""
+        backoff_remaining = self._is_in_429_backoff()
+        if backoff_remaining > 0:
+            if is_exit_order:
+                reduced_wait = min(backoff_remaining, 5.0)
+                print(f"[{self.name}] 🔴 EXIT ORDER waiting {reduced_wait:.0f}s (429 backoff, {backoff_remaining:.0f}s remaining)")
+                await asyncio.sleep(reduced_wait)
+            else:
+                print(f"[{self.name}] Rate limited (global 429 backoff), waiting {backoff_remaining:.0f}s...")
+                await asyncio.sleep(backoff_remaining)
+        
         with self._api_rate_lock:
             now = time.time()
             wait_time = self._min_api_interval - (now - self._last_api_call)
@@ -571,50 +621,50 @@ class SchwabBroker(BrokerInterface):
         if wait_time > 0:
             await asyncio.sleep(wait_time)
     
+    def _should_skip_non_critical(self) -> bool:
+        """Check if non-critical API calls should be skipped due to heavy rate limiting"""
+        return self._is_in_429_backoff() > 30
+    
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""
         try:
+            if self._should_skip_non_critical():
+                if hasattr(self, '_last_positions_simple') and self._last_positions_simple:
+                    return dict(self._last_positions_simple)
+                if self._last_valid_positions:
+                    return {p.get('symbol', ''): int(p.get('quantity', 0)) for p in self._last_valid_positions if p.get('symbol')}
+            
             if not await self._ensure_valid_token():
                 return {}
             
-            await self._async_rate_limit()
-            import httpx
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}",
+                params={'fields': 'positions'}
+            )
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
+            if response.status_code == 429:
+                return {p.get('symbol', ''): int(p.get('quantity', 0)) for p in self._last_valid_positions if p.get('symbol')}
             
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}",
-                    headers=headers,
-                    params={'fields': 'positions'}
-                )
+            if response.status_code == 200:
+                data = response.json()
+                account = data.get('securitiesAccount', {})
+                positions = account.get('positions', [])
                 
-                if response.status_code == 429:
-                    print(f"[{self.name}] ⚠️ Rate limited (429) on get_positions - using cached data")
-                    return {p.get('symbol', ''): int(p.get('quantity', 0)) for p in self._last_valid_positions if p.get('symbol')}
+                result = {}
+                for pos in positions:
+                    symbol = pos.get('instrument', {}).get('symbol', '')
+                    qty = pos.get('longQuantity', 0) - pos.get('shortQuantity', 0)
+                    if symbol:
+                        result[symbol] = int(qty)
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    account = data.get('securitiesAccount', {})
-                    positions = account.get('positions', [])
-                    
-                    result = {}
-                    for pos in positions:
-                        symbol = pos.get('instrument', {}).get('symbol', '')
-                        qty = pos.get('longQuantity', 0) - pos.get('shortQuantity', 0)
-                        if symbol:
-                            result[symbol] = int(qty)
-                    
-                    if len(result) > 0 or not self._last_valid_positions:
-                        self._last_positions_simple = dict(result)
-                    elif len(result) == 0 and hasattr(self, '_last_positions_simple') and self._last_positions_simple:
-                        if (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
-                            print(f"[{self.name}] ⚠️ get_positions returned 0 but cache exists - using cached")
-                            return dict(self._last_positions_simple)
-                    return result
+                if len(result) > 0 or not self._last_valid_positions:
+                    self._last_positions_simple = dict(result)
+                elif len(result) == 0 and hasattr(self, '_last_positions_simple') and self._last_positions_simple:
+                    if (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                        print(f"[{self.name}] ⚠️ get_positions returned 0 but cache exists - using cached")
+                        return dict(self._last_positions_simple)
+                return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting positions: {e}")
@@ -692,9 +742,11 @@ class SchwabBroker(BrokerInterface):
                 'Content-Type': 'application/json'
             }
             
+            is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
             response = await self._make_request(
                 'POST',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                is_exit_order=is_exit,
                 headers=headers,
                 json=order_payload
             )
@@ -839,9 +891,11 @@ class SchwabBroker(BrokerInterface):
                 'Content-Type': 'application/json'
             }
             
+            is_exit = (instruction == "SELL_TO_CLOSE")
             response = await self._make_request(
                 'POST',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                is_exit_order=is_exit,
                 headers=headers,
                 json=order_payload
             )
@@ -899,28 +953,23 @@ class SchwabBroker(BrokerInterface):
     async def get_quote(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
         try:
+            if self._should_skip_non_critical():
+                return None
+            
             if not await self._ensure_valid_token():
                 return None
             
-            import httpx
+            response = await self._make_request(
+                'GET',
+                f"https://api.schwabapi.com/marketdata/v1/quotes",
+                params={'symbols': symbol}
+            )
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"https://api.schwabapi.com/marketdata/v1/quotes",
-                    headers=headers,
-                    params={'symbols': symbol}
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if symbol in data:
-                        quote = data[symbol].get('quote', {})
-                        return float(quote.get('lastPrice', 0))
+            if response.status_code == 200:
+                data = response.json()
+                if symbol in data:
+                    quote = data[symbol].get('quote', {})
+                    return float(quote.get('lastPrice', 0))
                         
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
@@ -930,34 +979,29 @@ class SchwabBroker(BrokerInterface):
     async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get detailed quote data for signal verification (bid, ask, last, volume)"""
         try:
+            if self._should_skip_non_critical():
+                return None
+            
             if not await self._ensure_valid_token():
                 return None
             
-            import httpx
+            response = await self._make_request(
+                'GET',
+                f"https://api.schwabapi.com/marketdata/v1/quotes",
+                params={'symbols': symbol}
+            )
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"https://api.schwabapi.com/marketdata/v1/quotes",
-                    headers=headers,
-                    params={'symbols': symbol}
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if symbol in data:
-                        quote = data[symbol].get('quote', {})
-                        return {
-                            'bid': float(quote.get('bidPrice', 0) or 0),
-                            'ask': float(quote.get('askPrice', 0) or 0),
-                            'last': float(quote.get('lastPrice', 0) or 0),
-                            'price': float(quote.get('lastPrice', 0) or 0),
-                            'volume': int(quote.get('totalVolume', 0) or 0)
-                        }
+            if response.status_code == 200:
+                data = response.json()
+                if symbol in data:
+                    quote = data[symbol].get('quote', {})
+                    return {
+                        'bid': float(quote.get('bidPrice', 0) or 0),
+                        'ask': float(quote.get('askPrice', 0) or 0),
+                        'last': float(quote.get('lastPrice', 0) or 0),
+                        'price': float(quote.get('lastPrice', 0) or 0),
+                        'volume': int(quote.get('totalVolume', 0) or 0)
+                    }
                         
         except Exception as e:
             print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
@@ -972,33 +1016,25 @@ class SchwabBroker(BrokerInterface):
             
             option_symbol = self._build_option_symbol(underlying, expiry, strike, opt_type[0])
             
-            import httpx
+            response = await self._make_request(
+                'GET',
+                f"https://api.schwabapi.com/marketdata/v1/quotes",
+                params={'symbols': option_symbol}
+            )
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"https://api.schwabapi.com/marketdata/v1/quotes",
-                    headers=headers,
-                    params={'symbols': option_symbol}
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if option_symbol in data:
-                        quote = data[option_symbol].get('quote', {})
-                        return {
-                            'bid': float(quote.get('bidPrice', 0) or 0),
-                            'ask': float(quote.get('askPrice', 0) or 0),
-                            'last': float(quote.get('lastPrice', 0) or 0),
-                            'price': float(quote.get('lastPrice', 0) or 0),
-                            'volume': int(quote.get('totalVolume', 0) or 0),
-                            'open_interest': int(quote.get('openInterest', 0) or 0),
-                            'implied_volatility': float(quote.get('volatility', 0) or 0)
-                        }
+            if response.status_code == 200:
+                data = response.json()
+                if option_symbol in data:
+                    quote = data[option_symbol].get('quote', {})
+                    return {
+                        'bid': float(quote.get('bidPrice', 0) or 0),
+                        'ask': float(quote.get('askPrice', 0) or 0),
+                        'last': float(quote.get('lastPrice', 0) or 0),
+                        'price': float(quote.get('lastPrice', 0) or 0),
+                        'volume': int(quote.get('totalVolume', 0) or 0),
+                        'open_interest': int(quote.get('openInterest', 0) or 0),
+                        'implied_volatility': float(quote.get('volatility', 0) or 0)
+                    }
                         
         except Exception as e:
             print(f"[{self.name}] Error getting option quote: {e}")
@@ -1141,6 +1177,10 @@ class SchwabBroker(BrokerInterface):
     async def get_positions_detailed(self) -> List[Dict[str, Any]]:
         """Get detailed positions for sync service"""
         try:
+            if self._should_skip_non_critical():
+                if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                    return list(self._last_valid_positions)
+            
             if not await self._ensure_valid_token():
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     print(f"[{self.name}] Token refresh pending - returning {len(self._last_valid_positions)} cached positions")
@@ -1151,93 +1191,84 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] No account_hash - cannot fetch positions")
                 return []
             
-            await self._async_rate_limit()
-            import httpx
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}",
+                params={'fields': 'positions'}
+            )
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
+            if response.status_code == 429:
+                print(f"[{self.name}] ⚠️ Rate limited (429) on get_positions_detailed - returning {len(self._last_valid_positions)} cached positions")
+                return list(self._last_valid_positions)
             
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}",
-                    headers=headers,
-                    params={'fields': 'positions'}
-                )
+            if response.status_code == 200:
+                data = response.json()
+                account = data.get('securitiesAccount', {})
+                positions = account.get('positions', [])
                 
-                if response.status_code == 429:
-                    print(f"[{self.name}] ⚠️ Rate limited (429) on get_positions_detailed - returning {len(self._last_valid_positions)} cached positions")
+                result = []
+                for pos in positions:
+                    instrument = pos.get('instrument', {})
+                    symbol = instrument.get('symbol', '')
+                    asset_type = instrument.get('assetType', 'EQUITY').lower()
+                    
+                    qty = pos.get('longQuantity', 0) - pos.get('shortQuantity', 0)
+                    if qty == 0:
+                        continue
+                    
+                    avg_price = pos.get('averagePrice', 0)
+                    market_value = pos.get('marketValue', 0)
+                    
+                    if asset_type == 'option':
+                        current_price = market_value / (qty * 100) if qty else 0
+                        if avg_price > 0 and current_price > 0 and avg_price > current_price * 50:
+                            avg_price = avg_price / 100.0
+                    else:
+                        current_price = market_value / qty if qty else 0
+                    
+                    unrealized_pnl = pos.get('longOpenProfitLoss', 0) + pos.get('shortOpenProfitLoss', 0)
+                    
+                    position_data = {
+                        'symbol': symbol,
+                        'quantity': int(qty),
+                        'avg_cost': float(avg_price),
+                        'current_price': float(current_price),
+                        'unrealized_pl': float(unrealized_pnl),
+                        'asset': 'option' if asset_type == 'option' else 'stock',
+                        'position_id': instrument.get('cusip', symbol)
+                    }
+                    
+                    if asset_type == 'option':
+                        position_data['raw_symbol'] = symbol
+                        
+                        strike_price = instrument.get('strikePrice', 0)
+                        expiration = instrument.get('expirationDate', '')
+                        put_call = instrument.get('putCall', '')
+                        underlying = instrument.get('underlyingSymbol', '')
+                        
+                        if (not strike_price or strike_price == 0) and symbol:
+                            parsed = self._parse_occ_symbol(symbol)
+                            if parsed:
+                                underlying = parsed.get('underlying', underlying) or underlying
+                                strike_price = parsed.get('strike', 0)
+                                expiration = parsed.get('expiry', '')
+                                put_call = parsed.get('option_type', put_call)
+                        
+                        position_data['strike'] = float(strike_price) if strike_price else 0.0
+                        position_data['expiry'] = expiration[:10] if expiration else ''
+                        position_data['direction'] = put_call[0].upper() if put_call else ''
+                        position_data['symbol'] = underlying or symbol.split()[0] if symbol else symbol
+                    
+                    result.append(position_data)
+                
+                if len(result) > 0:
+                    self._last_valid_positions = list(result)
+                    self._last_valid_positions_time = time.time()
+                elif len(result) == 0 and self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                    print(f"[{self.name}] ⚠️ API returned 0 positions but cache has {len(self._last_valid_positions)} - returning cached data")
                     return list(self._last_valid_positions)
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    account = data.get('securitiesAccount', {})
-                    positions = account.get('positions', [])
-                    
-                    result = []
-                    for pos in positions:
-                        instrument = pos.get('instrument', {})
-                        symbol = instrument.get('symbol', '')
-                        asset_type = instrument.get('assetType', 'EQUITY').lower()
-                        
-                        qty = pos.get('longQuantity', 0) - pos.get('shortQuantity', 0)
-                        if qty == 0:
-                            continue
-                        
-                        avg_price = pos.get('averagePrice', 0)
-                        market_value = pos.get('marketValue', 0)
-                        
-                        if asset_type == 'option':
-                            current_price = market_value / (qty * 100) if qty else 0
-                            if avg_price > 0 and current_price > 0 and avg_price > current_price * 50:
-                                avg_price = avg_price / 100.0
-                        else:
-                            current_price = market_value / qty if qty else 0
-                        
-                        unrealized_pnl = pos.get('longOpenProfitLoss', 0) + pos.get('shortOpenProfitLoss', 0)
-                        
-                        position_data = {
-                            'symbol': symbol,
-                            'quantity': int(qty),
-                            'avg_cost': float(avg_price),
-                            'current_price': float(current_price),
-                            'unrealized_pl': float(unrealized_pnl),
-                            'asset': 'option' if asset_type == 'option' else 'stock',
-                            'position_id': instrument.get('cusip', symbol)
-                        }
-                        
-                        if asset_type == 'option':
-                            position_data['raw_symbol'] = symbol
-                            
-                            strike_price = instrument.get('strikePrice', 0)
-                            expiration = instrument.get('expirationDate', '')
-                            put_call = instrument.get('putCall', '')
-                            underlying = instrument.get('underlyingSymbol', '')
-                            
-                            if (not strike_price or strike_price == 0) and symbol:
-                                parsed = self._parse_occ_symbol(symbol)
-                                if parsed:
-                                    underlying = parsed.get('underlying', underlying) or underlying
-                                    strike_price = parsed.get('strike', 0)
-                                    expiration = parsed.get('expiry', '')
-                                    put_call = parsed.get('option_type', put_call)
-                            
-                            position_data['strike'] = float(strike_price) if strike_price else 0.0
-                            position_data['expiry'] = expiration[:10] if expiration else ''
-                            position_data['direction'] = put_call[0].upper() if put_call else ''
-                            position_data['symbol'] = underlying or symbol.split()[0] if symbol else symbol
-                        
-                        result.append(position_data)
-                    
-                    if len(result) > 0:
-                        self._last_valid_positions = list(result)
-                        self._last_valid_positions_time = time.time()
-                    elif len(result) == 0 and self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
-                        print(f"[{self.name}] ⚠️ API returned 0 positions but cache has {len(self._last_valid_positions)} - returning cached data")
-                        return list(self._last_valid_positions)
-                    
-                    return result
+                return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting detailed positions: {e}")
@@ -1250,6 +1281,9 @@ class SchwabBroker(BrokerInterface):
     async def get_pending_orders(self) -> List[Dict[str, Any]]:
         """Get open/pending orders"""
         try:
+            if self._should_skip_non_critical():
+                return getattr(self, '_last_pending_orders', [])
+            
             if not await self._ensure_valid_token():
                 return []
             
@@ -1257,58 +1291,51 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] No account_hash - cannot fetch pending orders")
                 return []
             
-            import httpx
             from datetime import datetime, timedelta
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-            
-            # Schwab requires date range for orders query
             to_date = datetime.now()
             from_date = to_date - timedelta(days=7)
             
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
-                    headers=headers,
-                    params={
-                        'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                        'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                        'status': 'WORKING'  # Only get working/pending orders
-                    }
-                )
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                params={
+                    'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'status': 'WORKING'
+                }
+            )
+            
+            if response.status_code == 200:
+                orders = response.json()
+                result = []
                 
-                if response.status_code == 200:
-                    orders = response.json()
-                    result = []
+                for order in orders:
+                    order_legs = order.get('orderLegCollection', [])
+                    if not order_legs:
+                        continue
                     
-                    for order in orders:
-                        order_legs = order.get('orderLegCollection', [])
-                        if not order_legs:
-                            continue
-                        
-                        leg = order_legs[0]
-                        instrument = leg.get('instrument', {})
-                        
-                        result.append({
-                            'order_id': str(order.get('orderId', '')),
-                            'symbol': instrument.get('symbol', ''),
-                            'quantity': int(leg.get('quantity', 0)),
-                            'limit_price': float(order.get('price', 0)) if order.get('price') else None,
-                            'action': leg.get('instruction', ''),  # BUY/SELL
-                            'status': order.get('status', ''),
-                            'order_type': order.get('orderType', ''),
-                            'entered_time': order.get('enteredTime', '')
-                        })
+                    leg = order_legs[0]
+                    instrument = leg.get('instrument', {})
                     
-                    return result
+                    result.append({
+                        'order_id': str(order.get('orderId', '')),
+                        'symbol': instrument.get('symbol', ''),
+                        'quantity': int(leg.get('quantity', 0)),
+                        'limit_price': float(order.get('price', 0)) if order.get('price') else None,
+                        'action': leg.get('instruction', ''),
+                        'status': order.get('status', ''),
+                        'order_type': order.get('orderType', ''),
+                        'entered_time': order.get('enteredTime', '')
+                    })
+                
+                self._last_pending_orders = list(result)
+                return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting pending orders: {e}")
         
-        return []
+        return getattr(self, '_last_pending_orders', [])
     
     async def get_order_history(self, count: int = 50) -> List[Dict[str, Any]]:
         """Get filled order history for sync"""
@@ -1320,93 +1347,86 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] No account_hash - cannot fetch order history")
                 return []
             
-            import httpx
             from datetime import datetime, timedelta
             
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
+            if self._should_skip_non_critical():
+                return []
             
-            # Query last 30 days of orders
             to_date = datetime.now()
             from_date = to_date - timedelta(days=30)
             
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
-                    headers=headers,
-                    params={
-                        'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                        'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                        'status': 'FILLED'
-                    }
-                )
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                params={
+                    'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'status': 'FILLED'
+                }
+            )
+            
+            if response.status_code == 200:
+                orders = response.json()
+                result = []
                 
-                if response.status_code == 200:
-                    orders = response.json()
-                    result = []
+                for order in orders[:count]:
+                    order_legs = order.get('orderLegCollection', [])
+                    if not order_legs:
+                        continue
                     
-                    for order in orders[:count]:
-                        order_legs = order.get('orderLegCollection', [])
-                        if not order_legs:
-                            continue
-                        
-                        leg = order_legs[0]
-                        instrument = leg.get('instrument', {})
-                        asset_type = instrument.get('assetType', 'EQUITY').lower()
-                        
-                        # Get symbol - for options, extract underlying
-                        symbol = instrument.get('symbol', '')
-                        underlying = instrument.get('underlyingSymbol', symbol) if asset_type == 'option' else symbol
-                        
-                        activities = order.get('orderActivityCollection', [])
-                        total_filled_qty = 0
-                        total_cost = 0.0
-                        filled_time = order.get('closeTime', '') or order.get('enteredTime', '')
-                        
-                        for activity in activities:
-                            if activity.get('activityType') == 'EXECUTION':
-                                exec_legs = activity.get('executionLegs', [])
-                                for exec_leg in exec_legs:
-                                    leg_qty = int(exec_leg.get('quantity', 0))
-                                    leg_price = float(exec_leg.get('price', 0))
-                                    total_filled_qty += leg_qty
-                                    total_cost += leg_qty * leg_price
-                                    leg_time = exec_leg.get('time', '')
-                                    if leg_time and leg_time > filled_time:
-                                        filled_time = leg_time
-                        
-                        filled_qty = total_filled_qty
-                        filled_price = (total_cost / total_filled_qty) if total_filled_qty > 0 else 0
-                        
-                        if filled_qty == 0:
-                            filled_qty = int(order.get('filledQuantity', 0)) or int(leg.get('quantity', 0))
-                        if filled_price == 0:
-                            filled_price = float(order.get('price', 0))
-                        
-                        instruction = leg.get('instruction', '') if leg else ''
-                        
-                        order_data = {
-                            'order_id': str(order.get('orderId', '')),
-                            'symbol': underlying,
-                            'quantity': filled_qty,
-                            'filled_price': filled_price,
-                            'action': instruction,
-                            'filled_time': filled_time,
-                            'asset_type': 'option' if asset_type == 'option' else 'stock',
-                            'order_type': order.get('orderType', '')
-                        }
-                        
-                        # Add option details
-                        if asset_type == 'option':
-                            order_data['strike'] = float(instrument.get('strikePrice', 0))
-                            order_data['expiry'] = instrument.get('expirationDate', '')[:10] if instrument.get('expirationDate') else ''
-                            order_data['direction'] = instrument.get('putCall', '')[0] if instrument.get('putCall') else ''
-                        
-                        result.append(order_data)
+                    leg = order_legs[0]
+                    instrument = leg.get('instrument', {})
+                    asset_type = instrument.get('assetType', 'EQUITY').lower()
                     
-                    return result
+                    symbol = instrument.get('symbol', '')
+                    underlying = instrument.get('underlyingSymbol', symbol) if asset_type == 'option' else symbol
+                    
+                    activities = order.get('orderActivityCollection', [])
+                    total_filled_qty = 0
+                    total_cost = 0.0
+                    filled_time = order.get('closeTime', '') or order.get('enteredTime', '')
+                    
+                    for activity in activities:
+                        if activity.get('activityType') == 'EXECUTION':
+                            exec_legs = activity.get('executionLegs', [])
+                            for exec_leg in exec_legs:
+                                leg_qty = int(exec_leg.get('quantity', 0))
+                                leg_price = float(exec_leg.get('price', 0))
+                                total_filled_qty += leg_qty
+                                total_cost += leg_qty * leg_price
+                                leg_time = exec_leg.get('time', '')
+                                if leg_time and leg_time > filled_time:
+                                    filled_time = leg_time
+                    
+                    filled_qty = total_filled_qty
+                    filled_price = (total_cost / total_filled_qty) if total_filled_qty > 0 else 0
+                    
+                    if filled_qty == 0:
+                        filled_qty = int(order.get('filledQuantity', 0)) or int(leg.get('quantity', 0))
+                    if filled_price == 0:
+                        filled_price = float(order.get('price', 0))
+                    
+                    instruction = leg.get('instruction', '') if leg else ''
+                    
+                    order_data = {
+                        'order_id': str(order.get('orderId', '')),
+                        'symbol': underlying,
+                        'quantity': filled_qty,
+                        'filled_price': filled_price,
+                        'action': instruction,
+                        'filled_time': filled_time,
+                        'asset_type': 'option' if asset_type == 'option' else 'stock',
+                        'order_type': order.get('orderType', '')
+                    }
+                    
+                    if asset_type == 'option':
+                        order_data['strike'] = float(instrument.get('strikePrice', 0))
+                        order_data['expiry'] = instrument.get('expirationDate', '')[:10] if instrument.get('expirationDate') else ''
+                        order_data['direction'] = instrument.get('putCall', '')[0] if instrument.get('putCall') else ''
+                    
+                    result.append(order_data)
+                
+                return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting order history: {e}")
@@ -1474,8 +1494,10 @@ class SchwabBroker(BrokerInterface):
                 )
 
             headers = {'Content-Type': 'application/json'}
+            is_exit = instruction in ('SELL', 'SELL_TO_CLOSE')
             response = await self._make_request(
                 'POST', f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                is_exit_order=is_exit,
                 headers=headers, json=order_payload
             )
 
@@ -1560,8 +1582,10 @@ class SchwabBroker(BrokerInterface):
                 )
 
             headers = {'Content-Type': 'application/json'}
+            is_exit = instruction in ('SELL', 'SELL_TO_CLOSE')
             response = await self._make_request(
                 'POST', f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                is_exit_order=is_exit,
                 headers=headers, json=order_payload
             )
 
@@ -2046,7 +2070,8 @@ class SchwabBroker(BrokerInterface):
 
             response = await self._make_request(
                 'DELETE',
-                f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}"
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
+                is_exit_order=True
             )
 
             if response.status_code in [200, 201, 202, 204]:
@@ -2070,6 +2095,7 @@ class SchwabBroker(BrokerInterface):
             response = await self._make_request(
                 'PUT',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
+                is_exit_order=True,
                 headers=headers,
                 json=new_order_payload
             )
