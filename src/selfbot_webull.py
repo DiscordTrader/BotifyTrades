@@ -12184,6 +12184,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stk['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
                     print(f"[POSITION SIZE] Execution configured for {exec_position_size_pct}% of portfolio (channel setting)")
                 
+                # Channel max position size cap (dollar amount cap on position sizing)
+                channel_max_position_size = channel_info.get('channel_max_position_size') if channel_info else None
+                if channel_max_position_size:
+                    stk['_channel_max_position_size'] = float(channel_max_position_size)
+                    print(f"[POSITION SIZE] ✓ Channel max position size: ${channel_max_position_size}")
+                
                 # Check for multi-broker configuration
                 enabled_brokers_json = channel_info.get('enabled_brokers') if channel_info else None
                 if enabled_brokers_json:
@@ -14372,30 +14378,36 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             raise  # Re-raise to skip order
                                         _original_print(f"[PAPER TRADE] [POSITION SIZE] ⚠️ Could not calculate position size: {e}")
                                 
-                                # Check if we should use bracket orders (stocks with stop loss or profit target)
+                                # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
                                 use_bracket = (
-                                    signal['asset'] == 'stock' and 
                                     signal['action'] == 'BTO' and
                                     (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
                                     hasattr(active_paper_broker, 'place_bracket_order')
                                 )
                                 
                                 if use_bracket:
-                                    # Use bracket order (entry + stop + target all at once)
-                                    _original_print(f"[PAPER TRADE] Using BRACKET order (entry + risk management)...")
+                                    asset_label = signal['asset'].upper()
+                                    _original_print(f"[PAPER TRADE] Using BRACKET order for {asset_label} (entry + risk management)...")
                                     if signal.get('stop_loss_price'):
                                         _original_print(f"[PAPER TRADE]   Stop Loss: ${signal['stop_loss_price']}")
                                     if signal.get('profit_target_price'):
                                         _original_print(f"[PAPER TRADE]   Profit Target: ${signal['profit_target_price']}")
                                     
-                                    result = await active_paper_broker.place_bracket_order(
-                                        symbol=signal['symbol'],
-                                        action=signal['action'],
-                                        quantity=signal['qty'],
-                                        stop_loss_price=signal.get('stop_loss_price'),
-                                        profit_target_price=signal.get('profit_target_price'),
-                                        entry_price=signal.get('price')  # None for market order
-                                    )
+                                    bracket_kwargs = {
+                                        'symbol': signal['symbol'],
+                                        'action': signal['action'],
+                                        'quantity': signal['qty'],
+                                        'stop_loss_price': signal.get('stop_loss_price'),
+                                        'profit_target_price': signal.get('profit_target_price'),
+                                        'entry_price': signal.get('price'),
+                                    }
+                                    if signal['asset'] == 'option':
+                                        bracket_kwargs['asset_type'] = 'OPTION'
+                                        bracket_kwargs['strike'] = signal.get('strike')
+                                        bracket_kwargs['expiry'] = signal.get('expiry')
+                                        bracket_kwargs['option_type'] = signal.get('opt_type')
+                                    
+                                    result = await active_paper_broker.place_bracket_order(**bracket_kwargs)
                                 else:
                                     # Regular order execution
                                     _original_print(f"[PAPER TRADE] Calling {paper_broker_label}.place_{signal['asset']}_order()...")
@@ -14570,9 +14582,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 import traceback
                                 traceback.print_exc()
                         
-                        # Check if we should use bracket orders (stocks with stop loss or profit target)
+                        # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
                         use_bracket = (
-                            signal['asset'] == 'stock' and 
                             signal['action'] == 'BTO' and
                             (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
                             hasattr(live_broker, 'place_bracket_order')
@@ -14583,21 +14594,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         retry_delay = 2  # seconds
                         
                         if use_bracket:
-                            # Use bracket order (entry + stop + target all at once)
-                            _original_print(f"[LIVE TRADE] Using BRACKET order (entry + risk management) via {broker_name_used}...")
+                            asset_label = signal['asset'].upper()
+                            _original_print(f"[LIVE TRADE] Using BRACKET order for {asset_label} (entry + risk management) via {broker_name_used}...")
                             if signal.get('stop_loss_price'):
                                 _original_print(f"[LIVE TRADE]   Stop Loss: ${signal['stop_loss_price']}")
                             if signal.get('profit_target_price'):
                                 _original_print(f"[LIVE TRADE]   Profit Target: ${signal['profit_target_price']}")
                             
-                            result = await live_broker.place_bracket_order(
-                                symbol=signal['symbol'],
-                                action=signal['action'],
-                                quantity=signal['qty'],
-                                stop_loss_price=signal.get('stop_loss_price'),
-                                profit_target_price=signal.get('profit_target_price'),
-                                entry_price=signal.get('price')  # None for market order
-                            )
+                            bracket_kwargs = {
+                                'symbol': signal['symbol'],
+                                'action': signal['action'],
+                                'quantity': signal['qty'],
+                                'stop_loss_price': signal.get('stop_loss_price'),
+                                'profit_target_price': signal.get('profit_target_price'),
+                                'entry_price': signal.get('price'),
+                            }
+                            if signal['asset'] == 'option':
+                                bracket_kwargs['asset_type'] = 'OPTION'
+                                bracket_kwargs['strike'] = signal.get('strike')
+                                bracket_kwargs['expiry'] = signal.get('expiry')
+                                bracket_kwargs['option_type'] = signal.get('opt_type')
+                            
+                            result = await live_broker.place_bracket_order(**bracket_kwargs)
                             
                             # Convert Alpaca OrderResult to dict format for consistency
                             if hasattr(result, 'success'):
