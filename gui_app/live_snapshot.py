@@ -115,9 +115,11 @@ def _fetch_webull(bot) -> List[Dict]:
 
             symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
             asset_type = pos.get('assetType', 'unknown')
+            ticker_data = pos.get('ticker', {})
             is_option = (
                 'optionId' in pos or
                 'strikePrice' in pos or
+                'strikePrice' in ticker_data or
                 asset_type.lower() in ('option', 'opt')
             )
 
@@ -125,10 +127,10 @@ def _fetch_webull(bot) -> List[Dict]:
             expiry = None
             call_put = None
             if is_option:
-                strike = float(pos.get('strikePrice', 0))
-                direction = pos.get('direction', '').upper()
-                call_put = 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else '')
-                raw_expiry = pos.get('expireDate', '')
+                strike = float(pos.get('strikePrice', 0) or ticker_data.get('strikePrice', 0) or 0)
+                direction = (pos.get('direction', '') or pos.get('optionType', '') or ticker_data.get('direction', '') or '').upper()
+                call_put = 'C' if direction in ('CALL', 'C') else ('P' if direction in ('PUT', 'P') else '')
+                raw_expiry = pos.get('expireDate', '') or ticker_data.get('expireDate', '') or ''
                 if raw_expiry and '-' in raw_expiry:
                     from datetime import datetime
                     try:
@@ -138,6 +140,38 @@ def _fetch_webull(bot) -> List[Dict]:
                         expiry = raw_expiry
                 else:
                     expiry = raw_expiry
+
+                if (not strike or strike == 0.0) and ticker_data:
+                    import re
+                    dis_symbol = ticker_data.get('disSymbol', '') or ''
+                    name_val = ticker_data.get('name', '') or ''
+                    _log(f"[WEBULL-POS] {symbol} option fallback: disSymbol='{dis_symbol}', name='{name_val}', assetType={asset_type}")
+                    m = re.match(r'^(\w+)\s+(\d{2}/\d{2}/\d{4})\s+([\d.]+)\s+(Put|Call)$', dis_symbol, re.IGNORECASE)
+                    if m:
+                        from datetime import datetime as dt
+                        try:
+                            exp_date = dt.strptime(m.group(2), '%m/%d/%Y')
+                            expiry = exp_date.strftime('%m/%d')
+                        except Exception:
+                            expiry = m.group(2)[:5]
+                        strike = float(m.group(3))
+                        call_put = 'C' if m.group(4).upper() == 'CALL' else 'P'
+                    else:
+                        name_field = ticker_data.get('name', '') or ''
+                        m2 = re.search(r'(\d+(?:\.\d+)?)\s+(Put|Call)\s+(\d{2}/\d{2}/\d{2,4})', name_field, re.IGNORECASE)
+                        if m2:
+                            strike = float(m2.group(1))
+                            call_put = 'C' if m2.group(2).upper() == 'CALL' else 'P'
+                            try:
+                                from datetime import datetime as dt
+                                exp_str = m2.group(3)
+                                if len(exp_str) == 8:
+                                    exp_date = dt.strptime(exp_str, '%m/%d/%y')
+                                else:
+                                    exp_date = dt.strptime(exp_str, '%m/%d/%Y')
+                                expiry = exp_date.strftime('%m/%d')
+                            except Exception:
+                                expiry = m2.group(3)[:5]
 
             avg_cost = float(pos.get('costPrice', 0))
             cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
@@ -437,29 +471,64 @@ def _fetch_tastytrade(bot) -> List[Dict]:
         return []
 
 
+def _normalize_strike(val):
+    if val is None or val == '':
+        return ''
+    try:
+        return str(float(val))
+    except (ValueError, TypeError):
+        return str(val)
+
+def _normalize_expiry(val):
+    if not val:
+        return ''
+    val = str(val).strip()
+    import re
+    m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', val)
+    if m:
+        return f"{int(m.group(2)):02d}/{int(m.group(3)):02d}"
+    m = re.match(r'^(\d{1,2})/(\d{1,2})$', val)
+    if m:
+        return f"{int(m.group(1)):02d}/{int(m.group(2)):02d}"
+    return val
+
+def _make_match_key(broker, symbol, strike, expiry, call_put):
+    return f"{str(broker).upper()}|{symbol}|{_normalize_strike(strike)}|{_normalize_expiry(expiry)}|{(call_put or '').upper()[:1]}"
+
+
 def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict]) -> List[Dict]:
     trade_map: Dict[str, Dict] = {}
     for t in db_trades:
-        symbol = t.get('symbol', '')
-        broker = str(t.get('broker', '')).upper()
-        strike = t.get('strike')
-        expiry = t.get('expiry')
-        call_put = t.get('call_put')
-        key = f"{broker}|{symbol}|{strike}|{expiry}|{call_put}"
+        key = _make_match_key(
+            t.get('broker', ''), t.get('symbol', ''),
+            t.get('strike'), t.get('expiry'), t.get('call_put')
+        )
         trade_map[key] = t
+        _log(f"[ENRICH] DB trade #{t.get('id')} key: {key}")
 
     enriched = []
     seen_db_ids = set()
 
     for pos in positions:
-        symbol = pos.get('symbol', '')
-        broker = pos.get('broker', '').upper()
-        strike = pos.get('strike')
-        expiry = pos.get('expiry')
-        call_put = pos.get('call_put')
-        key = f"{broker}|{symbol}|{strike}|{expiry}|{call_put}"
+        key = _make_match_key(
+            pos.get('broker', ''), pos.get('symbol', ''),
+            pos.get('strike'), pos.get('expiry'), pos.get('call_put')
+        )
+        _log(f"[ENRICH] Live pos {pos.get('symbol')} ({pos.get('broker')}) key: {key} → match={'YES' if key in trade_map else 'NO'}")
 
         matched_trade = trade_map.get(key)
+        if not matched_trade and pos.get('asset_type') == 'option' and (not pos.get('strike') or pos.get('strike') == 0):
+            pos_broker = str(pos.get('broker', '')).upper()
+            pos_symbol = pos.get('symbol', '')
+            for tkey, ttrade in trade_map.items():
+                if (tkey.startswith(f"{pos_broker}|{pos_symbol}|") and
+                    ttrade.get('asset_type') == 'option'):
+                    matched_trade = ttrade
+                    pos['strike'] = ttrade.get('strike')
+                    pos['expiry'] = ttrade.get('expiry')
+                    pos['call_put'] = ttrade.get('call_put')
+                    _log(f"[ENRICH] ✓ Fuzzy matched {pos_symbol} option to trade #{ttrade.get('id')}")
+                    break
         if matched_trade:
             trade_id = matched_trade.get('id')
             seen_db_ids.add(trade_id)

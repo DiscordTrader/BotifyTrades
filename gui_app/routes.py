@@ -7381,20 +7381,53 @@ def register_routes(app):
             # Safety net: Ensure all trades have a fill_status field
             for trade in merged:
                 if 'fill_status' not in trade or trade['fill_status'] is None:
-                    # Default based on status
                     if trade.get('status') == 'OPEN':
-                        trade['fill_status'] = 'Filled'  # Open positions are filled
+                        trade['fill_status'] = 'Filled'
                     elif trade.get('status') == 'CLOSED':
-                        trade['fill_status'] = 'Filled'  # Closed positions were filled
+                        trade['fill_status'] = 'Filled'
                     elif trade.get('status') == 'PENDING':
-                        trade['fill_status'] = 'Submitted'  # Pending orders are submitted
+                        trade['fill_status'] = 'Submitted'
                     else:
-                        trade['fill_status'] = 'Unknown'  # Unknown status
+                        trade['fill_status'] = 'Unknown'
+            
+            # Deduplicate: Remove duplicate position entries that can occur when
+            # live broker positions and DB trades have subtle key format mismatches
+            seen_position_keys = {}
+            deduped_merged = []
+            for trade in merged:
+                call_put_val = normalize_call_put(trade.get('call_put', ''))
+                expiry_val = normalize_expiry(trade.get('expiry', ''))
+                strike_val = trade.get('strike', '')
+                if strike_val is not None and strike_val != '':
+                    try:
+                        strike_val = float(strike_val)
+                    except (ValueError, TypeError):
+                        pass
+                broker_val = str(trade.get('broker', '')).upper().replace('_PAPER', '').replace('_LIVE', '')
+                
+                if trade.get('asset_type') == 'option':
+                    dedup_key = f"{trade.get('symbol', '')}_{strike_val}_{expiry_val}_{call_put_val}_{broker_val}"
+                else:
+                    dedup_key = f"{trade.get('symbol', '')}_stock_{broker_val}"
+                
+                if dedup_key in seen_position_keys:
+                    existing = seen_position_keys[dedup_key]
+                    existing_has_db_id = isinstance(existing.get('id'), int)
+                    current_has_db_id = isinstance(trade.get('id'), int)
+                    if current_has_db_id and not existing_has_db_id:
+                        deduped_merged = [t for t in deduped_merged if t is not existing]
+                        deduped_merged.append(trade)
+                        seen_position_keys[dedup_key] = trade
+                else:
+                    seen_position_keys[dedup_key] = trade
+                    deduped_merged.append(trade)
+            
+            merged = deduped_merged
             
             # Enrich trades with source display info for UI
             for trade in merged:
-                source_display = db.get_trade_source_display(trade)
-                trade['source_display'] = source_display
+                if not trade.get('source_display'):
+                    trade['source_display'] = db.get_trade_source_display(trade)
             
             return jsonify({'trades': merged})
             
