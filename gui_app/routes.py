@@ -6788,269 +6788,52 @@ def register_routes(app):
                         else:
                             trade['display_status'] = trade['status']
             
-            # Get live positions based on broker filter
+            # Get live positions from cached snapshot (already enriched with fuzzy matching)
             live_positions = []
             webull_orders = []
-            alpaca_positions = []
-            alpaca_orders = []
             
-            # Normalize broker filter for case-insensitive comparison
             broker_filter_upper = broker_filter.upper() if broker_filter else None
             
+            try:
+                from gui_app.live_snapshot import get_live_snapshot
+                snapshot = get_live_snapshot()
+                cached_positions = snapshot.get('positions', [])
+                for pos in cached_positions:
+                    if pos.get('source') != 'live_brokerage':
+                        continue
+                    pos_broker = pos.get('broker', '').upper()
+                    if broker_filter_upper and broker_filter_upper not in pos_broker:
+                        continue
+                    live_positions.append({
+                        'symbol': pos.get('symbol', ''),
+                        'asset': pos.get('asset_type', 'stock'),
+                        'asset_type': pos.get('asset_type', 'stock'),
+                        'strike': pos.get('strike'),
+                        'expiry': pos.get('expiry'),
+                        'call_put': pos.get('call_put', ''),
+                        'direction': pos.get('call_put', ''),
+                        'quantity': pos.get('quantity', 0),
+                        'avg_cost': pos.get('entry_price', 0),
+                        'current_price': pos.get('current_price', 0),
+                        'unrealized_pl': pos.get('unrealized_pnl', 0),
+                        'broker': pos.get('broker', ''),
+                        'bid': pos.get('bid', 0),
+                        'ask': pos.get('ask', 0),
+                        'mid': pos.get('mid', 0),
+                        'last': pos.get('last', 0),
+                        'option_id': pos.get('option_id'),
+                    })
+            except Exception as e:
+                print(f"[API] Snapshot cache read error: {e}")
+            
             if not broker_filter_upper or broker_filter_upper in ['WEBULL', 'WEBULL_PAPER']:
-                import concurrent.futures
-                def _fetch_webull_positions_direct():
-                    try:
-                        if not hasattr(_bot_instance, 'broker') or not _bot_instance.broker:
-                            return [], []
+                try:
+                    if hasattr(_bot_instance, 'broker') and _bot_instance.broker:
                         wb = getattr(_bot_instance.broker, '_client', None)
-                        if not wb:
-                            return [], []
-                        raw_positions = wb.get_positions() or []
-                        orders = wb.get_current_orders() or []
-                        
-                        normalized = []
-                        for pos in raw_positions:
-                            try:
-                                position_qty = float(pos.get('position', 0))
-                            except (ValueError, TypeError):
-                                position_qty = 0
-                            if position_qty <= 0:
-                                continue
-                            
-                            symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
-                            raw_asset = pos.get('assetType', 'unknown')
-                            is_option = (
-                                'optionId' in pos or
-                                'strikePrice' in pos or
-                                'expireDate' in pos or
-                                raw_asset.lower() in ('option', 'opt')
-                            )
-                            
-                            strike = None
-                            expiry = None
-                            call_put = None
-                            if is_option:
-                                strike = float(pos.get('strikePrice', 0))
-                                direction = pos.get('direction', '').upper()
-                                call_put = 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else '')
-                                raw_expiry = pos.get('expireDate', '')
-                                if raw_expiry and '-' in raw_expiry:
-                                    from datetime import datetime as dt_parse
-                                    try:
-                                        exp_date = dt_parse.strptime(raw_expiry, '%Y-%m-%d')
-                                        expiry = exp_date.strftime('%m/%d')
-                                    except Exception:
-                                        expiry = raw_expiry
-                                else:
-                                    expiry = raw_expiry
-                            
-                            avg_cost = float(pos.get('costPrice', 0))
-                            cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
-                            unrealized = (cur_price - avg_cost) * position_qty
-                            if is_option:
-                                unrealized *= 100
-                            
-                            normalized.append({
-                                'symbol': symbol,
-                                'asset': 'option' if is_option else 'stock',
-                                'asset_type': 'option' if is_option else 'stock',
-                                'strike': strike,
-                                'expiry': expiry,
-                                'call_put': call_put,
-                                'direction': call_put or '',
-                                'quantity': position_qty,
-                                'avg_cost': avg_cost,
-                                'current_price': cur_price,
-                                'unrealized_pl': unrealized,
-                                'broker': 'WEBULL',
-                                'bid': float(pos.get('bid', 0) or 0),
-                                'ask': float(pos.get('ask', 0) or 0),
-                                'mid': float(pos.get('mid', 0) or 0),
-                                'last': float(pos.get('last', cur_price) or cur_price),
-                            })
-                        
-                        return normalized, orders
-                    except Exception as e:
-                        print(f"[API] Direct Webull positions error: {e}")
-                        return [], []
-                
-                try:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        wb_positions, wb_orders = executor.submit(_fetch_webull_positions_direct).result(timeout=10)
-                    live_positions = wb_positions or []
-                    webull_orders = wb_orders or []
+                        if wb:
+                            webull_orders = wb.get_current_orders() or []
                 except Exception as e:
-                    print(f"[API] Webull positions fetch error: {e}")
-            
-            if broker_filter_upper in ['ALPACA', 'ALPACA_PAPER']:
-                import concurrent.futures
-                def _fetch_alpaca_positions_direct():
-                    try:
-                        paper_broker = getattr(_bot_instance, 'paper_broker', None)
-                        if not paper_broker or not hasattr(paper_broker, 'trading_client'):
-                            return [], []
-                        positions_raw = paper_broker.trading_client.get_all_positions()
-                        positions = []
-                        for pos in positions_raw:
-                            qty = float(pos.qty)
-                            positions.append({
-                                'symbol': pos.symbol,
-                                'quantity': abs(qty),
-                                'raw_quantity': qty,
-                                'side': 'SHORT' if qty < 0 else 'LONG',
-                                'asset_type': 'stock',
-                                'avg_price': float(pos.avg_entry_price),
-                                'current_price': float(pos.current_price),
-                                'pnl': float(pos.unrealized_pl)
-                            })
-                        from alpaca.trading.enums import QueryOrderStatus
-                        from alpaca.trading.requests import GetOrdersRequest
-                        req = GetOrdersRequest(status=QueryOrderStatus.OPEN)
-                        orders_raw = paper_broker.trading_client.get_orders(filter=req)
-                        orders = []
-                        for order in orders_raw:
-                            order_status = order.status.value.lower() if hasattr(order.status, 'value') else str(order.status).lower()
-                            if order_status in ('pending_cancel', 'canceled', 'cancelled', 'expired', 'rejected'):
-                                continue
-                            orders.append({
-                                'order_id': order.id,
-                                'symbol': order.symbol,
-                                'action': 'BUY' if order.side.value == 'buy' else 'SELL',
-                                'quantity': float(order.qty),
-                                'filled': float(order.filled_qty or 0),
-                                'status': order.status.value,
-                                'price': float(order.limit_price) if order.limit_price else 0
-                            })
-                        return positions, orders
-                    except Exception as e:
-                        print(f"[API] Direct Alpaca positions error: {e}")
-                        return [], []
-                
-                try:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        alpaca_positions, alpaca_orders = executor.submit(_fetch_alpaca_positions_direct).result(timeout=10)
-                except Exception as e:
-                    print(f"[API] Error fetching Alpaca positions: {e}")
-            
-            # Fetch Robinhood positions if broker filter is ROBINHOOD or no filter
-            robinhood_positions = []
-            if not broker_filter_upper or broker_filter_upper == 'ROBINHOOD':
-                try:
-                    if hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
-                        rh_broker = _bot_instance.robinhood_broker
-                        rh_raw_positions = rh_broker.get_all_positions()
-                        for pos in rh_raw_positions:
-                            robinhood_positions.append({
-                                'symbol': pos.get('symbol', ''),
-                                'quantity': float(pos.get('quantity', 0)),
-                                'avg_cost': float(pos.get('avg_price') or pos.get('average_buy_price') or 0),
-                                'current_price': float(pos.get('current_price', 0)),
-                                'unrealized_pl': float(pos.get('unrealized_pnl', 0)),
-                                'asset': pos.get('asset_type') or pos.get('type', 'stock'),
-                                'strike': pos.get('strike_price'),
-                                'expiry': pos.get('expiration_date'),
-                                'call_put': pos.get('option_type', '').upper()[:1] if pos.get('option_type') else None,
-                                'broker': 'ROBINHOOD'
-                            })
-                        live_positions.extend(robinhood_positions)
-                except Exception as e:
-                    print(f"[API] Error fetching Robinhood positions: {e}")
-            
-            # Fetch Schwab positions if broker filter is SCHWAB or no filter
-            schwab_positions = []
-            if not broker_filter_upper or broker_filter_upper in ['SCHWAB', 'SCHWAB_LIVE', 'SCHWAB_PAPER']:
-                try:
-                    schwab_broker = None
-                    if hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
-                        schwab_broker = _bot_instance.schwab_broker
-                    elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'schwab_broker'):
-                        schwab_broker = _bot_instance.broker_manager.schwab_broker
-                    
-                    if schwab_broker and schwab_broker.is_authenticated():
-                        schwab_future = asyncio.run_coroutine_threadsafe(
-                            schwab_broker.get_positions_detailed(),
-                            _bot_instance.loop
-                        )
-                        schwab_raw = schwab_future.result(timeout=15) or []
-                        for pos in schwab_raw:
-                            schwab_positions.append({
-                                'symbol': pos.get('symbol', ''),
-                                'quantity': float(pos.get('quantity', 0)),
-                                'avg_cost': float(pos.get('avg_cost', 0)),
-                                'current_price': float(pos.get('current_price', 0)),
-                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
-                                'asset': pos.get('asset', 'stock'),
-                                'strike': pos.get('strike'),
-                                'expiry': pos.get('expiry'),
-                                'call_put': pos.get('direction', ''),
-                                'broker': 'SCHWAB'
-                            })
-                        live_positions.extend(schwab_positions)
-                except Exception as e:
-                    print(f"[API] Error fetching Schwab positions: {e}")
-            
-            # Fetch IBKR positions if broker filter is IBKR or no filter
-            if not broker_filter_upper or broker_filter_upper in ['IBKR', 'IBKR_LIVE', 'IBKR_PAPER']:
-                try:
-                    ibkr_broker = None
-                    if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
-                        ibkr_broker = _bot_instance.ibkr_broker
-                    elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'ibkr_broker'):
-                        ibkr_broker = _bot_instance.broker_manager.ibkr_broker
-                    
-                    if ibkr_broker and hasattr(ibkr_broker, 'get_positions_detailed'):
-                        ibkr_future = asyncio.run_coroutine_threadsafe(
-                            ibkr_broker.get_positions_detailed(),
-                            _bot_instance.loop
-                        )
-                        ibkr_raw = ibkr_future.result(timeout=15) or []
-                        for pos in ibkr_raw:
-                            live_positions.append({
-                                'symbol': pos.get('symbol', ''),
-                                'quantity': float(pos.get('quantity', 0)),
-                                'avg_cost': float(pos.get('avg_cost', 0)),
-                                'current_price': float(pos.get('current_price', 0)),
-                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
-                                'asset': pos.get('asset', 'stock'),
-                                'strike': pos.get('strike'),
-                                'expiry': pos.get('expiry'),
-                                'call_put': pos.get('direction', ''),
-                                'broker': 'IBKR'
-                            })
-                except Exception as e:
-                    print(f"[API] Error fetching IBKR positions: {e}")
-            
-            # Fetch Tastytrade positions if broker filter matches or no filter
-            if not broker_filter_upper or broker_filter_upper in ['TASTYTRADE', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER']:
-                try:
-                    tt_broker = None
-                    if hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
-                        tt_broker = _bot_instance.tastytrade_broker
-                    elif hasattr(_bot_instance, 'broker_manager') and hasattr(_bot_instance.broker_manager, 'tastytrade_broker'):
-                        tt_broker = _bot_instance.broker_manager.tastytrade_broker
-                    
-                    if tt_broker and hasattr(tt_broker, 'get_positions_detailed'):
-                        tt_future = asyncio.run_coroutine_threadsafe(
-                            tt_broker.get_positions_detailed(),
-                            _bot_instance.loop
-                        )
-                        tt_raw = tt_future.result(timeout=15) or []
-                        for pos in tt_raw:
-                            live_positions.append({
-                                'symbol': pos.get('symbol', ''),
-                                'quantity': float(pos.get('quantity', 0)),
-                                'avg_cost': float(pos.get('avg_cost', 0)),
-                                'current_price': float(pos.get('current_price', 0)),
-                                'unrealized_pl': float(pos.get('unrealized_pl', 0)),
-                                'asset': pos.get('asset', 'stock'),
-                                'strike': pos.get('strike'),
-                                'expiry': pos.get('expiry'),
-                                'call_put': pos.get('direction', ''),
-                                'broker': 'TASTYTRADE'
-                            })
-                except Exception as e:
-                    print(f"[API] Error fetching Tastytrade positions: {e}")
+                    print(f"[API] Webull orders fetch error: {e}")
             
             # Create order_id -> status mapping for quick lookup
             order_status_map = {order['order_id']: order['status'] for order in webull_orders}

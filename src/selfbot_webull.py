@@ -14964,6 +14964,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _original_print(f"[NOTIFY] Warning: Could not send failure notification: {notify_err}", flush=True)
                     
                     # === CONFLICTING ORDER HANDLER ===
+                    # Alpaca error: held_for_orders means existing pending order blocks new sell
+                    # Cancel it and schedule immediate retry
+                    if 'held_for_orders' in error_msg or 'insufficient qty available for order' in error_msg:
+                        _original_print(f"[EXIT-CHASER] ⚡ Alpaca: shares held by pending order for {signal['symbol']}", flush=True)
+                        try:
+                            import re as _re
+                            related_match = _re.search(r'"related_orders":\s*\["([^"]+)"', error_msg)
+                            if related_match:
+                                blocking_order_id = related_match.group(1)
+                                _original_print(f"[EXIT-CHASER] Canceling blocking order {blocking_order_id}", flush=True)
+                                alpaca_broker = None
+                                if hasattr(self, 'paper_broker') and self.paper_broker:
+                                    alpaca_broker = self.paper_broker
+                                elif hasattr(self, 'alpaca_broker') and self.alpaca_broker:
+                                    alpaca_broker = self.alpaca_broker
+                                if alpaca_broker and hasattr(alpaca_broker, 'trading_client'):
+                                    try:
+                                        alpaca_broker.trading_client.cancel_order_by_id(blocking_order_id)
+                                        _original_print(f"[EXIT-CHASER] ✓ Canceled blocking order {blocking_order_id}", flush=True)
+                                        if signal.get('_risk_management_order') and signal.get('_position_key'):
+                                            from src.risk.position_monitor import risk_manager_instance
+                                            if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
+                                                risk_manager_instance.cache.clear_retry_state(signal['_position_key'])
+                                                _original_print(f"[EXIT-CHASER] ✓ Retry state reset - will retry on next monitor cycle", flush=True)
+                                    except Exception as cancel_err:
+                                        _original_print(f"[EXIT-CHASER] ⚠️ Cancel failed: {cancel_err}", flush=True)
+                            else:
+                                _original_print(f"[EXIT-CHASER] ⚠️ Could not extract blocking order ID from error", flush=True)
+                        except Exception as chaser_err:
+                            _original_print(f"[EXIT-CHASER] ⚠️ Could not handle Alpaca conflicting order: {chaser_err}", flush=True)
+                    
                     # Webull error: ORDER_NOT_SUPPORT_REVERSE_OPTION means there's already a pending order
                     # Cancel it and schedule immediate retry
                     if 'ORDER_NOT_SUPPORT_REVERSE' in str(error_type) or 'reverse' in error_msg.lower():
