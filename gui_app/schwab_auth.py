@@ -334,7 +334,7 @@ def get_schwab_credentials():
 def get_default_redirect_uri():
     """Get the default redirect URI based on environment"""
     if os.environ.get("REPLIT_DEV_DOMAIN"):
-        return f'https://{os.environ["REPLIT_DEV_DOMAIN"]}/schwab/callback'
+        return f'https://{os.environ["REPLIT_DEV_DOMAIN"]}/api/schwab/callback'
     # For local deployments, use the automatic callback server on port 8182
     return 'https://127.0.0.1:8182/callback'
 
@@ -688,6 +688,7 @@ def schwab_oauth_reset():
 
 
 @schwab_auth.route("/schwab/callback")
+@schwab_auth.route("/api/schwab/callback")
 def schwab_callback():
     """Handle Schwab OAuth callback (for Replit/web-based flow)."""
     try:
