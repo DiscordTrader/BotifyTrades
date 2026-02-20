@@ -1200,6 +1200,27 @@ class BrokerSyncService:
                         close_reason='order_cancelled_or_rejected'
                     )
                     
+                    # Send rejection/cancellation notification
+                    try:
+                        from gui_app.discord_notifier import notify_order_failed
+                        opt_detail = ""
+                        if trade.get('strike'):
+                            opt_type_str = (trade.get('call_put') or trade.get('opt_type') or '').upper()
+                            opt_detail = f" ${trade['strike']}{opt_type_str}"
+                            if trade.get('expiry'):
+                                opt_detail += f" {trade['expiry']}"
+                        notify_order_failed(
+                            symbol=symbol,
+                            action=trade.get('action', 'BTO'),
+                            broker=broker_name,
+                            error_message=f"Order rejected/cancelled by {broker_name}{opt_detail} - not found in pending orders after submission",
+                            quantity=int(trade.get('quantity', 1)),
+                            price=float(trade.get('price') or trade.get('executed_price') or 0)
+                        )
+                        print(f"[SYNC] ✓ Sent rejection notification for trade #{trade_id} ({symbol}) on {broker_name}")
+                    except Exception as notify_err:
+                        print(f"[SYNC] Warning: Could not send rejection notification: {notify_err}")
+                    
                     # Cancel associated lot to prevent orphaned P&L entries
                     try:
                         from gui_app.database import cancel_lot
