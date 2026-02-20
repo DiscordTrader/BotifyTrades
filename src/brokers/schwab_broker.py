@@ -388,11 +388,11 @@ class SchwabBroker(BrokerInterface):
             truncated = math.floor(price * 100) / 100
             return f"{truncated:.2f}"
 
-    async def _make_request(self, method, url, is_exit_order: bool = False, **kwargs):
+    async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
         """Make HTTP request with rate limit and token refresh handling"""
         import httpx
 
-        await self._async_rate_limit(is_exit_order=is_exit_order)
+        await self._async_rate_limit(is_exit_order=is_exit_order, is_entry_order=is_entry_order)
 
         headers = kwargs.pop('headers', {})
         if 'Authorization' not in headers:
@@ -410,6 +410,10 @@ class SchwabBroker(BrokerInterface):
                 if is_exit_order:
                     wait = min(retry_after, 10)
                     print(f"[{self.name}] 🔴 EXIT ORDER 429 - short wait {wait}s then retry")
+                    await asyncio.sleep(wait)
+                elif is_entry_order:
+                    wait = min(retry_after, 15)
+                    print(f"[{self.name}] ⏳ BUY ORDER 429 - waiting {wait}s then retry")
                     await asyncio.sleep(wait)
                 else:
                     await asyncio.sleep(retry_after)
@@ -602,7 +606,7 @@ class SchwabBroker(BrokerInterface):
             else:
                 self._last_api_call = now
     
-    async def _async_rate_limit(self, is_exit_order: bool = False):
+    async def _async_rate_limit(self, is_exit_order: bool = False, is_entry_order: bool = False):
         """Non-blocking rate limit for async contexts with global 429 awareness"""
         backoff_remaining = self._is_in_429_backoff()
         if backoff_remaining > 0:
@@ -610,6 +614,10 @@ class SchwabBroker(BrokerInterface):
                 reduced_wait = min(backoff_remaining, 5.0)
                 print(f"[{self.name}] 🔴 EXIT ORDER waiting {reduced_wait:.0f}s (429 backoff, {backoff_remaining:.0f}s remaining)")
                 await asyncio.sleep(reduced_wait)
+            elif is_entry_order:
+                capped_wait = min(backoff_remaining, 15.0)
+                print(f"[{self.name}] ⏳ BUY ORDER waiting {capped_wait:.0f}s (429 backoff, {backoff_remaining:.0f}s remaining)")
+                await asyncio.sleep(capped_wait)
             else:
                 print(f"[{self.name}] Rate limited (global 429 backoff), waiting {backoff_remaining:.0f}s...")
                 await asyncio.sleep(backoff_remaining)
@@ -743,10 +751,12 @@ class SchwabBroker(BrokerInterface):
             }
             
             is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
+            is_entry = instruction in ("BUY", "BUY_TO_COVER") and not is_exit
             response = await self._make_request(
                 'POST',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
                 is_exit_order=is_exit,
+                is_entry_order=is_entry,
                 headers=headers,
                 json=order_payload
             )
@@ -892,10 +902,12 @@ class SchwabBroker(BrokerInterface):
             }
             
             is_exit = (instruction == "SELL_TO_CLOSE")
+            is_entry = (instruction == "BUY_TO_OPEN")
             response = await self._make_request(
                 'POST',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
                 is_exit_order=is_exit,
+                is_entry_order=is_entry,
                 headers=headers,
                 json=order_payload
             )
