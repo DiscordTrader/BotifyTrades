@@ -2254,7 +2254,7 @@ async function loadSchwabStatus() {
         const refreshBtn = document.getElementById('refresh-schwab-token');
         
         document.getElementById('schwab-redirect-uri').value = data.redirect_uri || '';
-        document.getElementById('schwab-dry-run').checked = data.dry_run !== undefined ? data.dry_run : true;
+        document.getElementById('schwab-dry-run').checked = data.dry_run !== undefined ? data.dry_run : false;
         
         if (data.authenticated) {
             statusEl.className = 'connection-status connected';

@@ -950,7 +950,7 @@ def schwab_status():
     token_status = token_manager.get_token_status()
     
     creds = get_schwab_credentials()
-    dry_run = creds.get('dry_run', False) if creds else True
+    dry_run = creds.get('dry_run', False) if creds else False
     
     return jsonify({
         'configured': is_schwab_configured(),
@@ -1065,6 +1065,27 @@ def schwab_manual_code():
         return jsonify({'success': False, 'error': str(e)})
 
 
+def _migrate_schwab_dry_run():
+    """Fix stored dry_run=True from old default. Schwab should default to LIVE."""
+    try:
+        creds = db.get_broker_credentials('SCHWAB')
+        if creds:
+            stored = creds.get('credentials', {})
+            if stored.get('dry_run') == True:
+                stored['dry_run'] = False
+                import json
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    'UPDATE broker_credentials SET credentials_encrypted = ? WHERE broker_name = ?',
+                    (json.dumps(stored), 'SCHWAB')
+                )
+                conn.commit()
+                print("[SCHWAB AUTH] ✓ Migrated dry_run=True → False (fixed old default)")
+    except Exception as e:
+        print(f"[SCHWAB AUTH] Migration check skipped: {e}")
+
+
 def init_schwab_token_manager():
     """
     Initialize Schwab token manager on app startup.
@@ -1072,9 +1093,10 @@ def init_schwab_token_manager():
     Loads tokens and starts auto-refresh if tokens exist.
     """
     try:
+        _migrate_schwab_dry_run()
+        
         token_manager = get_token_manager()
         
-        # Force load tokens from file on startup
         token_manager.load_tokens()
         
         if token_manager._token_data and token_manager._token_data.get('refresh_token'):
