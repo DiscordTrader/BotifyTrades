@@ -12926,7 +12926,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _conditional_order_id=signal.get('_conditional_order_id'),
                         _is_market_order=signal.get('is_market_order', False),
                         _qot_price=signal.get('_qot_price'),
-                        _trigger_price=signal.get('_trigger_price')
+                        _trigger_price=signal.get('_trigger_price'),
+                        _risk_management_order=signal.get('_risk_management_order', False)
                     )
                 elif broker_upper in india_brokers:
                     # Indian brokers (Zerodha, Upstox, DhanQ) use standardized interface
@@ -13543,10 +13544,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     self._executed_orders_permanent = set()  # Permanent blocking for platform signals
                     self._executed_orders_lock = asyncio.Lock()
                 
+                is_risk_management_order = signal.get('_risk_management_order', False)
+                if is_risk_management_order:
+                    _original_print(f"[WORKER] ✓ Risk management order - bypassing worker-level dedupe for {signal.get('action')} {signal.get('symbol')}", flush=True)
+                
                 current_time = time_module.time()
                 async with self._executed_orders_lock:
+                    # 0. Risk management orders bypass ALL deduplication
+                    if is_risk_management_order:
+                        self._executed_orders[order_key] = current_time
                     # 1. Check permanent cache for Discord/Telegram
-                    if is_platform_signal:
+                    elif is_platform_signal:
                         if order_key in self._executed_orders_permanent:
                             _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (platform msg_id: {signal_id})", flush=True)
                             try:
@@ -13567,7 +13575,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # 2. Check TTL cache for EVERYTHING (manual, triggered, etc)
                     # This provides a second layer of defense even for platform signals
-                    if order_key in self._executed_orders:
+                    # Risk management orders already bypassed above
+                    if not is_risk_management_order and order_key in self._executed_orders:
                         last_exec_time = self._executed_orders[order_key]
                         elapsed = current_time - last_exec_time
                         if elapsed < DEDUPE_TTL_SECONDS:
