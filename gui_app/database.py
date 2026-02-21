@@ -3882,7 +3882,8 @@ def load_risk_state(trade_id: int) -> dict:
         SELECT pt1_hit, pt2_hit, pt3_hit, pt4_hit, 
                dynamic_sl_price, giveback_guard_active, max_pnl_seen,
                trailing_stop_price, trailing_activated, highest_price,
-               risk_settings_hash, early_trailing_active, early_stop_price, early_steps_locked
+               risk_settings_hash, early_trailing_active, early_stop_price, early_steps_locked,
+               quantity
         FROM trades
         WHERE id = ? AND status IN ('OPEN', 'PENDING')
     ''', (trade_id,))
@@ -3903,14 +3904,15 @@ def load_risk_state(trade_id: int) -> dict:
             'risk_settings_hash': row[10],
             'early_trailing_active': bool(row[11]) if row[11] else False,
             'early_stop_price': row[12],
-            'early_steps_locked': row[13] or 0
+            'early_steps_locked': row[13] or 0,
+            'quantity': row[14] or 0
         }
     return {
         'pt1_hit': False, 'pt2_hit': False, 'pt3_hit': False, 'pt4_hit': False,
         'dynamic_sl_price': None, 'giveback_guard_active': False, 'max_pnl_seen': 0.0,
         'trailing_stop_price': None, 'trailing_activated': False, 'highest_price': 0.0,
         'risk_settings_hash': None, 'early_trailing_active': False, 'early_stop_price': None,
-        'early_steps_locked': 0
+        'early_steps_locked': 0, 'quantity': 0
     }
 
 

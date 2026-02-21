@@ -229,6 +229,7 @@ class PositionCacheEntry:
     broker: str = ""
     raw_symbol: Optional[str] = None
     channel_settings: Optional[ChannelRiskSettings] = None
+    original_qty: Optional[int] = None
     
     tier1_hit: bool = False
     tier2_hit: bool = False
@@ -285,6 +286,7 @@ class PositionCacheEntry:
             'tier2_hit': self.tier2_hit,
             'tier3_hit': self.tier3_hit,
             'tier4_hit': self.tier4_hit,
+            'original_qty': self.original_qty,
             'pending_orders': self.pending_orders,
             'created_at': self.created_at.isoformat(),
             'max_pnl_seen': self.max_pnl_seen,

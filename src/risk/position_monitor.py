@@ -1487,10 +1487,11 @@ class RiskManager:
         Evaluate Enhanced Risk v2.0 features: Dynamic SL and Giveback Guard.
         Updates cache state and returns exit decision if triggered.
         """
+        original_qty = cache.original_qty if cache.original_qty else int(position.quantity)
         state = TradeState(
             entry_price=cache.entry_price,
             current_price=position.current_price,
-            qty=int(position.quantity),
+            qty=original_qty,
             remaining_qty=int(position.quantity)
         )
         state.copy_from_cache(cache)

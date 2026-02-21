@@ -137,6 +137,9 @@ class PositionCache:
                     entry = self._cache[pos_key]
                     has_state = False
                     
+                    if trade.get('quantity') and trade['quantity'] > 0:
+                        entry.original_qty = int(trade['quantity'])
+                    
                     if trade.get('pt1_hit'):
                         entry.tier1_hit = True
                         has_state = True
@@ -316,7 +319,8 @@ class PositionCache:
                 broker=position.broker,
                 raw_symbol=position.raw_symbol,
                 stop_loss_price=sl_price,
-                profit_target_price=target_price
+                profit_target_price=target_price,
+                original_qty=int(position.quantity)
             )
             self._cache[pos_key] = entry
             
@@ -351,6 +355,8 @@ class PositionCache:
                         if saved_state.get('trailing_activated'):
                             entry.trailing_activated = True
                             has_state = True
+                        if saved_state.get('quantity') and saved_state['quantity'] > 0:
+                            entry.original_qty = int(saved_state['quantity'])
                         if saved_state.get('highest_price'):
                             entry.highest_price = max(entry.highest_price, saved_state['highest_price'])
                         if saved_state.get('risk_settings_hash'):
