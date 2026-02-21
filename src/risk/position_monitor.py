@@ -678,6 +678,82 @@ class RiskDBAdapter:
             print(f"[RISK] Warning: Could not lookup trade_id: {e}")
             return None
     
+    def auto_import_manual_position(
+        self,
+        position: 'PositionSnapshot'
+    ) -> Optional[int]:
+        """Instantly import a broker position not tracked in DB as a synthetic trade.
+        
+        Called by the risk engine when it detects a live broker position with no 
+        matching DB trade. Creates a trade entry immediately so risk state can persist.
+        Returns the new trade_id or None if import failed.
+        
+        This is the FASTEST detection path (~1 second) vs broker_sync (30 seconds).
+        """
+        if not self._db:
+            return None
+        
+        try:
+            from datetime import datetime
+            
+            entry_price = float(position.avg_cost) if position.avg_cost else 0
+            current_price = float(position.current_price) if position.current_price else entry_price
+            quantity = float(position.quantity) if position.quantity else 1
+            
+            multiplier = 100 if position.asset == 'option' else 1
+            pnl = (current_price - entry_price) * quantity * multiplier if entry_price > 0 else 0
+            pnl_percent = ((current_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+            
+            call_put = None
+            if position.asset == 'option' and position.direction:
+                d = position.direction.upper().strip()
+                if d in ('CALL', 'C'):
+                    call_put = 'C'
+                elif d in ('PUT', 'P'):
+                    call_put = 'P'
+                else:
+                    call_put = d
+            
+            trade_data = {
+                'symbol': position.symbol,
+                'direction': 'BTO',
+                'quantity': int(quantity),
+                'intended_price': entry_price,
+                'executed_price': entry_price,
+                'current_price': current_price,
+                'pnl': round(pnl, 2),
+                'pnl_percent': round(pnl_percent, 4),
+                'broker': position.broker,
+                'status': 'OPEN',
+                'asset_type': position.asset or 'stock',
+                'executed': True,
+                'channel_id': None,
+                'message_id': None,
+                'order_id': None,
+                'source': 'risk_auto_import',
+                'stop_loss_price': None,
+                'profit_target_price': None,
+            }
+            
+            if position.asset == 'option':
+                trade_data.update({
+                    'strike': position.strike,
+                    'expiry': position.expiry,
+                    'call_put': call_put
+                })
+            
+            if hasattr(self._db, 'add_trade'):
+                trade_id = self._db.add_trade(trade_data)
+            else:
+                from gui_app.database import add_trade
+                trade_id = add_trade(trade_data)
+            
+            return trade_id
+            
+        except Exception as e:
+            print(f"[RISK] ⚠️ Auto-import failed for {position.symbol}: {e}")
+            return None
+
     def load_position_price_targets(self) -> Dict[str, Dict[str, Optional[float]]]:
         """Load stop/target prices for all open positions.
         
@@ -955,6 +1031,28 @@ class RiskManager:
         positions = await self._fetch_all_positions()
         
         if positions:
+            current_keys = {p.position_key for p in positions}
+            if not hasattr(self, '_prev_position_keys'):
+                self._prev_position_keys = set()
+            
+            new_keys = current_keys - self._prev_position_keys
+            removed_keys = self._prev_position_keys - current_keys
+            
+            if new_keys:
+                for nk in new_keys:
+                    matching = [p for p in positions if p.position_key == nk]
+                    if matching:
+                        p = matching[0]
+                        print(f"[RISK] 🆕 NEW POSITION DETECTED: {p.symbol} on {p.broker} "
+                              f"(qty={p.quantity}, avg_cost=${p.avg_cost}, current=${p.current_price}) — "
+                              f"risk engine will evaluate immediately")
+            
+            if removed_keys:
+                for rk in removed_keys:
+                    print(f"[RISK] 📤 Position closed externally: {rk}")
+            
+            self._prev_position_keys = current_keys
+            
             webull_count = sum(1 for p in positions if p.broker == 'Webull')
             alpaca_count = sum(1 for p in positions if 'ALPACA' in p.broker)
             schwab_count = sum(1 for p in positions if 'SCHWAB' in p.broker.upper())
@@ -981,6 +1079,10 @@ class RiskManager:
             stale_count = self.cache.cleanup_stale(broker_position_keys)
             if stale_count > 0:
                 print(f"[RISK] 🧹 Periodic cleanup: removed {stale_count} stale cache entries")
+            if hasattr(self, '_auto_imported_keys'):
+                stale_imports = self._auto_imported_keys - broker_position_keys
+                if stale_imports:
+                    self._auto_imported_keys -= stale_imports
         
         self.cache.save()
     
@@ -1353,15 +1455,26 @@ class RiskManager:
             if trade_id:
                 self.cache.set_trade_id(pos_key, trade_id)
             else:
-                if not hasattr(self, '_logged_missing_trades'):
-                    self._logged_missing_trades = set()
-                if pos_key not in self._logged_missing_trades:
-                    self._logged_missing_trades.add(pos_key)
-                    print(f"[RISK] No trade row found in DB for live position: {pos_key} "
-                          f"(broker={position.broker}, symbol={position.symbol}, "
-                          f"asset={position.asset}"
-                          f"{f', strike={position.strike}, expiry={position.expiry}' if position.asset == 'option' else ''}"
-                          f") — using global risk settings as fallback")
+                # INSTANT AUTO-IMPORT: Create DB trade immediately for manual/untracked positions
+                # This is the fastest detection path (~1s) vs broker_sync (30s)
+                if not hasattr(self, '_auto_imported_keys'):
+                    self._auto_imported_keys = set()
+                
+                if pos_key not in self._auto_imported_keys:
+                    self._auto_imported_keys.add(pos_key)
+                    
+                    new_trade_id = self.db_adapter.auto_import_manual_position(position)
+                    if new_trade_id:
+                        trade_id = new_trade_id
+                        self.cache.set_trade_id(pos_key, trade_id)
+                        print(f"[RISK] ⚡ INSTANT IMPORT: Manual position detected and imported in <1s: "
+                              f"{pos_key} → trade #{trade_id} "
+                              f"(broker={position.broker}, symbol={position.symbol}, "
+                              f"qty={position.quantity}, entry=${position.avg_cost}"
+                              f"{f', strike={position.strike}, expiry={position.expiry}' if position.asset == 'option' else ''}"
+                              f") — global risk settings NOW ACTIVE")
+                    else:
+                        print(f"[RISK] ⚠️ Auto-import failed for {pos_key} — monitoring with global risk settings (no state persistence)")
         
         self.cache.update_highest_price(pos_key, position.current_price, trade_id=trade_id)
         
