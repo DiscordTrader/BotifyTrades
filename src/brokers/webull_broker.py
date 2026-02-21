@@ -30,6 +30,8 @@ class WebullBroker(BrokerInterface):
         self._token_refresh_task = None
         self._option_id_cache = {}
         self._option_id_cache_ttl = 300
+        self._streaming_client = None
+        self._data_hub = None
     
     async def connect(self) -> bool:
         """Connect to Webull"""
@@ -60,6 +62,7 @@ class WebullBroker(BrokerInterface):
                     self._tokens_valid = True
                     print(f"[{self.name}] ✓ Connected successfully (token auth)")
                     self._start_proactive_token_refresh()
+                    self._start_streaming()
                     return True
             
             username = self.config.get('username')
@@ -76,6 +79,7 @@ class WebullBroker(BrokerInterface):
                     self._tokens_valid = True
                     print(f"[{self.name}] ✓ Connected successfully (password auth)")
                     self._start_proactive_token_refresh()
+                    self._start_streaming()
                     return True
             
             print(f"[{self.name}] ❌ Failed to connect - no valid credentials")
@@ -85,8 +89,26 @@ class WebullBroker(BrokerInterface):
             print(f"[{self.name}] ❌ Connection error: {e}")
             return False
     
+    def _start_streaming(self):
+        try:
+            from src.services.webull_streaming_client import WebullStreamingClient
+            from src.services.webull_data_hub import get_webull_data_hub
+            self._data_hub = get_webull_data_hub()
+            self._streaming_client = WebullStreamingClient(self)
+            self._streaming_client.start()
+            print(f"[{self.name}] ✓ Streaming client started")
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Could not start streaming: {e}")
+            self._streaming_client = None
+
     async def disconnect(self):
         """Disconnect from Webull"""
+        if self._streaming_client:
+            try:
+                self._streaming_client.stop()
+            except Exception:
+                pass
+            self._streaming_client = None
         if self._token_refresh_task and not self._token_refresh_task.done():
             self._token_refresh_task.cancel()
             try:
@@ -478,6 +500,11 @@ class WebullBroker(BrokerInterface):
                         'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
                     })
             
+            if self._data_hub:
+                self._data_hub.update_positions(positions_raw, source="rest")
+            if self._streaming_client:
+                self._streaming_client.subscribe_positions(positions)
+
             return positions
         except Exception as e:
             print(f"[{self.name}] Error getting detailed positions: {e}")

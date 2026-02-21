@@ -977,7 +977,18 @@ class RiskManager:
                         self._standby_mode = False
                     
                     await self._monitoring_cycle()
-                    await asyncio.sleep(self._get_adaptive_interval())
+                    interval = self._get_adaptive_interval()
+                    elapsed = 0.0
+                    while elapsed < interval:
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            if get_webull_data_hub().check_risk_eval_requested():
+                                print("[RISK] ⚡ Early wake: order event from Webull stream")
+                                break
+                        except ImportError:
+                            pass
+                        await asyncio.sleep(min(0.5, interval - elapsed))
+                        elapsed += 0.5
                 else:
                     if not self._standby_mode:
                         print("[RISK] ⏸️ Entering standby mode - no risk settings enabled (zero API calls)")
@@ -1074,6 +1085,8 @@ class RiskManager:
                 print(f"[RISK] Per-channel risk ACTIVE for {channel_count} channel(s)")
         
         positions = await self._fetch_all_positions()
+        
+        self._update_prices_from_hub(positions)
         
         if positions:
             current_keys = {p.position_key for p in positions}
@@ -2381,6 +2394,36 @@ class RiskManager:
             print(f"[RISK] Error cleaning terminal order cache: {e}")
             return 0
     
+    def _update_prices_from_hub(self, positions: list):
+        """Update Webull position prices from streaming hub if available.
+        
+        When Webull MQTT streaming is active, position prices from REST may
+        be stale. This method updates current_price with real-time streaming
+        data from the WebullDataHub, providing zero-API-cost price updates.
+        """
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if not hub.is_streaming():
+                return
+
+            updated_count = 0
+            for pos in positions:
+                if pos.broker != 'Webull':
+                    continue
+                price = hub.get_quote_price(pos.symbol)
+                if price and price > 0:
+                    pos.current_price = price
+                    updated_count += 1
+
+            if updated_count > 0 and not hasattr(self, '_hub_update_logged'):
+                print(f"[RISK] ✓ Webull streaming: updated {updated_count} position prices from hub")
+                self._hub_update_logged = True
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ Hub price update error: {e}")
+
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:
         """Convert raw position dict to PositionSnapshot."""
         return PositionSnapshot(

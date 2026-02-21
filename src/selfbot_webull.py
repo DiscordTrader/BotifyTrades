@@ -1930,6 +1930,8 @@ class WebullBroker:
         self._option_id_cache = {}
         self._option_id_cache_ttl = 300
         self._token_refresh_task = None
+        self._streaming_client = None
+        self._data_hub = None
     
     def is_authenticated(self) -> bool:
         """Check if Webull is actually authenticated (tokens valid).
@@ -1960,6 +1962,28 @@ class WebullBroker:
             del self._option_id_cache[cache_key]
         return None
     
+    def _start_streaming(self):
+        """Start MQTT streaming for real-time quotes and order updates."""
+        try:
+            from src.services.webull_streaming_client import WebullStreamingClient
+            from src.services.webull_data_hub import get_webull_data_hub
+            self._data_hub = get_webull_data_hub()
+            
+            class _BrokerAdapter:
+                def __init__(self, client, name):
+                    self.wb = client
+                    self.name = name
+            
+            adapter = _BrokerAdapter(self._client, self.name)
+            self._streaming_client = WebullStreamingClient(adapter)
+            self._streaming_client.start()
+            print(f"[{self.name}] ✓ MQTT streaming client started")
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Could not start streaming: {e}")
+            import traceback
+            traceback.print_exc()
+            self._streaming_client = None
+
     def _start_proactive_token_refresh(self):
         """Start background task to refresh tokens every 10 minutes during market hours"""
         if self._token_refresh_task and not self._token_refresh_task.done():
@@ -3916,6 +3940,9 @@ class WebullBroker:
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch positions: {e}")
             
+            if positions and self._streaming_client:
+                self._streaming_client.subscribe_positions(positions)
+
             return positions
         
         return await self.loop.run_in_executor(None, _blocking_get)
@@ -5911,6 +5938,7 @@ class SelfClient(discord.Client):
                 mode_str = "PAPER" if PAPER_TRADE else "LIVE"
                 print(f"[Webull] ✓ Login successful ({mode_str} account)", flush=True)
                 self.broker_ready.set()
+                self.broker._start_streaming()
                 try:
                     from gui_app.broker_credentials_service import set_broker_status
                     set_broker_status('webull_live', True, 'connected', account_info={'mode': 'live'})

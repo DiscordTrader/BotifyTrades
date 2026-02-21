@@ -97,6 +97,8 @@ class CleanConsoleFormatter(logging.Formatter):
         '[PAPER TRADE]', '[MULTI-BROKER]', '[ROUTER]', '[LIFECYCLE]',
         # Conditional orders
         '[CONDITIONAL]',
+        # Streaming / Data Hub
+        '[WEBULL_STREAM]', '[WEBULL_HUB]', '[SCHWAB_STREAM]', '[SCHWAB_HUB]',
         # Debug (when enabled)
         '[DEBUG]', '[API]', '[ROUTE]'
     ]
