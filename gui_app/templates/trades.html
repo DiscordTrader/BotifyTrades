@@ -1658,12 +1658,15 @@ let streamingPollInterval = setInterval(async () => {
         const status = data.streaming_status || {};
         const indicator = document.getElementById('streaming-indicator');
         if (indicator) {
-            const anyStreaming = status.webull || status.schwab;
-            indicator.style.display = anyStreaming ? 'inline' : 'none';
-            if (anyStreaming) {
+            const broker = (currentBroker || '').toUpperCase();
+            const showWebull = status.webull && (!broker || broker.includes('WEBULL'));
+            const showSchwab = status.schwab && (!broker || broker === 'SCHWAB');
+            const anyRelevant = showWebull || showSchwab;
+            indicator.style.display = anyRelevant ? 'inline' : 'none';
+            if (anyRelevant) {
                 const parts = [];
-                if (status.webull) parts.push('Webull');
-                if (status.schwab) parts.push('Schwab');
+                if (showWebull) parts.push('Webull');
+                if (showSchwab) parts.push('Schwab');
                 indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
             }
         }
