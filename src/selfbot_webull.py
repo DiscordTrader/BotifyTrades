@@ -6562,6 +6562,11 @@ class SelfClient(discord.Client):
                     mode = "PAPER" if schwab_creds.get('dry_run', False) else "LIVE"
                     _original_print(f"[SCHWAB] ✓ Connected successfully ({mode})", flush=True)
                     try:
+                        loop = asyncio.get_event_loop()
+                        self.schwab_broker.start_streaming(loop=loop)
+                    except Exception as stream_err:
+                        _original_print(f"[SCHWAB] ⚠️ Streaming start skipped (REST fallback active): {stream_err}", flush=True)
+                    try:
                         from gui_app.database import update_broker_connection_status
                         account_info = await self.schwab_broker.get_account_info()
                         update_broker_connection_status('schwab', True, f"Connected - Account: {self.schwab_broker.account_number}")

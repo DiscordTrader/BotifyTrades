@@ -62,10 +62,21 @@ class SchwabBroker(BrokerInterface):
         self._global_429_lock = threading.Lock()
         self._consecutive_429s = 0
         self._last_successful_call = 0
+
+        self._streaming_client = None
+        self._data_hub = None
+        self._api_calls_this_minute = 0
+        self._api_calls_minute_start = 0
+        self._api_budget_lock = threading.Lock()
+        self._API_BUDGET_LIMIT = 120
+        self._API_BUDGET_THROTTLE = 96
+        self._API_BUDGET_CRITICAL = 108
     
     async def connect(self) -> bool:
         """Connect to Schwab using stored tokens"""
         try:
+            self._init_data_hub()
+
             if not self.client_id or not self.client_secret:
                 print(f"[{self.name}] ❌ Missing Client ID or Client Secret")
                 return False
@@ -90,6 +101,83 @@ class SchwabBroker(BrokerInterface):
             import traceback
             traceback.print_exc()
             return False
+
+    def _init_data_hub(self):
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            self._data_hub = get_schwab_data_hub()
+        except Exception as e:
+            print(f"[{self.name}] Data hub init skipped: {e}")
+
+    def start_streaming(self, loop=None):
+        try:
+            if self._streaming_client:
+                return
+            self._init_data_hub()
+            from src.services.schwab_streaming_client import SchwabStreamingClient
+            self._streaming_client = SchwabStreamingClient(self)
+            self._streaming_client.start(loop=loop)
+            print(f"[{self.name}] ✓ WebSocket streaming started")
+        except Exception as e:
+            print(f"[{self.name}] Streaming start failed (will use REST fallback): {e}")
+
+    def stop_streaming(self):
+        if self._streaming_client:
+            self._streaming_client.stop()
+            self._streaming_client = None
+
+    async def subscribe_position_symbols(self, positions: list):
+        if not self._streaming_client or not self._streaming_client.is_connected():
+            return
+        equity_symbols = []
+        option_symbols = []
+        for pos in positions:
+            symbol = pos.get('symbol', '') if isinstance(pos, dict) else str(pos)
+            asset_type = pos.get('assetType', 'EQUITY') if isinstance(pos, dict) else 'EQUITY'
+            if asset_type == 'OPTION' or len(symbol) > 10:
+                option_symbols.append(symbol)
+            else:
+                equity_symbols.append(symbol)
+        if equity_symbols:
+            await self._streaming_client.subscribe_equities(equity_symbols)
+        if option_symbols:
+            await self._streaming_client.subscribe_options(option_symbols)
+
+    def get_hub_quote(self, symbol: str) -> Optional[float]:
+        if self._data_hub:
+            price = self._data_hub.get_quote_price(symbol)
+            if price and price > 0:
+                return price
+        return None
+
+    def get_hub_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
+        if self._data_hub:
+            return self._data_hub.get_quote_detailed(symbol)
+        return None
+
+    def _track_api_call(self) -> bool:
+        with self._api_budget_lock:
+            now = time.time()
+            if now - self._api_calls_minute_start >= 60:
+                self._api_calls_this_minute = 0
+                self._api_calls_minute_start = now
+            self._api_calls_this_minute += 1
+            return self._api_calls_this_minute <= self._API_BUDGET_LIMIT
+
+    def _get_api_usage(self) -> int:
+        with self._api_budget_lock:
+            now = time.time()
+            if now - self._api_calls_minute_start >= 60:
+                return 0
+            return self._api_calls_this_minute
+
+    def _should_throttle_non_critical(self) -> bool:
+        usage = self._get_api_usage()
+        return usage >= self._API_BUDGET_THROTTLE
+
+    def _should_block_non_order(self) -> bool:
+        usage = self._get_api_usage()
+        return usage >= self._API_BUDGET_CRITICAL
     
     def _load_tokens(self) -> bool:
         """Load tokens from file, using token manager if available"""
@@ -389,9 +477,15 @@ class SchwabBroker(BrokerInterface):
             return f"{truncated:.2f}"
 
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
-        """Make HTTP request with rate limit and token refresh handling"""
+        """Make HTTP request with rate limit, budget tracking, and token refresh handling"""
         import httpx
 
+        if not is_exit_order and not is_entry_order:
+            if self._should_block_non_order():
+                print(f"[{self.name}] ⚠️ API budget critical ({self._get_api_usage()}/{self._API_BUDGET_LIMIT}/min) - blocking non-order call")
+                return type('BudgetBlockedResponse', (), {'status_code': 503, 'text': 'Budget exceeded', 'json': lambda: {}, 'headers': {}, '_budget_blocked': True})()
+
+        self._track_api_call()
         await self._async_rate_limit(is_exit_order=is_exit_order, is_entry_order=is_entry_order)
 
         headers = kwargs.pop('headers', {})
@@ -634,9 +728,13 @@ class SchwabBroker(BrokerInterface):
         return self._is_in_429_backoff() > 30
     
     async def get_positions(self) -> Dict[str, Any]:
-        """Get current positions"""
+        """Get current positions. Uses hub cache when available to reduce API calls."""
         try:
-            if self._should_skip_non_critical():
+            if self._should_skip_non_critical() or self._should_throttle_non_critical():
+                if self._data_hub:
+                    cached = self._data_hub.get_positions(detailed=False)
+                    if cached is not None:
+                        return {p.get('symbol', ''): int(p.get('quantity', 0)) for p in cached if p.get('symbol')}
                 if hasattr(self, '_last_positions_simple') and self._last_positions_simple:
                     return dict(self._last_positions_simple)
                 if self._last_valid_positions:
@@ -651,7 +749,7 @@ class SchwabBroker(BrokerInterface):
                 params={'fields': 'positions'}
             )
             
-            if response.status_code == 429:
+            if response.status_code in (429, 503) or getattr(response, '_budget_blocked', False):
                 return {p.get('symbol', ''): int(p.get('quantity', 0)) for p in self._last_valid_positions if p.get('symbol')}
             
             if response.status_code == 200:
@@ -963,8 +1061,12 @@ class SchwabBroker(BrokerInterface):
         return f"{underlying_padded}{year}{month}{day}{call_put.upper()}{strike_str}"
     
     async def get_quote(self, symbol: str) -> Optional[float]:
-        """Get current price for a symbol"""
+        """Get current price for a symbol. Tries streaming hub first, REST fallback."""
         try:
+            hub_price = self.get_hub_quote(symbol)
+            if hub_price is not None:
+                return hub_price
+
             if self._should_skip_non_critical():
                 return None
             
@@ -981,7 +1083,15 @@ class SchwabBroker(BrokerInterface):
                 data = response.json()
                 if symbol in data:
                     quote = data[symbol].get('quote', {})
-                    return float(quote.get('lastPrice', 0))
+                    price = float(quote.get('lastPrice', 0))
+                    if self._data_hub and price > 0:
+                        self._data_hub.update_quote(symbol, {
+                            'bid': float(quote.get('bidPrice', 0) or 0),
+                            'ask': float(quote.get('askPrice', 0) or 0),
+                            'last': price,
+                            'volume': int(quote.get('totalVolume', 0) or 0),
+                        }, source="rest")
+                    return price
                         
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
@@ -989,8 +1099,12 @@ class SchwabBroker(BrokerInterface):
         return None
     
     async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Get detailed quote data for signal verification (bid, ask, last, volume)"""
+        """Get detailed quote data for signal verification (bid, ask, last, volume). Tries hub first."""
         try:
+            hub_data = self.get_hub_quote_detailed(symbol)
+            if hub_data and hub_data.get('last', 0) > 0:
+                return hub_data
+
             if self._should_skip_non_critical():
                 return None
             
@@ -1007,13 +1121,16 @@ class SchwabBroker(BrokerInterface):
                 data = response.json()
                 if symbol in data:
                     quote = data[symbol].get('quote', {})
-                    return {
+                    result = {
                         'bid': float(quote.get('bidPrice', 0) or 0),
                         'ask': float(quote.get('askPrice', 0) or 0),
                         'last': float(quote.get('lastPrice', 0) or 0),
                         'price': float(quote.get('lastPrice', 0) or 0),
                         'volume': int(quote.get('totalVolume', 0) or 0)
                     }
+                    if self._data_hub and result['last'] > 0:
+                        self._data_hub.update_quote(symbol, result, source="rest")
+                    return result
                         
         except Exception as e:
             print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
@@ -1021,12 +1138,16 @@ class SchwabBroker(BrokerInterface):
         return None
     
     async def get_option_quote(self, underlying: str, strike: float, expiry: str, opt_type: str) -> Optional[Dict[str, Any]]:
-        """Get option quote for signal verification"""
+        """Get option quote for signal verification. Tries hub first."""
         try:
+            option_symbol = self._build_option_symbol(underlying, expiry, strike, opt_type[0])
+
+            hub_data = self.get_hub_quote_detailed(option_symbol)
+            if hub_data and hub_data.get('last', 0) > 0:
+                return hub_data
+
             if not await self._ensure_valid_token():
                 return None
-            
-            option_symbol = self._build_option_symbol(underlying, expiry, strike, opt_type[0])
             
             response = await self._make_request(
                 'GET',
@@ -1038,7 +1159,7 @@ class SchwabBroker(BrokerInterface):
                 data = response.json()
                 if option_symbol in data:
                     quote = data[option_symbol].get('quote', {})
-                    return {
+                    result = {
                         'bid': float(quote.get('bidPrice', 0) or 0),
                         'ask': float(quote.get('askPrice', 0) or 0),
                         'last': float(quote.get('lastPrice', 0) or 0),
@@ -1047,6 +1168,9 @@ class SchwabBroker(BrokerInterface):
                         'open_interest': int(quote.get('openInterest', 0) or 0),
                         'implied_volatility': float(quote.get('volatility', 0) or 0)
                     }
+                    if self._data_hub and result['last'] > 0:
+                        self._data_hub.update_quote(option_symbol, result, source="rest")
+                    return result
                         
         except Exception as e:
             print(f"[{self.name}] Error getting option quote: {e}")
@@ -1190,6 +1314,10 @@ class SchwabBroker(BrokerInterface):
         """Get detailed positions for sync service"""
         try:
             if self._should_skip_non_critical():
+                if self._data_hub:
+                    cached = self._data_hub.get_positions(detailed=True)
+                    if cached is not None:
+                        return list(cached)
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     return list(self._last_valid_positions)
             
@@ -1209,8 +1337,8 @@ class SchwabBroker(BrokerInterface):
                 params={'fields': 'positions'}
             )
             
-            if response.status_code == 429:
-                print(f"[{self.name}] ⚠️ Rate limited (429) on get_positions_detailed - returning {len(self._last_valid_positions)} cached positions")
+            if response.status_code in (429, 503) or getattr(response, '_budget_blocked', False):
+                print(f"[{self.name}] ⚠️ Rate limited/throttled on get_positions_detailed - returning {len(self._last_valid_positions)} cached positions")
                 return list(self._last_valid_positions)
             
             if response.status_code == 200:
@@ -1276,6 +1404,11 @@ class SchwabBroker(BrokerInterface):
                 if len(result) > 0:
                     self._last_valid_positions = list(result)
                     self._last_valid_positions_time = time.time()
+                    if self._data_hub:
+                        try:
+                            self._data_hub.update_positions(result, detailed=True, source="rest")
+                        except Exception:
+                            pass
                 elif len(result) == 0 and self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     print(f"[{self.name}] ⚠️ API returned 0 positions but cache has {len(self._last_valid_positions)} - returning cached data")
                     return list(self._last_valid_positions)

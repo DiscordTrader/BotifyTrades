@@ -454,7 +454,6 @@ class BrokerSyncService:
                             })
             
             elif broker_name == 'SCHWAB':
-                # Get detailed positions from Schwab
                 if hasattr(broker_instance, 'get_positions_detailed'):
                     positions = await broker_instance.get_positions_detailed() or []
                     
@@ -471,6 +470,14 @@ class BrokerSyncService:
                             'expiry': pos.get('expiry'),
                             'call_put': pos.get('direction')
                         })
+                    
+                    try:
+                        if hasattr(broker_instance, '_data_hub') and broker_instance._data_hub:
+                            broker_instance._data_hub.update_positions(positions, source="sync")
+                        if positions and hasattr(broker_instance, 'subscribe_position_symbols'):
+                            await broker_instance.subscribe_position_symbols(positions)
+                    except Exception:
+                        pass
                 
                 # Get pending orders from Schwab
                 if hasattr(broker_instance, 'get_pending_orders'):

@@ -52,6 +52,8 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Schwab Global 429 Rate Limit Protection**: Centralized rate limit mitigation for Schwab API with global backoff timer, escalating backoff, and priority for exit orders.
 
+**Schwab WebSocket Streaming & Data Hub**: Industry-grade 5-tier API optimization. WebSocket streaming client (`schwab_streaming_client.py`) connects via userPreference endpoint for real-time LEVELONE_EQUITIES and LEVELONE_OPTIONS quotes, eliminating ~60-120 REST calls/min. Centralized Data Hub (`schwab_data_hub.py`) provides thread-safe singleton cache with TTL invalidation for quotes (120s) and positions (60s), event bus for cache updates, and hub-first lookups in all quote/position methods with REST fallback. API Budget Manager tracks rolling 120/min limit: throttles non-critical at 80% (96), blocks non-order at 90% (108), never blocks exit orders. Streaming auto-starts on Schwab connect, broker_sync_service populates hub and subscribes position symbols.
+
 **Broker Health Monitor**: A centralized, thread-safe system for real-time broker connection status and buying power monitoring.
 
 **Settled Cash Validation**: Industry-grade good faith violation prevention across all major brokers.
