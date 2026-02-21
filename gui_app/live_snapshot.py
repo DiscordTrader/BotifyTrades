@@ -497,13 +497,16 @@ def _make_match_key(broker, symbol, strike, expiry, call_put):
 
 
 def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict]) -> List[Dict]:
+    from collections import defaultdict
     trade_map: Dict[str, Dict] = {}
+    trade_map_all: Dict[str, list] = defaultdict(list)
     for t in db_trades:
         key = _make_match_key(
             t.get('broker', ''), t.get('symbol', ''),
             t.get('strike'), t.get('expiry'), t.get('call_put')
         )
         trade_map[key] = t
+        trade_map_all[key].append(t)
         _log(f"[ENRICH] DB trade #{t.get('id')} key: {key}")
 
     enriched = []
@@ -528,10 +531,25 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict]) -> List
                     pos['expiry'] = ttrade.get('expiry')
                     pos['call_put'] = ttrade.get('call_put')
                     _log(f"[ENRICH] ✓ Fuzzy matched {pos_symbol} option to trade #{ttrade.get('id')}")
+                    key = _make_match_key(
+                        pos.get('broker', ''), pos_symbol,
+                        ttrade.get('strike'), ttrade.get('expiry'), ttrade.get('call_put')
+                    )
                     break
         if matched_trade:
+            all_matching = trade_map_all.get(key, [matched_trade])
+            for t in all_matching:
+                seen_db_ids.add(t.get('id'))
+            def _trade_rank(t):
+                src = (t.get('source') or '').lower()
+                has_oid = bool(t.get('order_id'))
+                if src == 'discord' and has_oid: return 0
+                if src == 'sync_discord' and has_oid: return 1
+                if src == 'discord': return 2
+                if src == 'sync_discord': return 3
+                return 4
+            matched_trade = min(all_matching, key=_trade_rank)
             trade_id = matched_trade.get('id')
-            seen_db_ids.add(trade_id)
             pos['id'] = trade_id
             pos['source'] = 'database'
             pos['status'] = matched_trade.get('status', 'OPEN')

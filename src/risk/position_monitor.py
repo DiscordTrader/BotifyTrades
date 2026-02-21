@@ -742,6 +742,26 @@ class RiskDBAdapter:
                     'call_put': call_put
                 })
             
+            try:
+                from gui_app.database import get_trades
+                existing = get_trades(status='OPEN', limit=2000) + get_trades(status='PENDING', limit=1000)
+                for ex in existing:
+                    ex_broker = (ex.get('broker') or '').upper()
+                    if ex['symbol'] == position.symbol and ex_broker == position.broker.upper():
+                        if position.asset == 'stock':
+                            return ex.get('id')
+                        elif position.asset == 'option':
+                            ex_strike = float(ex.get('strike') or 0)
+                            pos_strike = float(position.strike or 0)
+                            ex_expiry = str(ex.get('expiry') or '').replace('/', '').replace('-', '')[-4:]
+                            pos_expiry = str(position.expiry or '').replace('/', '').replace('-', '')[-4:]
+                            if (abs(ex_strike - pos_strike) < 0.01 and
+                                ex.get('call_put') == call_put and
+                                (not pos_expiry or not ex_expiry or ex_expiry == pos_expiry)):
+                                return ex.get('id')
+            except Exception:
+                pass
+            
             if hasattr(self._db, 'add_trade'):
                 trade_id = self._db.add_trade(trade_data)
             else:
