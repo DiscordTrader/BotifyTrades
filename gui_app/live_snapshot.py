@@ -86,6 +86,19 @@ def _make_position(
     }
 
 
+def _try_hub_positions(hub_getter, broker_label: str) -> Optional[List[Dict]]:
+    try:
+        hub = hub_getter()
+        if not hub or not hub.is_streaming():
+            return None
+        cached = hub.get_positions()
+        if cached is None:
+            return None
+        return cached
+    except Exception:
+        return None
+
+
 def _fetch_webull(bot) -> List[Dict]:
     try:
         if not hasattr(bot, 'broker') or bot.broker is None:
@@ -105,7 +118,19 @@ def _fetch_webull(bot) -> List[Dict]:
         if not wb_client:
             return []
 
-        positions_raw = wb_client.get_positions() or []
+        positions_raw = None
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming() and hub.get_positions_age() < 60:
+                cached = hub.get_positions()
+                if cached is not None:
+                    positions_raw = list(cached)
+        except Exception:
+            pass
+
+        if positions_raw is None:
+            positions_raw = wb_client.get_positions() or []
 
         positions = []
         for pos in positions_raw:
@@ -311,11 +336,23 @@ def _fetch_schwab(bot) -> List[Dict]:
         if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
             return []
 
-        future = asyncio.run_coroutine_threadsafe(
-            schwab_broker.get_positions_detailed(),
-            bot.loop
-        )
-        raw = future.result(timeout=10) or []
+        raw = None
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            if hub.is_streaming() and hub.get_positions_age(detailed=True) < 30:
+                cached = hub.get_positions(detailed=True)
+                if cached is not None:
+                    raw = list(cached)
+        except Exception:
+            pass
+
+        if raw is None:
+            future = asyncio.run_coroutine_threadsafe(
+                schwab_broker.get_positions_detailed(),
+                bot.loop
+            )
+            raw = future.result(timeout=10) or []
 
         positions = []
         for pos in raw:
@@ -618,6 +655,91 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict]) -> List
     return enriched
 
 
+def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
+    streaming_meta = {'webull': False, 'schwab': False, 'sources': {}}
+    try:
+        from src.services.webull_data_hub import get_webull_data_hub
+        wb_hub = get_webull_data_hub()
+        if wb_hub.is_streaming():
+            streaming_meta['webull'] = True
+            for pos in positions:
+                broker = (pos.get('broker') or '').upper()
+                if 'WEBULL' not in broker:
+                    continue
+                symbol = pos.get('symbol', '')
+                if not symbol:
+                    continue
+                quote = wb_hub.get_quote_detailed(symbol)
+                if quote and quote.get('last', 0) > 0:
+                    pos['current_price'] = quote['last']
+                    pos['last'] = quote['last']
+                    if quote.get('bid', 0) > 0:
+                        pos['bid'] = quote['bid']
+                    if quote.get('ask', 0) > 0:
+                        pos['ask'] = quote['ask']
+                    if pos['bid'] > 0 and pos['ask'] > 0:
+                        pos['mid'] = round((pos['bid'] + pos['ask']) / 2, 4)
+                    entry = pos.get('entry_price', 0)
+                    qty = pos.get('quantity', 0)
+                    if entry > 0:
+                        pnl_pct = ((quote['last'] - entry) / entry) * 100
+                        unrealized = (quote['last'] - entry) * qty
+                        if pos.get('asset_type') == 'option':
+                            unrealized *= 100
+                        pos['pnl_pct'] = round(pnl_pct, 2)
+                        pos['unrealized_pnl'] = round(unrealized, 2)
+                    pid = pos.get('id')
+                    if pid:
+                        streaming_meta['sources'][str(pid)] = {
+                            'source': 'stream',
+                            'age': round(time.time() - quote.get('timestamp', 0), 1)
+                        }
+    except Exception:
+        pass
+
+    try:
+        from src.services.schwab_data_hub import get_schwab_data_hub
+        sch_hub = get_schwab_data_hub()
+        if sch_hub.is_streaming():
+            streaming_meta['schwab'] = True
+            for pos in positions:
+                broker = (pos.get('broker') or '').upper()
+                if broker != 'SCHWAB':
+                    continue
+                symbol = pos.get('symbol', '')
+                if not symbol:
+                    continue
+                quote = sch_hub.get_quote_detailed(symbol)
+                if quote and quote.get('last', 0) > 0:
+                    pos['current_price'] = quote['last']
+                    pos['last'] = quote['last']
+                    if quote.get('bid', 0) > 0:
+                        pos['bid'] = quote['bid']
+                    if quote.get('ask', 0) > 0:
+                        pos['ask'] = quote['ask']
+                    if pos['bid'] > 0 and pos['ask'] > 0:
+                        pos['mid'] = round((pos['bid'] + pos['ask']) / 2, 4)
+                    entry = pos.get('entry_price', 0)
+                    qty = pos.get('quantity', 0)
+                    if entry > 0:
+                        pnl_pct = ((quote['last'] - entry) / entry) * 100
+                        unrealized = (quote['last'] - entry) * qty
+                        if pos.get('asset_type') == 'option':
+                            unrealized *= 100
+                        pos['pnl_pct'] = round(pnl_pct, 2)
+                        pos['unrealized_pnl'] = round(unrealized, 2)
+                    pid = pos.get('id')
+                    if pid:
+                        streaming_meta['sources'][str(pid)] = {
+                            'source': 'stream',
+                            'age': round(time.time() - quote.get('timestamp', 0), 1)
+                        }
+    except Exception:
+        pass
+
+    return streaming_meta
+
+
 def _build_prices(positions: List[Dict]) -> Dict:
     prices = {}
     for pos in positions:
@@ -690,6 +812,9 @@ def _refresh_snapshot(bot_instance):
 
         merged = _enrich_with_db_trades(all_live_positions, db_trades)
 
+        merged = [dict(pos) for pos in merged]
+        streaming_meta = _overlay_streaming_prices(merged)
+
         prices = _build_prices(merged)
 
         risk_states = {}
@@ -706,6 +831,7 @@ def _refresh_snapshot(bot_instance):
             _snapshot_cache['prices'] = prices
             _snapshot_cache['risk_states'] = risk_states
             _snapshot_cache['broker_status'] = broker_status
+            _snapshot_cache['streaming'] = streaming_meta
             _snapshot_cache['last_updated'] = time.time()
             _snapshot_cache['updating'] = False
 

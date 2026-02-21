@@ -198,7 +198,9 @@
 <!-- Live Trades Section -->
 <div class="table-container">
     <div class="table-header">
-        <h3 class="table-title">📈 Live Trading Monitor</h3>
+        <h3 class="table-title">📈 Live Trading Monitor
+            <span id="streaming-indicator" style="display:none; margin-left:10px; font-size:0.7rem; padding:2px 8px; border-radius:10px; background:#22c55e33; color:#22c55e; font-weight:500; vertical-align:middle;">⚡ LIVE</span>
+        </h3>
         <div style="display: flex; gap: 12px; align-items: center;">
             <span id="summary-text" style="color: var(--text-secondary); font-size: 0.875rem;">Loading...</span>
             <button id="syncPositionsBtn" onclick="syncPositions()" class="btn btn-small" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white;" title="Sync with broker - closes stale positions">
@@ -1825,12 +1827,12 @@ function renderPositionCards(trades) {
                 
                 <div class="position-metrics">
                     <div class="metric-label">Current</div>
-                    <div class="metric-value" style="color: ${pnl >= 0 ? '#22c55e' : '#ef4444'}">$${currentPrice.toFixed(2)}</div>
+                    <div class="metric-value" data-field="current-price" data-trade-id="${trade.id}" style="color: ${pnl >= 0 ? '#22c55e' : '#ef4444'}">$${currentPrice.toFixed(2)}</div>
                 </div>
                 
                 <div class="position-pnl">
-                    <div class="pnl-value ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}">${pnlSign}$${Math.abs(pnl).toFixed(2)}</div>
-                    <div class="pnl-percent ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}">${pnlSign}${pnlPercent.toFixed(1)}%</div>
+                    <div class="pnl-value ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}" data-field="pnl-value" data-trade-id="${trade.id}">${pnlSign}$${Math.abs(pnl).toFixed(2)}</div>
+                    <div class="pnl-percent ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}" data-field="pnl-pct" data-trade-id="${trade.id}">${pnlSign}${pnlPercent.toFixed(1)}%</div>
                 </div>
                 
                 <div class="position-actions">
@@ -3137,18 +3139,91 @@ document.addEventListener('DOMContentLoaded', () => {
         currentBroker = brokerFilter.value;
     }
     
-    // Delay initial data loading to allow bot initialization (3 second startup window for testing)
     setTimeout(() => {
         console.log('Loading trades and stats...');
         loadTrades();
         loadStats();
         
-        // Refresh every 30 seconds (after initial delay)
         setInterval(() => {
             loadTrades();
             loadStats();
         }, 30000);
-    }, 3000);  // Reduced from 15s to 3s for faster testing
+
+        setInterval(streamingQuotePoll, 2000);
+    }, 3000);
 });
+
+let _lastStreamingStatus = {};
+
+async function streamingQuotePoll() {
+    if (currentTab !== 'live') return;
+    try {
+        const resp = await fetch('/api/streaming/quotes');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const quotes = data.quotes || {};
+        const status = data.streaming_status || {};
+
+        const indicator = document.getElementById('streaming-indicator');
+        if (indicator) {
+            const anyStreaming = status.webull || status.schwab;
+            indicator.style.display = anyStreaming ? 'inline' : 'none';
+            if (anyStreaming) {
+                const parts = [];
+                if (status.webull) parts.push('Webull');
+                if (status.schwab) parts.push('Schwab');
+                indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
+            }
+        }
+
+        for (const [pid, q] of Object.entries(quotes)) {
+            const priceEl = document.querySelector(`[data-field="current-price"][data-trade-id="${pid}"]`);
+            const pnlEl = document.querySelector(`[data-field="pnl-value"][data-trade-id="${pid}"]`);
+            const pctEl = document.querySelector(`[data-field="pnl-pct"][data-trade-id="${pid}"]`);
+
+            if (!priceEl) continue;
+
+            const last = parseFloat(q.last) || 0;
+            if (last <= 0) continue;
+
+            const isStream = q.source === 'stream';
+            const pnl = parseFloat(q.unrealized_pnl) || 0;
+            const pnlPct = parseFloat(q.pnl_pct) || 0;
+            const pnlSign = pnl >= 0 ? '+' : '';
+            const color = pnl >= 0 ? '#22c55e' : '#ef4444';
+
+            const oldPrice = priceEl.textContent.replace(/[^0-9.]/g, '');
+            if (oldPrice !== last.toFixed(2)) {
+                priceEl.style.transition = 'color 0.3s';
+                priceEl.style.color = color;
+                priceEl.textContent = '$' + last.toFixed(2);
+                if (isStream) {
+                    priceEl.style.textShadow = `0 0 6px ${color}60`;
+                    setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
+                }
+            }
+
+            if (pnlEl) {
+                pnlEl.textContent = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+                pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+            }
+            if (pctEl) {
+                pctEl.textContent = pnlSign + pnlPct.toFixed(1) + '%';
+                pctEl.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+            }
+
+            const card = document.getElementById('position-' + pid);
+            if (card) {
+                card.classList.remove('profit', 'loss');
+                card.classList.add(pnl >= 0 ? 'profit' : 'loss');
+            }
+        }
+
+        _lastStreamingStatus = status;
+    } catch (e) {
+        // Silent fail - next poll will retry
+    }
+}
 </script>
 {% endblock %}

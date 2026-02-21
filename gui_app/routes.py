@@ -6646,6 +6646,7 @@ def register_routes(app):
                 'prices': snapshot.get('prices', {}),
                 'risk_states': snapshot.get('risk_states', {}),
                 'broker_status': snapshot.get('broker_status', {}),
+                'streaming': snapshot.get('streaming', {}),
                 'last_updated': snapshot.get('last_updated', 0),
                 'snapshot_age': round(get_snapshot_age(), 1),
             })
@@ -6654,6 +6655,49 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'positions': [], 'prices': {}, 'risk_states': {}, 'error': str(e)})
+
+    @app.route('/api/streaming/quotes', methods=['GET'])
+    @login_required
+    def api_streaming_quotes():
+        """Lightweight endpoint returning only streaming quote data for active positions.
+        Designed for fast 1-2s polling from the frontend to update prices in-place.
+        """
+        try:
+            from gui_app.live_snapshot import get_live_snapshot
+            snapshot = get_live_snapshot()
+            positions = snapshot.get('positions', [])
+            streaming = snapshot.get('streaming', {})
+
+            quotes = {}
+            for pos in positions:
+                pid = pos.get('id')
+                if pid is None:
+                    pid = f"{pos.get('broker','')}__{pos.get('symbol','')}"
+                    if pid == '__':
+                        continue
+                source_info = streaming.get('sources', {}).get(str(pid), {})
+                quotes[str(pid)] = {
+                    'last': pos.get('last', pos.get('current_price', 0)),
+                    'bid': pos.get('bid', 0),
+                    'ask': pos.get('ask', 0),
+                    'mid': pos.get('mid', 0),
+                    'pnl_pct': pos.get('pnl_pct', 0),
+                    'unrealized_pnl': pos.get('unrealized_pnl', 0),
+                    'source': source_info.get('source', 'rest'),
+                    'age': source_info.get('age', -1),
+                }
+
+            return jsonify({
+                'success': True,
+                'quotes': quotes,
+                'streaming_status': {
+                    'webull': streaming.get('webull', False),
+                    'schwab': streaming.get('schwab', False),
+                },
+                'snapshot_age': round(time.time() - snapshot.get('last_updated', 0), 1),
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'quotes': {}, 'error': str(e)})
 
     @app.route('/api/trades/close-all', methods=['POST'])
     @login_required

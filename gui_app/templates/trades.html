@@ -241,6 +241,7 @@
                 🔄 Refresh Prices
             </button>
             <span id="staleness-indicator" class="staleness-badge staleness-fresh" style="display:none;">Updated just now</span>
+            <span id="streaming-indicator" style="display:none; font-size:0.7rem; padding:2px 8px; border-radius:10px; background:#22c55e33; color:#22c55e; font-weight:500;">⚡ LIVE</span>
             <button onclick="closeAllPositions()" class="btn btn-small btn-panic" title="Emergency: Close all positions">
                 ⚡ Close All
             </button>
@@ -716,9 +717,9 @@ function displayTradesTable(trades) {
             <td class="price-bid" style="color: var(--text-secondary);">-</td>
             <td class="price-ask" style="color: var(--text-secondary);">-</td>
             <td class="price-mid" style="color: var(--text-secondary);">-</td>
-            <td class="price-last">$${current.toFixed(2)}</td>
-            <td class="${pnlClass} pnl-cash"><strong>$${pnl.toFixed(2)}</strong></td>
-            <td class="${pnlClass} pnl-percent">${pnlPercent.toFixed(1)}%</td>`;
+            <td class="price-last" data-field="current_price">$${current.toFixed(2)}</td>
+            <td class="${pnlClass} pnl-cash" data-field="pnl"><strong>$${pnl.toFixed(2)}</strong></td>
+            <td class="${pnlClass} pnl-percent" data-field="pnl_pct">${pnlPercent.toFixed(1)}%</td>`;
         
         if (isLiveTab) {
             tableHTML += `<td class="risk-status-cell" data-risk-trade-id="${trade.id}">
@@ -1646,9 +1647,68 @@ riskPollInterval = setInterval(() => {
     unifiedLivePoll();
 }, 4000);
 
+let streamingPollInterval = setInterval(async () => {
+    if (currentTab !== 'live') return;
+    try {
+        const resp = await fetch('/api/streaming/quotes');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const quotes = data.quotes || {};
+        const status = data.streaming_status || {};
+        const indicator = document.getElementById('streaming-indicator');
+        if (indicator) {
+            const anyStreaming = status.webull || status.schwab;
+            indicator.style.display = anyStreaming ? 'inline' : 'none';
+            if (anyStreaming) {
+                const parts = [];
+                if (status.webull) parts.push('Webull');
+                if (status.schwab) parts.push('Schwab');
+                indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
+            }
+        }
+
+        const rows = document.querySelectorAll('#trades-table-container table tbody tr');
+        rows.forEach(row => {
+            const tradeId = row.getAttribute('data-trade-id');
+            if (!tradeId || !quotes[tradeId]) return;
+            const q = quotes[tradeId];
+            const last = parseFloat(q.last) || 0;
+            if (last <= 0) return;
+
+            const priceCell = row.querySelector('[data-field="current_price"]');
+            const pnlCell = row.querySelector('[data-field="pnl"]');
+            const pctCell = row.querySelector('[data-field="pnl_pct"]');
+
+            if (priceCell) {
+                const color = (q.pnl_pct || 0) >= 0 ? '#22c55e' : '#ef4444';
+                priceCell.textContent = '$' + last.toFixed(2);
+                priceCell.style.color = color;
+                if (q.source === 'stream') {
+                    priceCell.style.textShadow = `0 0 6px ${color}60`;
+                    setTimeout(() => { priceCell.style.textShadow = 'none'; }, 800);
+                }
+            }
+            if (pnlCell) {
+                const pnl = parseFloat(q.unrealized_pnl) || 0;
+                const sign = pnl >= 0 ? '+' : '';
+                pnlCell.textContent = sign + '$' + Math.abs(pnl).toFixed(2);
+                pnlCell.className = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            }
+            if (pctCell) {
+                const pct = parseFloat(q.pnl_pct) || 0;
+                const sign = pct >= 0 ? '+' : '';
+                pctCell.textContent = sign + pct.toFixed(1) + '%';
+                pctCell.className = pct >= 0 ? 'pnl-positive' : 'pnl-negative';
+            }
+        });
+    } catch (e) { /* silent */ }
+}, 2000);
+
 window.addEventListener('beforeunload', () => {
     if (priceRefreshInterval) clearInterval(priceRefreshInterval);
     if (riskPollInterval) clearInterval(riskPollInterval);
+    if (streamingPollInterval) clearInterval(streamingPollInterval);
 });
 
 let eventFilterTimeout = null;
