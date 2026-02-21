@@ -434,13 +434,38 @@ class RiskDBAdapter:
                 use_global = row[34] if len(row) > 34 else 1  # Default: use global (backwards compat)
                 
                 if risk_enabled:
-                    # Channel has its own risk management enabled - use channel settings
-                    pass  # Fall through to extract channel settings below
+                    pass
                 elif use_global:
-                    # Channel doesn't have own risk management but wants global settings
-                    return None  # Return None so global RiskSettings apply
+                    trade_sl_price = row[27] if len(row) > 27 and row[27] else None
+                    trade_pt_price = row[28] if len(row) > 28 and row[28] else None
+                    trade_entry_price = row[29] if len(row) > 29 and row[29] else None
+                    if trade_sl_price or trade_pt_price:
+                        sl_override = 0
+                        pt_override = 0
+                        if trade_sl_price and trade_entry_price and trade_entry_price > 0:
+                            sl_pct = ((trade_entry_price - trade_sl_price) / trade_entry_price) * 100
+                            if sl_pct > 0:
+                                sl_override = round(sl_pct, 1)
+                                print(f"[RISK] ✓ Bracket SL override: ${trade_sl_price:.2f} ({sl_override}% from entry ${trade_entry_price:.2f})")
+                        if trade_pt_price and trade_entry_price and trade_entry_price > 0:
+                            pt_pct = ((trade_pt_price - trade_entry_price) / trade_entry_price) * 100
+                            if pt_pct > 0:
+                                pt_override = round(pt_pct, 1)
+                                print(f"[RISK] ✓ Bracket PT override: ${trade_pt_price:.2f} ({pt_override}% from entry ${trade_entry_price:.2f})")
+                        if sl_override > 0 or pt_override > 0:
+                            channel_name = row[7] or 'Unknown'
+                            print(f"[RISK] ✓ Using signal bracket SL/PT for '{channel_name}' (global risk disabled, but signal has explicit levels)")
+                            return ChannelRiskSettings(
+                                channel_id=str(row[0]),
+                                channel_name=channel_name,
+                                profit_target_1_pct=pt_override if pt_override > 0 else 0,
+                                stop_loss_pct=sl_override if sl_override > 0 else 0,
+                                trailing_stop_pct=row[5] or 0,
+                                trailing_activation_pct=row[6] or 15.0,
+                                exit_strategy_mode='hybrid',
+                            )
+                    return None
                 else:
-                    # No risk management at channel level and not using global
                     return None
                 
                 # Extract trade-level SL/PT overrides (from conditional orders or parsed signals)
@@ -1107,20 +1132,35 @@ class RiskManager:
         self.cache.save()
     
     async def _fetch_all_positions(self) -> List[PositionSnapshot]:
-        """Fetch positions from all brokers with rate limit enforcement."""
+        """Fetch positions from all brokers with rate limit enforcement.
+        
+        When rate-limited, uses cached positions from last successful fetch
+        to ensure risk monitoring continues without gaps.
+        """
         positions = []
         rate_manager = get_rate_limit_manager() if RATE_LIMIT_AVAILABLE else None
         
+        import time as _time
         if rate_manager:
             can_proceed, wait_time = rate_manager.can_make_request('webull')
             if not can_proceed:
-                print(f"[RISK] Webull rate limit reached - skipping this cycle (wait {wait_time:.1f}s)")
+                cache_age = _time.time() - getattr(self, '_webull_cache_ts', 0)
+                if hasattr(self, '_last_webull_positions') and self._last_webull_positions and cache_age < 30:
+                    positions.extend(self._last_webull_positions)
+                elif hasattr(self, '_last_webull_positions') and self._last_webull_positions:
+                    print(f"[RISK] Webull rate limit - cached positions stale ({cache_age:.0f}s), skipping")
+                else:
+                    print(f"[RISK] Webull rate limit reached - no cached positions (wait {wait_time:.1f}s)")
             else:
                 rate_manager.record_request('webull')
                 webull_positions = await self.position_fetcher() or []
+                webull_snapshots = []
                 for pos in webull_positions:
                     pos['broker'] = 'Webull'
-                    positions.append(self._to_snapshot(pos))
+                    webull_snapshots.append(self._to_snapshot(pos))
+                self._last_webull_positions = webull_snapshots
+                self._webull_cache_ts = _time.time()
+                positions.extend(webull_snapshots)
         else:
             webull_positions = await self.position_fetcher() or []
             for pos in webull_positions:
