@@ -13007,7 +13007,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 if uses_modern_signature:
                     _skip_retry = bool(_resilience_ctx and _resilience_ctx.is_risk_order) if _resilience_ctx else False
-                    # Build common kwargs for modern brokers
                     _option_kwargs = dict(
                         symbol=signal['symbol'],
                         strike=signal['strike'],
@@ -13016,15 +13015,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         action=signal['action'],
                         quantity=signal['qty'],
                         price=order_price,
-                        _conditional_order_id=signal.get('_conditional_order_id'),
-                        _is_market_order=signal.get('is_market_order', False),
-                        _qot_price=signal.get('_qot_price'),
-                        _trigger_price=signal.get('_trigger_price'),
-                        _risk_management_order=signal.get('_risk_management_order', False),
                     )
-                    # Only Webull accepts _skip_internal_retry (prevents retry storm)
-                    if 'WEBULL' in broker_upper and _skip_retry:
-                        _option_kwargs['_skip_internal_retry'] = True
+                    _accepts_kwargs = any(x in broker_upper for x in ['ALPACA', 'SCHWAB'])
+                    if _accepts_kwargs:
+                        _option_kwargs['_conditional_order_id'] = signal.get('_conditional_order_id')
+                        _option_kwargs['_is_market_order'] = signal.get('is_market_order', False)
+                        _option_kwargs['_qot_price'] = signal.get('_qot_price')
+                        _option_kwargs['_trigger_price'] = signal.get('_trigger_price')
+                        _option_kwargs['_risk_management_order'] = signal.get('_risk_management_order', False)
+                    if 'WEBULL' in broker_upper:
+                        _option_kwargs['option_id'] = signal.get('option_id')
+                        if _skip_retry:
+                            _option_kwargs['_skip_internal_retry'] = True
                     result = await broker_instance.place_option_order(**_option_kwargs)
                 elif broker_upper in india_brokers:
                     # Indian brokers (Zerodha, Upstox, DhanQ) use standardized interface
@@ -13041,21 +13043,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         lots=signal.get('lots')  # Optional - broker handles lot size calculation
                     )
                 else:
-                    # Webull and other legacy US brokers - no lots parameter
                     result = await broker_instance.place_option_order(
-                        action=signal['action'],
-                        qty=signal['qty'],
                         symbol=signal['symbol'],
                         strike=signal['strike'],
-                        opt_type=signal['opt_type'],
-                        expiry_mmdd=signal['expiry'],
-                        limit_price=order_price,  # Uses limit_cap price if enabled
-                        channel_id=signal.get('channel_id'),
-                        _conditional_order_id=signal.get('_conditional_order_id'),
-                        _is_market_order=signal.get('is_market_order', False),
-                        _qot_price=signal.get('_qot_price'),
-                        _trigger_price=signal.get('_trigger_price'),
-                        _risk_management_order=signal.get('_risk_management_order', False)
+                        expiry=signal['expiry'],
+                        option_type=signal['opt_type'],
+                        action=signal['action'],
+                        quantity=signal['qty'],
+                        price=order_price
                     )
                 
                 # Log the result for debugging (applies to all option orders)
@@ -13112,11 +13107,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 else:
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             else:
-                # Handle different broker parameter names for stocks
-                # Modern brokers (Alpaca, Robinhood, Schwab, IBKR, Tastytrade) use: symbol, action, quantity, price
-                # Webull uses legacy signature: action, qty, symbol, limit_price
                 broker_upper = broker_name.upper()
-                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE'])
+                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL'])
                 
                 # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
                 use_market_order = signal.get('_use_market_order', False)
@@ -13147,14 +13139,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             price=stock_order_price
                         )
                 else:
-                    # Webull and other legacy brokers (uses qty, not quantity)
                     result = await broker_instance.place_stock_order(
-                        action=signal['action'],
-                        qty=signal['qty'],
                         symbol=signal['symbol'],
-                        limit_price=stock_order_price,
-                        channel_id=signal.get('channel_id'),
-                        force_market=use_market_order
+                        action=signal['action'],
+                        quantity=signal['qty'],
+                        price=stock_order_price
                     )
                 # Convert OrderResult to dict format for consistency
                 stock_order_succeeded = False
