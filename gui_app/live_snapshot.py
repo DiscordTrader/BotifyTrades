@@ -703,8 +703,36 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             trade_broker = str(t.get('broker', '')).upper()
 
             if trade_broker in synced_brokers:
-                _log(f"[ENRICH] Skipping DB trade #{tid} ({t.get('symbol')}) - broker {trade_broker} synced with no matching live position")
-                continue
+                trade_status = str(t.get('status', '')).upper()
+                is_pending = trade_status in ('PENDING', 'PARTIAL')
+
+                is_recent = False
+                try:
+                    executed_at = t.get('executed_at', '')
+                    if executed_at:
+                        from datetime import datetime, timezone
+                        if isinstance(executed_at, str):
+                            for fmt in ('%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+                                try:
+                                    trade_time = datetime.strptime(executed_at, fmt)
+                                    break
+                                except ValueError:
+                                    continue
+                            else:
+                                trade_time = None
+                        else:
+                            trade_time = executed_at
+                        if trade_time:
+                            age_seconds = (datetime.now() - trade_time).total_seconds()
+                            is_recent = age_seconds < 300
+                except Exception:
+                    pass
+
+                if is_pending or is_recent:
+                    _log(f"[ENRICH] Keeping DB trade #{tid} ({t.get('symbol')}) - {'pending' if is_pending else 'recent'} order on {trade_broker}")
+                else:
+                    _log(f"[ENRICH] Skipping stale DB trade #{tid} ({t.get('symbol')}) - broker {trade_broker} synced with no matching live position")
+                    continue
 
             entry_price = float(t.get('entry_price') or 0)
             cur_price = float(t.get('current_price') or entry_price)
