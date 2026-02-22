@@ -6877,6 +6877,7 @@ def register_routes(app):
             # Get live positions from cached snapshot (already enriched with fuzzy matching)
             live_positions = []
             webull_orders = []
+            alpaca_orders = []
             
             broker_filter_upper = broker_filter.upper() if broker_filter else None
             
@@ -7163,33 +7164,42 @@ def register_routes(app):
                                            if trade.get('status') == 'PENDING'}
                 
                 for order in webull_orders:
-                    order_id = order.get('order_id')
-                    symbol_qty_key = (order['symbol'], order['quantity'])
+                    order_id = order.get('order_id', '')
+                    order_symbol = order.get('symbol', '')
+                    order_qty = order.get('quantity', 0)
+                    order_status = order.get('status', '')
+                    
+                    if not order_id or not order_symbol:
+                        continue
+                    
+                    symbol_qty_key = (order_symbol, order_qty)
                     
                     # Skip if already tracked by order_id OR by symbol+quantity
                     if order_id in tracked_order_ids:
                         continue
                     if symbol_qty_key in tracked_pending_symbols:
                         continue
-                    if order['status'] not in ['Submitted', 'Working']:
+                    if order_status not in ['Submitted', 'Working']:
                         continue
                         
                     # Generate stable ID for pending order
                     import hashlib
-                    stable_id = 'pending_' + hashlib.md5(order_id.encode()).hexdigest()[:12]
+                    stable_id = 'pending_' + hashlib.md5(str(order_id).encode()).hexdigest()[:12]
+                    
+                    limit_price = order.get('limit_price', 0) or order.get('lmtPrice', 0) or 0
                     
                     merged.append({
                         'id': stable_id,
-                        'symbol': order['symbol'],
-                        'asset_type': order['asset_type'],
-                        'side': order['action'],
-                        'quantity': order['quantity'],
-                        'entry_price': order['limit_price'],
-                        'current_price': order['limit_price'],
+                        'symbol': order_symbol,
+                        'asset_type': order.get('asset_type', 'option'),
+                        'side': order.get('action', 'BTO'),
+                        'quantity': order_qty,
+                        'entry_price': limit_price,
+                        'current_price': limit_price,
                         'pnl': 0,
                         'pnl_percent': 0,
                         'status': 'PENDING',
-                        'fill_status': order['status'],
+                        'fill_status': order_status,
                         'broker': 'Webull',
                         'executed_at': None,
                         'order_id': order_id,
@@ -7214,7 +7224,9 @@ def register_routes(app):
                     
                     for order in alpaca_orders:
                         order_id = str(order.get('order_id', ''))
-                        symbol = order['symbol']
+                        symbol = order.get('symbol', '')
+                        if not symbol:
+                            continue
                         qty = int(float(order.get('quantity', 0)))
                         symbol_qty_key = (symbol, qty)
                         
