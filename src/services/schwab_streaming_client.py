@@ -72,6 +72,7 @@ class SchwabStreamingClient:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
+        self._last_heartbeat = time.time()
 
         print(f"[SCHWAB_STREAM] Streaming client created for {broker_instance.name}")
 
@@ -211,7 +212,7 @@ class SchwabStreamingClient:
         if 'notify' in data:
             for notify in data['notify']:
                 if 'heartbeat' in notify:
-                    pass
+                    self._last_heartbeat = time.time()
 
         if 'data' in data:
             for item in data['data']:
@@ -323,8 +324,8 @@ class SchwabStreamingClient:
 
                 async with websockets.connect(
                     socket_url,
-                    ping_interval=30,
-                    ping_timeout=10,
+                    ping_interval=None,
+                    ping_timeout=None,
                     close_timeout=5,
                     max_size=2**20
                 ) as ws:
@@ -344,6 +345,7 @@ class SchwabStreamingClient:
                         continue
 
                     self._hub.set_streaming_active(True)
+                    self._last_heartbeat = time.time()
                     print("[SCHWAB_STREAM] ✓ Connected and streaming")
 
                     if self._subscribed_equities:
@@ -355,10 +357,14 @@ class SchwabStreamingClient:
                         self._subscribed_options.clear()
                         await self.subscribe_options(old_opt)
 
-                    async for message in ws:
-                        if not self._running:
-                            break
-                        self._decode_message(message)
+                    while self._running:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=90)
+                            self._decode_message(message)
+                        except asyncio.TimeoutError:
+                            if time.time() - self._last_heartbeat > 120:
+                                print("[SCHWAB_STREAM] ⚠️ No heartbeat for 120s, reconnecting...")
+                                break
 
             except asyncio.CancelledError:
                 break
