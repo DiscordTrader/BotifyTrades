@@ -6699,6 +6699,48 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'quotes': {}, 'error': str(e)})
 
+    @app.route('/api/streaming/stock-quote', methods=['GET'])
+    @login_required
+    def api_streaming_stock_quote():
+        """Return streaming quote for a single symbol from the appropriate broker data hub.
+        Used by Quick Trade panel for real-time underlying stock price.
+        """
+        symbol = request.args.get('symbol', '').upper()
+        broker = request.args.get('broker', '').upper()
+        if not symbol:
+            return jsonify({'success': False, 'error': 'Symbol required'})
+
+        result = {'success': True, 'symbol': symbol, 'source': 'none', 'streaming': False}
+
+        def _try_hub(hub, source_label):
+            if not hub.is_streaming():
+                return False
+            quote = hub.get_quote_detailed(symbol)
+            if quote and quote.get('last', 0) > 0:
+                result.update({
+                    'last': quote['last'],
+                    'bid': quote.get('bid', 0),
+                    'ask': quote.get('ask', 0),
+                    'mid': round((quote.get('bid', 0) + quote.get('ask', 0)) / 2, 4) if quote.get('bid', 0) > 0 and quote.get('ask', 0) > 0 else 0,
+                    'source': source_label,
+                    'streaming': True,
+                    'age': round(time.time() - quote.get('timestamp', 0), 1),
+                })
+                return True
+            return False
+
+        try:
+            if 'SCHWAB' in broker:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                _try_hub(get_schwab_data_hub(), 'schwab_stream')
+            elif 'WEBULL' in broker:
+                from src.services.webull_data_hub import get_webull_data_hub
+                _try_hub(get_webull_data_hub(), 'webull_stream')
+        except Exception:
+            pass
+
+        return jsonify(result)
+
     @app.route('/api/trades/close-all', methods=['POST'])
     @login_required
     def api_close_all_positions():

@@ -161,6 +161,7 @@
         <div class="qt-title">
             <div class="qt-title-icon">&#x26A1;</div>
             Quick Trade - Options Chain
+            <span id="qt-streaming-indicator" style="display:none; font-size:0.65rem; padding:2px 8px; border-radius:10px; background:#22c55e22; color:#22c55e; font-weight:500; margin-left:8px; vertical-align:middle;"></span>
         </div>
         <span class="qt-toggle">&#x25BC;</span>
     </div>
@@ -602,31 +603,33 @@ async function refreshPrices() {
     }
 }
 
-function updatePricesInTable(prices) {
+function updatePricesInTable(prices, streamingMeta) {
+    const streamSources = (streamingMeta && streamingMeta.sources) ? streamingMeta.sources : {};
     for (const [tradeId, priceData] of Object.entries(prices)) {
         const row = document.querySelector(`tr[data-trade-id="${tradeId}"]`);
         if (!row) continue;
-        
+
         const prev = previousPrices[tradeId] || {};
-        
+        const isStream = (streamSources[tradeId] && streamSources[tradeId].source === 'stream');
+
         const bidCell = row.querySelector('.price-bid');
         const askCell = row.querySelector('.price-ask');
         const midCell = row.querySelector('.price-mid');
         const lastCell = row.querySelector('.price-last');
-        
+
         function flashCell(cell, newVal, oldVal) {
             if (!cell || oldVal === undefined || oldVal === null) return;
-            if (newVal > oldVal) {
-                cell.classList.remove('price-flash-down');
-                cell.classList.add('price-flash-up');
-                setTimeout(() => cell.classList.remove('price-flash-up'), 500);
-            } else if (newVal < oldVal) {
-                cell.classList.remove('price-flash-up');
-                cell.classList.add('price-flash-down');
-                setTimeout(() => cell.classList.remove('price-flash-down'), 500);
+            const color = newVal > oldVal ? '#22c55e' : newVal < oldVal ? '#ef4444' : null;
+            if (!color) return;
+            cell.classList.remove('price-flash-down', 'price-flash-up');
+            cell.classList.add(newVal > oldVal ? 'price-flash-up' : 'price-flash-down');
+            if (isStream) {
+                cell.style.textShadow = `0 0 8px ${color}60`;
+                setTimeout(() => { cell.style.textShadow = 'none'; }, 800);
             }
+            setTimeout(() => cell.classList.remove('price-flash-up', 'price-flash-down'), 500);
         }
-        
+
         if (bidCell && priceData.bid != null) {
             flashCell(bidCell, priceData.bid, prev.bid);
             bidCell.textContent = `$${priceData.bid.toFixed(2)}`;
@@ -643,27 +646,32 @@ function updatePricesInTable(prices) {
             flashCell(lastCell, priceData.last, prev.last);
             lastCell.textContent = `$${priceData.last.toFixed(2)}`;
         }
-        
+
         previousPrices[tradeId] = { bid: priceData.bid, ask: priceData.ask, mid: priceData.mid, last: priceData.last };
-        
+
         const trade = currentTrades.find(t => t.id == tradeId);
         if (trade) {
             const entryPrice = trade.entry_price || trade.executed_price;
             if (entryPrice) {
                 const currentPrice = priceData.mid || priceData.last || entryPrice;
                 const quantity = trade.quantity;
-                
+
                 const pnl = (currentPrice - entryPrice) * quantity * (trade.asset_type === 'option' ? 100 : 1);
                 const pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
-                
+                const pnlColor = pnl >= 0 ? '#22c55e' : '#ef4444';
+
                 const pnlCashCell = row.querySelector('.pnl-cash');
                 const pnlPercentCell = row.querySelector('.pnl-percent');
-                
+
                 if (pnlCashCell) {
                     pnlCashCell.innerHTML = `<strong>$${pnl.toFixed(2)}</strong>`;
                     pnlCashCell.className = 'pnl-cash ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                    if (isStream) {
+                        pnlCashCell.style.textShadow = `0 0 6px ${pnlColor}50`;
+                        setTimeout(() => { pnlCashCell.style.textShadow = 'none'; }, 800);
+                    }
                 }
-                
+
                 if (pnlPercentCell) {
                     pnlPercentCell.textContent = `${pnlPercent.toFixed(1)}%`;
                     pnlPercentCell.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
@@ -1608,9 +1616,12 @@ async function unifiedLivePoll() {
         const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
         const response = await fetch(`/api/trades/live-snapshot${brokerParam}`);
         const data = await response.json();
+
+        const streamingMeta = data.streaming || {};
+        _updateStreamingIndicator(streamingMeta);
         
         if (data.prices) {
-            updatePricesInTable(data.prices);
+            updatePricesInTable(data.prices, streamingMeta);
         }
         if (data.risk_states) {
             const states = data.risk_states;
@@ -1647,6 +1658,28 @@ riskPollInterval = setInterval(() => {
     unifiedLivePoll();
 }, 4000);
 
+function _updateStreamingIndicator(streamingMeta) {
+    const indicator = document.getElementById('streaming-indicator');
+    if (!indicator) return;
+    const status = streamingMeta || {};
+    const broker = (currentBroker || '').toUpperCase();
+    const showWebull = status.webull && (!broker || broker.includes('WEBULL'));
+    const showSchwab = status.schwab && (!broker || broker === 'SCHWAB');
+    const anyRelevant = showWebull || showSchwab;
+    indicator.style.display = anyRelevant ? 'inline' : 'none';
+    if (anyRelevant) {
+        if (broker) {
+            const label = broker.replace('_PAPER', ' Paper').replace('_', ' ');
+            indicator.textContent = '\u26A1 LIVE \u2022 ' + label;
+        } else {
+            const parts = [];
+            if (showWebull) parts.push('Webull');
+            if (showSchwab) parts.push('Schwab');
+            indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
+        }
+    }
+}
+
 let streamingPollInterval = setInterval(async () => {
     if (currentTab !== 'live') return;
     try {
@@ -1656,25 +1689,7 @@ let streamingPollInterval = setInterval(async () => {
 
         const quotes = data.quotes || {};
         const status = data.streaming_status || {};
-        const indicator = document.getElementById('streaming-indicator');
-        if (indicator) {
-            const broker = (currentBroker || '').toUpperCase();
-            const showWebull = status.webull && (!broker || broker.includes('WEBULL'));
-            const showSchwab = status.schwab && (!broker || broker === 'SCHWAB');
-            const anyRelevant = showWebull || showSchwab;
-            indicator.style.display = anyRelevant ? 'inline' : 'none';
-            if (anyRelevant) {
-                if (broker) {
-                    const label = broker.replace('_PAPER', ' Paper').replace('_', ' ');
-                    indicator.textContent = '\u26A1 LIVE \u2022 ' + label;
-                } else {
-                    const parts = [];
-                    if (showWebull) parts.push('Webull');
-                    if (showSchwab) parts.push('Schwab');
-                    indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
-                }
-            }
-        }
+        _updateStreamingIndicator(status);
 
         const rows = document.querySelectorAll('#trades-table-container table tbody tr');
         rows.forEach(row => {
@@ -1684,6 +1699,8 @@ let streamingPollInterval = setInterval(async () => {
             const last = parseFloat(q.last) || 0;
             if (last <= 0) return;
 
+            const isStream = q.source === 'stream';
+
             const priceCell = row.querySelector('[data-field="current_price"]');
             const pnlCell = row.querySelector('[data-field="pnl"]');
             const pctCell = row.querySelector('[data-field="pnl_pct"]');
@@ -1692,7 +1709,7 @@ let streamingPollInterval = setInterval(async () => {
                 const color = (q.pnl_pct || 0) >= 0 ? '#22c55e' : '#ef4444';
                 priceCell.textContent = '$' + last.toFixed(2);
                 priceCell.style.color = color;
-                if (q.source === 'stream') {
+                if (isStream) {
                     priceCell.style.textShadow = `0 0 6px ${color}60`;
                     setTimeout(() => { priceCell.style.textShadow = 'none'; }, 800);
                 }
@@ -1702,6 +1719,11 @@ let streamingPollInterval = setInterval(async () => {
                 const sign = pnl >= 0 ? '+' : '';
                 pnlCell.textContent = sign + '$' + Math.abs(pnl).toFixed(2);
                 pnlCell.className = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                if (isStream) {
+                    const pnlColor = pnl >= 0 ? '#22c55e' : '#ef4444';
+                    pnlCell.style.textShadow = `0 0 6px ${pnlColor}50`;
+                    setTimeout(() => { pnlCell.style.textShadow = 'none'; }, 800);
+                }
             }
             if (pctCell) {
                 const pct = parseFloat(q.pnl_pct) || 0;
@@ -1717,6 +1739,7 @@ window.addEventListener('beforeunload', () => {
     if (priceRefreshInterval) clearInterval(priceRefreshInterval);
     if (riskPollInterval) clearInterval(riskPollInterval);
     if (streamingPollInterval) clearInterval(streamingPollInterval);
+    if (qtStreamingTimer) clearInterval(qtStreamingTimer);
 });
 
 let eventFilterTimeout = null;
@@ -2178,8 +2201,12 @@ async function qtSendWebhookForOrder(action, symbol, strike, optType, expiry, pr
     }
 }
 
+let qtStreamingTimer = null;
+let qtLastStreamPrice = 0;
+
 function qtStartAutoRefresh() {
     if (qtRefreshTimer) clearInterval(qtRefreshTimer);
+    if (qtStreamingTimer) clearInterval(qtStreamingTimer);
     qtRefreshTimer = setInterval(async () => {
         if (!qtChainData) return;
         const symbol = document.getElementById('qt-symbol').value.trim().toUpperCase();
@@ -2209,11 +2236,52 @@ function qtStartAutoRefresh() {
                     });
                 }
             });
-            if (data.stock_price > 0) {
+            if (data.stock_price > 0 && !qtLastStreamPrice) {
                 document.getElementById('qt-stock-price').innerHTML = `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`;
             }
         } catch (e) { /* silent */ }
     }, 3000);
+
+    qtStreamingTimer = setInterval(qtStreamingStockPoll, 2000);
+    qtStreamingStockPoll();
+}
+
+async function qtStreamingStockPoll() {
+    const symbol = document.getElementById('qt-symbol').value.trim().toUpperCase();
+    const broker = document.getElementById('qt-broker').value;
+    if (!symbol || !qtChainData) return;
+    try {
+        const r = await fetch(`/api/streaming/stock-quote?symbol=${symbol}&broker=${broker}`, { credentials: 'include' });
+        const data = await r.json();
+        const qtInd = document.getElementById('qt-streaming-indicator');
+        if (data.streaming && data.last > 0) {
+            qtLastStreamPrice = data.last;
+            const priceEl = document.getElementById('qt-stock-price');
+            if (priceEl) {
+                const oldText = priceEl.textContent.replace(/[^0-9.]/g, '');
+                const newText = data.last.toFixed(2);
+                const changed = oldText !== newText;
+                const color = data.last >= (qtChainData.stock_price || 0) ? '#22c55e' : '#ef4444';
+                priceEl.innerHTML = `<span class="qt-price-badge stock" style="border-color:${color}40;">$${newText}</span>`;
+                if (changed) {
+                    priceEl.style.textShadow = `0 0 10px ${color}60`;
+                    setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
+                }
+            }
+            const srcEl = document.getElementById('qt-data-source');
+            if (srcEl) {
+                const srcLabel = data.source.includes('schwab') ? 'Schwab Stream' : 'Webull Stream';
+                srcEl.innerHTML = `<span class="qt-source" style="background:#22c55e22; color:#22c55e;">\u26A1 ${srcLabel}</span>`;
+            }
+            if (qtInd) {
+                qtInd.style.display = 'inline';
+                qtInd.textContent = '\u26A1 LIVE';
+            }
+        } else {
+            qtLastStreamPrice = 0;
+            if (qtInd) qtInd.style.display = 'none';
+        }
+    } catch (e) { /* silent */ }
 }
 
 async function qtLoadWebhookChannels() {
