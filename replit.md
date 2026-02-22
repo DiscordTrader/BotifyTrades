@@ -1,9 +1,11 @@
-# BotifyTrades - Multi-Platform Trading Bot
+# BotifyTrades — Compressed Documentation
 
 ## Overview
-BotifyTrades is a cross-platform trading automation bot for Discord and Telegram, designed for automated stock and options trading across multiple brokers. Its primary purpose is to make sophisticated trading accessible and efficient by integrating advanced trading functionalities within messaging platforms. Key capabilities include automated execution, advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The project targets markets in the USA and Canada, aiming to provide a robust solution for automated trading and make sophisticated trading accessible and efficient.
+
+BotifyTrades is a production-grade, cross-platform automated trading bot designed to monitor Discord and Telegram for trade signals and execute them across multiple brokers. It features a comprehensive Flask-based web control panel with real-time dashboards, advanced risk management, WebSocket streaming, AI-powered analysis, and detailed portfolio analytics. The project aims to provide automated trading capabilities for US, Canadian, and Indian markets, offering users a powerful tool for managing and optimizing their trading strategies.
 
 ## User Preferences
+
 - **Security**: Always use environment variables (Replit Secrets) for credentials and license keys
 - **Testing**: Test with paper_trade = true before enabling live trading
 - **Monitoring**: Review console logs regularly for trade execution
@@ -14,91 +16,50 @@ BotifyTrades is a cross-platform trading automation bot for Discord and Telegram
 
 ## System Architecture
 
-### UI/UX Decisions
-The bot features a Flask-based web control panel with a dark theme, real-time dashboards, dynamic channel management, and live trade monitoring. Broker-specific Live Analytics pages and an integrated AI chat assistant are included. The options trading interface is optimized for strike-targeted lookup and detailed order inputs with Greeks. A PySide6-based setup wizard guides first-time users.
+**UI/UX Decisions:**
+The web control panel is built with Flask, providing a responsive and interactive user experience. Key UI/UX features include:
+- **Real-time Dashboards**: `index.html` offers an immediate overview of broker status, live positions, P&L, and risk statuses.
+- **Trade Monitoring**: `trades.html` includes five tabs for live positions (with real-time price updates and glowing effects), pending orders, filled orders, signals, and an event log.
+- **Performance Analytics**: `analytics.html` provides over 30 performance metrics, trade journaling, time-series charts, P&L heatmaps, and edge analysis using Chart.js.
+- **Intuitive Settings**: Dedicated sections for Discord, Telegram, Brokers, Trading, Risk Management, Notifications, and AI Analysis ensure easy configuration.
+- **Visual Feedback**: Streaming indicators, glow effects on price changes, and staleness indicators provide clear status updates.
 
-### Technical Implementations
-Core technologies include `discord.py-self` for Discord and `webull` for brokerage. It utilizes a true dual-broker architecture for live and paper trading, with platform-specific credential encryption and an asynchronous, queue-based order execution system.
+**Technical Implementations:**
+- **Signal Sources**: Integrates with Discord (via `discord.py-self`) and Telegram (via Telethon) for signal monitoring, supporting embed parsing, regex matching, and AI-powered detection.
+- **5-Tier Signal Parsing**: Employs a tiered parsing system starting from embed parsers, moving to standard formats, trader-specific patterns, regex, and finally an AI fallback using OpenAI GPT. Features include deduplication, market order support, follow-up SL/PT updates, and configurable regex patterns.
+- **Risk Management Engine**: A comprehensive, multi-layered risk management system with global and per-channel settings. It includes configurable Stop Loss (SL), Trailing Stop, four Profit Targets (PTs), Dynamic SL Escalation, Max Profit Giveback Guard, and a "Leave Runner" feature. Risk states are persistent across restarts.
+- **Order Execution System**: An asynchronous, queue-based system for multi-broker order execution, featuring per-channel broker selection and a Universal Order Placement Resilience Layer with error classification, circuit breakers, and orchestrated retry budgets.
+- **Order Management System (OMS)**: Handles dynamic SL/PT management, exit order arbitration, position matching, and FIFO-based P&L tracking with both execution-based and mark-to-market P&L.
+- **WebSocket Streaming**: Utilizes Webull MQTT for real-time quotes and orders, and a 5-tier optimized Schwab WebSocket streaming system for Level One equities and options. Both employ centralized, thread-safe data hubs with TTL invalidation and hub-first lookups.
+- **Broker Sync Service**: A 30-second cycle service to reconcile database state with actual broker states, detecting filled/cancelled orders, position changes, and account info updates.
+- **Notification System**: Provides Discord webhook notifications for various events (order filled/failed/cancelled, risk events, position updates) and desktop browser notifications.
+- **Security & Authentication**: Implements admin account management with password hashing and email recovery, session-based authentication, rate limiting, and encrypted broker credentials using the `cryptography` library.
+- **Database Architecture**: Uses SQLite with WAL mode for concurrent read/write operations, thread-safe connections, and stores critical trading data and encrypted credentials.
+- **AI Analysis**: Integrates OpenAI GPT for pre-trade and post-trade analysis, an AI chat assistant, and AI command toggles.
 
-**Unified Signal Parsing Pipeline**: A 5-tier architecture for signal detection with security gating, including embed parsers, signal format registries, trader-specific parsers, standard BTO/STC regex, and an AI Fallback. Natural language parsers are implemented for various signal formats, with AI and learned-pattern signals requiring admin approval and confidence thresholds. Signal deduplication is implemented with a 5-minute TTL.
-
-**Risk Management**: Features GUI-configurable automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all stored in SQLite. Includes pre-trade analysis, post-execution analysis with OpenAI GPT models, real-time market data integration, and interactive Discord commands. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. A dual-mode channel system for simultaneous execution and signal forwarding, FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection are supported. Per-channel risk settings allow independent operation, including 4-tier profit targets, trailing stops, and Leave Runner functionality. Position Matching handles ambiguous exit signals, and Trade Monitor detects and posts broker-executed trades.
-
-**Enhanced Portfolio Simulation Engine v2.0**: Provides industry-grade portfolio analysis.
-
-**Performance Analytics Dashboard v2.0**: Industry-grade performance analytics page with custom date range picker, per-broker isolated performance cards, 30+ performance metrics, a trade journal, paginated trade list, time-series breakdown charts, P&L heatmaps, edge analysis, and various financial charts (Chart.js).
-
-**Conditional Order Monitoring System**: Monitors price conditions and executes orders when triggered, with an automatic monitor upgrade mechanism.
-
-**Limit Cap Protection**: Prevents chasing runaway prices on conditional orders by setting a maximum limit price, configurable per channel.
-
-**Filled Orders Tracking**: Syncs filled orders from broker APIs into a local database with automatic sync and deduplication.
-
-**Execution-Based P&L Tracking**: Provides professional-grade P&L calculation, including slippage and latency metrics, with a Two-Tier P&L Architecture.
-
-**Order Management System (OMS) and Risk Management System (RMS)**: Provide dynamic SL/PT management via Discord message edits. The Exit Order Arbiter uses threading.Lock for cross-thread safety. A Circuit Breaker provides emergency trading halt controls. Industry-grade Risk State Persistence ensures all risk state survives bot restarts. Enhanced Risk Management v2.0 provides Dynamic SL Escalation and Max Profit Giveback Guard.
-
-**Follow-up SL/PT Updates**: Signal providers can update stop-loss for both pending and filled positions using various formats.
-
-**Early Trailing Stop**: A percentage-based trailing stop with a breakeven-first approach.
-
-**Stop Loss Order Type**: Per-channel option to use Market or Limit orders for stop loss exits, with retries before switching to market.
-
-**SL Limit Offset**: Configurable percentage offset for limit orders to improve fill probability.
-
-**Entry Order Mode**: Per-channel option to force market orders on BTO entries for faster fills, or use limit orders.
-
-**Broker-Aware Price Monitoring**: Routes quote requests to the position's connected broker with a fallback chain.
-
-**Schwab Global 429 Rate Limit Protection**: Centralized rate limit mitigation for Schwab API with global backoff timer, escalating backoff, and priority for exit orders.
-
-**Schwab WebSocket Streaming & Data Hub**: Industry-grade 5-tier API optimization. WebSocket streaming client (`schwab_streaming_client.py`) connects via userPreference endpoint for real-time LEVELONE_EQUITIES and LEVELONE_OPTIONS quotes, eliminating ~60-120 REST calls/min. Centralized Data Hub (`schwab_data_hub.py`) provides thread-safe singleton cache with TTL invalidation for quotes (120s) and positions (60s), event bus for cache updates, and hub-first lookups in all quote/position methods with REST fallback. API Budget Manager tracks rolling 120/min limit: throttles non-critical at 80% (96), blocks non-order at 90% (108), never blocks exit orders. Streaming auto-starts on Schwab connect, broker_sync_service populates hub and subscribes position symbols.
-
-**Streaming-Fed UI Layer**: Real-time price updates in Dashboard and Trades page via hub-first architecture. Snapshot daemon (`live_snapshot.py`) uses `_overlay_streaming_prices()` to overlay WebullDataHub and SchwabDataHub streaming quotes onto positions with broker isolation (Webull hub only feeds Webull, Schwab hub only feeds Schwab). Hub-first position fetch with `is_streaming()` + TTL validation and REST fallback. Lightweight `/api/streaming/quotes` endpoint enables 2-second frontend polling for in-place price/PnL updates without full page reload. Both Dashboard (`index.html`) and Trades page (`trades.html`) feature streaming status indicators (⚡ LIVE), glow effects for streaming price changes, and graceful degradation when streaming is unavailable. Trade Monitor (`unifiedLivePoll`) uses streaming metadata from `/api/trades/live-snapshot` for broker-specific glow effects on price/PnL cells. Quick Trade panel polls `/api/streaming/stock-quote` every 2s for real-time underlying stock price with streaming indicator and visual feedback, falling back to REST chain refresh when streaming is unavailable.
-
-**Broker Health Monitor**: A centralized, thread-safe system for real-time broker connection status and buying power monitoring.
-
-**Settled Cash Validation**: Industry-grade good faith violation prevention across all major brokers.
-
-**Unfilled Order Chaser**: Monitors pending exit orders, cancels stale ones, and replaces them with mid-price limit orders.
-
-**Notification System**: Real-time alerting for critical trading events via Discord webhooks and desktop browser notifications.
-
-**Log File Upload & Debug**: The AI chat assistant supports uploading .log/.txt/.csv files for automated debugging, categorizing lines, building context, and using OpenAI for analysis.
-
-**Isolated Execution Flows**: Critical architecture separating Channel Execution from Signal Routing.
-
-**NDX→QQQ Conversion Service**: Enables channels with limited NDX access to trade equivalent QQQ options.
-
-**Dynamic Position Sizing with Signal Override**: Intelligent position size calculation based on actual buying power, with signal provider override capabilities.
-
-**Per-Channel Ticker Filter**: Restricts trading to specific symbols per channel, with modes for OFF, ALLOW LIST, or BLOCK LIST.
-
-**Channel Scanner**: Admin-only feature that scans Discord channel message history to discover signal formats, normalize messages, cluster templates, and generate regex patterns for admin approval.
-
-**Universal Order Placement Resilience Layer**: A 3-layer architecture providing fault tolerance across all 11 brokers, including error classification, circuit breakers, and orchestrated retry budgets.
-
-**Live Monitoring Performance Layer**: Industry-grade position monitoring with zero-lag UX. Features a background snapshot daemon, cached data retrieval, real-time frontend updates, quick-close buttons, toast notifications, and a Dashboard Risk Engine with status indicators for each position.
-
-### System Design Choices
-The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. A License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting, and session-based authentication.
+**System Design Choices:**
+- **Broker Isolation**: Ensures that each broker's streaming data only feeds its own positions, preventing data cross-contamination.
+- **Thread Safety**: All shared states are protected by locks for cross-thread safety.
+- **Queue-Based Execution**: Signals are processed asynchronously through a queue, ensuring non-blocking signal detection.
+- **Hub-First Architecture**: Prioritizes cached streaming data before resorting to REST API calls.
+- **Graceful Degradation**: Automatically falls back to REST polling if streaming services become unavailable.
+- **Modular Broker Abstraction**: A common interface is used to manage diverse broker APIs.
+- **Market Isolation**: Conditional order services for US, India, and Canada operate independently.
 
 ## External Dependencies
 
-- **Python**: 3.8+
-- **PySide6**: Setup wizard GUI
-- **discord.py-self**: Discord API interaction
-- **webull**: Webull brokerage integration
-- **Flask**: Web GUI framework
-- **cryptography**: Encryption utilities
-- **requests**: HTTP client
-- **openai**: AI analysis (GPT models)
-- **ta**: Technical analysis library
-- **yfinance**: Market data access
-- **aiohttp**: Asynchronous HTTP client
-- **alpaca-py**: Alpaca brokerage integration
-- **ib-insync**: Interactive Brokers integration
-- **robin-stocks**: Robinhood brokerage integration
-- **pyotp**: TOTP 2FA code generation
-- **Telethon**: Telegram user client
-- **httpx**: HTTP client for Schwab API
+- **Python 3.8+**: Core runtime environment.
+- **Flask**: Web framework for the control panel.
+- **discord.py-self**: Discord user account API for signal monitoring.
+- **Telethon**: Telegram user client for signal monitoring.
+- **Webull, alpaca-py, ib-insync, robin-stocks**: SDKs for respective brokerage integrations.
+- **httpx**: HTTP client for Schwab API.
+- **openai**: For AI analysis and chat assistant.
+- **cryptography**: For encrypting sensitive credentials.
+- **yfinance**: For market data access.
+- **ta**: For technical analysis calculations.
+- **aiohttp**: Asynchronous HTTP client.
+- **pyotp**: For TOTP 2FA code generation.
+- **PySide6**: Used for the first-time setup wizard GUI on Windows.
+- **paho-mqtt**: For Webull MQTT streaming.
+- **Chart.js**: Frontend library for data visualization.
