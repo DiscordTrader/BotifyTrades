@@ -6922,7 +6922,7 @@ def register_routes(app):
                     print(f"[API] Webull orders fetch error: {e}")
             
             # Create order_id -> status mapping for quick lookup
-            order_status_map = {order['order_id']: order['status'] for order in webull_orders}
+            order_status_map = {order.get('order_id', ''): order.get('status', '') for order in webull_orders if order.get('order_id')}
             
             # Helper to normalize call_put to single character
             def normalize_call_put(val):
