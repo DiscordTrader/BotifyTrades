@@ -459,7 +459,12 @@ async function loadTrades() {
         const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
         
         if (currentTab === 'live' || currentTab === 'pending') {
-            const snapshotResponse = await fetch(`/api/trades/live-snapshot${brokerParam}`).then(r => r.json());
+            const snapshotResp = await fetch(`/api/trades/live-snapshot${brokerParam}`);
+            if (snapshotResp.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            const snapshotResponse = await snapshotResp.json();
             if (snapshotResponse.success) {
                 const positions = snapshotResponse.positions || [];
                 const pending = snapshotResponse.pending || [];
@@ -483,7 +488,17 @@ async function loadTrades() {
                 
                 updatePricesInTable(prices);
                 if (riskStates && Object.keys(riskStates).length > 0) {
-                    updateRiskBadges(riskStates);
+                    document.querySelectorAll('.risk-status-cell').forEach(cell => {
+                        const tradeId = cell.getAttribute('data-risk-trade-id');
+                        const rs = riskStates[tradeId];
+                        const badgesHTML = buildRiskBadges(rs);
+                        const tooltipHTML = rs ? buildRiskTooltip(rs) : '';
+                        if (rs && tooltipHTML) {
+                            cell.innerHTML = `<div class="risk-tooltip"><div class="risk-badges">${badgesHTML}</div><div class="risk-tooltip-text">${tooltipHTML}</div></div>`;
+                        } else {
+                            cell.innerHTML = `<div class="risk-badges">${badgesHTML}</div>`;
+                        }
+                    });
                 }
                 updateStalenessIndicator(snapshotResponse.snapshot_age || 0);
             } else {
