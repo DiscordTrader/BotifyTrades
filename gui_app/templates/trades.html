@@ -1617,6 +1617,14 @@ function updateStalenessIndicator(snapshotAge) {
     const el = document.getElementById('staleness-indicator');
     if (!el) return;
     lastSnapshotAge = snapshotAge || 0;
+    const streamingEl = document.getElementById('streaming-indicator');
+    const isStreaming = streamingEl && streamingEl.style.display !== 'none';
+    if (isStreaming) {
+        el.style.display = 'inline';
+        el.textContent = 'Updated just now';
+        el.className = 'staleness-badge staleness-fresh';
+        return;
+    }
     const ageSec = Math.round(lastSnapshotAge);
     el.style.display = 'inline';
     el.textContent = ageSec < 2 ? 'Updated just now' : `Updated ${ageSec}s ago`;
