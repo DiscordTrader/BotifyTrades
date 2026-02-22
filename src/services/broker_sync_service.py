@@ -1199,6 +1199,16 @@ class BrokerSyncService:
                             print(f"[SYNC] ⚠️ Could not parse trade created_at: {parse_err}")
                     
                     # Pending order no longer exists after grace period = cancelled or rejected
+                    # Check if already closed by user cancel action (avoid duplicate notification)
+                    try:
+                        from gui_app.database import get_trade_by_id
+                        fresh_trade = get_trade_by_id(trade_id)
+                    except Exception:
+                        fresh_trade = None
+                    if fresh_trade and fresh_trade.get('status') == 'CLOSED':
+                        print(f"[SYNC] Trade #{trade_id} ({symbol}) already CLOSED (likely user-cancelled), skipping")
+                        continue
+                    
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in pending orders: PENDING → CLOSED (cancelled)")
                     self.db.update_trade(
                         trade_id,
@@ -1207,26 +1217,28 @@ class BrokerSyncService:
                         close_reason='order_cancelled_or_rejected'
                     )
                     
-                    # Send rejection/cancellation notification
+                    # Send cancellation notification (not failure - order was cancelled, not rejected)
                     try:
-                        from gui_app.discord_notifier import notify_order_failed
+                        from gui_app.discord_notifier import send_cancel_notification
                         opt_detail = ""
+                        is_option = False
                         if trade.get('strike'):
+                            is_option = True
                             opt_type_str = (trade.get('call_put') or trade.get('opt_type') or '').upper()
                             opt_detail = f" ${trade['strike']}{opt_type_str}"
                             if trade.get('expiry'):
                                 opt_detail += f" {trade['expiry']}"
-                        notify_order_failed(
+                        send_cancel_notification(
                             symbol=symbol,
-                            action=trade.get('action', 'BTO'),
-                            broker=broker_name,
-                            error_message=f"Order rejected/cancelled by {broker_name}{opt_detail} - not found in pending orders after submission",
                             quantity=int(trade.get('quantity', 1)),
-                            price=float(trade.get('price') or trade.get('executed_price') or 0)
+                            price=float(trade.get('price') or trade.get('executed_price') or 0),
+                            is_option=is_option,
+                            order_id=trade.get('order_id', ''),
+                            broker=broker_name
                         )
-                        print(f"[SYNC] ✓ Sent rejection notification for trade #{trade_id} ({symbol}) on {broker_name}")
+                        print(f"[SYNC] ✓ Sent cancel notification for trade #{trade_id} ({symbol}) on {broker_name}")
                     except Exception as notify_err:
-                        print(f"[SYNC] Warning: Could not send rejection notification: {notify_err}")
+                        print(f"[SYNC] Warning: Could not send cancel notification: {notify_err}")
                     
                     # Cancel associated lot to prevent orphaned P&L entries
                     try:

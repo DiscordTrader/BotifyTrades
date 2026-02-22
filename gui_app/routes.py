@@ -5321,8 +5321,30 @@ def register_routes(app):
                 except Exception as e:
                     print(f"[API] Warning: Could not fetch order details: {e}")
                 
-                # Cancel order using Webull API
                 result = wb.cancel_order(order_id)
+                
+                try:
+                    from gui_app import database as db
+                    from datetime import datetime
+                    pending_trades = db.get_trades(status='PENDING')
+                    for pt in pending_trades:
+                        if pt.get('order_id') == order_id:
+                            db.update_trade(
+                                pt['id'],
+                                status='CLOSED',
+                                closed_at=datetime.now().isoformat(),
+                                close_reason='user_cancelled'
+                            )
+                            print(f"[CANCEL] ✓ Trade #{pt['id']} ({pt.get('symbol')}) marked CLOSED (user cancelled)")
+                            try:
+                                from gui_app.database import cancel_lot
+                                if cancel_lot(trade_id=pt['id'], reason='USER_CANCELLED'):
+                                    print(f"[CANCEL] ✓ Cancelled lot linked to trade #{pt['id']}")
+                            except Exception:
+                                pass
+                            break
+                except Exception as db_err:
+                    print(f"[CANCEL] Warning: Could not update trade in DB: {db_err}")
                 
                 # Send Discord notification for canceled order
                 if order_details:
