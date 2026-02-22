@@ -396,7 +396,8 @@ async function switchTab(tab) {
         console.log('[DEBUG] Loading filled orders from API...');
         await loadFilledOrders();
     } else {
-        filterAndDisplayTrades();
+        initialLoadDone = false;
+        await loadTrades();
     }
 }
 
@@ -1623,9 +1624,11 @@ function updateStalenessIndicator(snapshotAge) {
 }
 
 async function unifiedLivePoll() {
-    if (currentTab !== 'live') return;
-    const openTrades = currentTrades.filter(t => t.status === 'OPEN');
-    if (openTrades.length === 0) return;
+    if (currentTab !== 'live' && currentTab !== 'pending') return;
+    if (currentTab === 'live') {
+        const openTrades = currentTrades.filter(t => t.status === 'OPEN');
+        if (openTrades.length === 0) return;
+    }
     
     try {
         const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
@@ -1654,11 +1657,16 @@ async function unifiedLivePoll() {
             detectRiskStateChanges(states);
             previousRiskStates = JSON.parse(JSON.stringify(states));
         }
-        if (data.positions) {
+        if (currentTab === 'live' && data.positions) {
             allTrades = data.positions;
             const newFiltered = allTrades.filter(t => t.status === 'OPEN' || t.source === 'live_brokerage');
             currentTrades = newFiltered;
             updateTradesInPlace(newFiltered);
+            updateSummaryStats();
+        } else if (currentTab === 'pending' && data.pending) {
+            allTrades = data.pending;
+            currentTrades = data.pending;
+            updateTradesInPlace(data.pending);
             updateSummaryStats();
         }
         updateStalenessIndicator(data.snapshot_age);
