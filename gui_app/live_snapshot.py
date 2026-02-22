@@ -230,6 +230,86 @@ def _fetch_webull(bot) -> List[Dict]:
         return []
 
 
+def _fetch_webull_paper(bot) -> List[Dict]:
+    try:
+        paper_broker = getattr(bot, 'webull_paper_broker', None)
+        if not paper_broker:
+            if hasattr(bot, 'broker') and hasattr(bot.broker, 'brokers'):
+                paper_broker = bot.broker.brokers.get('Webull_Paper') or bot.broker.brokers.get('WEBULL_PAPER')
+            if not paper_broker:
+                return []
+
+        wb_client = getattr(paper_broker, '_client', None) or getattr(paper_broker, 'wb', None)
+        if not wb_client:
+            return []
+
+        positions_raw = wb_client.get_positions() or []
+        positions = []
+        for pos in positions_raw:
+            position_qty = float(pos.get('position', 0))
+            if position_qty <= 0:
+                continue
+
+            symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+            asset_type = pos.get('assetType', 'unknown')
+            ticker_data = pos.get('ticker', {})
+            is_option = (
+                'optionId' in pos or
+                'strikePrice' in pos or
+                'strikePrice' in ticker_data or
+                asset_type.lower() in ('option', 'opt')
+            )
+
+            strike = None
+            expiry = None
+            call_put = None
+            if is_option:
+                strike = float(pos.get('strikePrice', 0) or ticker_data.get('strikePrice', 0) or 0)
+                direction = (pos.get('direction', '') or pos.get('optionType', '') or ticker_data.get('direction', '') or '').upper()
+                call_put = 'C' if direction in ('CALL', 'C') else ('P' if direction in ('PUT', 'P') else '')
+                raw_expiry = pos.get('expireDate', '') or ticker_data.get('expireDate', '') or ''
+                if raw_expiry and '-' in raw_expiry:
+                    from datetime import datetime
+                    try:
+                        exp_date = datetime.strptime(raw_expiry, '%Y-%m-%d')
+                        expiry = exp_date.strftime('%m/%d')
+                    except Exception:
+                        expiry = raw_expiry
+                else:
+                    expiry = raw_expiry
+
+            avg_cost = float(pos.get('costPrice', 0))
+            cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
+            unrealized = (cur_price - avg_cost) * position_qty
+            if is_option:
+                unrealized *= 100
+            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
+
+            positions.append(_make_position(
+                pos_id=pos.get('position_id', f"WBP_{symbol}"),
+                symbol=symbol,
+                asset_type='option' if is_option else 'stock',
+                strike=strike,
+                expiry=expiry,
+                call_put=call_put,
+                quantity=position_qty,
+                entry_price=avg_cost,
+                current_price=cur_price,
+                bid=float(pos.get('bid', 0)),
+                ask=float(pos.get('ask', 0)),
+                mid=float(pos.get('mid', 0)),
+                last=float(pos.get('last', cur_price)),
+                unrealized_pnl=unrealized,
+                pnl_pct=pnl_pct,
+                broker='WEBULL_PAPER',
+                source='live_brokerage',
+            ))
+        return positions
+    except Exception as e:
+        _log(f"Webull Paper fetch error: {e}")
+        return []
+
+
 def _fetch_alpaca(bot) -> List[Dict]:
     try:
         paper_broker = None
@@ -533,7 +613,7 @@ def _make_match_key(broker, symbol, strike, expiry, call_put):
     return f"{str(broker).upper()}|{symbol}|{_normalize_strike(strike)}|{_normalize_expiry(expiry)}|{(call_put or '').upper()[:1]}"
 
 
-def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict]) -> List[Dict]:
+def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_status: Dict[str, Dict] = None) -> List[Dict]:
     from collections import defaultdict
     trade_map: Dict[str, Dict] = {}
     trade_map_all: Dict[str, list] = defaultdict(list)
@@ -611,9 +691,21 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict]) -> List
 
         enriched.append(pos)
 
+    synced_brokers = set()
+    if broker_status:
+        for bname, bstat in broker_status.items():
+            if bstat.get('error') is None:
+                synced_brokers.add(bname.upper())
+
     for t in db_trades:
         tid = t.get('id')
         if tid not in seen_db_ids:
+            trade_broker = str(t.get('broker', '')).upper()
+
+            if trade_broker in synced_brokers:
+                _log(f"[ENRICH] Skipping DB trade #{tid} ({t.get('symbol')}) - broker {trade_broker} synced with no matching live position")
+                continue
+
             entry_price = float(t.get('entry_price') or 0)
             cur_price = float(t.get('current_price') or entry_price)
             pnl_pct = ((cur_price - entry_price) / entry_price * 100) if entry_price > 0 else 0.0
@@ -631,7 +723,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict]) -> List
                 current_price=cur_price,
                 unrealized_pnl=unrealized,
                 pnl_pct=pnl_pct,
-                broker=str(t.get('broker', '')).upper(),
+                broker=trade_broker,
                 source='database',
                 status=t.get('status', 'OPEN'),
                 direction=t.get('direction', ''),
@@ -774,6 +866,7 @@ def _refresh_snapshot(bot_instance):
 
         broker_fetchers = {
             'WEBULL': (_fetch_webull, bot_instance),
+            'WEBULL_PAPER': (_fetch_webull_paper, bot_instance),
             'ALPACA_PAPER': (_fetch_alpaca, bot_instance),
             'ROBINHOOD': (_fetch_robinhood, bot_instance),
             'SCHWAB': (_fetch_schwab, bot_instance),
@@ -784,7 +877,7 @@ def _refresh_snapshot(bot_instance):
         all_live_positions: List[Dict] = []
         broker_status: Dict[str, Dict] = {}
 
-        with ThreadPoolExecutor(max_workers=6, thread_name_prefix='snapshot') as executor:
+        with ThreadPoolExecutor(max_workers=7, thread_name_prefix='snapshot') as executor:
             future_map = {}
             for broker_name, (fetcher, bot) in broker_fetchers.items():
                 f = executor.submit(fetcher, bot)
@@ -810,7 +903,7 @@ def _refresh_snapshot(bot_instance):
                     }
                     _log(f"{broker_name} future error: {e}")
 
-        merged = _enrich_with_db_trades(all_live_positions, db_trades)
+        merged = _enrich_with_db_trades(all_live_positions, db_trades, broker_status)
 
         merged = [dict(pos) for pos in merged]
         streaming_meta = _overlay_streaming_prices(merged)
