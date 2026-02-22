@@ -3173,10 +3173,15 @@ async function streamingQuotePoll() {
             const anyRelevant = showWebull || showSchwab;
             indicator.style.display = anyRelevant ? 'inline' : 'none';
             if (anyRelevant) {
-                const parts = [];
-                if (showWebull) parts.push('Webull');
-                if (showSchwab) parts.push('Schwab');
-                indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
+                if (broker) {
+                    const label = broker.replace('_PAPER', ' Paper').replace('_', ' ');
+                    indicator.textContent = '\u26A1 LIVE \u2022 ' + label;
+                } else {
+                    const parts = [];
+                    if (showWebull) parts.push('Webull');
+                    if (showSchwab) parts.push('Schwab');
+                    indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
+                }
             }
         }
 
