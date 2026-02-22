@@ -346,6 +346,7 @@ class SchwabStreamingClient:
 
                     self._hub.set_streaming_active(True)
                     self._last_heartbeat = time.time()
+                    self._last_qos_time = time.time()
                     print("[SCHWAB_STREAM] ✓ Connected and streaming")
 
                     if self._subscribed_equities:
@@ -359,18 +360,39 @@ class SchwabStreamingClient:
 
                     while self._running:
                         try:
-                            message = await asyncio.wait_for(ws.recv(), timeout=90)
+                            message = await asyncio.wait_for(ws.recv(), timeout=30)
                             self._decode_message(message)
                         except asyncio.TimeoutError:
-                            if time.time() - self._last_heartbeat > 120:
-                                print("[SCHWAB_STREAM] ⚠️ No heartbeat for 120s, reconnecting...")
+                            pass
+
+                        now = time.time()
+                        if now - self._last_qos_time >= 25:
+                            try:
+                                si = self._streamer_info or {}
+                                qos_request = {
+                                    "requests": [{
+                                        "service": "ADMIN",
+                                        "requestid": self._next_request_id(),
+                                        "command": "QOS",
+                                        "SchwabClientCustomerId": si.get('schwabClientCustomerId', self._app_id or ''),
+                                        "SchwabClientCorrelId": si.get('schwabClientCorrelId', ''),
+                                        "parameters": {"qoslevel": "0"}
+                                    }]
+                                }
+                                await ws.send(json.dumps(qos_request))
+                                self._last_qos_time = now
+                            except Exception:
                                 break
+
+                        if now - self._last_heartbeat > 180:
+                            print("[SCHWAB_STREAM] ⚠️ No heartbeat for 180s, reconnecting...")
+                            break
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 error_str = str(e)
-                if 'going away' not in error_str.lower() and 'normal closure' not in error_str.lower():
+                if '1000' not in error_str and 'going away' not in error_str.lower() and 'normal closure' not in error_str.lower():
                     print(f"[SCHWAB_STREAM] Connection error: {e}")
 
             self._connected = False
