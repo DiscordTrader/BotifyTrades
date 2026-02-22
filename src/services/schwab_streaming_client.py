@@ -121,7 +121,8 @@ class SchwabStreamingClient:
                     print("[SCHWAB_STREAM] ❌ No streamerSocketUrl found")
                     return False
 
-                print(f"[SCHWAB_STREAM] ✓ Streamer info obtained (socket: {socket_url[:50]}...)")
+                si_keys = list(self._streamer_info.keys())
+                print(f"[SCHWAB_STREAM] ✓ Streamer info obtained (socket: {socket_url[:50]}...) keys={si_keys}")
                 return True
 
         except Exception as e:
@@ -132,47 +133,35 @@ class SchwabStreamingClient:
         si = self._streamer_info
         account_id = self._account_id or self._broker.account_number or ''
         app_id = self._app_id or si.get('appId', '')
+        access_token = self._broker.access_token or ''
 
-        credential_parts = {
-            'userid': account_id,
-            'token': si.get('token', ''),
-            'company': si.get('company', ''),
-            'segment': si.get('segment', ''),
-            'cddomain': si.get('cddomain', si.get('accountCdDomainId', '')),
-            'usergroup': si.get('userGroup', ''),
-            'accesslevel': si.get('accessLevel', ''),
-            'authorized': 'Y',
-            'timestamp': str(si.get('tokenTimestamp', int(time.time() * 1000))),
-            'appid': app_id,
-            'acl': si.get('acl', '')
-        }
-
-        credential = '&'.join(f'{k}={v}' for k, v in credential_parts.items())
+        schwab_client_channel = si.get('schwabClientChannel', '')
+        schwab_client_function_id = si.get('schwabClientFunctionId', '')
 
         return {
             "requests": [{
                 "service": "ADMIN",
                 "requestid": "0",
                 "command": "LOGIN",
-                "account": account_id,
-                "source": app_id,
+                "SchwabClientCustomerId": si.get('schwabClientCustomerId', app_id),
+                "SchwabClientCorrelId": si.get('schwabClientCorrelId', ''),
                 "parameters": {
-                    "credential": credential,
-                    "token": si.get('token', ''),
-                    "version": "1.0",
-                    "qoslevel": "0"
+                    "Authorization": access_token,
+                    "SchwabClientChannel": schwab_client_channel,
+                    "SchwabClientFunctionId": schwab_client_function_id
                 }
             }]
         }
 
     def _build_subscribe_request(self, service: str, symbols: list, fields: str) -> Dict:
+        si = self._streamer_info or {}
         return {
             "requests": [{
                 "service": service,
                 "requestid": self._next_request_id(),
                 "command": "SUBS",
-                "account": self._account_id or '',
-                "source": self._app_id or '',
+                "SchwabClientCustomerId": si.get('schwabClientCustomerId', self._app_id or ''),
+                "SchwabClientCorrelId": si.get('schwabClientCorrelId', ''),
                 "parameters": {
                     "keys": ','.join(symbols),
                     "fields": fields
@@ -181,13 +170,14 @@ class SchwabStreamingClient:
         }
 
     def _build_add_request(self, service: str, symbols: list, fields: str) -> Dict:
+        si = self._streamer_info or {}
         return {
             "requests": [{
                 "service": service,
                 "requestid": self._next_request_id(),
                 "command": "ADD",
-                "account": self._account_id or '',
-                "source": self._app_id or '',
+                "SchwabClientCustomerId": si.get('schwabClientCustomerId', self._app_id or ''),
+                "SchwabClientCorrelId": si.get('schwabClientCorrelId', ''),
                 "parameters": {
                     "keys": ','.join(symbols),
                     "fields": fields
