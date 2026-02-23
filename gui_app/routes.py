@@ -306,7 +306,9 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
             else:
                 print(f"[OPTIONS] Webull returned empty chain for {symbol}, trying Alpaca fallback...", flush=True)
         except Exception as e:
-            print(f"[OPTIONS] Webull option chain error for {symbol}: {e}, trying Alpaca fallback", flush=True)
+            print(f"[OPTIONS] Webull option chain error for {symbol}: {type(e).__name__}: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
     else:
         print(f"[OPTIONS] Webull broker or loop not available, trying Alpaca fallback", flush=True)
     
@@ -316,9 +318,9 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
         asyncio.set_event_loop(new_loop)
         try:
             chain = new_loop.run_until_complete(alpaca.get_option_chain(symbol, expiry))
-            chain['data_source'] = 'Alpaca (fallback)'
+            chain['data_source'] = 'Alpaca'
             _option_chain_cache[cache_key] = (chain, now)
-            print(f"[OPTIONS] Alpaca fallback for {cache_key}")
+            print(f"[OPTIONS] Using Alpaca data for {cache_key}")
             return chain
         except Exception as e:
             print(f"[OPTIONS] Alpaca fallback also failed: {e}")
@@ -9539,7 +9541,6 @@ def register_routes(app):
                 try:
                     from datetime import datetime
                     
-                    # Fetch expirations from Webull for non-index symbols
                     future = asyncio.run_coroutine_threadsafe(
                         broker.get_options_expiration_dates(symbol),
                         loop
@@ -9566,14 +9567,18 @@ def register_routes(app):
                                     'label': exp_label
                                 })
                         
-                        print(f"[API] Loaded {len(expirations)} Webull expirations for {symbol}")
-                        return jsonify({
-                            'symbol': symbol,
-                            'expirations': expirations,
-                            'data_source': 'Webull'
-                        })
+                        if expirations:
+                            print(f"[API] Loaded {len(expirations)} Webull expirations for {symbol}")
+                            return jsonify({
+                                'symbol': symbol,
+                                'expirations': expirations,
+                                'data_source': 'Webull'
+                            })
+                    print(f"[API] Webull returned empty expirations for {symbol}, trying Alpaca")
                 except Exception as e:
-                    print(f"[API] Webull expiration fetch failed: {e}, trying Alpaca fallback")
+                    print(f"[API] Webull expiration fetch failed: {type(e).__name__}: {e}, trying Alpaca fallback")
+                    import traceback
+                    traceback.print_exc()
             
             # Fallback to Alpaca if Webull not available
             alpaca = get_alpaca_provider()
@@ -9604,7 +9609,7 @@ def register_routes(app):
                 return jsonify({
                     'symbol': symbol,
                     'expirations': expirations,
-                    'data_source': 'Alpaca (fallback)'
+                    'data_source': 'Alpaca'
                 })
             finally:
                 new_loop.close()
