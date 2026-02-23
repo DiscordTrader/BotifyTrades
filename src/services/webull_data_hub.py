@@ -132,7 +132,9 @@ class WebullDataHub:
             if 'ask' in quote_data:
                 existing.ask = float(quote_data['ask'] or 0)
             if 'last' in quote_data or 'price' in quote_data:
-                existing.last = float(quote_data.get('last', quote_data.get('price', existing.last)) or 0)
+                raw_price = float(quote_data.get('last', quote_data.get('price', existing.last)) or 0)
+                if 0 < raw_price < 500000:
+                    existing.last = raw_price
             if 'volume' in quote_data:
                 existing.volume = int(quote_data['volume'] or 0)
             if 'high' in quote_data:
