@@ -287,9 +287,8 @@ class StreamingPriceMonitor(PriceMonitor):
                         rest_price = await self._fetch_rest_price()
                         if rest_price:
                             self._update_price_timestamp()
-                            if rest_price != self.last_price:
-                                self.last_price = rest_price
-                                await self.callback(self.symbol, rest_price)
+                            self.last_price = rest_price
+                            await self.callback(self.symbol, rest_price)
                         await asyncio.sleep(self.REST_FALLBACK_INTERVAL)
                     else:
                         await asyncio.sleep(self.HUB_POLL_INTERVAL)
@@ -311,23 +310,9 @@ class StreamingPriceMonitor(PriceMonitor):
     
     async def _fetch_rest_price(self) -> Optional[float]:
         now = time.time()
-        if now - self._last_rest_call < 2.0:
+        if now - self._last_rest_call < self.REST_FALLBACK_INTERVAL - 0.5:
             return self.last_price
         self._last_rest_call = now
-        
-        if self.finnhub_api_key:
-            try:
-                if not self._rest_session or self._rest_session.closed:
-                    self._rest_session = aiohttp.ClientSession()
-                url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
-                async with self._rest_session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        price = data.get('c')
-                        if price and float(price) > 0:
-                            return float(price)
-            except Exception:
-                pass
         
         if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
             try:
@@ -340,6 +325,20 @@ class StreamingPriceMonitor(PriceMonitor):
                         val = result.get(key)
                         if val and float(val) > 0:
                             return float(val)
+            except Exception:
+                pass
+        
+        if self.finnhub_api_key:
+            try:
+                if not self._rest_session or self._rest_session.closed:
+                    self._rest_session = aiohttp.ClientSession()
+                url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
+                async with self._rest_session.get(url, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        price = data.get('c')
+                        if price and float(price) > 0:
+                            return float(price)
             except Exception:
                 pass
         
@@ -1209,7 +1208,14 @@ class BaseConditionalOrderService(ABC):
         except Exception:
             pass
         
-        self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {adjusted_trigger})")
+        if not hasattr(self, '_price_log_counters'):
+            self._price_log_counters = {}
+        counter = self._price_log_counters.get(order_id, 0) + 1
+        self._price_log_counters[order_id] = counter
+        last = order.get('_last_logged_price')
+        if last != price or counter <= 3 or counter % 10 == 0:
+            order['_last_logged_price'] = price
+            self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {adjusted_trigger})")
         
         triggered = False
         if trigger_type == 'over' and price >= adjusted_trigger:
