@@ -6949,15 +6949,25 @@ class SelfClient(discord.Client):
                 conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
                 _original_print("[CONDITIONAL] ✓ Schwab registered for price monitoring", flush=True)
             
-            if hasattr(self, '_data_hub') and self._data_hub:
-                conditional_order_router.set_data_hub('webull', self._data_hub)
+            webull_hub = None
+            if self.broker and hasattr(self.broker, '_data_hub') and self.broker._data_hub:
+                webull_hub = self.broker._data_hub
+            if not webull_hub:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    webull_hub = get_webull_data_hub()
+                except Exception:
+                    pass
+            if webull_hub:
+                conditional_order_router.set_data_hub('webull', webull_hub)
                 _original_print("[CONDITIONAL] ✓ Webull streaming data hub registered (sub-100ms pricing)", flush=True)
             try:
                 from src.services.schwab_data_hub import get_schwab_data_hub
                 schwab_hub = get_schwab_data_hub()
-                if schwab_hub and schwab_hub.is_streaming():
+                if schwab_hub:
                     conditional_order_router.set_data_hub('schwab', schwab_hub)
-                    _original_print("[CONDITIONAL] ✓ Schwab streaming data hub registered (sub-100ms pricing)", flush=True)
+                    streaming_status = "streaming" if schwab_hub.is_streaming() else "registered, will activate when streaming starts"
+                    _original_print(f"[CONDITIONAL] ✓ Schwab data hub {streaming_status}", flush=True)
             except Exception:
                 pass
         except Exception as e:

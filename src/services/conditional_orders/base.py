@@ -575,6 +575,70 @@ class BaseConditionalOrderService(ABC):
         self.data_hubs[broker_key.lower()] = hub
         sys.stderr.write(f"[{self.MARKET}] Registered data hub for {broker_key}\n")
         sys.stderr.flush()
+        
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._upgrade_to_streaming(broker_key, hub),
+                self._loop
+            )
+    
+    async def _upgrade_to_streaming(self, broker_key: str, hub: Any):
+        """Upgrade Finnhub/REST monitors to streaming when a hub becomes available."""
+        broker_lower = broker_key.lower()
+        upgraded_count = 0
+        
+        fallback_monitors = [oid for oid, mon in self.monitors.items()
+                              if isinstance(mon, (FinnhubPriceMonitor, YFinancePriceMonitor, BrokerPriceMonitor))]
+        if not fallback_monitors:
+            return
+        
+        self._log(f"Checking {len(fallback_monitors)} monitor(s) for streaming upgrade via {broker_key}")
+        
+        for order_id in fallback_monitors:
+            monitor = self.monitors.get(order_id)
+            if not monitor:
+                continue
+            
+            if isinstance(monitor, StreamingPriceMonitor):
+                continue
+            
+            order = self.pending_orders.get(order_id)
+            if not order:
+                continue
+            
+            order_broker = order.get('broker_primary', '').lower()
+            order_broker_key = order_broker.replace('_paper', '').replace('_live', '')
+            
+            if order_broker_key == broker_lower or order_broker == broker_lower:
+                current_monitor = self.monitors.get(order_id)
+                if current_monitor is not monitor or isinstance(current_monitor, StreamingPriceMonitor):
+                    continue
+                
+                broker_instance = self.broker_instances.get(order_broker) or self.broker_instances.get(order_broker_key)
+                
+                self._log(f"Upgrading #{order_id} {monitor.symbol} from {type(monitor).__name__} to streaming via {broker_key}")
+                
+                await monitor.stop()
+                if order_id in self.monitor_tasks:
+                    self.monitor_tasks[order_id].cancel()
+                    try:
+                        await self.monitor_tasks[order_id]
+                    except asyncio.CancelledError:
+                        pass
+                
+                if isinstance(self.monitors.get(order_id), StreamingPriceMonitor):
+                    self._log(f"#{order_id} already upgraded to streaming by another path, skipping")
+                    continue
+                
+                new_monitor = await self.build_price_monitor(order, broker_instance, order_broker)
+                if new_monitor:
+                    self.monitors[order_id] = new_monitor
+                    task = asyncio.create_task(new_monitor.start())
+                    self.monitor_tasks[order_id] = task
+                    upgraded_count += 1
+        
+        if upgraded_count > 0:
+            self._log(f"Upgraded {upgraded_count} monitor(s) to streaming via {broker_key}")
     
     def get_data_hub(self, broker_name: str) -> Optional[Any]:
         """Get the streaming data hub for a broker, checking common aliases."""
@@ -689,9 +753,12 @@ class BaseConditionalOrderService(ABC):
                 broker_key = broker_lower.replace('_paper', '').replace('_live', '')
                 
                 if order_broker_key == broker_key or order_broker == broker_lower:
+                    current = self.monitors.get(order_id)
+                    if current is not monitor or isinstance(current, StreamingPriceMonitor):
+                        continue
+                    
                     self._log(f"Upgrading #{order_id} {monitor.symbol} from fallback to {broker_name}")
                     
-                    # Stop the old monitor
                     await monitor.stop()
                     if order_id in self.monitor_tasks:
                         self.monitor_tasks[order_id].cancel()
@@ -700,7 +767,10 @@ class BaseConditionalOrderService(ABC):
                         except asyncio.CancelledError:
                             pass
                     
-                    # Build new monitor with the broker
+                    if isinstance(self.monitors.get(order_id), StreamingPriceMonitor):
+                        self._log(f"#{order_id} already upgraded to streaming, skipping")
+                        continue
+                    
                     new_monitor = await self.build_price_monitor(order, broker_instance, broker_name)
                     if new_monitor:
                         self.monitors[order_id] = new_monitor
