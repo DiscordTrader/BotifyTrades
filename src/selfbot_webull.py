@@ -5286,6 +5286,90 @@ INCOMPLETE_OPTION_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+NATURAL_LANG_STOCK_ENTRY_PATTERN = re.compile(
+    r'(?:^|[\s@]\w*\s+)'
+    r'(?:(?:going\s+)?in|bought|buying|long|entered|entering|added)\s+'
+    r'(?:(?:on|into|some)\s+)?'
+    r'\$?([A-Za-z]{1,5})\s+'
+    r'(?:@\s*)?'
+    r'\$?([\d]+\.[\d]+|[\d]+)',
+    re.IGNORECASE
+)
+
+NATURAL_LANG_STOCK_EXIT_PATTERN = re.compile(
+    r'(?:^|[\s@]\w*\s+)'
+    r'(?:out|sold|selling|exited|exiting|closed|closing|dumped)\s+'
+    r'(?:(?:of|from|all)\s+)?'
+    r'\$?([A-Za-z]{1,5})\s+'
+    r'(?:@\s*)?'
+    r'\$?([\d]+\.[\d]+|[\d]+)',
+    re.IGNORECASE
+)
+
+NATURAL_LANG_SL_PATTERN = re.compile(
+    r'(?:SL|stop\s*loss|stop)\s+\$?([\d]+\.[\d]+|[\d]+)',
+    re.IGNORECASE
+)
+
+NATURAL_LANG_PT_PATTERN = re.compile(
+    r'(?:PT|TP|target|profit\s*target)\s+\$?([\d]+\.[\d]+|[\d]+)',
+    re.IGNORECASE
+)
+
+
+def _parse_natural_lang_stock(text: str) -> Optional[dict]:
+    """Parse natural language stock signals like 'in SNSE 32.32 SL 29.99' or 'out SNSE 34.50'."""
+    stripped = text.strip()
+    
+    entry_match = NATURAL_LANG_STOCK_ENTRY_PATTERN.search(stripped)
+    exit_match = NATURAL_LANG_STOCK_EXIT_PATTERN.search(stripped)
+    
+    if not entry_match and not exit_match:
+        return None
+    
+    if entry_match:
+        symbol = entry_match.group(1).upper()
+        price_str = entry_match.group(2)
+        direction = 'BTO'
+    else:
+        symbol = exit_match.group(1).upper()
+        price_str = exit_match.group(2)
+        direction = 'STC'
+    
+    if symbol in INVALID_STOCK_SYMBOLS:
+        return None
+    
+    if len(symbol) > 5 or len(symbol) < 1:
+        return None
+    
+    price = float(price_str)
+    
+    result = {
+        "asset": "stock",
+        "action": direction,
+        "qty": None,
+        "symbol": symbol,
+        "price": price,
+        "is_market_order": False,
+        "_qty_from_signal": False,
+        "parsed_by": "natural_language"
+    }
+    
+    sl_match = NATURAL_LANG_SL_PATTERN.search(stripped)
+    if sl_match:
+        result['stop_loss'] = float(sl_match.group(1))
+    
+    pt_match = NATURAL_LANG_PT_PATTERN.search(stripped)
+    if pt_match:
+        result['profit_target_price'] = float(pt_match.group(1))
+    
+    print(f"[NATURAL LANG] ✓ Parsed stock signal: {direction} {symbol} @ ${price}" + 
+          (f" SL=${result.get('stop_loss')}" if result.get('stop_loss') else "") +
+          (f" PT=${result.get('profit_target_price')}" if result.get('profit_target_price') else ""))
+    
+    return result
+
+
 def parse_stock_signal(text: str) -> Optional[dict]:
     incomplete_option = INCOMPLETE_OPTION_PATTERN.search(text.strip())
     if incomplete_option:
@@ -5298,60 +5382,60 @@ def parse_stock_signal(text: str) -> Optional[dict]:
         return learned_result
     
     m = STK_REGEX.search(text.strip())
-    if not m:
-        return None
-    groups = m.groups()
-    direction, qty_str, symbol, price_str = groups[:4]
-    
-    if symbol.upper() in INVALID_STOCK_SYMBOLS:
-        print(f"[SIGNAL] ❌ Rejected invalid symbol '{symbol}' (common word, not a ticker)")
-        return None
-    pct_str = groups[4] if len(groups) > 4 else None
-    
-    # Check for market order: "@ m" or "@m" means execute at market price
-    is_market_order = price_str.lower() == 'm'
-    if is_market_order:
-        price = None  # Market order - price will be determined at execution
-        print(f"[SIGNAL] Market order detected for {symbol}")
-    else:
-        price = float(price_str)
-    
-    # Calculate quantity if not specified
-    qty_from_signal = False  # Track whether qty came from signal text
-    
-    if qty_str is None:
-        if is_market_order:
-            # For market orders without qty, default to 1 share
-            qty = 1
-            print(f"[AUTO-QTY] Market order: defaulting to 1 share")
-        elif direction.upper() == 'STC':
-            # For STC without qty, close entire position
-            qty = None
-            print(f"[AUTO-QTY] STC without qty - will close based on open position size")
+    if m:
+        groups = m.groups()
+        direction, qty_str, symbol, price_str = groups[:4]
+        
+        if symbol.upper() not in INVALID_STOCK_SYMBOLS:
+            pct_str = groups[4] if len(groups) > 4 else None
+            
+            is_market_order = price_str.lower() == 'm'
+            if is_market_order:
+                price = None
+                print(f"[SIGNAL] Market order detected for {symbol}")
+            else:
+                price = float(price_str)
+            
+            qty_from_signal = False
+            
+            if qty_str is None:
+                if is_market_order:
+                    qty = 1
+                    print(f"[AUTO-QTY] Market order: defaulting to 1 share")
+                elif direction.upper() == 'STC':
+                    qty = None
+                    print(f"[AUTO-QTY] STC without qty - will close based on open position size")
+                else:
+                    qty = None
+                    print(f"[AUTO-QTY] Stock BTO without qty - will apply tiered default (channel → global → max_position_size)")
+            else:
+                qty = int(qty_str)
+                qty_from_signal = True
+            
+            result = {
+                "asset": "stock",
+                "action": direction.upper(),
+                "qty": qty,
+                "symbol": symbol.upper(),
+                "price": price,
+                "is_market_order": is_market_order,
+                "_qty_from_signal": qty_from_signal
+            }
+            
+            if pct_str:
+                result['_position_size_pct'] = float(pct_str)
+                print(f"[POSITION SIZE] ✓ Parsed {pct_str}% from signal - will size based on account percentage")
+            
+            return result
         else:
-            # BTO without qty - set flag for tiered default system
-            qty = None
-            print(f"[AUTO-QTY] Stock BTO without qty - will apply tiered default (channel → global → max_position_size)")
-    else:
-        qty = int(qty_str)
-        qty_from_signal = True
+            print(f"[SIGNAL] ❌ Rejected invalid symbol '{symbol}' (common word, not a ticker)")
+            return None
     
-    result = {
-        "asset": "stock",
-        "action": direction.upper(),
-        "qty": qty,
-        "symbol": symbol.upper(),
-        "price": price,  # None for market orders
-        "is_market_order": is_market_order,
-        "_qty_from_signal": qty_from_signal  # Flag for tiered default system
-    }
+    nl_result = _parse_natural_lang_stock(text)
+    if nl_result:
+        return nl_result
     
-    # Add position size percentage if parsed from signal (e.g., "BTO $SIDU @ 4.00 (12.5%)")
-    if pct_str:
-        result['_position_size_pct'] = float(pct_str)
-        print(f"[POSITION SIZE] ✓ Parsed {pct_str}% from signal - will size based on account percentage")
-    
-    return result
+    return None
 
 
 # ------------------------------ TRADE IDEA PARSER ---------------------------------
@@ -9430,8 +9514,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 is_bto_stc_signal = content_upper.startswith('BTO ') or content_upper.startswith('STC ') or ' BTO ' in content_upper or ' STC ' in content_upper
                 # Also check for Bishop format: "I'm Entering" + "Option:" or "Trimming"
                 is_bishop_signal = ("I'M ENTERING" in content_upper and "OPTION:" in content_upper) or "TRIMMING " in content_upper
+                # Check for natural language stock signals: "in SNSE 32.32", "out AAPL 150", "bought TSLA 200", etc.
+                is_natural_lang_stock = bool(NATURAL_LANG_STOCK_ENTRY_PATTERN.search(combined_content) or 
+                                             NATURAL_LANG_STOCK_EXIT_PATTERN.search(combined_content))
                 # Combine all signal checks
-                is_bto_stc_signal = is_bto_stc_signal or is_bishop_signal
+                is_bto_stc_signal = is_bto_stc_signal or is_bishop_signal or is_natural_lang_stock
                 
                 # DUAL-ACTION ROUTING: Check if we should execute on broker AND/OR forward to webhook
                 # IMPORTANT: Channel execution (execute_enabled from Channels page) is INDEPENDENT of
@@ -12202,7 +12289,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as e:
                     print(f"[BULLWINKLE STC] ❌ Error looking up position: {e}")
             
+            if stk.get('stop_loss') and not stk.get('stop_loss_price'):
+                stk['stop_loss_price'] = stk['stop_loss']
+            if stk.get('profit_target_price') is None and stk.get('profit_targets'):
+                stk['profit_target_price'] = stk['profit_targets'][0] if stk['profit_targets'] else None
+            
             print(f"[SIGNAL PARSED] ✓ Stock Signal: {stk['action']} {stk['qty']} {stk['symbol']} @ ${stk['price']}")
+            if stk.get('stop_loss_price') or stk.get('profit_target_price'):
+                print(f"[SIGNAL PARSED] ✓ Bracket: SL=${stk.get('stop_loss_price')} PT=${stk.get('profit_target_price')}")
+            if stk.get('parsed_by'):
+                print(f"[SIGNAL PARSED] ✓ Parsed by: {stk['parsed_by']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
             
             # STRICT ROUTING CHECK: Validate broker assignment BEFORE creating lot
