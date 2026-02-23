@@ -2351,76 +2351,79 @@ async function loadStats() {
 
 // ============ CONDITIONAL ORDERS TAB FUNCTIONS ============
 let conditionalOrdersRefreshInterval = null;
+let conditionalLivePriceInterval = null;
+let _condOrdersCache = [];
 
 function startConditionalOrdersAutoRefresh() {
     stopConditionalOrdersAutoRefresh();
-    conditionalOrdersRefreshInterval = setInterval(async () => {
-        await refreshConditionalOrderPrices();
-    }, 3000);
-    console.log('[ConditionalOrders] Auto-refresh started (3s interval)');
+    conditionalLivePriceInterval = setInterval(refreshLivePricesOnly, 1000);
+    conditionalOrdersRefreshInterval = setInterval(refreshConditionalOrderPrices, 5000);
+    console.log('[ConditionalOrders] Auto-refresh started (prices: 1s, full: 5s)');
 }
 
 function stopConditionalOrdersAutoRefresh() {
     if (conditionalOrdersRefreshInterval) {
         clearInterval(conditionalOrdersRefreshInterval);
         conditionalOrdersRefreshInterval = null;
-        console.log('[ConditionalOrders] Auto-refresh stopped');
     }
+    if (conditionalLivePriceInterval) {
+        clearInterval(conditionalLivePriceInterval);
+        conditionalLivePriceInterval = null;
+    }
+}
+
+async function refreshLivePricesOnly() {
+    try {
+        const resp = await fetch('/api/conditional_orders/live_prices');
+        const data = await resp.json();
+        if (!data.success) return;
+        const livePrices = data.prices || {};
+
+        for (const [orderId, live] of Object.entries(livePrices)) {
+            const card = document.querySelector(`[data-order-id="${orderId}"]`);
+            if (!card) continue;
+            const priceEl = card.querySelector('.current-price-value');
+            const timeEl = card.querySelector('.current-price-time');
+            const sourceEl = card.querySelector('.current-price-source');
+
+            if (priceEl && live.price) {
+                const price = parseFloat(live.price);
+                const trigger = parseFloat(live.trigger_price) || 0;
+                const dir = live.direction || 'ABOVE';
+                const met = dir === 'ABOVE' ? price >= trigger : price <= trigger;
+                priceEl.textContent = '$' + price.toFixed(2);
+                priceEl.style.color = met ? '#22c55e' : '#ef4444';
+            }
+
+            if (timeEl) {
+                const now = new Date();
+                timeEl.textContent = now.toLocaleString('en-US', {
+                    timeZone: 'America/New_York',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                });
+            }
+
+            if (sourceEl) {
+                const isStream = live.source === 'streaming';
+                const rawLabel = live.data_source || live.source || '';
+                const label = isStream ? 'STREAMING' : rawLabel.replace(/_/g,' ').toUpperCase();
+                const color = isStream ? '#0f8' : '#f59e0b';
+                const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
+                const dot = isStream ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0f8;margin-right:3px;box-shadow:0 0 4px #0f8;"></span>' : '';
+                if (label) {
+                    sourceEl.innerHTML = `<span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${bg};color:${color};">${dot}${label}</span>`;
+                }
+            }
+        }
+    } catch (err) {}
 }
 
 async function refreshConditionalOrderPrices() {
     try {
-        const [ordersResp, livePricesResp] = await Promise.all([
-            fetch('/api/conditional_orders?active_only=true'),
-            fetch('/api/conditional_orders/live_prices')
-        ]);
-        const ordersData = await ordersResp.json();
-        const livePricesData = await livePricesResp.json();
-        const orders = ordersData.orders || [];
-        const livePrices = livePricesData.prices || {};
-        
-        orders.forEach(order => {
-            const card = document.querySelector(`[data-order-id="${order.id}"]`);
-            if (!card) return;
-            const priceEl = card.querySelector('.current-price-value');
-            const timeEl = card.querySelector('.current-price-time');
-            const sourceEl = card.querySelector('.current-price-source');
-            
-            const live = livePrices[String(order.id)];
-            const livePrice = live && live.price ? parseFloat(live.price) : null;
-            const displayPrice = livePrice || (order.current_price ? parseFloat(order.current_price) : null);
-            
-            if (priceEl && displayPrice) {
-                const triggerPrice = parseFloat(order.adjusted_trigger_price || order.trigger_price);
-                const color = displayPrice >= triggerPrice ? '#22c55e' : '#ef4444';
-                priceEl.textContent = '$' + displayPrice.toFixed(2);
-                priceEl.style.color = color;
-            }
-            
-            if (timeEl && order.price_updated_at) {
-                const timeStr = order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') 
-                    ? order.price_updated_at 
-                    : order.price_updated_at + 'Z';
-                timeEl.textContent = new Date(timeStr).toLocaleString('en-US', {
-                    timeZone: 'America/New_York', 
-                    hour: '2-digit', 
-                    minute: '2-digit', 
-                    second: '2-digit',
-                    hour12: true
-                });
-            }
-            
-            if (sourceEl && live) {
-                const isStream = live.source === 'streaming';
-                const ds = order.data_source_active || '';
-                const label = isStream ? 'STREAM' : ds ? ds.toUpperCase() : (live.source || '').toUpperCase();
-                const color = isStream ? '#0f8' : '#f59e0b';
-                const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
-                if (label) {
-                    sourceEl.innerHTML = `<span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${bg};color:${color};">${label}</span>`;
-                }
-            }
-        });
+        const resp = await fetch('/api/conditional_orders?active_only=true');
+        const data = await resp.json();
+        const orders = data.orders || [];
+        _condOrdersCache = orders;
     } catch (err) {
         console.error('[ConditionalOrders] Price refresh error:', err);
     }
@@ -2589,10 +2592,11 @@ async function loadConditionalOrders() {
                             ${(() => {
                                 const ds = (order.data_source_active || '').toLowerCase();
                                 const isStream = ds.includes('stream');
-                                const label = isStream ? 'STREAM' : ds ? ds.toUpperCase() : '';
+                                const label = isStream ? 'STREAMING' : ds ? ds.replace(/_/g,' ').toUpperCase() : '';
                                 const color = isStream ? '#0f8' : '#f59e0b';
                                 const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
-                                return label ? '<div class="current-price-source" style="margin-top:3px;"><span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:' + bg + ';color:' + color + ';">' + label + '</span></div>' : '';
+                                const dot = isStream ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0f8;margin-right:3px;box-shadow:0 0 4px #0f8;"></span>' : '';
+                                return label ? '<div class="current-price-source" style="margin-top:3px;"><span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:' + bg + ';color:' + color + ';">' + dot + label + '</span></div>' : '';
                             })()}
                         </div>
                         

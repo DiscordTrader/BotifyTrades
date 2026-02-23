@@ -1793,7 +1793,7 @@ async function updateConditionalPrices() {
 
 function startConditionalPricePolling() {
     stopConditionalPricePolling();
-    conditionalPriceInterval = setInterval(updateConditionalPrices, 2000);
+    conditionalPriceInterval = setInterval(updateConditionalPrices, 1000);
 }
 
 function stopConditionalPricePolling() {
