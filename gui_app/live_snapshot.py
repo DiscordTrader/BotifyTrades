@@ -32,7 +32,11 @@ _daemon_stop_event = threading.Event()
 _daemon_started = False
 
 
+_snapshot_log_verbose = False
+
 def _log(msg: str):
+    if not _snapshot_log_verbose and '[ENRICH]' in msg:
+        return
     import sys
     sys.stderr.write(f"[SNAPSHOT] {msg}\n")
     sys.stderr.flush()

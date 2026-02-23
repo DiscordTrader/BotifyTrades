@@ -6811,10 +6811,13 @@ class SelfClient(discord.Client):
         self.processing_ready.set()
         print("[Init] ✓ Worker task started; processing signals.")
         
+        _original_print(f"[WATCHDOG] Debug: _gateway_watchdog_started={self._gateway_watchdog_started}", flush=True)
         if not self._gateway_watchdog_started:
             self._gateway_watchdog_started = True
             self._watchdog_task = asyncio.create_task(self._gateway_watchdog())
-            print("[WATCHDOG] ✓ Gateway health monitor started (reconnect if no messages for 2 min)")
+            _original_print("[WATCHDOG] ✓ Gateway health monitor started (reconnect if no messages for 2 min)", flush=True)
+        else:
+            _original_print("[WATCHDOG] ⚠️ Watchdog already started - skipping", flush=True)
         
         telegram_bridge_task = asyncio.create_task(self.telegram_signal_bridge())
         await asyncio.sleep(0)
@@ -8151,12 +8154,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             await message.channel.send(f"❌ Scan failed: {str(e)}")
     
 
+    def _watchdog_log(self, msg):
+        """Write watchdog messages to both console and a persistent file."""
+        import datetime
+        ts = datetime.datetime.now().strftime('%H:%M:%S')
+        line = f"[{ts}] {msg}"
+        _original_print(line, flush=True)
+        try:
+            with open('/tmp/watchdog.log', 'a') as f:
+                f.write(line + '\n')
+        except Exception:
+            pass
+
     async def _gateway_watchdog(self):
         """Monitor gateway health and force reconnect if messages stop arriving."""
         import time as _time_mod
         await asyncio.sleep(30)
         self._last_message_time = _time_mod.time()
-        _original_print("[WATCHDOG] Gateway watchdog active - monitoring message flow", flush=True)
+        self._watchdog_log("[WATCHDOG] Gateway watchdog active - monitoring message flow")
         
         while True:
             await asyncio.sleep(30)
@@ -8164,26 +8179,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 now = _time_mod.time()
                 silence = now - self._last_message_time
                 
+                self._watchdog_log(f"[WATCHDOG] Heartbeat: silence={int(silence)}s, events={self._gateway_event_count}")
+                
                 if silence > self._gateway_watchdog_interval:
-                    _original_print(f"[WATCHDOG] ⚠️ No messages for {int(silence)}s - gateway stalled!", flush=True)
-                    _original_print(f"[WATCHDOG] 🔄 Forcing gateway reconnect...", flush=True)
+                    self._watchdog_log(f"[WATCHDOG] ⚠️ No messages for {int(silence)}s - gateway stalled!")
+                    self._watchdog_log(f"[WATCHDOG] 🔄 Forcing gateway reconnect...")
                     
                     try:
                         if hasattr(self, 'ws') and self.ws and hasattr(self.ws, 'close'):
                             await self.ws.close(code=4000)
-                            _original_print(f"[WATCHDOG] ✓ WebSocket closed - discord.py-self will auto-reconnect", flush=True)
+                            self._watchdog_log(f"[WATCHDOG] ✓ WebSocket closed - discord.py-self will auto-reconnect")
                         else:
-                            _original_print(f"[WATCHDOG] No ws handle, trying client.close()", flush=True)
+                            self._watchdog_log(f"[WATCHDOG] No ws handle, trying client.close()")
                             await self.close()
                     except Exception as e:
-                        _original_print(f"[WATCHDOG] Reconnect error: {e}", flush=True)
+                        self._watchdog_log(f"[WATCHDOG] Reconnect error: {e}")
                     
                     self._last_message_time = now
                     await asyncio.sleep(15)
                 elif silence > 60:
-                    _original_print(f"[WATCHDOG] Gateway silent for {int(silence)}s (threshold: {self._gateway_watchdog_interval}s)", flush=True)
+                    self._watchdog_log(f"[WATCHDOG] Gateway silent for {int(silence)}s (threshold: {self._gateway_watchdog_interval}s)")
             except Exception as e:
-                _original_print(f"[WATCHDOG] Error: {e}", flush=True)
+                self._watchdog_log(f"[WATCHDOG] Error: {e}")
                 await asyncio.sleep(10)
 
     def dispatch(self, event, /, *args, **kwargs):
@@ -8204,6 +8221,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         """Overridden to add gateway-level message event diagnostics."""
         import time as _time_mod
         self._last_message_time = _time_mod.time()
+        is_self = self.user and message.author.id == self.user.id
+        self._watchdog_log(f"[MSG] ch={message.channel.id} author={message.author.name} self={is_self} content={message.content[:60]}")
         if not self._gateway_diag_printed:
             self._gateway_diag_printed = True
             _original_print(f"[Discord GATEWAY] ✓ First on_message event! Channel: {message.channel.id} Author: {message.author.name}", flush=True)
