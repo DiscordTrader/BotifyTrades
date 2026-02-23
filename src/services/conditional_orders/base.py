@@ -248,10 +248,61 @@ class StreamingPriceMonitor(PriceMonitor):
         self._rest_session: Optional[aiohttp.ClientSession] = None
         self._last_rest_call = 0
     
+    def _try_subscribe_streaming(self):
+        try:
+            has_broker = self.broker_instance is not None
+            has_client = has_broker and hasattr(self.broker_instance, '_streaming_client') and self.broker_instance._streaming_client is not None
+            
+            if not has_client:
+                sys.stderr.write(f"[STREAM_MON] Cannot subscribe {self.symbol}: broker={has_broker}, streaming_client={has_client}\n")
+                sys.stderr.flush()
+                return False
+                
+            client = self.broker_instance._streaming_client
+            ticker_id = None
+            
+            if hasattr(self.data_hub, 'get_ticker_id'):
+                ticker_id = self.data_hub.get_ticker_id(self.symbol)
+                
+            if not ticker_id:
+                try:
+                    import requests as _req
+                    url = f'https://quotes-gw.webullfintech.com/api/search/pc/tickers?keyword={self.symbol}&pageIndex=1&pageSize=1&regionId=6'
+                    resp = _req.get(url, timeout=5)
+                    data = resp.json().get('data', [])
+                    for item in data:
+                        if item.get('symbol', '').upper() == self.symbol.upper():
+                            tid = item.get('tickerId')
+                            if tid and int(tid) > 0:
+                                ticker_id = str(int(tid))
+                                sys.stderr.write(f"[STREAM_MON] Looked up ticker_id for {self.symbol}: {ticker_id}\n")
+                                sys.stderr.flush()
+                                if hasattr(self.data_hub, 'register_ticker_id'):
+                                    self.data_hub.register_ticker_id(self.symbol, ticker_id)
+                            break
+                except Exception as e:
+                    sys.stderr.write(f"[STREAM_MON] Ticker lookup error for {self.symbol}: {e}\n")
+                    sys.stderr.flush()
+                    
+            if ticker_id and str(ticker_id) != '0':
+                client.subscribe_symbol(self.symbol, str(ticker_id))
+                sys.stderr.write(f"[STREAM_MON] ✓ Subscribed {self.symbol} to streaming (tid={ticker_id})\n")
+                sys.stderr.flush()
+                return True
+            else:
+                sys.stderr.write(f"[STREAM_MON] No ticker_id found for {self.symbol}, cannot subscribe to streaming\n")
+                sys.stderr.flush()
+        except Exception as e:
+            sys.stderr.write(f"[STREAM_MON] Could not subscribe {self.symbol}: {e}\n")
+            sys.stderr.flush()
+        return False
+
     async def start(self):
         self.is_running = True
         sys.stderr.write(f"[STREAM_MON] Starting streaming price monitor for {self.symbol} via {self.broker_name} hub\n")
         sys.stderr.flush()
+        
+        self._try_subscribe_streaming()
         
         poll_count = 0
         while self.is_running:
@@ -344,8 +395,20 @@ class StreamingPriceMonitor(PriceMonitor):
         
         return None
     
+    def _try_unsubscribe_streaming(self):
+        try:
+            if self.broker_instance and hasattr(self.broker_instance, '_streaming_client'):
+                client = self.broker_instance._streaming_client
+                if client and hasattr(client, 'unsubscribe_symbol'):
+                    client.unsubscribe_symbol(self.symbol)
+                    sys.stderr.write(f"[STREAM_MON] Unsubscribed {self.symbol} from streaming\n")
+                    sys.stderr.flush()
+        except Exception:
+            pass
+
     async def stop(self):
         self.is_running = False
+        self._try_unsubscribe_streaming()
         if self._rest_session and not self._rest_session.closed:
             try:
                 await self._rest_session.close()
