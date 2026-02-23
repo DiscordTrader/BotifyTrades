@@ -637,16 +637,25 @@ class BrokerHealthMonitor:
                       f"(price ${price:.2f} is stock trigger, not option premium) - broker will validate", flush=True)
                 return True, ""
             
-            required_amount = price * 100 * qty
+            min_required = price * 100
             bp_type = 'options'
         else:
-            required_amount = price * qty
+            min_required = price
             bp_type = 'stocks'
         
-        is_valid, reason = self.validate_buying_power(broker_key, required_amount, bp_type)
+        is_valid, reason = self.validate_buying_power(broker_key, min_required, bp_type)
         
         if not is_valid:
             return False, reason
+        
+        if qty > 1 and min_required > 0:
+            full_cost = min_required * qty
+            cached_info = self.get_cached_account_info(broker_key)
+            bp = self._extract_buying_power(broker_key, cached_info, bp_type) if cached_info else 0
+            if bp > 0 and full_cost > bp:
+                affordable = int(bp / min_required)
+                if affordable >= 1:
+                    print(f"[HEALTH] ℹ️ {broker_key}: Can afford {affordable}/{int(qty)} units (BP=${bp:.2f}, cost/unit=${min_required:.2f}) - auto-sizing downstream")
         
         return True, ""
     
