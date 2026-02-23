@@ -2404,9 +2404,9 @@ async function refreshLivePricesOnly() {
             }
 
             if (sourceEl) {
-                const isStream = live.source === 'streaming';
-                const rawLabel = live.data_source || live.source || '';
-                const label = isStream ? 'STREAMING' : rawLabel.replace(/_/g,' ').toUpperCase();
+                const ds = (live.data_source || '').toLowerCase();
+                const isStream = live.source === 'streaming' || ds.includes('stream');
+                const label = isStream ? 'STREAMING' : ds ? ds.replace(/_/g,' ').toUpperCase() : (live.source || '').toUpperCase();
                 const color = isStream ? '#0f8' : '#f59e0b';
                 const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
                 const dot = isStream ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0f8;margin-right:3px;box-shadow:0 0 4px #0f8;"></span>' : '';
