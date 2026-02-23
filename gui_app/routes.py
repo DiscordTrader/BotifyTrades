@@ -10147,11 +10147,11 @@ def register_routes(app):
                                 print(f"[OPTIONS API] ✓ Trade #{trade_id} saved as OPEN for tracking in channel {tracking_discord_id}")
                                 
                                 try:
-                                    from src.risk.position_monitor import get_risk_manager
-                                    rm = get_risk_manager()
-                                    if rm:
-                                        rm.invalidate_settings_cache()
+                                    from src.risk.position_monitor import request_settings_invalidation
+                                    if request_settings_invalidation():
                                         print(f"[OPTIONS API] ✓ Risk engine notified of new position")
+                                    else:
+                                        print(f"[OPTIONS API] Risk engine not available yet")
                                 except Exception as risk_err:
                                     print(f"[OPTIONS API] Risk notification error: {risk_err}")
                                 
