@@ -10122,7 +10122,6 @@ def register_routes(app):
                                     call_put=option_type[0]  # 'C' or 'P'
                                 )
                                 
-                                # Save trade record
                                 trade_data = {
                                     'channel_id': tracking_discord_id,
                                     'message_id': msg_id,
@@ -10136,6 +10135,7 @@ def register_routes(app):
                                     'intended_price': price,
                                     'executed_price': price,
                                     'executed': True,
+                                    'status': 'OPEN',
                                     'broker': broker_name,
                                     'order_id': str(order_id),
                                     'stop_loss_price': stop_loss_price,
@@ -10144,7 +10144,16 @@ def register_routes(app):
                                     'source': 'gui'
                                 }
                                 trade_id = db.add_trade(trade_data)
-                                print(f"[OPTIONS API] ✓ Trade #{trade_id} saved to database for tracking in channel {tracking_discord_id}")
+                                print(f"[OPTIONS API] ✓ Trade #{trade_id} saved as OPEN for tracking in channel {tracking_discord_id}")
+                                
+                                try:
+                                    from src.risk.position_monitor import get_risk_manager
+                                    rm = get_risk_manager()
+                                    if rm:
+                                        rm.invalidate_settings_cache()
+                                        print(f"[OPTIONS API] ✓ Risk engine notified of new position")
+                                except Exception as risk_err:
+                                    print(f"[OPTIONS API] Risk notification error: {risk_err}")
                                 
                                 # Process through lot_matcher for PNL tracking
                                 matcher = get_matcher()
