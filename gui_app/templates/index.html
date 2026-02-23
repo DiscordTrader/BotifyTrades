@@ -2356,8 +2356,8 @@ function startConditionalOrdersAutoRefresh() {
     stopConditionalOrdersAutoRefresh();
     conditionalOrdersRefreshInterval = setInterval(async () => {
         await refreshConditionalOrderPrices();
-    }, 5000); // Refresh prices every 5 seconds
-    console.log('[ConditionalOrders] Auto-refresh started (5s interval)');
+    }, 3000);
+    console.log('[ConditionalOrders] Auto-refresh started (3s interval)');
 }
 
 function stopConditionalOrdersAutoRefresh() {
@@ -2370,19 +2370,30 @@ function stopConditionalOrdersAutoRefresh() {
 
 async function refreshConditionalOrderPrices() {
     try {
-        const response = await fetch('/api/conditional_orders?active_only=true');
-        const data = await response.json();
-        const orders = data.orders || [];
+        const [ordersResp, livePricesResp] = await Promise.all([
+            fetch('/api/conditional_orders?active_only=true'),
+            fetch('/api/conditional_orders/live_prices')
+        ]);
+        const ordersData = await ordersResp.json();
+        const livePricesData = await livePricesResp.json();
+        const orders = ordersData.orders || [];
+        const livePrices = livePricesData.prices || {};
         
         orders.forEach(order => {
-            const priceEl = document.querySelector(`[data-order-id="${order.id}"] .current-price-value`);
-            const timeEl = document.querySelector(`[data-order-id="${order.id}"] .current-price-time`);
+            const card = document.querySelector(`[data-order-id="${order.id}"]`);
+            if (!card) return;
+            const priceEl = card.querySelector('.current-price-value');
+            const timeEl = card.querySelector('.current-price-time');
+            const sourceEl = card.querySelector('.current-price-source');
             
-            if (priceEl && order.current_price) {
+            const live = livePrices[String(order.id)];
+            const livePrice = live && live.price ? parseFloat(live.price) : null;
+            const displayPrice = livePrice || (order.current_price ? parseFloat(order.current_price) : null);
+            
+            if (priceEl && displayPrice) {
                 const triggerPrice = parseFloat(order.adjusted_trigger_price || order.trigger_price);
-                const currentPrice = parseFloat(order.current_price);
-                const color = currentPrice >= triggerPrice ? '#22c55e' : '#ef4444';
-                priceEl.textContent = '$' + currentPrice.toFixed(2);
+                const color = displayPrice >= triggerPrice ? '#22c55e' : '#ef4444';
+                priceEl.textContent = '$' + displayPrice.toFixed(2);
                 priceEl.style.color = color;
             }
             
@@ -2397,6 +2408,17 @@ async function refreshConditionalOrderPrices() {
                     second: '2-digit',
                     hour12: true
                 });
+            }
+            
+            if (sourceEl && live) {
+                const isStream = live.source === 'streaming';
+                const ds = order.data_source_active || '';
+                const label = isStream ? 'STREAM' : ds ? ds.toUpperCase() : (live.source || '').toUpperCase();
+                const color = isStream ? '#0f8' : '#f59e0b';
+                const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
+                if (label) {
+                    sourceEl.innerHTML = `<span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${bg};color:${color};">${label}</span>`;
+                }
             }
         });
     } catch (err) {
@@ -2564,6 +2586,14 @@ async function loadConditionalOrders() {
                             <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Current</div>
                             <div class="current-price-value" style="font-size: 1.1rem; font-weight: 700; color: ${order.current_price ? (parseFloat(order.current_price) >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : '—'}</div>
                             <div class="current-price-time" style="font-size: 0.6rem; color: var(--text-muted); margin-top: 2px;">${order.price_updated_at ? new Date(order.price_updated_at + (order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') ? '' : 'Z')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true}) : ''}</div>
+                            ${(() => {
+                                const ds = (order.data_source_active || '').toLowerCase();
+                                const isStream = ds.includes('stream');
+                                const label = isStream ? 'STREAM' : ds ? ds.toUpperCase() : '';
+                                const color = isStream ? '#0f8' : '#f59e0b';
+                                const bg = isStream ? 'rgba(0,255,136,0.12)' : 'rgba(245,158,11,0.12)';
+                                return label ? '<div class="current-price-source" style="margin-top:3px;"><span style="font-size:0.55rem;font-weight:600;padding:1px 6px;border-radius:3px;background:' + bg + ';color:' + color + ';">' + label + '</span></div>' : '';
+                            })()}
                         </div>
                         
                         <!-- Adjusted -->

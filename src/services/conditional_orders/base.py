@@ -319,10 +319,14 @@ class StreamingPriceMonitor(PriceMonitor):
                         sys.stderr.write(f"[STREAM_MON] {self.symbol}: ${price:.2f} (hub, poll #{poll_count})\n")
                         sys.stderr.flush()
                     
+                    now = time.time()
+                    last_cb = getattr(self, '_last_callback_time', 0)
                     if price != self.last_price:
                         self.last_price = price
+                        self._last_callback_time = now
                         await self.callback(self.symbol, price)
-                    elif poll_count % 40 == 0:
+                    elif now - last_cb >= 3.0:
+                        self._last_callback_time = now
                         await self.callback(self.symbol, price)
                     
                     await asyncio.sleep(self.HUB_POLL_INTERVAL)
