@@ -1451,35 +1451,16 @@ class BaseConditionalOrderService(ABC):
             try:
                 order['triggered_price'] = trigger_price
                 result = self.execution_callback(order, trigger_price)
-                callback_success = True
                 if asyncio.iscoroutine(result):
                     if self.main_event_loop and self.main_event_loop.is_running():
                         future = asyncio.run_coroutine_threadsafe(result, self.main_event_loop)
                         try:
-                            cb_result = future.result(timeout=30)
-                            if cb_result is False:
-                                callback_success = False
-                                self._log(f"Execution callback returned False for #{order_id}")
+                            future.result(timeout=30)
                         except Exception as e:
-                            callback_success = False
                             self._log(f"Async execution error #{order_id}: {e}")
-                            update_conditional_order_status(
-                                order_id,
-                                'ERROR',
-                                event='EXECUTION_FAILED',
-                                error_message=f"Async callback error: {str(e)[:200]}"
-                            )
                     else:
-                        callback_success = False
                         self._log(f"Cannot execute async callback - no main event loop")
-                        update_conditional_order_status(
-                            order_id,
-                            'ERROR',
-                            event='EXECUTION_FAILED',
-                            error_message="No main event loop available"
-                        )
-                if callback_success:
-                    update_conditional_order_status(order_id, 'EXECUTING')
+                update_conditional_order_status(order_id, 'EXECUTING')
             except Exception as e:
                 self._log(f"Execution error #{order_id}: {e}")
                 update_conditional_order_status(

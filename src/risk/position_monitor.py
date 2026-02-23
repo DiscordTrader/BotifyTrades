@@ -1079,6 +1079,7 @@ class RiskManager:
     
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
+        # Check for pending invalidation requests from Flask (thread-safe)
         check_and_process_invalidation_request()
         
         risk_settings = self._get_risk_settings()
@@ -1091,12 +1092,6 @@ class RiskManager:
                 print(f"[RISK] Per-channel risk ACTIVE for {channel_count} channel(s)")
         
         positions = await self._fetch_all_positions()
-        if not positions:
-            if not hasattr(self, '_empty_pos_logged') or not self._empty_pos_logged:
-                print("[RISK] No open positions found across brokers — monitoring idle")
-                self._empty_pos_logged = True
-            return
-        self._empty_pos_logged = False
         
         self._update_prices_from_hub(positions)
         

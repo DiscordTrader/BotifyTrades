@@ -80,11 +80,11 @@ class WebullStreamingClient:
                 quote_update['change'] = float(data['change'])
             if 'changeRatio' in data:
                 quote_update['changeRatio'] = float(data['changeRatio'])
+            if 'marketValue' in data:
+                quote_update['last'] = float(data['marketValue'])
             if 'pPrice' in data:
-                pp = float(data['pPrice'])
-                if 0 < pp < 500000:
-                    quote_update['last'] = pp
-                    quote_update['price'] = pp
+                quote_update['last'] = float(data['pPrice'])
+                quote_update['price'] = float(data['pPrice'])
 
             if 'askList' in data and data['askList']:
                 best_ask = data['askList'][0]

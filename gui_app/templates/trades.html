@@ -2371,147 +2371,10 @@ async function qtSendWebhookForOrder(action, symbol, strike, optType, expiry, pr
 
 let qtStreamingTimer = null;
 let qtLastStreamPrice = 0;
-let qtStreamQuoteTimer = null;
-let qtStreamSubscribed = false;
-let qtPrevPrices = {};
-let qtInitialPollTimeout = null;
-
-async function qtSubscribeStream() {
-    if (!qtChainData || !qtChainData.strikes) return;
-    const symbol = qtChainData.symbol;
-    const broker = document.getElementById('qt-broker').value;
-    const contracts = [];
-    qtChainData.strikes.forEach(s => {
-        if (s.call && s.call.option_id) {
-            contracts.push({ option_id: s.call.option_id, symbol: s.call.symbol || '', strike: s.strike, type: 'C' });
-        }
-        if (s.put && s.put.option_id) {
-            contracts.push({ option_id: s.put.option_id, symbol: s.put.symbol || '', strike: s.strike, type: 'P' });
-        }
-    });
-    if (contracts.length === 0) return;
-    try {
-        const r = await fetch('/api/options/subscribe-stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ symbol, broker, contracts })
-        });
-        const data = await r.json();
-        if (data.success && data.subscribed > 0) {
-            qtStreamSubscribed = true;
-            console.log(`[QT] Subscribed ${data.subscribed} contracts to ${data.hub} stream`);
-        }
-    } catch (e) { console.log('[QT] Stream subscribe error:', e.message); }
-}
-
-function qtFlashPrice(el, direction) {
-    const color = direction === 'up' ? '#22c55e' : '#ef4444';
-    el.style.textShadow = `0 0 8px ${color}`;
-    el.style.color = color;
-    el.style.transition = 'none';
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            el.style.transition = 'text-shadow 0.6s ease-out, color 0.6s ease-out';
-            el.style.textShadow = 'none';
-            el.style.color = '';
-        });
-    });
-}
-
-async function qtStreamQuotePoll() {
-    if (!qtChainData) return;
-    const symbol = qtChainData.symbol;
-    const broker = document.getElementById('qt-broker').value;
-    try {
-        const r = await fetch(`/api/options/stream-quotes?symbol=${symbol}&broker=${broker}`, { credentials: 'include' });
-        const data = await r.json();
-        if (!data.quotes || data.count === 0) return;
-
-        const rows = document.querySelectorAll('.qt-chain tbody tr');
-        const qtInd = document.getElementById('qt-streaming-indicator');
-        let anyStreaming = false;
-
-        qtChainData.strikes.forEach((s, idx) => {
-            const row = rows[idx];
-            if (!row) return;
-
-            const cKey = `${symbol}_${s.strike}_C`;
-            const pKey = `${symbol}_${s.strike}_P`;
-            const cQuote = data.quotes[cKey];
-            const pQuote = data.quotes[pKey];
-
-            const prices = row.querySelectorAll('.qt-price');
-            if (prices.length < 6) return;
-
-            if (cQuote && cQuote.streaming) {
-                anyStreaming = true;
-                const cBid = cQuote.bid || 0, cAsk = cQuote.ask || 0;
-                const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cQuote.last || 0);
-                const vals = [cBid, cMid, cAsk];
-                [0, 1, 2].forEach(i => {
-                    const newText = '$' + vals[i].toFixed(2);
-                    if (prices[i].textContent !== newText) {
-                        const prevKey = `c_${idx}_${i}`;
-                        const prev = qtPrevPrices[prevKey] || 0;
-                        qtPrevPrices[prevKey] = vals[i];
-                        prices[i].textContent = newText;
-                        if (prev > 0) qtFlashPrice(prices[i], vals[i] >= prev ? 'up' : 'down');
-                    }
-                });
-                s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
-                if (cQuote.last > 0) s.call.last = cQuote.last;
-            }
-
-            if (pQuote && pQuote.streaming) {
-                anyStreaming = true;
-                const pBid = pQuote.bid || 0, pAsk = pQuote.ask || 0;
-                const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pQuote.last || 0);
-                const vals = [pBid, pMid, pAsk];
-                [0, 1, 2].forEach(i => {
-                    const newText = '$' + vals[i].toFixed(2);
-                    if (prices[i + 3].textContent !== newText) {
-                        const prevKey = `p_${idx}_${i}`;
-                        const prev = qtPrevPrices[prevKey] || 0;
-                        qtPrevPrices[prevKey] = vals[i];
-                        prices[i + 3].textContent = newText;
-                        if (prev > 0) qtFlashPrice(prices[i + 3], vals[i] >= prev ? 'up' : 'down');
-                    }
-                });
-                s.put.bid = pBid; s.put.ask = pAsk; s.put.mid = pMid;
-                if (pQuote.last > 0) s.put.last = pQuote.last;
-            }
-        });
-
-        if (qtInd) {
-            if (anyStreaming) {
-                qtInd.style.display = 'inline';
-                qtInd.textContent = '\u26A1 LIVE';
-                qtInd.style.color = '#22c55e';
-            }
-        }
-
-        const srcEl = document.getElementById('qt-data-source');
-        if (srcEl && anyStreaming) {
-            const srcLabel = broker.includes('SCHWAB') ? 'Schwab WS' : 'Webull MQTT';
-            srcEl.innerHTML = `<span class="qt-source" style="background:#22c55e22; color:#22c55e;">\u26A1 ${srcLabel} Stream</span>`;
-        }
-    } catch (e) { /* silent */ }
-}
 
 function qtStartAutoRefresh() {
     if (qtRefreshTimer) clearInterval(qtRefreshTimer);
     if (qtStreamingTimer) clearInterval(qtStreamingTimer);
-    if (qtStreamQuoteTimer) clearInterval(qtStreamQuoteTimer);
-    if (qtInitialPollTimeout) clearTimeout(qtInitialPollTimeout);
-    qtPrevPrices = {};
-    qtStreamSubscribed = false;
-
-    qtSubscribeStream();
-
-    qtStreamQuoteTimer = setInterval(qtStreamQuotePoll, 300);
-    qtInitialPollTimeout = setTimeout(qtStreamQuotePoll, 500);
-
     qtRefreshTimer = setInterval(async () => {
         if (!qtChainData) return;
         const symbol = document.getElementById('qt-symbol').value.trim().toUpperCase();
@@ -2523,7 +2386,6 @@ function qtStartAutoRefresh() {
             const data = await r.json();
             if (data.error || !data.strikes) return;
             qtChainData = data;
-            if (!qtStreamSubscribed) qtSubscribeStream();
             const rows = document.querySelectorAll('.qt-chain tbody tr');
             data.strikes.forEach((s, idx) => {
                 const row = rows[idx];
@@ -2535,6 +2397,9 @@ function qtStartAutoRefresh() {
                         const newText = '$' + newVals[i].toFixed(2);
                         if (el.textContent !== newText) {
                             el.textContent = newText;
+                            el.style.transition = 'opacity 0.2s';
+                            el.style.opacity = '0.6';
+                            setTimeout(() => { el.style.opacity = '1'; }, 200);
                         }
                     });
                 }
@@ -2543,9 +2408,9 @@ function qtStartAutoRefresh() {
                 document.getElementById('qt-stock-price').innerHTML = `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`;
             }
         } catch (e) { /* silent */ }
-    }, 15000);
+    }, 3000);
 
-    qtStreamingTimer = setInterval(qtStreamingStockPoll, 1500);
+    qtStreamingTimer = setInterval(qtStreamingStockPoll, 2000);
     qtStreamingStockPoll();
 }
 
@@ -2570,6 +2435,11 @@ async function qtStreamingStockPoll() {
                     priceEl.style.textShadow = `0 0 10px ${color}60`;
                     setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
                 }
+            }
+            const srcEl = document.getElementById('qt-data-source');
+            if (srcEl) {
+                const srcLabel = data.source.includes('schwab') ? 'Schwab Stream' : 'Webull Stream';
+                srcEl.innerHTML = `<span class="qt-source" style="background:#22c55e22; color:#22c55e;">\u26A1 ${srcLabel}</span>`;
             }
             if (qtInd) {
                 qtInd.style.display = 'inline';
