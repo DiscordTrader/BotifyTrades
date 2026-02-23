@@ -8484,6 +8484,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif entry_price_offset != 0 and not is_channel_market_mode:
                             effective_limit_price = execution_price * (1 + entry_price_offset / 100)
                         
+                        all_enabled_brokers = None
+                        try:
+                            if channel_id:
+                                ch_for_brokers = get_channel_by_discord_id(str(channel_id))
+                                if ch_for_brokers and ch_for_brokers.get('enabled_brokers'):
+                                    eb = ch_for_brokers.get('enabled_brokers')
+                                    if isinstance(eb, str):
+                                        eb = json.loads(eb)
+                                    if isinstance(eb, list) and len(eb) > 0:
+                                        all_enabled_brokers = eb
+                                        sys.stderr.write(f"[CONDITIONAL EXEC] Multi-broker: {all_enabled_brokers}\n")
+                                        sys.stderr.flush()
+                        except Exception as eb_err:
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Error loading enabled_brokers: {eb_err}\n")
+                        
                         signal = {
                             'asset': order.get('asset_type', 'stock'),
                             'asset_type': order.get('asset_type', 'stock'),
@@ -8493,10 +8508,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'is_market_order': not use_limit_order,
                             '_use_market_order': is_channel_market_mode and not use_limit_order,
                             '_conditional_order_id': order['id'],
-                            '_broker_override': broker_name,
                             'channel_id': order.get('channel_id'),
                             '_trigger_price': triggered_price,
                         }
+                        
+                        if all_enabled_brokers and len(all_enabled_brokers) > 1:
+                            signal['_enabled_brokers'] = all_enabled_brokers
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Routing to ALL brokers: {all_enabled_brokers}\n")
+                            sys.stderr.flush()
+                        else:
+                            signal['_broker_override'] = broker_name
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Single broker: {broker_name}\n")
+                            sys.stderr.flush()
                         
                         # Add limit price cap for broker execution
                         if effective_limit_price:
