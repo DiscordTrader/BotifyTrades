@@ -6,6 +6,7 @@ import asyncio
 import time
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Optional, Any, Dict, Callable
 from functools import wraps
@@ -9867,6 +9868,162 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
+
+    _option_stream_subscriptions: Dict[str, Dict[str, Any]] = {}
+    _option_stream_lock = threading.Lock()
+
+    @app.route('/api/options/subscribe-stream', methods=['POST'])
+    def api_subscribe_option_stream():
+        try:
+            data = request.json
+            symbol = data.get('symbol', '').upper()
+            broker = data.get('broker', 'WEBULL').upper()
+            contracts = data.get('contracts', [])
+
+            if not symbol or not contracts:
+                return jsonify({'error': 'Symbol and contracts required'}), 400
+
+            subscribed = []
+            hub_type = None
+
+            if broker in ('WEBULL', 'WEBULL_PAPER'):
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                hub_type = 'webull'
+
+                wb_broker = get_webull_broker()
+                streaming_client = getattr(wb_broker, '_streaming_client', None) if wb_broker else None
+
+                for c in contracts:
+                    option_id = str(c.get('option_id', ''))
+                    contract_symbol = c.get('symbol', '')
+                    strike = c.get('strike', 0)
+                    opt_type = c.get('type', '')
+
+                    if not option_id or option_id == '0':
+                        continue
+
+                    stream_key = f"{symbol}_{strike}_{opt_type}"
+
+                    if streaming_client and streaming_client.is_connected():
+                        streaming_client.subscribe_symbol(stream_key, option_id)
+                        subscribed.append(stream_key)
+                    else:
+                        hub.register_ticker_id(stream_key, option_id)
+                        subscribed.append(stream_key)
+
+                with _option_stream_lock:
+                    _option_stream_subscriptions[symbol] = {
+                        'contracts': {c.get('symbol', f"{symbol}_{c.get('strike')}_{c.get('type')}"): c for c in contracts},
+                        'broker': broker,
+                        'hub_type': hub_type,
+                        'subscribed_at': time.time()
+                    }
+
+            elif broker == 'SCHWAB':
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                hub = get_schwab_data_hub()
+                hub_type = 'schwab'
+
+                schwab_broker = None
+                if _bot_instance:
+                    for attr_name in ['schwab_broker', 'schwab']:
+                        schwab_broker = getattr(_bot_instance, attr_name, None)
+                        if schwab_broker:
+                            break
+                    if not schwab_broker and hasattr(_bot_instance, 'brokers_dict'):
+                        schwab_broker = _bot_instance.brokers_dict.get('schwab') or _bot_instance.brokers_dict.get('SCHWAB')
+
+                streaming_client = getattr(schwab_broker, '_streaming_client', None) if schwab_broker else None
+
+                option_symbols = []
+                for c in contracts:
+                    occ_symbol = c.get('occ_symbol', '') or c.get('symbol', '')
+                    if occ_symbol:
+                        option_symbols.append(occ_symbol)
+                        subscribed.append(occ_symbol)
+
+                if streaming_client and streaming_client.is_connected() and option_symbols:
+                    loop = get_webull_loop()
+                    if loop and not loop.is_closed():
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                streaming_client.subscribe_options(option_symbols), loop
+                            )
+                            future.result(timeout=5)
+                        except Exception as e:
+                            print(f"[OPTIONS_STREAM] Schwab subscribe error: {e}")
+
+                with _option_stream_lock:
+                    _option_stream_subscriptions[symbol] = {
+                        'contracts': {s: {} for s in option_symbols},
+                        'broker': broker,
+                        'hub_type': hub_type,
+                        'subscribed_at': time.time()
+                    }
+
+            return jsonify({
+                'success': True,
+                'subscribed': len(subscribed),
+                'symbols': subscribed[:10],
+                'hub': hub_type
+            })
+
+        except Exception as e:
+            print(f"[OPTIONS_STREAM] Subscribe error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/options/stream-quotes', methods=['GET'])
+    def api_get_option_stream_quotes():
+        try:
+            symbol = request.args.get('symbol', '').upper()
+            broker = request.args.get('broker', 'WEBULL').upper()
+
+            if not symbol:
+                return jsonify({'error': 'Symbol required'}), 400
+
+            quotes = {}
+            hub = None
+            streaming = False
+
+            if broker in ('WEBULL', 'WEBULL_PAPER'):
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                streaming = hub.is_streaming()
+            elif broker == 'SCHWAB':
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                hub = get_schwab_data_hub()
+                streaming = hub.is_streaming() if hasattr(hub, 'is_streaming') else False
+
+            if not hub:
+                return jsonify({'quotes': {}, 'streaming': False})
+
+            with hub._quotes_lock:
+                now = time.time()
+                for key, quote in hub._quotes.items():
+                    if key.startswith(symbol + '_') or key == symbol:
+                        age = now - quote.timestamp
+                        if age < 120:
+                            quotes[key] = {
+                                'bid': quote.bid,
+                                'ask': quote.ask,
+                                'last': quote.last,
+                                'volume': getattr(quote, 'volume', 0),
+                                'age_ms': int(age * 1000),
+                                'streaming': age < 5
+                            }
+
+            return jsonify({
+                'quotes': quotes,
+                'streaming': streaming,
+                'count': len(quotes),
+                'timestamp': time.time()
+            })
+
+        except Exception as e:
+            return jsonify({'quotes': {}, 'streaming': False, 'error': str(e)})
 
     @app.route('/api/options/order', methods=['POST'])
     def api_place_option_order():
