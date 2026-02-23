@@ -81,6 +81,7 @@ class SchwabDataHub:
 
         self._streaming_active = False
         self._subscribed_symbols: Set[str] = set()
+        self._risk_eval_requested = threading.Event()
 
         self.POSITION_CACHE_TTL = 15
         self.ORDER_CACHE_TTL = 15
@@ -257,6 +258,15 @@ class SchwabDataHub:
 
     def is_streaming(self) -> bool:
         return self._streaming_active
+
+    def request_risk_eval(self):
+        self._risk_eval_requested.set()
+
+    def check_risk_eval_requested(self) -> bool:
+        if self._risk_eval_requested.is_set():
+            self._risk_eval_requested.clear()
+            return True
+        return False
 
     def add_subscribed_symbols(self, symbols: Set[str]):
         self._subscribed_symbols.update(symbols)

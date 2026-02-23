@@ -987,6 +987,13 @@ class RiskManager:
                                 break
                         except ImportError:
                             pass
+                        try:
+                            from src.services.schwab_data_hub import get_schwab_data_hub
+                            if get_schwab_data_hub().check_risk_eval_requested():
+                                print("[RISK] ⚡ Early wake: order event from Schwab stream")
+                                break
+                        except ImportError:
+                            pass
                         await asyncio.sleep(min(0.5, interval - elapsed))
                         elapsed += 0.5
                 else:
@@ -2395,34 +2402,56 @@ class RiskManager:
             return 0
     
     def _update_prices_from_hub(self, positions: list):
-        """Update Webull position prices from streaming hub if available.
+        """Update position prices from streaming hubs if available.
         
-        When Webull MQTT streaming is active, position prices from REST may
-        be stale. This method updates current_price with real-time streaming
-        data from the WebullDataHub, providing zero-API-cost price updates.
+        When streaming is active (Webull MQTT or Schwab WebSocket), position 
+        prices from REST may be stale. This method updates current_price with 
+        real-time streaming data from both hubs, providing zero-API-cost updates.
         """
+        webull_updated = 0
+        schwab_updated = 0
+        
         try:
             from src.services.webull_data_hub import get_webull_data_hub
             hub = get_webull_data_hub()
-            if not hub.is_streaming():
-                return
-
-            updated_count = 0
-            for pos in positions:
-                if pos.broker != 'Webull':
-                    continue
-                price = hub.get_quote_price(pos.symbol)
-                if price and price > 0:
-                    pos.current_price = price
-                    updated_count += 1
-
-            if updated_count > 0 and not hasattr(self, '_hub_update_logged'):
-                print(f"[RISK] ✓ Webull streaming: updated {updated_count} position prices from hub")
-                self._hub_update_logged = True
+            if hub.is_streaming():
+                for pos in positions:
+                    if pos.broker != 'Webull':
+                        continue
+                    price = hub.get_quote_price(pos.symbol)
+                    if price and price > 0:
+                        pos.current_price = price
+                        webull_updated += 1
         except ImportError:
             pass
         except Exception as e:
-            print(f"[RISK] ⚠️ Hub price update error: {e}")
+            print(f"[RISK] ⚠️ Webull hub price update error: {e}")
+        
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            if schwab_hub.is_streaming():
+                for pos in positions:
+                    if 'SCHWAB' not in pos.broker.upper():
+                        continue
+                    price = schwab_hub.get_quote_price(pos.symbol)
+                    if price and price > 0:
+                        pos.current_price = price
+                        schwab_updated += 1
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ Schwab hub price update error: {e}")
+        
+        total = webull_updated + schwab_updated
+        if total > 0 and not hasattr(self, '_hub_update_logged'):
+            parts = []
+            if webull_updated > 0:
+                parts.append(f"Webull({webull_updated})")
+            if schwab_updated > 0:
+                parts.append(f"Schwab({schwab_updated})")
+            print(f"[RISK] ✓ Streaming hub: updated {total} position prices [{', '.join(parts)}]")
+            self._hub_update_logged = True
 
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:
         """Convert raw position dict to PositionSnapshot."""
