@@ -5597,6 +5597,9 @@ class SelfClient(discord.Client):
         super().__init__(**kwargs)
         self._gateway_event_count = 0
         self._gateway_diag_printed = False
+        self._last_message_time = 0.0
+        self._gateway_watchdog_started = False
+        self._gateway_watchdog_interval = 120  # seconds - force reconnect if no messages for 2 min
         # Initialize async objects to None - will be created in setup() when event loop is ready
         self.order_queue = None
         self.broker: Optional[WebullBroker] = None
@@ -6807,6 +6810,11 @@ class SelfClient(discord.Client):
         await asyncio.sleep(0)  # Yield to event loop so worker can start
         self.processing_ready.set()
         print("[Init] ✓ Worker task started; processing signals.")
+        
+        if not self._gateway_watchdog_started:
+            self._gateway_watchdog_started = True
+            self._watchdog_task = asyncio.create_task(self._gateway_watchdog())
+            print("[WATCHDOG] ✓ Gateway health monitor started (reconnect if no messages for 2 min)")
         
         telegram_bridge_task = asyncio.create_task(self.telegram_signal_bridge())
         await asyncio.sleep(0)
@@ -8143,6 +8151,48 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             await message.channel.send(f"❌ Scan failed: {str(e)}")
     
 
+    async def _gateway_watchdog(self):
+        """Monitor gateway health and force reconnect if messages stop arriving."""
+        import time as _time_mod
+        await asyncio.sleep(30)
+        self._last_message_time = _time_mod.time()
+        sys.stderr.write("[WATCHDOG] Gateway watchdog active - monitoring message flow\n")
+        sys.stderr.flush()
+        
+        while True:
+            await asyncio.sleep(30)
+            try:
+                now = _time_mod.time()
+                silence = now - self._last_message_time
+                
+                if silence > self._gateway_watchdog_interval:
+                    sys.stderr.write(f"[WATCHDOG] ⚠️ No messages for {int(silence)}s - gateway stalled!\n")
+                    sys.stderr.write(f"[WATCHDOG] 🔄 Forcing gateway reconnect...\n")
+                    sys.stderr.flush()
+                    
+                    try:
+                        if hasattr(self, 'ws') and self.ws and hasattr(self.ws, 'close'):
+                            await self.ws.close(code=4000)
+                            sys.stderr.write(f"[WATCHDOG] ✓ WebSocket closed - discord.py-self will auto-reconnect\n")
+                            sys.stderr.flush()
+                        else:
+                            sys.stderr.write(f"[WATCHDOG] No ws handle, trying client.close()\n")
+                            sys.stderr.flush()
+                            await self.close()
+                    except Exception as e:
+                        sys.stderr.write(f"[WATCHDOG] Reconnect error: {e}\n")
+                        sys.stderr.flush()
+                    
+                    self._last_message_time = now
+                    await asyncio.sleep(15)
+                elif silence > 60:
+                    sys.stderr.write(f"[WATCHDOG] Gateway silent for {int(silence)}s (threshold: {self._gateway_watchdog_interval}s)\n")
+                    sys.stderr.flush()
+            except Exception as e:
+                sys.stderr.write(f"[WATCHDOG] Error: {e}\n")
+                sys.stderr.flush()
+                await asyncio.sleep(10)
+
     def dispatch(self, event, /, *args, **kwargs):
         """Override dispatch to track ALL gateway events for diagnostics."""
         self._gateway_event_count += 1
@@ -8154,6 +8204,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
     async def on_message(self, message: discord.Message):
         """Overridden to add gateway-level message event diagnostics."""
+        import time as _time_mod
+        self._last_message_time = _time_mod.time()
         if not self._gateway_diag_printed:
             self._gateway_diag_printed = True
             _original_print(f"[Discord GATEWAY] ✓ First on_message event! Channel: {message.channel.id} Author: {message.author.name}", flush=True)
