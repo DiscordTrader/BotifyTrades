@@ -267,20 +267,13 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
     if cache_key in _option_chain_cache:
         cached_data, cached_time = _option_chain_cache[cache_key]
         if now - cached_time < _CHAIN_CACHE_TTL:
-            print(f"[OPTIONS] Using cached option chain for {cache_key} (source: {cached_data.get('data_source', 'unknown')})", flush=True)
             return cached_data
     
     broker = get_webull_broker()
     loop = get_webull_loop()
     
-    print(f"[OPTIONS] Broker available: {broker is not None}, Loop available: {loop is not None}", flush=True)
-    
-    # Try Webull first
-    # Note: For index options like SPX, Webull uses the same symbol for all expirations
-    # (SPXW is not a valid ticker in Webull - all SPX options use "SPX")
     if broker and loop:
         try:
-            print(f"[OPTIONS] Calling Webull broker.get_option_chain({symbol}, {expiry})", flush=True)
             future = asyncio.run_coroutine_threadsafe(
                 broker.get_option_chain(symbol, expiry),
                 loop
@@ -288,12 +281,8 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
             chain = future.result(timeout=15)
             calls_count = len(chain.get('calls', [])) if chain else 0
             puts_count = len(chain.get('puts', [])) if chain else 0
-            print(f"[OPTIONS] Webull returned: {calls_count} calls, {puts_count} puts for {symbol}", flush=True)
             
             if chain and (chain.get('calls') or chain.get('puts')):
-                # Check if Webull returned valid bid/ask data
-                # Look at ALL options, not just first 10, because ATM options may have prices
-                # while far OTM options may not
                 has_valid_prices = False
                 all_options = chain.get('calls', []) + chain.get('puts', [])
                 for opt in all_options:
@@ -303,16 +292,17 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
                 
                 if has_valid_prices:
                     chain['data_source'] = 'Webull'
-                    # Fetch stock price if not in chain - use yfinance for reliability
-                    if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
-                        stock_price = fetch_stock_price_reliable(symbol)
-                        if stock_price > 0:
-                            chain['stock_price'] = stock_price
-                    _option_chain_cache[cache_key] = (chain, now)
-                    print(f"[OPTIONS] ✓ Using Webull data for {cache_key} (stock_price={chain.get('stock_price')})", flush=True)
-                    return chain
                 else:
-                    print(f"[OPTIONS] Webull returned chain but bid/ask all zero for {symbol}, trying Alpaca fallback...", flush=True)
+                    chain['data_source'] = 'Webull (no live quotes)'
+                    print(f"[OPTIONS] Webull chain has no live bid/ask for {symbol} — may be after hours", flush=True)
+                
+                if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+                    stock_price = fetch_stock_price_reliable(symbol)
+                    if stock_price > 0:
+                        chain['stock_price'] = stock_price
+                _option_chain_cache[cache_key] = (chain, now)
+                print(f"[OPTIONS] ✓ Using {chain['data_source']} for {cache_key} ({calls_count}C/{puts_count}P)", flush=True)
+                return chain
             else:
                 print(f"[OPTIONS] Webull returned empty chain for {symbol}, trying Alpaca fallback...", flush=True)
         except Exception as e:
@@ -320,7 +310,6 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
     else:
         print(f"[OPTIONS] Webull broker or loop not available, trying Alpaca fallback", flush=True)
     
-    # Alpaca fallback
     alpaca = get_alpaca_provider()
     if alpaca:
         new_loop = asyncio.new_event_loop()
@@ -329,10 +318,10 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
             chain = new_loop.run_until_complete(alpaca.get_option_chain(symbol, expiry))
             chain['data_source'] = 'Alpaca (fallback)'
             _option_chain_cache[cache_key] = (chain, now)
-            print(f"[CACHE] Fetched Alpaca fallback option chain for {cache_key}")
+            print(f"[OPTIONS] Alpaca fallback for {cache_key}")
             return chain
         except Exception as e:
-            print(f"[CACHE] Alpaca fallback also failed: {e}")
+            print(f"[OPTIONS] Alpaca fallback also failed: {e}")
         finally:
             new_loop.close()
     
