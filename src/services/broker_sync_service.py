@@ -970,7 +970,6 @@ class BrokerSyncService:
             print(f"[SYNC] No active {broker_name} trades to update")
             return
         
-        # Build position lookup by normalized key (NOT raw symbol)
         positions_by_key = {}
         for p in normalized_data.get('positions', []):
             key = self._build_position_key(
@@ -982,6 +981,9 @@ class BrokerSyncService:
             )
             positions_by_key[key] = p
         
+        if positions_by_key:
+            print(f"[SYNC] {broker_name} position keys: {list(positions_by_key.keys())}")
+        
         pending_by_order_id = {o['broker_order_id']: o for o in normalized_data.get('pending_orders', []) if o.get('broker_order_id')}
         pending_by_symbol = {o['symbol']: o for o in normalized_data.get('pending_orders', [])}
         
@@ -991,7 +993,6 @@ class BrokerSyncService:
             current_status = trade['status']
             db_order_id = trade.get('order_id')
             
-            # Build normalized key for this trade
             trade_key = self._build_position_key(
                 symbol,
                 trade.get('asset_type', 'stock'),
@@ -999,6 +1000,10 @@ class BrokerSyncService:
                 trade.get('expiry'),
                 trade.get('call_put')
             )
+            
+            if current_status == 'PENDING':
+                in_pending = db_order_id in pending_by_order_id if db_order_id else symbol in pending_by_symbol
+                print(f"[SYNC] Trade #{trade_id} ({symbol}) key='{trade_key}' status={current_status} order_id={db_order_id} in_positions={trade_key in positions_by_key} in_pending={in_pending}")
             
             # Check if trade is in broker's pending orders (match by order_id first, then symbol)
             found_in_pending = False

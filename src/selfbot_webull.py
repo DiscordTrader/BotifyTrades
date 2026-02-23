@@ -1929,6 +1929,7 @@ class WebullBroker:
         self._custom_credentials = credentials
         self._option_id_cache = {}
         self._option_id_cache_ttl = 300
+        self._ticker_id_cache = {}
         self._token_refresh_task = None
         self._streaming_client = None
         self._data_hub = None
@@ -4179,6 +4180,38 @@ class WebullBroker:
         
         return await self.loop.run_in_executor(None, _blocking_quote)
 
+    def _get_ticker_id(self, symbol: str) -> int:
+        """Get Webull ticker ID for a symbol with caching to avoid repeated lookups."""
+        if symbol in self._ticker_id_cache:
+            return self._ticker_id_cache[symbol]
+        
+        wb = self._client
+        if not wb:
+            return 0
+        
+        try:
+            import requests as req_lib
+            headers = wb.build_req_headers()
+            url = wb._urls.stock_id(symbol, wb._region_code)
+            response = req_lib.get(url, headers=headers, timeout=5)
+            result = response.json()
+            ticker_id = 0
+            if result.get('data'):
+                for item in result['data']:
+                    if item.get('symbol') == symbol or item.get('disSymbol') == symbol:
+                        ticker_id = item['tickerId']
+                        break
+                if ticker_id == 0 and result['data']:
+                    ticker_id = result['data'][0]['tickerId']
+            
+            if ticker_id:
+                self._ticker_id_cache[symbol] = ticker_id
+                print(f"[Webull] Cached ticker ID for {symbol}: {ticker_id}")
+            return ticker_id
+        except Exception as e:
+            print(f"[Webull] Failed to get ticker ID for {symbol}: {type(e).__name__}: {e}")
+            return 0
+
     async def get_options_expiration_dates(self, symbol: str) -> list:
         """Get all available option expiration dates for a symbol"""
         def _blocking_get_expirations():
@@ -4187,35 +4220,46 @@ class WebullBroker:
                 return []
             
             try:
-                result = wb.get_options_expiration_dates(stock=symbol)
+                ticker_id = self._get_ticker_id(symbol)
+                if not ticker_id:
+                    print(f"[Webull] Cannot get expirations - no ticker ID for {symbol}")
+                    return []
                 
-                # Handle both list (new API) and dict (old API) formats
-                exp_list = []
-                if isinstance(result, list):
-                    exp_list = result
-                elif isinstance(result, dict) and 'expireDateList' in result:
-                    exp_list = result['expireDateList']
+                import requests as req_lib
+                headers = wb.build_req_headers()
+                data = {'count': -1, 'direction': 'all', 'tickerId': ticker_id}
+                res = req_lib.post(wb._urls.options_exp_dat_new(), json=data, headers=headers, timeout=10)
+                result = res.json()
                 
-                if exp_list:
-                    expirations = []
-                    for exp in exp_list:
-                        if isinstance(exp, dict):
-                            exp_date = exp.get('date', '')
-                            exp_label = exp.get('label', exp_date)
+                exp_list = result.get('expireDateList', [])
+                if not exp_list:
+                    print(f"[Webull] No expiration dates returned for {symbol}")
+                    return []
+                
+                expirations = []
+                for exp in exp_list:
+                    if isinstance(exp, dict):
+                        exp_from = exp.get('from', {})
+                        if isinstance(exp_from, dict):
+                            exp_date = exp_from.get('date', '')
                         else:
-                            exp_date = str(exp)
-                            exp_label = exp_date
-                        
-                        if exp_date:
-                            expirations.append({
-                                'date': exp_date,
-                                'label': exp_label,
-                                'count': exp.get('count', 0) if isinstance(exp, dict) else 0
-                            })
-                    return expirations
-                return []
+                            exp_date = str(exp_from)
+                        exp_label = exp_date
+                    else:
+                        exp_date = str(exp)
+                        exp_label = exp_date
+                    
+                    if exp_date:
+                        expirations.append({
+                            'date': exp_date,
+                            'label': exp_label,
+                            'count': exp.get('count', 0) if isinstance(exp, dict) else 0
+                        })
+                
+                print(f"[Webull] Got {len(expirations)} expiration dates for {symbol}")
+                return expirations
             except Exception as e:
-                print(f"[Webull] Error getting expiration dates for {symbol}: {e}")
+                print(f"[Webull] Error getting expiration dates for {symbol}: {type(e).__name__}: {e}")
                 return []
         
         return await self.loop.run_in_executor(None, _blocking_get_expirations)
@@ -4334,44 +4378,56 @@ class WebullBroker:
                     except Exception:
                         return None
                 
-                # Get call options
-                calls = []
-                seen_strikes = set()
-                needs_live_quotes = False
-                try:
-                    call_data = wb.get_options(stock=symbol, direction='call', expireDate=expiration_date)
-                    data_list = call_data if isinstance(call_data, list) else call_data.get('data', []) if isinstance(call_data, dict) else []
-                    first_row_checked = False
-                    for row in data_list:
-                        if not first_row_checked and isinstance(row, dict):
-                            if 'call' in row:
-                                call_nested = row.get('call', {})
-                                if isinstance(call_nested, dict):
-                                    bid_list = call_nested.get('bidList', [])
-                                    ask_list = call_nested.get('askList', [])
-                                    if not bid_list and not ask_list:
-                                        needs_live_quotes = True
-                            first_row_checked = True
-                        opt = extract_option(row, 'call')
-                        if opt and opt['strike'] not in seen_strikes:
-                            seen_strikes.add(opt['strike'])
-                            calls.append(opt)
-                except Exception as e:
-                    print(f"[Webull] Error: Could not fetch calls for {symbol}: {e}")
+                ticker_id = self._get_ticker_id(symbol)
+                if not ticker_id:
+                    print(f"[Webull] Cannot get option chain - no ticker ID for {symbol}")
+                    return {'calls': [], 'puts': [], 'stock_price': None}
                 
-                # Get put options
+                import requests as req_lib
+                headers = wb.build_req_headers()
+                data = {'count': -1, 'direction': 'all', 'tickerId': ticker_id}
+                res = req_lib.post(wb._urls.options_exp_dat_new(), json=data, headers=headers, timeout=15)
+                api_result = res.json()
+                exp_list = api_result.get('expireDateList', [])
+                
+                chain_data = []
+                for entry in exp_list:
+                    if isinstance(entry, dict):
+                        exp_from = entry.get('from', {})
+                        entry_date = exp_from.get('date', '') if isinstance(exp_from, dict) else str(exp_from)
+                        if str(entry_date) == str(expiration_date):
+                            chain_data = entry.get('data', [])
+                            break
+                
+                calls = []
                 puts = []
-                seen_strikes = set()
-                try:
-                    put_data = wb.get_options(stock=symbol, direction='put', expireDate=expiration_date)
-                    data_list = put_data if isinstance(put_data, list) else put_data.get('data', []) if isinstance(put_data, dict) else []
-                    for row in data_list:
-                        opt = extract_option(row, 'put')
-                        if opt and opt['strike'] not in seen_strikes:
-                            seen_strikes.add(opt['strike'])
-                            puts.append(opt)
-                except Exception as e:
-                    print(f"[Webull] Error: Could not fetch puts for {symbol}: {e}")
+                seen_call_strikes = set()
+                seen_put_strikes = set()
+                needs_live_quotes = False
+                first_row_checked = False
+                
+                for row in chain_data:
+                    if not first_row_checked and isinstance(row, dict):
+                        if 'call' in row:
+                            call_nested = row.get('call', {})
+                            if isinstance(call_nested, dict):
+                                bid_list = call_nested.get('bidList', [])
+                                ask_list = call_nested.get('askList', [])
+                                if not bid_list and not ask_list:
+                                    needs_live_quotes = True
+                        first_row_checked = True
+                    
+                    call_opt = extract_option(row, 'call')
+                    if call_opt and call_opt['strike'] not in seen_call_strikes:
+                        seen_call_strikes.add(call_opt['strike'])
+                        calls.append(call_opt)
+                    
+                    put_opt = extract_option(row, 'put')
+                    if put_opt and put_opt['strike'] not in seen_put_strikes:
+                        seen_put_strikes.add(put_opt['strike'])
+                        puts.append(put_opt)
+                
+                print(f"[Webull] Option chain for {symbol} {expiration_date}: {len(calls)} calls, {len(puts)} puts")
                 
                 # If chain data is missing bid/ask, fetch live quotes for ATM options
                 if needs_live_quotes and (calls or puts):
@@ -5597,6 +5653,9 @@ class SelfClient(discord.Client):
         super().__init__(**kwargs)
         self._gateway_event_count = 0
         self._gateway_diag_printed = False
+        self._last_message_time = 0.0
+        self._gateway_watchdog_started = False
+        self._gateway_watchdog_interval = 120  # seconds - force reconnect if no messages for 2 min
         # Initialize async objects to None - will be created in setup() when event loop is ready
         self.order_queue = None
         self.broker: Optional[WebullBroker] = None
@@ -6807,6 +6866,14 @@ class SelfClient(discord.Client):
         await asyncio.sleep(0)  # Yield to event loop so worker can start
         self.processing_ready.set()
         print("[Init] ✓ Worker task started; processing signals.")
+        
+        _original_print(f"[WATCHDOG] Debug: _gateway_watchdog_started={self._gateway_watchdog_started}", flush=True)
+        if not self._gateway_watchdog_started:
+            self._gateway_watchdog_started = True
+            self._watchdog_task = asyncio.create_task(self._gateway_watchdog())
+            _original_print("[WATCHDOG] ✓ Gateway health monitor started (reconnect if no messages for 2 min)", flush=True)
+        else:
+            _original_print("[WATCHDOG] ⚠️ Watchdog already started - skipping", flush=True)
         
         telegram_bridge_task = asyncio.create_task(self.telegram_signal_bridge())
         await asyncio.sleep(0)
@@ -8143,6 +8210,55 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             await message.channel.send(f"❌ Scan failed: {str(e)}")
     
 
+    def _watchdog_log(self, msg):
+        """Write watchdog messages to both console and a persistent file."""
+        import datetime
+        ts = datetime.datetime.now().strftime('%H:%M:%S')
+        line = f"[{ts}] {msg}"
+        _original_print(line, flush=True)
+        try:
+            with open('/tmp/watchdog.log', 'a') as f:
+                f.write(line + '\n')
+        except Exception:
+            pass
+
+    async def _gateway_watchdog(self):
+        """Monitor gateway health and force reconnect if messages stop arriving."""
+        import time as _time_mod
+        await asyncio.sleep(30)
+        self._last_message_time = _time_mod.time()
+        self._watchdog_log("[WATCHDOG] Gateway watchdog active - monitoring message flow")
+        
+        while True:
+            await asyncio.sleep(30)
+            try:
+                now = _time_mod.time()
+                silence = now - self._last_message_time
+                
+                self._watchdog_log(f"[WATCHDOG] Heartbeat: silence={int(silence)}s, events={self._gateway_event_count}")
+                
+                if silence > self._gateway_watchdog_interval:
+                    self._watchdog_log(f"[WATCHDOG] ⚠️ No messages for {int(silence)}s - gateway stalled!")
+                    self._watchdog_log(f"[WATCHDOG] 🔄 Forcing gateway reconnect...")
+                    
+                    try:
+                        if hasattr(self, 'ws') and self.ws and hasattr(self.ws, 'close'):
+                            await self.ws.close(code=4000)
+                            self._watchdog_log(f"[WATCHDOG] ✓ WebSocket closed - discord.py-self will auto-reconnect")
+                        else:
+                            self._watchdog_log(f"[WATCHDOG] No ws handle, trying client.close()")
+                            await self.close()
+                    except Exception as e:
+                        self._watchdog_log(f"[WATCHDOG] Reconnect error: {e}")
+                    
+                    self._last_message_time = now
+                    await asyncio.sleep(15)
+                elif silence > 60:
+                    self._watchdog_log(f"[WATCHDOG] Gateway silent for {int(silence)}s (threshold: {self._gateway_watchdog_interval}s)")
+            except Exception as e:
+                self._watchdog_log(f"[WATCHDOG] Error: {e}")
+                await asyncio.sleep(10)
+
     def dispatch(self, event, /, *args, **kwargs):
         """Override dispatch to track ALL gateway events for diagnostics."""
         self._gateway_event_count += 1
@@ -8150,10 +8266,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             _original_print(f"[Discord GATEWAY] Event #{self._gateway_event_count}: {event}", flush=True)
         if self._gateway_event_count % 200 == 0:
             _original_print(f"[Discord GATEWAY] Total events dispatched: {self._gateway_event_count}", flush=True)
+        if event == 'message' and args:
+            msg = args[0]
+            is_self = self.user and msg.author.id == self.user.id
+            if is_self:
+                _original_print(f"[Discord GATEWAY] ★ SELF-MESSAGE RECEIVED! Channel:{msg.channel.id} Content:{msg.content[:80]}", flush=True)
         super().dispatch(event, *args, **kwargs)
 
     async def on_message(self, message: discord.Message):
         """Overridden to add gateway-level message event diagnostics."""
+        import time as _time_mod
+        self._last_message_time = _time_mod.time()
+        is_self = self.user and message.author.id == self.user.id
+        self._watchdog_log(f"[MSG] ch={message.channel.id} author={message.author.name} self={is_self} content={message.content[:60]}")
         if not self._gateway_diag_printed:
             self._gateway_diag_printed = True
             _original_print(f"[Discord GATEWAY] ✓ First on_message event! Channel: {message.channel.id} Author: {message.author.name}", flush=True)
@@ -8415,6 +8540,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif entry_price_offset != 0 and not is_channel_market_mode:
                             effective_limit_price = execution_price * (1 + entry_price_offset / 100)
                         
+                        all_enabled_brokers = None
+                        try:
+                            if channel_id:
+                                ch_for_brokers = get_channel_by_discord_id(str(channel_id))
+                                if ch_for_brokers and ch_for_brokers.get('enabled_brokers'):
+                                    eb = ch_for_brokers.get('enabled_brokers')
+                                    if isinstance(eb, str):
+                                        eb = json.loads(eb)
+                                    if isinstance(eb, list) and len(eb) > 0:
+                                        all_enabled_brokers = eb
+                                        sys.stderr.write(f"[CONDITIONAL EXEC] Multi-broker: {all_enabled_brokers}\n")
+                                        sys.stderr.flush()
+                        except Exception as eb_err:
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Error loading enabled_brokers: {eb_err}\n")
+                        
                         signal = {
                             'asset': order.get('asset_type', 'stock'),
                             'asset_type': order.get('asset_type', 'stock'),
@@ -8424,10 +8564,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'is_market_order': not use_limit_order,
                             '_use_market_order': is_channel_market_mode and not use_limit_order,
                             '_conditional_order_id': order['id'],
-                            '_broker_override': broker_name,
                             'channel_id': order.get('channel_id'),
                             '_trigger_price': triggered_price,
                         }
+                        
+                        if all_enabled_brokers and len(all_enabled_brokers) > 1:
+                            signal['_enabled_brokers'] = all_enabled_brokers
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Routing to ALL brokers: {all_enabled_brokers}\n")
+                            sys.stderr.flush()
+                        else:
+                            signal['_broker_override'] = broker_name
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Single broker: {broker_name}\n")
+                            sys.stderr.flush()
                         
                         # Add limit price cap for broker execution
                         if effective_limit_price:
@@ -10758,6 +10906,102 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[AUTO CONVERT] Monitoring signal conversion channel: '{message.content[:50]}'")
                     await self.handle_auto_signal_conversion(message, message.content.strip(), target_channel_id=target_execution_channel_id)
                     return
+        else:
+            if channel_info and channel_info.get('conditional_order_enabled') and not message.content.strip().startswith('!'):
+                try:
+                    from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
+                    from src.services.conditional_orders.router import conditional_order_router
+                    
+                    if is_conditional_order_signal(message.content, require_sl_pt=False) and conditional_order_router.is_enabled():
+                        cond_channel_id = str(message.channel.id)
+                        print(f"[COND ORDER] ✓ Detected conditional order signal in non-mapped channel {cond_channel_id}")
+                        parsed_cond = parse_conditional_order_signal(message.content)
+                        if parsed_cond:
+                            parsed_cond['message_id'] = str(message.id)
+                            parsed_cond['author_id'] = str(message.author.id)
+                            parsed_cond['author_name'] = str(message.author)
+                            
+                            cond_broker = None
+                            if channel_info:
+                                if channel_info.get('enabled_brokers'):
+                                    try:
+                                        import json
+                                        enabled = channel_info.get('enabled_brokers')
+                                        if isinstance(enabled, str):
+                                            enabled = json.loads(enabled)
+                                        if enabled and len(enabled) > 0:
+                                            broker_map = {
+                                                'WEBULL': 'Webull', 
+                                                'ALPACA': 'ALPACA_PAPER',
+                                                'ALPACA_PAPER': 'ALPACA_PAPER',
+                                                'TASTYTRADE': 'TASTYTRADE',
+                                                'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
+                                                'IBKR': 'IBKR',
+                                                'IBKR_PAPER': 'IBKR_PAPER',
+                                                'SCHWAB': 'SCHWAB',
+                                                'ROBINHOOD': 'ROBINHOOD',
+                                                'UPSTOX': 'UPSTOX',
+                                                'ZERODHA': 'ZERODHA',
+                                                'DHANQ': 'DHANQ',
+                                                'QUESTRADE': 'QUESTRADE'
+                                            }
+                                            first_broker = enabled[0].upper()
+                                            cond_broker = broker_map.get(first_broker, enabled[0].upper())
+                                            print(f"[COND ORDER] Using channel enabled_brokers[0]: {enabled[0]} -> {cond_broker}")
+                                    except Exception as e:
+                                        print(f"[COND ORDER] Error parsing enabled_brokers: {e}")
+                                elif channel_info.get('broker_override'):
+                                    cond_broker = channel_info.get('broker_override')
+                                    print(f"[COND ORDER] Using channel broker_override: {cond_broker}")
+                            
+                            if not cond_broker:
+                                print(f"[COND ORDER] ❌ REJECTED: No broker configured for channel {cond_channel_id}")
+                                return
+                            
+                            order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
+                            if order_id:
+                                trigger_type = parsed_cond.get('trigger_type', 'over')
+                                print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']}")
+                                
+                                try:
+                                    from src.services.signal_conversation_state import get_conversation_state_manager
+                                    state_mgr = get_conversation_state_manager()
+                                    state_mgr.register_signal(
+                                        message_id=int(message.id),
+                                        channel_id=int(message.channel.id),
+                                        author_id=int(message.author.id),
+                                        timestamp=message.created_at,
+                                        symbol=parsed_cond['symbol'],
+                                        order_id=order_id
+                                    )
+                                    print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
+                                except Exception as ctx_err:
+                                    print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
+                                
+                                try:
+                                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                    cond_signal = {
+                                        'action': 'BTO',
+                                        'symbol': parsed_cond['symbol'],
+                                        'qty': parsed_cond.get('calculated_qty', 1),
+                                        'asset': parsed_cond.get('asset_type', 'stock'),
+                                        'channel_id': cond_channel_id,
+                                        'author': author_name,
+                                        'message_content': message.content[:200],
+                                        'is_conditional': True,
+                                        'trigger_price': parsed_cond['trigger_price'],
+                                        'trigger_type': trigger_type,
+                                    }
+                                    from gui_app import database as db
+                                    db.add_signal(cond_signal)
+                                except Exception:
+                                    pass
+                                
+                                return
+                except Exception as e:
+                    print(f"[COND ORDER] Error checking conditional order: {e}")
+                    import traceback
+                    traceback.print_exc()
         
         # Handle AI commands (only in designated AI channel)
         if ENABLE_AI_COMMANDS and AI_CHANNEL_ID and message.channel.id == AI_CHANNEL_ID:

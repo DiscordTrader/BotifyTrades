@@ -6,6 +6,7 @@ import asyncio
 import time
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Optional, Any, Dict, Callable
 from functools import wraps
@@ -266,33 +267,22 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
     if cache_key in _option_chain_cache:
         cached_data, cached_time = _option_chain_cache[cache_key]
         if now - cached_time < _CHAIN_CACHE_TTL:
-            print(f"[OPTIONS] Using cached option chain for {cache_key} (source: {cached_data.get('data_source', 'unknown')})", flush=True)
             return cached_data
     
     broker = get_webull_broker()
     loop = get_webull_loop()
     
-    print(f"[OPTIONS] Broker available: {broker is not None}, Loop available: {loop is not None}", flush=True)
-    
-    # Try Webull first
-    # Note: For index options like SPX, Webull uses the same symbol for all expirations
-    # (SPXW is not a valid ticker in Webull - all SPX options use "SPX")
     if broker and loop:
         try:
-            print(f"[OPTIONS] Calling Webull broker.get_option_chain({symbol}, {expiry})", flush=True)
             future = asyncio.run_coroutine_threadsafe(
                 broker.get_option_chain(symbol, expiry),
                 loop
             )
-            chain = future.result(timeout=15)
+            chain = future.result(timeout=25)
             calls_count = len(chain.get('calls', [])) if chain else 0
             puts_count = len(chain.get('puts', [])) if chain else 0
-            print(f"[OPTIONS] Webull returned: {calls_count} calls, {puts_count} puts for {symbol}", flush=True)
             
             if chain and (chain.get('calls') or chain.get('puts')):
-                # Check if Webull returned valid bid/ask data
-                # Look at ALL options, not just first 10, because ATM options may have prices
-                # while far OTM options may not
                 has_valid_prices = False
                 all_options = chain.get('calls', []) + chain.get('puts', [])
                 for opt in all_options:
@@ -302,36 +292,38 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
                 
                 if has_valid_prices:
                     chain['data_source'] = 'Webull'
-                    # Fetch stock price if not in chain - use yfinance for reliability
-                    if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
-                        stock_price = fetch_stock_price_reliable(symbol)
-                        if stock_price > 0:
-                            chain['stock_price'] = stock_price
-                    _option_chain_cache[cache_key] = (chain, now)
-                    print(f"[OPTIONS] ✓ Using Webull data for {cache_key} (stock_price={chain.get('stock_price')})", flush=True)
-                    return chain
                 else:
-                    print(f"[OPTIONS] Webull returned chain but bid/ask all zero for {symbol}, trying Alpaca fallback...", flush=True)
+                    chain['data_source'] = 'Webull (no live quotes)'
+                    print(f"[OPTIONS] Webull chain has no live bid/ask for {symbol} — may be after hours", flush=True)
+                
+                if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+                    stock_price = fetch_stock_price_reliable(symbol)
+                    if stock_price > 0:
+                        chain['stock_price'] = stock_price
+                _option_chain_cache[cache_key] = (chain, now)
+                print(f"[OPTIONS] ✓ Using {chain['data_source']} for {cache_key} ({calls_count}C/{puts_count}P)", flush=True)
+                return chain
             else:
                 print(f"[OPTIONS] Webull returned empty chain for {symbol}, trying Alpaca fallback...", flush=True)
         except Exception as e:
-            print(f"[OPTIONS] Webull option chain error for {symbol}: {e}, trying Alpaca fallback", flush=True)
+            print(f"[OPTIONS] Webull option chain error for {symbol}: {type(e).__name__}: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
     else:
         print(f"[OPTIONS] Webull broker or loop not available, trying Alpaca fallback", flush=True)
     
-    # Alpaca fallback
     alpaca = get_alpaca_provider()
     if alpaca:
         new_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(new_loop)
         try:
             chain = new_loop.run_until_complete(alpaca.get_option_chain(symbol, expiry))
-            chain['data_source'] = 'Alpaca (fallback)'
+            chain['data_source'] = 'Alpaca'
             _option_chain_cache[cache_key] = (chain, now)
-            print(f"[CACHE] Fetched Alpaca fallback option chain for {cache_key}")
+            print(f"[OPTIONS] Using Alpaca data for {cache_key}")
             return chain
         except Exception as e:
-            print(f"[CACHE] Alpaca fallback also failed: {e}")
+            print(f"[OPTIONS] Alpaca fallback also failed: {e}")
         finally:
             new_loop.close()
     
@@ -9549,12 +9541,11 @@ def register_routes(app):
                 try:
                     from datetime import datetime
                     
-                    # Fetch expirations from Webull for non-index symbols
                     future = asyncio.run_coroutine_threadsafe(
                         broker.get_options_expiration_dates(symbol),
                         loop
                     )
-                    expirations_raw = future.result(timeout=10)
+                    expirations_raw = future.result(timeout=20)
                     
                     if expirations_raw:
                         expirations = []
@@ -9576,14 +9567,18 @@ def register_routes(app):
                                     'label': exp_label
                                 })
                         
-                        print(f"[API] Loaded {len(expirations)} Webull expirations for {symbol}")
-                        return jsonify({
-                            'symbol': symbol,
-                            'expirations': expirations,
-                            'data_source': 'Webull'
-                        })
+                        if expirations:
+                            print(f"[API] Loaded {len(expirations)} Webull expirations for {symbol}")
+                            return jsonify({
+                                'symbol': symbol,
+                                'expirations': expirations,
+                                'data_source': 'Webull'
+                            })
+                    print(f"[API] Webull returned empty expirations for {symbol}, trying Alpaca")
                 except Exception as e:
-                    print(f"[API] Webull expiration fetch failed: {e}, trying Alpaca fallback")
+                    print(f"[API] Webull expiration fetch failed: {type(e).__name__}: {e}, trying Alpaca fallback")
+                    import traceback
+                    traceback.print_exc()
             
             # Fallback to Alpaca if Webull not available
             alpaca = get_alpaca_provider()
@@ -9614,7 +9609,7 @@ def register_routes(app):
                 return jsonify({
                     'symbol': symbol,
                     'expirations': expirations,
-                    'data_source': 'Alpaca (fallback)'
+                    'data_source': 'Alpaca'
                 })
             finally:
                 new_loop.close()
@@ -9867,6 +9862,162 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
+
+    _option_stream_subscriptions: Dict[str, Dict[str, Any]] = {}
+    _option_stream_lock = threading.Lock()
+
+    @app.route('/api/options/subscribe-stream', methods=['POST'])
+    def api_subscribe_option_stream():
+        try:
+            data = request.json
+            symbol = data.get('symbol', '').upper()
+            broker = data.get('broker', 'WEBULL').upper()
+            contracts = data.get('contracts', [])
+
+            if not symbol or not contracts:
+                return jsonify({'error': 'Symbol and contracts required'}), 400
+
+            subscribed = []
+            hub_type = None
+
+            if broker in ('WEBULL', 'WEBULL_PAPER'):
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                hub_type = 'webull'
+
+                wb_broker = get_webull_broker()
+                streaming_client = getattr(wb_broker, '_streaming_client', None) if wb_broker else None
+
+                for c in contracts:
+                    option_id = str(c.get('option_id', ''))
+                    contract_symbol = c.get('symbol', '')
+                    strike = c.get('strike', 0)
+                    opt_type = c.get('type', '')
+
+                    if not option_id or option_id == '0':
+                        continue
+
+                    stream_key = f"{symbol}_{strike}_{opt_type}"
+
+                    if streaming_client and streaming_client.is_connected():
+                        streaming_client.subscribe_symbol(stream_key, option_id)
+                        subscribed.append(stream_key)
+                    else:
+                        hub.register_ticker_id(stream_key, option_id)
+                        subscribed.append(stream_key)
+
+                with _option_stream_lock:
+                    _option_stream_subscriptions[symbol] = {
+                        'contracts': {c.get('symbol', f"{symbol}_{c.get('strike')}_{c.get('type')}"): c for c in contracts},
+                        'broker': broker,
+                        'hub_type': hub_type,
+                        'subscribed_at': time.time()
+                    }
+
+            elif broker == 'SCHWAB':
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                hub = get_schwab_data_hub()
+                hub_type = 'schwab'
+
+                schwab_broker = None
+                if _bot_instance:
+                    for attr_name in ['schwab_broker', 'schwab']:
+                        schwab_broker = getattr(_bot_instance, attr_name, None)
+                        if schwab_broker:
+                            break
+                    if not schwab_broker and hasattr(_bot_instance, 'brokers_dict'):
+                        schwab_broker = _bot_instance.brokers_dict.get('schwab') or _bot_instance.brokers_dict.get('SCHWAB')
+
+                streaming_client = getattr(schwab_broker, '_streaming_client', None) if schwab_broker else None
+
+                option_symbols = []
+                for c in contracts:
+                    occ_symbol = c.get('occ_symbol', '') or c.get('symbol', '')
+                    if occ_symbol:
+                        option_symbols.append(occ_symbol)
+                        subscribed.append(occ_symbol)
+
+                if streaming_client and streaming_client.is_connected() and option_symbols:
+                    loop = get_webull_loop()
+                    if loop and not loop.is_closed():
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                streaming_client.subscribe_options(option_symbols), loop
+                            )
+                            future.result(timeout=5)
+                        except Exception as e:
+                            print(f"[OPTIONS_STREAM] Schwab subscribe error: {e}")
+
+                with _option_stream_lock:
+                    _option_stream_subscriptions[symbol] = {
+                        'contracts': {s: {} for s in option_symbols},
+                        'broker': broker,
+                        'hub_type': hub_type,
+                        'subscribed_at': time.time()
+                    }
+
+            return jsonify({
+                'success': True,
+                'subscribed': len(subscribed),
+                'symbols': subscribed[:10],
+                'hub': hub_type
+            })
+
+        except Exception as e:
+            print(f"[OPTIONS_STREAM] Subscribe error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/options/stream-quotes', methods=['GET'])
+    def api_get_option_stream_quotes():
+        try:
+            symbol = request.args.get('symbol', '').upper()
+            broker = request.args.get('broker', 'WEBULL').upper()
+
+            if not symbol:
+                return jsonify({'error': 'Symbol required'}), 400
+
+            quotes = {}
+            hub = None
+            streaming = False
+
+            if broker in ('WEBULL', 'WEBULL_PAPER'):
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                streaming = hub.is_streaming()
+            elif broker == 'SCHWAB':
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                hub = get_schwab_data_hub()
+                streaming = hub.is_streaming() if hasattr(hub, 'is_streaming') else False
+
+            if not hub:
+                return jsonify({'quotes': {}, 'streaming': False})
+
+            with hub._quotes_lock:
+                now = time.time()
+                for key, quote in hub._quotes.items():
+                    if key.startswith(symbol + '_') or key == symbol:
+                        age = now - quote.timestamp
+                        if age < 120:
+                            quotes[key] = {
+                                'bid': quote.bid,
+                                'ask': quote.ask,
+                                'last': quote.last,
+                                'volume': getattr(quote, 'volume', 0),
+                                'age_ms': int(age * 1000),
+                                'streaming': age < 5
+                            }
+
+            return jsonify({
+                'quotes': quotes,
+                'streaming': streaming,
+                'count': len(quotes),
+                'timestamp': time.time()
+            })
+
+        except Exception as e:
+            return jsonify({'quotes': {}, 'streaming': False, 'error': str(e)})
 
     @app.route('/api/options/order', methods=['POST'])
     def api_place_option_order():
@@ -10122,7 +10273,6 @@ def register_routes(app):
                                     call_put=option_type[0]  # 'C' or 'P'
                                 )
                                 
-                                # Save trade record
                                 trade_data = {
                                     'channel_id': tracking_discord_id,
                                     'message_id': msg_id,
@@ -10136,6 +10286,7 @@ def register_routes(app):
                                     'intended_price': price,
                                     'executed_price': price,
                                     'executed': True,
+                                    'status': 'OPEN',
                                     'broker': broker_name,
                                     'order_id': str(order_id),
                                     'stop_loss_price': stop_loss_price,
@@ -10144,7 +10295,16 @@ def register_routes(app):
                                     'source': 'gui'
                                 }
                                 trade_id = db.add_trade(trade_data)
-                                print(f"[OPTIONS API] ✓ Trade #{trade_id} saved to database for tracking in channel {tracking_discord_id}")
+                                print(f"[OPTIONS API] ✓ Trade #{trade_id} saved as OPEN for tracking in channel {tracking_discord_id}")
+                                
+                                try:
+                                    from src.risk.position_monitor import request_settings_invalidation
+                                    if request_settings_invalidation():
+                                        print(f"[OPTIONS API] ✓ Risk engine notified of new position")
+                                    else:
+                                        print(f"[OPTIONS API] Risk engine not available yet")
+                                except Exception as risk_err:
+                                    print(f"[OPTIONS API] Risk notification error: {risk_err}")
                                 
                                 # Process through lot_matcher for PNL tracking
                                 matcher = get_matcher()

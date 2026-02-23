@@ -32,7 +32,23 @@ _daemon_stop_event = threading.Event()
 _daemon_started = False
 
 
+_snapshot_log_verbose = False
+_snapshot_log_last_summary = 0
+_snapshot_log_seen_warnings = set()
+
 def _log(msg: str):
+    if not _snapshot_log_verbose and '[ENRICH]' in msg:
+        return
+    global _snapshot_log_last_summary, _snapshot_log_seen_warnings
+    if msg.startswith('Refreshed:'):
+        now = time.time()
+        if now - _snapshot_log_last_summary < 60:
+            return
+        _snapshot_log_last_summary = now
+    if 'option fallback' in msg or 'fetch error' in msg:
+        if msg in _snapshot_log_seen_warnings:
+            return
+        _snapshot_log_seen_warnings.add(msg)
     import sys
     sys.stderr.write(f"[SNAPSHOT] {msg}\n")
     sys.stderr.flush()
