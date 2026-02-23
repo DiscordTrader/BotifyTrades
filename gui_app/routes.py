@@ -278,7 +278,7 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
                 broker.get_option_chain(symbol, expiry),
                 loop
             )
-            chain = future.result(timeout=15)
+            chain = future.result(timeout=25)
             calls_count = len(chain.get('calls', [])) if chain else 0
             puts_count = len(chain.get('puts', [])) if chain else 0
             
@@ -9545,7 +9545,7 @@ def register_routes(app):
                         broker.get_options_expiration_dates(symbol),
                         loop
                     )
-                    expirations_raw = future.result(timeout=10)
+                    expirations_raw = future.result(timeout=20)
                     
                     if expirations_raw:
                         expirations = []

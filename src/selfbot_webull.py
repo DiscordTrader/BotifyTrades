@@ -1929,6 +1929,7 @@ class WebullBroker:
         self._custom_credentials = credentials
         self._option_id_cache = {}
         self._option_id_cache_ttl = 300
+        self._ticker_id_cache = {}
         self._token_refresh_task = None
         self._streaming_client = None
         self._data_hub = None
@@ -4179,6 +4180,38 @@ class WebullBroker:
         
         return await self.loop.run_in_executor(None, _blocking_quote)
 
+    def _get_ticker_id(self, symbol: str) -> int:
+        """Get Webull ticker ID for a symbol with caching to avoid repeated lookups."""
+        if symbol in self._ticker_id_cache:
+            return self._ticker_id_cache[symbol]
+        
+        wb = self._client
+        if not wb:
+            return 0
+        
+        try:
+            import requests as req_lib
+            headers = wb.build_req_headers()
+            url = wb._urls.stock_id(symbol, wb._region_code)
+            response = req_lib.get(url, headers=headers, timeout=5)
+            result = response.json()
+            ticker_id = 0
+            if result.get('data'):
+                for item in result['data']:
+                    if item.get('symbol') == symbol or item.get('disSymbol') == symbol:
+                        ticker_id = item['tickerId']
+                        break
+                if ticker_id == 0 and result['data']:
+                    ticker_id = result['data'][0]['tickerId']
+            
+            if ticker_id:
+                self._ticker_id_cache[symbol] = ticker_id
+                print(f"[Webull] Cached ticker ID for {symbol}: {ticker_id}")
+            return ticker_id
+        except Exception as e:
+            print(f"[Webull] Failed to get ticker ID for {symbol}: {type(e).__name__}: {e}")
+            return 0
+
     async def get_options_expiration_dates(self, symbol: str) -> list:
         """Get all available option expiration dates for a symbol"""
         def _blocking_get_expirations():
@@ -4187,35 +4220,46 @@ class WebullBroker:
                 return []
             
             try:
-                result = wb.get_options_expiration_dates(stock=symbol)
+                ticker_id = self._get_ticker_id(symbol)
+                if not ticker_id:
+                    print(f"[Webull] Cannot get expirations - no ticker ID for {symbol}")
+                    return []
                 
-                # Handle both list (new API) and dict (old API) formats
-                exp_list = []
-                if isinstance(result, list):
-                    exp_list = result
-                elif isinstance(result, dict) and 'expireDateList' in result:
-                    exp_list = result['expireDateList']
+                import requests as req_lib
+                headers = wb.build_req_headers()
+                data = {'count': -1, 'direction': 'all', 'tickerId': ticker_id}
+                res = req_lib.post(wb._urls.options_exp_dat_new(), json=data, headers=headers, timeout=10)
+                result = res.json()
                 
-                if exp_list:
-                    expirations = []
-                    for exp in exp_list:
-                        if isinstance(exp, dict):
-                            exp_date = exp.get('date', '')
-                            exp_label = exp.get('label', exp_date)
+                exp_list = result.get('expireDateList', [])
+                if not exp_list:
+                    print(f"[Webull] No expiration dates returned for {symbol}")
+                    return []
+                
+                expirations = []
+                for exp in exp_list:
+                    if isinstance(exp, dict):
+                        exp_from = exp.get('from', {})
+                        if isinstance(exp_from, dict):
+                            exp_date = exp_from.get('date', '')
                         else:
-                            exp_date = str(exp)
-                            exp_label = exp_date
-                        
-                        if exp_date:
-                            expirations.append({
-                                'date': exp_date,
-                                'label': exp_label,
-                                'count': exp.get('count', 0) if isinstance(exp, dict) else 0
-                            })
-                    return expirations
-                return []
+                            exp_date = str(exp_from)
+                        exp_label = exp_date
+                    else:
+                        exp_date = str(exp)
+                        exp_label = exp_date
+                    
+                    if exp_date:
+                        expirations.append({
+                            'date': exp_date,
+                            'label': exp_label,
+                            'count': exp.get('count', 0) if isinstance(exp, dict) else 0
+                        })
+                
+                print(f"[Webull] Got {len(expirations)} expiration dates for {symbol}")
+                return expirations
             except Exception as e:
-                print(f"[Webull] Error getting expiration dates for {symbol}: {e}")
+                print(f"[Webull] Error getting expiration dates for {symbol}: {type(e).__name__}: {e}")
                 return []
         
         return await self.loop.run_in_executor(None, _blocking_get_expirations)
@@ -4334,44 +4378,56 @@ class WebullBroker:
                     except Exception:
                         return None
                 
-                # Get call options
-                calls = []
-                seen_strikes = set()
-                needs_live_quotes = False
-                try:
-                    call_data = wb.get_options(stock=symbol, direction='call', expireDate=expiration_date)
-                    data_list = call_data if isinstance(call_data, list) else call_data.get('data', []) if isinstance(call_data, dict) else []
-                    first_row_checked = False
-                    for row in data_list:
-                        if not first_row_checked and isinstance(row, dict):
-                            if 'call' in row:
-                                call_nested = row.get('call', {})
-                                if isinstance(call_nested, dict):
-                                    bid_list = call_nested.get('bidList', [])
-                                    ask_list = call_nested.get('askList', [])
-                                    if not bid_list and not ask_list:
-                                        needs_live_quotes = True
-                            first_row_checked = True
-                        opt = extract_option(row, 'call')
-                        if opt and opt['strike'] not in seen_strikes:
-                            seen_strikes.add(opt['strike'])
-                            calls.append(opt)
-                except Exception as e:
-                    print(f"[Webull] Error: Could not fetch calls for {symbol}: {e}")
+                ticker_id = self._get_ticker_id(symbol)
+                if not ticker_id:
+                    print(f"[Webull] Cannot get option chain - no ticker ID for {symbol}")
+                    return {'calls': [], 'puts': [], 'stock_price': None}
                 
-                # Get put options
+                import requests as req_lib
+                headers = wb.build_req_headers()
+                data = {'count': -1, 'direction': 'all', 'tickerId': ticker_id}
+                res = req_lib.post(wb._urls.options_exp_dat_new(), json=data, headers=headers, timeout=15)
+                api_result = res.json()
+                exp_list = api_result.get('expireDateList', [])
+                
+                chain_data = []
+                for entry in exp_list:
+                    if isinstance(entry, dict):
+                        exp_from = entry.get('from', {})
+                        entry_date = exp_from.get('date', '') if isinstance(exp_from, dict) else str(exp_from)
+                        if str(entry_date) == str(expiration_date):
+                            chain_data = entry.get('data', [])
+                            break
+                
+                calls = []
                 puts = []
-                seen_strikes = set()
-                try:
-                    put_data = wb.get_options(stock=symbol, direction='put', expireDate=expiration_date)
-                    data_list = put_data if isinstance(put_data, list) else put_data.get('data', []) if isinstance(put_data, dict) else []
-                    for row in data_list:
-                        opt = extract_option(row, 'put')
-                        if opt and opt['strike'] not in seen_strikes:
-                            seen_strikes.add(opt['strike'])
-                            puts.append(opt)
-                except Exception as e:
-                    print(f"[Webull] Error: Could not fetch puts for {symbol}: {e}")
+                seen_call_strikes = set()
+                seen_put_strikes = set()
+                needs_live_quotes = False
+                first_row_checked = False
+                
+                for row in chain_data:
+                    if not first_row_checked and isinstance(row, dict):
+                        if 'call' in row:
+                            call_nested = row.get('call', {})
+                            if isinstance(call_nested, dict):
+                                bid_list = call_nested.get('bidList', [])
+                                ask_list = call_nested.get('askList', [])
+                                if not bid_list and not ask_list:
+                                    needs_live_quotes = True
+                        first_row_checked = True
+                    
+                    call_opt = extract_option(row, 'call')
+                    if call_opt and call_opt['strike'] not in seen_call_strikes:
+                        seen_call_strikes.add(call_opt['strike'])
+                        calls.append(call_opt)
+                    
+                    put_opt = extract_option(row, 'put')
+                    if put_opt and put_opt['strike'] not in seen_put_strikes:
+                        seen_put_strikes.add(put_opt['strike'])
+                        puts.append(put_opt)
+                
+                print(f"[Webull] Option chain for {symbol} {expiration_date}: {len(calls)} calls, {len(puts)} puts")
                 
                 # If chain data is missing bid/ask, fetch live quotes for ATM options
                 if needs_live_quotes and (calls or puts):
