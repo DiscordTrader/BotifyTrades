@@ -15,6 +15,7 @@ import aiohttp
 import threading
 import json
 import sys
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
@@ -112,14 +113,12 @@ class PriceMonitor(ABC):
     
     def get_staleness_seconds(self) -> int:
         """Get seconds since last successful price update."""
-        import time
         if self._last_price_update_time == 0:
             return 0  # No price yet, not considered stale
         return int(time.time() - self._last_price_update_time)
     
     def _update_price_timestamp(self):
         """Update the last price update timestamp. Call after successful price fetch."""
-        import time
         self._last_price_update_time = time.time()
     
     @abstractmethod
@@ -222,6 +221,137 @@ class YFinancePriceMonitor(PriceMonitor):
             sys.stderr.write(f"[YFINANCE] Fetch error for {self.symbol}: {e}\n")
             sys.stderr.flush()
             return None
+
+
+class StreamingPriceMonitor(PriceMonitor):
+    """Price monitor using WebSocket/MQTT streaming data hubs (zero API calls).
+    
+    Queries the data hub cache first (sub-100ms latency).
+    Falls back to REST polling only if hub has no data for the symbol.
+    """
+    
+    HUB_POLL_INTERVAL = 0.25
+    REST_FALLBACK_INTERVAL = 3
+    HUB_STALE_THRESHOLD = 10
+    
+    def __init__(self, symbol: str, callback: Callable[[str, float], None],
+                 data_hub: Any, broker_name: str, broker_instance: Any = None,
+                 finnhub_api_key: str = None):
+        super().__init__(symbol, callback)
+        self.data_hub = data_hub
+        self.broker_name = broker_name
+        self.broker_instance = broker_instance
+        self.finnhub_api_key = finnhub_api_key
+        self._hub_miss_count = 0
+        self._using_rest_fallback = False
+        self._rest_monitor: Optional['BrokerPriceMonitor'] = None
+        self._rest_session: Optional[aiohttp.ClientSession] = None
+        self._last_rest_call = 0
+    
+    async def start(self):
+        self.is_running = True
+        sys.stderr.write(f"[STREAM_MON] Starting streaming price monitor for {self.symbol} via {self.broker_name} hub\n")
+        sys.stderr.flush()
+        
+        poll_count = 0
+        while self.is_running:
+            try:
+                price = self._query_hub()
+                poll_count += 1
+                
+                if price:
+                    self._hub_miss_count = 0
+                    self._using_rest_fallback = False
+                    self._update_price_timestamp()
+                    
+                    if poll_count <= 3 or poll_count % 40 == 0:
+                        sys.stderr.write(f"[STREAM_MON] {self.symbol}: ${price:.2f} (hub, poll #{poll_count})\n")
+                        sys.stderr.flush()
+                    
+                    if price != self.last_price:
+                        self.last_price = price
+                        await self.callback(self.symbol, price)
+                    elif poll_count % 40 == 0:
+                        await self.callback(self.symbol, price)
+                    
+                    await asyncio.sleep(self.HUB_POLL_INTERVAL)
+                else:
+                    self._hub_miss_count += 1
+                    
+                    if self._hub_miss_count >= 4 and not self._using_rest_fallback:
+                        self._using_rest_fallback = True
+                        sys.stderr.write(f"[STREAM_MON] Hub miss for {self.symbol} x{self._hub_miss_count}, falling back to REST\n")
+                        sys.stderr.flush()
+                    
+                    if self._using_rest_fallback:
+                        rest_price = await self._fetch_rest_price()
+                        if rest_price:
+                            self._update_price_timestamp()
+                            if rest_price != self.last_price:
+                                self.last_price = rest_price
+                                await self.callback(self.symbol, rest_price)
+                        await asyncio.sleep(self.REST_FALLBACK_INTERVAL)
+                    else:
+                        await asyncio.sleep(self.HUB_POLL_INTERVAL)
+                        
+            except Exception as e:
+                sys.stderr.write(f"[STREAM_MON] Error for {self.symbol}: {e}\n")
+                sys.stderr.flush()
+                await asyncio.sleep(1)
+    
+    def _query_hub(self) -> Optional[float]:
+        try:
+            price = self.data_hub.get_quote_price(self.symbol)
+            if price and price > 0:
+                return float(price)
+        except Exception as e:
+            sys.stderr.write(f"[STREAM_MON] Hub query error for {self.symbol}: {e}\n")
+            sys.stderr.flush()
+        return None
+    
+    async def _fetch_rest_price(self) -> Optional[float]:
+        now = time.time()
+        if now - self._last_rest_call < 2.0:
+            return self.last_price
+        self._last_rest_call = now
+        
+        if self.finnhub_api_key:
+            try:
+                if not self._rest_session or self._rest_session.closed:
+                    self._rest_session = aiohttp.ClientSession()
+                url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
+                async with self._rest_session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        price = data.get('c')
+                        if price and float(price) > 0:
+                            return float(price)
+            except Exception:
+                pass
+        
+        if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                if isinstance(result, (int, float)) and result > 0:
+                    return float(result)
+                elif isinstance(result, dict):
+                    for key in ('close', 'last', 'lastTradePrice', 'price', 'last_trade_price'):
+                        val = result.get(key)
+                        if val and float(val) > 0:
+                            return float(val)
+            except Exception:
+                pass
+        
+        return None
+    
+    async def stop(self):
+        self.is_running = False
+        if self._rest_session and not self._rest_session.closed:
+            try:
+                await self._rest_session.close()
+            except Exception:
+                pass
 
 
 class BrokerPriceMonitor(PriceMonitor):
@@ -436,8 +566,23 @@ class BaseConditionalOrderService(ABC):
         self._thread: Optional[threading.Thread] = None
         self._thread_logs = deque(maxlen=100)
         self.finnhub_api_key = os.getenv('FINNHUB_API_KEY', '')
+        self.data_hubs: Dict[str, Any] = {}
         
         self._init_rate_limiters()
+    
+    def set_data_hub(self, broker_key: str, hub: Any):
+        """Register a streaming data hub for a broker (e.g., 'webull', 'schwab')."""
+        self.data_hubs[broker_key.lower()] = hub
+        sys.stderr.write(f"[{self.MARKET}] Registered data hub for {broker_key}\n")
+        sys.stderr.flush()
+    
+    def get_data_hub(self, broker_name: str) -> Optional[Any]:
+        """Get the streaming data hub for a broker, checking common aliases."""
+        broker_lower = broker_name.lower().replace('_paper', '').replace('_live', '')
+        hub = self.data_hubs.get(broker_lower)
+        if hub and hasattr(hub, 'is_streaming') and hub.is_streaming():
+            return hub
+        return None
     
     @abstractmethod
     def _init_rate_limiters(self):

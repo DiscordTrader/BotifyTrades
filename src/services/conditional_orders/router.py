@@ -110,6 +110,14 @@ class ConditionalOrderRouter:
         service.set_broker_instance(broker_name, instance)
         self._log(f"Registered {broker_name} with {market} service")
     
+    def set_data_hub(self, broker_key: str, hub: Any):
+        """Register a streaming data hub with the appropriate market service."""
+        broker_lower = broker_key.lower()
+        market = self._get_market_from_broker(broker_lower)
+        service = self._get_service_for_market(market)
+        service.set_data_hub(broker_key, hub)
+        self._log(f"Registered data hub for {broker_key} with {market} service")
+    
     def set_execution_callback(self, callback: Callable, main_loop: Optional[asyncio.AbstractEventLoop] = None):
         """Set execution callback on all services."""
         for service in self._services.values():

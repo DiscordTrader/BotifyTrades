@@ -8127,6 +8127,60 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/conditional_orders/live_prices', methods=['GET'])
+    def api_get_conditional_order_live_prices():
+        """Get live streaming prices for all active conditional orders."""
+        try:
+            from src.services.conditional_orders.router import conditional_order_router
+            
+            active_orders = db.get_active_conditional_orders()
+            prices = {}
+            
+            for order in active_orders:
+                symbol = order.get('symbol', '')
+                order_id = order.get('id')
+                broker = order.get('broker', '')
+                
+                if not symbol:
+                    continue
+                
+                price_info = {
+                    'symbol': symbol,
+                    'price': None,
+                    'source': 'none',
+                    'trigger_price': order.get('trigger_price'),
+                    'direction': order.get('direction', 'ABOVE'),
+                    'status': order.get('status'),
+                    'data_source': order.get('data_source_active', ''),
+                }
+                
+                broker_normalized = broker.lower().replace('_paper', '').replace('_live', '') if broker else ''
+                for market, service in conditional_order_router._services.items():
+                    hub = service.get_data_hub(broker_normalized) if broker_normalized else None
+                    if hub:
+                        hub_price = hub.get_quote_price(symbol)
+                        if hub_price and hub_price > 0:
+                            price_info['price'] = hub_price
+                            price_info['source'] = 'streaming'
+                            quote = hub.get_quote(symbol)
+                            if quote:
+                                price_info['age'] = round(time.time() - quote.timestamp, 1) if hasattr(quote, 'timestamp') else 0
+                            break
+                
+                if not price_info['price']:
+                    monitor = conditional_order_router._services.get('US', conditional_order_router.us_service).monitors.get(order_id)
+                    if monitor and hasattr(monitor, 'last_price') and monitor.last_price:
+                        price_info['price'] = monitor.last_price
+                        price_info['source'] = 'monitor'
+                
+                prices[str(order_id)] = price_info
+            
+            return jsonify({'success': True, 'prices': prices})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
     @app.route('/api/conditional_orders/<int:order_id>/offset', methods=['POST'])
     def api_update_conditional_order_offset(order_id):
         """Update trigger offset for a conditional order"""

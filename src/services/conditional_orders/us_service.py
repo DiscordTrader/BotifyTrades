@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any
 from .base import (
     BaseConditionalOrderService,
     PriceMonitor,
+    StreamingPriceMonitor,
     BrokerPriceMonitor,
     FinnhubPriceMonitor,
     YFinancePriceMonitor,
@@ -50,14 +51,14 @@ class USConditionalOrderService(BaseConditionalOrderService):
         Build price monitor for US market orders.
         
         Fallback chain:
-        1. Channel-configured broker (Webull/Alpaca/etc.) - real-time
-        2. Finnhub API - real-time
-        3. yfinance - delayed (~15 min)
+        1. Streaming data hub (WebSocket/MQTT) - sub-100ms, zero API calls
+        2. Channel-configured broker REST API - real-time
+        3. Finnhub API - real-time
+        4. yfinance - delayed (~15 min)
         """
         symbol = order['symbol']
         settings_threshold = 0.8
         
-        # Normalize broker name for rate limiter lookup: 'alpaca_paper' -> 'alpaca'
         broker_lower = broker_name.lower() if broker_name else ''
         broker_key = broker_lower.replace('_paper', '').replace('_live', '')
         rate_limiter = self.rate_limiters.get(broker_key) if broker_key else None
@@ -71,9 +72,19 @@ class USConditionalOrderService(BaseConditionalOrderService):
         async def price_callback(sym: str, price: float):
             await self._on_price_update(order['id'], sym, price)
         
-        if broker_instance and broker_rate_ok:
+        hub = self.get_data_hub(broker_name) if broker_name else None
+        if hub:
+            data_source = f"{broker_key}_stream"
+            self._log(f"Using STREAMING hub for {symbol} via {broker_name} (sub-100ms, zero API calls)")
+            monitor = StreamingPriceMonitor(
+                symbol, price_callback, hub, broker_name,
+                broker_instance=broker_instance,
+                finnhub_api_key=self.finnhub_api_key
+            )
+        
+        elif broker_instance and broker_rate_ok:
             data_source = broker_name.lower()
-            self._log(f"Using {broker_name} for {symbol} (real-time, Finnhub fallback available)")
+            self._log(f"Using {broker_name} for {symbol} (real-time REST, Finnhub fallback available)")
             monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance, finnhub_api_key=self.finnhub_api_key)
         
         elif self.finnhub_api_key:
@@ -94,7 +105,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
             return None
         
         from gui_app.database import update_conditional_order_status
-        status = 'ACTIVE_MONITORING' if data_source in self.get_supported_brokers() else 'FALLBACK_MONITORING'
+        is_streaming = data_source and data_source.endswith('_stream')
+        status = 'ACTIVE_MONITORING' if (is_streaming or data_source in self.get_supported_brokers()) else 'FALLBACK_MONITORING'
         update_conditional_order_status(
             order['id'],
             status,

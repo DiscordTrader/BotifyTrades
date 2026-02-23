@@ -395,9 +395,15 @@ async function switchTab(tab) {
     } else if (tab === 'filled') {
         console.log('[DEBUG] Loading filled orders from API...');
         await loadFilledOrders();
+    } else if (tab === 'pending') {
+        initialLoadDone = false;
+        await loadTrades();
+        await loadConditionalOrders();
+        startConditionalPricePolling();
     } else {
         initialLoadDone = false;
         await loadTrades();
+        stopConditionalPricePolling();
     }
 }
 
@@ -1684,6 +1690,137 @@ async function unifiedLivePoll() {
 }
 
 loadTrades();
+
+let conditionalPriceInterval = null;
+
+async function loadConditionalOrders() {
+    try {
+        const resp = await fetch('/api/conditional_orders?active_only=true');
+        const data = await resp.json();
+        if (!data.success || !data.orders || data.orders.length === 0) {
+            return;
+        }
+        
+        const container = document.getElementById('trades-table-container');
+        const existingSection = document.getElementById('conditional-orders-section');
+        
+        let html = '<div id="conditional-orders-section" style="margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 16px;">';
+        html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 0 4px;">';
+        html += '<span style="font-size: 1rem;">&#9201;</span>';
+        html += '<span style="font-weight: 600; color: var(--text-primary); font-size: 0.95rem;">Conditional Orders</span>';
+        html += `<span style="background: rgba(255,165,0,0.2); color: #ffa500; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;">${data.orders.length} active</span>`;
+        html += '</div>';
+        
+        html += '<table class="data-table"><thead><tr>';
+        html += '<th>Symbol</th><th>Direction</th><th>Trigger</th><th>Current</th><th>Distance</th><th>Source</th><th>Broker</th><th>Actions</th>';
+        html += '</tr></thead><tbody>';
+        
+        data.orders.forEach(order => {
+            const trigger = parseFloat(order.trigger_price) || 0;
+            const direction = order.direction || 'ABOVE';
+            const dirBadge = direction === 'ABOVE' 
+                ? '<span style="background: rgba(0,255,136,0.15); color: #0f8; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">ABOVE</span>'
+                : '<span style="background: rgba(255,68,68,0.15); color: #f44; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">BELOW</span>';
+            
+            const dataSource = order.data_source_active || '';
+            const isStreaming = dataSource.includes('stream');
+            const sourceBadge = isStreaming 
+                ? '<span style="background: rgba(0,255,136,0.15); color: #0f8; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">STREAM</span>'
+                : dataSource 
+                    ? `<span style="background: rgba(255,255,255,0.05); color: var(--text-secondary); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">${dataSource.toUpperCase()}</span>`
+                    : '-';
+            
+            html += `<tr data-cond-id="${order.id}">`;
+            html += `<td><strong>${order.symbol}</strong></td>`;
+            html += `<td>${dirBadge}</td>`;
+            html += `<td>$${trigger.toFixed(2)}</td>`;
+            html += `<td class="cond-price" data-cond-price="${order.id}" style="color: var(--text-secondary);">-</td>`;
+            html += `<td class="cond-distance" data-cond-dist="${order.id}" style="color: var(--text-secondary);">-</td>`;
+            html += `<td>${sourceBadge}</td>`;
+            html += `<td style="font-size: 0.85rem;">${order.broker || '-'}</td>`;
+            html += `<td><button class="btn btn-danger btn-small" onclick="cancelConditionalOrder(${order.id}, '${order.symbol}')">Cancel</button></td>`;
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table></div>';
+        
+        if (existingSection) {
+            existingSection.outerHTML = html;
+        } else {
+            container.insertAdjacentHTML('beforeend', html);
+        }
+        
+        updateConditionalPrices();
+    } catch (e) {
+        console.error('[COND] Error loading conditional orders:', e);
+    }
+}
+
+async function updateConditionalPrices() {
+    try {
+        const resp = await fetch('/api/conditional_orders/live_prices');
+        const data = await resp.json();
+        if (!data.success) return;
+        
+        for (const [orderId, info] of Object.entries(data.prices)) {
+            const priceCell = document.querySelector(`[data-cond-price="${orderId}"]`);
+            const distCell = document.querySelector(`[data-cond-dist="${orderId}"]`);
+            if (!priceCell) continue;
+            
+            if (info.price) {
+                const price = parseFloat(info.price);
+                const trigger = parseFloat(info.trigger_price) || 0;
+                const direction = info.direction || 'ABOVE';
+                
+                const isStream = info.source === 'streaming';
+                const streamDot = isStream ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#0f8;margin-right:4px;animation:pulse 2s infinite;"></span>' : '';
+                priceCell.innerHTML = `${streamDot}$${price.toFixed(2)}`;
+                priceCell.style.color = '#fff';
+                
+                if (trigger > 0) {
+                    const dist = direction === 'ABOVE' ? price - trigger : trigger - price;
+                    const distPct = ((dist / trigger) * 100).toFixed(2);
+                    const distColor = dist >= 0 ? '#0f8' : '#ffa500';
+                    const distSign = dist >= 0 ? '+' : '';
+                    distCell.innerHTML = `<span style="color: ${distColor};">${distSign}$${dist.toFixed(2)} (${distSign}${distPct}%)</span>`;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[COND] Error updating prices:', e);
+    }
+}
+
+function startConditionalPricePolling() {
+    stopConditionalPricePolling();
+    conditionalPriceInterval = setInterval(updateConditionalPrices, 2000);
+}
+
+function stopConditionalPricePolling() {
+    if (conditionalPriceInterval) {
+        clearInterval(conditionalPriceInterval);
+        conditionalPriceInterval = null;
+    }
+}
+
+async function cancelConditionalOrder(orderId, symbol) {
+    if (!confirm(`Cancel conditional order for ${symbol}?\n\nOrder #${orderId}`)) return;
+    try {
+        const resp = await fetch(`/api/conditional_orders/${orderId}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'Cancelled via Trades UI' })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            await loadConditionalOrders();
+        } else {
+            alert(data.error || 'Failed to cancel order');
+        }
+    } catch (e) {
+        alert('Error cancelling order');
+    }
+}
 
 riskPollInterval = setInterval(() => {
     unifiedLivePoll();
