@@ -2423,7 +2423,15 @@ class RiskManager:
                 for pos in positions:
                     if pos.broker != 'Webull':
                         continue
-                    price = hub.get_quote_price(pos.symbol)
+                    if pos.asset == 'option':
+                        lookup_sym = pos.raw_symbol if pos.raw_symbol else None
+                        if not lookup_sym:
+                            continue
+                        price = hub.get_quote_price(lookup_sym)
+                        if not price:
+                            continue
+                    else:
+                        price = hub.get_quote_price(pos.symbol)
                     if price and price > 0:
                         pos.current_price = price
                         webull_updated += 1
@@ -2439,7 +2447,15 @@ class RiskManager:
                 for pos in positions:
                     if 'SCHWAB' not in pos.broker.upper():
                         continue
-                    price = schwab_hub.get_quote_price(pos.symbol)
+                    if pos.asset == 'option':
+                        lookup_sym = pos.raw_symbol if pos.raw_symbol else None
+                        if not lookup_sym:
+                            continue
+                        price = schwab_hub.get_quote_price(lookup_sym)
+                        if not price:
+                            continue
+                    else:
+                        price = schwab_hub.get_quote_price(pos.symbol)
                     if price and price > 0:
                         pos.current_price = price
                         schwab_updated += 1
