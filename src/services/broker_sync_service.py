@@ -1632,6 +1632,16 @@ class BrokerSyncService:
             
             return None  # No match found - this is a manual trade
         
+        # Build set of position keys that already have pending SELL/STC orders
+        # (exit order is in-flight; re-importing would create a new trade and trigger duplicate STC)
+        pending_sell_pos_keys = set()
+        for pending_order in normalized_data.get('pending_orders', []):
+            order_type = (pending_order.get('order_type') or '').upper()
+            if 'SELL' in order_type or order_type in ('STC', 'SELL_TO_CLOSE', 'STO'):
+                p_sym = pending_order.get('symbol', '').upper()
+                if p_sym:
+                    pending_sell_pos_keys.add(p_sym)
+
         # Find positions not tracked by bot
         broker_positions = normalized_data.get('positions', [])
         
@@ -1646,6 +1656,11 @@ class BrokerSyncService:
             pos_key = self._build_position_key(symbol, asset_type, strike, expiry, call_put)
             
             if pos_key not in tracked_keys:
+                # Skip if there's already a pending exit order for this symbol
+                # (prevents re-import loop while limit STC orders are awaiting fill)
+                if symbol.upper() in pending_sell_pos_keys:
+                    print(f"[SYNC] ⏭️ Skipping import of {broker_name} {symbol} ({asset_type}) - pending exit order in flight")
+                    continue
                 # Try to find origin channel_id using multi-pass matching
                 origin_channel_id = find_origin_channel(position)
                 

@@ -802,6 +802,8 @@ def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
                 broker = (pos.get('broker') or '').upper()
                 if 'WEBULL' not in broker:
                     continue
+                if pos.get('asset_type') == 'option':
+                    continue
                 symbol = pos.get('symbol', '')
                 if not symbol:
                     continue
@@ -841,6 +843,8 @@ def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
             for pos in positions:
                 broker = (pos.get('broker') or '').upper()
                 if broker != 'SCHWAB':
+                    continue
+                if pos.get('asset_type') == 'option':
                     continue
                 symbol = pos.get('symbol', '')
                 if not symbol:

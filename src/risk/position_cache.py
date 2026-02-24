@@ -28,7 +28,7 @@ def get_position_cache() -> 'PositionCache':
 class PositionCache:
     """Manages position state cache with file persistence."""
     
-    CLOSING_CYCLE_RESET = 5  # Reset closing flag after this many cycles (~5s at 1s/cycle)
+    CLOSING_CYCLE_RESET = 60  # Reset closing flag after this many cycles (~60s at 1s/cycle)
     
     def __init__(self, cache_file: Optional[Path] = None):
         self.cache_file = cache_file or Path.cwd() / '.position_cache.json'
