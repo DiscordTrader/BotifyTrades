@@ -1119,8 +1119,8 @@ class BrokerSyncService:
                     entry_price = float(trade.get('executed_price') or trade.get('price') or 0)
                     asset_type = trade.get('asset_type', 'option')
                     
-                    # Use broker quantity for P&L calculation (source of truth)
-                    quantity = broker_quantity if broker_quantity > 0 else db_quantity
+                    # Use broker quantity for P&L calculation (source of truth), always positive
+                    quantity = abs(broker_quantity) if broker_quantity != 0 else abs(db_quantity)
                     
                     # Calculate P&L
                     if entry_price > 0 and current_price:
@@ -1693,7 +1693,7 @@ class BrokerSyncService:
                 # Calculate initial P&L
                 entry_price = float(position['avg_price'] or 0)
                 current_price = float(position.get('current_price') or entry_price)
-                quantity = float(position['quantity'] or 1)
+                quantity = abs(float(position['quantity'] or 1))
                 multiplier = 100 if asset_type == 'option' else 1
                 
                 if entry_price > 0:
@@ -1716,7 +1716,7 @@ class BrokerSyncService:
                 trade_data = {
                     'symbol': symbol,
                     'direction': 'BTO',
-                    'quantity': position['quantity'],
+                    'quantity': abs(float(position['quantity'] or 0)),
                     'intended_price': position['avg_price'],
                     'executed_price': position['avg_price'],
                     'current_price': current_price,
