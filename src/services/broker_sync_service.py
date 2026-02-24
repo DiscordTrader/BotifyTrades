@@ -1839,10 +1839,12 @@ class BrokerSyncService:
             new_count = 0
             for order in filled_orders:
                 # Normalize side to standard format
+                # Handles: BUY/SELL (Alpaca), BUY_TO_OPEN/SELL_TO_CLOSE (Schwab)
                 side = order.get('action', '')
-                if side.upper() in ['BUY']:
+                side_upper = side.upper()
+                if side_upper in ('BUY', 'BUY_TO_OPEN', 'BTO'):
                     side = 'BTO'
-                elif side.upper() in ['SELL']:
+                elif side_upper in ('SELL', 'SELL_TO_CLOSE', 'STC'):
                     side = 'STC'
                 
                 # Calculate total cost

@@ -3363,6 +3363,7 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
         FROM trades t 
         LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
         WHERE t.channel_id IS NOT NULL AND t.channel_id != ''
+          AND (t.hide_in_ui IS NULL OR t.hide_in_ui = 0)
     '''
     params = []
     

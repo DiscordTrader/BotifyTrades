@@ -3,7 +3,7 @@
     "entry_price": 39.652857,
     "highest_price": 47.29,
     "trailing_activated": true,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
