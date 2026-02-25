@@ -1215,24 +1215,14 @@ class SchwabBroker(BrokerInterface):
                         y = f"20{y}"
                     expiry = f"{y}-{int(m):02d}-{int(d):02d}"
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                # Get stock quote for current price
-                stock_price = None
-                try:
-                    quote_response = await client.get(
-                        f"https://api.schwabapi.com/marketdata/v1/quotes",
-                        headers=headers,
-                        params={'symbols': symbol}
-                    )
-                    if quote_response.status_code == 200:
-                        quote_data = quote_response.json()
-                        if symbol in quote_data:
-                            stock_price = float(quote_data[symbol].get('quote', {}).get('lastPrice', 0) or 0)
-                except:
-                    pass
-                
-                # Get option chain
-                response = await client.get(
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                import asyncio as _aio
+                quote_task = client.get(
+                    f"https://api.schwabapi.com/marketdata/v1/quotes",
+                    headers=headers,
+                    params={'symbols': symbol}
+                )
+                chain_task = client.get(
                     f"https://api.schwabapi.com/marketdata/v1/chains",
                     headers=headers,
                     params={
@@ -1243,6 +1233,19 @@ class SchwabBroker(BrokerInterface):
                         'includeUnderlyingQuote': 'true'
                     }
                 )
+                quote_response, response = await _aio.gather(quote_task, chain_task, return_exceptions=True)
+                
+                stock_price = None
+                if not isinstance(quote_response, Exception) and quote_response.status_code == 200:
+                    try:
+                        quote_data = quote_response.json()
+                        if symbol in quote_data:
+                            stock_price = float(quote_data[symbol].get('quote', {}).get('lastPrice', 0) or 0)
+                    except:
+                        pass
+                
+                if isinstance(response, Exception):
+                    raise response
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -1259,8 +1262,10 @@ class SchwabBroker(BrokerInterface):
                     for exp_date, strikes in call_exp_map.items():
                         for strike_str, options in strikes.items():
                             for opt in options:
+                                strike_val = float(opt.get('strikePrice', 0))
+                                occ = self._build_option_symbol(symbol, expiry, strike_val, 'C')
                                 calls.append({
-                                    'strike': float(opt.get('strikePrice', 0)),
+                                    'strike': strike_val,
                                     'bid': float(opt.get('bid', 0) or 0),
                                     'ask': float(opt.get('ask', 0) or 0),
                                     'last': float(opt.get('last', 0) or 0),
@@ -1271,6 +1276,7 @@ class SchwabBroker(BrokerInterface):
                                     'gamma': float(opt.get('gamma', 0) or 0),
                                     'theta': float(opt.get('theta', 0) or 0),
                                     'vega': float(opt.get('vega', 0) or 0),
+                                    'option_id': occ,
                                 })
                     
                     # Parse put options
@@ -1278,8 +1284,10 @@ class SchwabBroker(BrokerInterface):
                     for exp_date, strikes in put_exp_map.items():
                         for strike_str, options in strikes.items():
                             for opt in options:
+                                strike_val = float(opt.get('strikePrice', 0))
+                                occ = self._build_option_symbol(symbol, expiry, strike_val, 'P')
                                 puts.append({
-                                    'strike': float(opt.get('strikePrice', 0)),
+                                    'strike': strike_val,
                                     'bid': float(opt.get('bid', 0) or 0),
                                     'ask': float(opt.get('ask', 0) or 0),
                                     'last': float(opt.get('last', 0) or 0),
@@ -1290,6 +1298,7 @@ class SchwabBroker(BrokerInterface):
                                     'gamma': float(opt.get('gamma', 0) or 0),
                                     'theta': float(opt.get('theta', 0) or 0),
                                     'vega': float(opt.get('vega', 0) or 0),
+                                    'option_id': occ,
                                 })
                     
                     # Sort by strike

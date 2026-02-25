@@ -2164,7 +2164,7 @@ async function qtLoadChain() {
     container.innerHTML = '<div class="qt-loading"><div class="spinner"></div>Loading chain...</div>';
     document.getElementById('qt-load-btn').disabled = true;
     try {
-        const r = await fetch(`/api/options/quick-chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}&count=2`, { credentials: 'include' });
+        const r = await fetch(`/api/options/quick-chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}&count=4`, { credentials: 'include' });
         const data = await r.json();
         document.getElementById('qt-load-btn').disabled = false;
         if (data.error) {
@@ -2438,8 +2438,15 @@ async function qtStreamQuotePoll() {
 
             const cKey = `${symbol}_${s.strike}_C`;
             const pKey = `${symbol}_${s.strike}_P`;
-            const cQuote = data.quotes[cKey];
-            const pQuote = data.quotes[pKey];
+            let cQuote = data.quotes[cKey];
+            let pQuote = data.quotes[pKey];
+
+            if (!cQuote || !pQuote) {
+                const cOCC = s.call && s.call.option_id ? s.call.option_id : '';
+                const pOCC = s.put && s.put.option_id ? s.put.option_id : '';
+                if (!cQuote && cOCC && data.quotes[cOCC]) cQuote = data.quotes[cOCC];
+                if (!pQuote && pOCC && data.quotes[pOCC]) pQuote = data.quotes[pOCC];
+            }
 
             const prices = row.querySelectorAll('.qt-price');
             if (prices.length < 6) return;
@@ -2519,7 +2526,7 @@ function qtStartAutoRefresh() {
         const expiry = document.getElementById('qt-expiry').value;
         if (!symbol || !expiry) return;
         try {
-            const r = await fetch(`/api/options/quick-chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}&count=2`, { credentials: 'include' });
+            const r = await fetch(`/api/options/quick-chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}&count=4`, { credentials: 'include' });
             const data = await r.json();
             if (data.error || !data.strikes) return;
             qtChainData = data;

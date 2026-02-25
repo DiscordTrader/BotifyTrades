@@ -9932,8 +9932,8 @@ def register_routes(app):
 
                 option_symbols = []
                 for c in contracts:
-                    occ_symbol = c.get('occ_symbol', '') or c.get('symbol', '')
-                    if occ_symbol:
+                    occ_symbol = c.get('occ_symbol', '') or c.get('option_id', '') or c.get('symbol', '')
+                    if occ_symbol and len(occ_symbol) > 5:
                         option_symbols.append(occ_symbol)
                         subscribed.append(occ_symbol)
 
@@ -9994,10 +9994,13 @@ def register_routes(app):
             if not hub:
                 return jsonify({'quotes': {}, 'streaming': False})
 
+            symbol_prefix_underscore = symbol + '_'
+            symbol_prefix_space = symbol.ljust(6)
+
             with hub._quotes_lock:
                 now = time.time()
                 for key, quote in hub._quotes.items():
-                    if key.startswith(symbol + '_') or key == symbol:
+                    if key.startswith(symbol_prefix_underscore) or key.startswith(symbol_prefix_space) or key == symbol:
                         age = now - quote.timestamp
                         if age < 120:
                             quotes[key] = {
