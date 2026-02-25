@@ -8797,36 +8797,49 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             signal['stop_loss_price'] = round(ch_sl_price, 2)
                             print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.2f}", flush=True)
                         
-                        # Profit Targets: Signal values first, then channel settings
+                        # Profit Targets: Signal prices first, then channel percentage settings
                         if has_signal_targets:
                             raw_targets = order['take_profit_targets']
                             targets = None
                             if isinstance(raw_targets, str):
-                                # Try JSON first, then comma-separated
                                 try:
                                     targets = json.loads(raw_targets)
                                 except json.JSONDecodeError:
-                                    # Parse comma-separated string: "172.0,190.0,220.0"
                                     targets = [float(t.strip()) for t in raw_targets.split(',') if t.strip()]
                             elif isinstance(raw_targets, list):
                                 targets = raw_targets
                             elif raw_targets is not None:
                                 targets = [float(raw_targets)]
                             
-                            # Ensure targets is a list
                             if targets is not None:
                                 if not isinstance(targets, list):
-                                    targets = [targets]  # Convert single value to list
+                                    targets = [targets]
                                 if len(targets) > 0:
-                                    # Targets are percentages - convert to actual prices
-                                    targets_as_prices = [round(triggered_price * (1 + pct / 100), 2) for pct in targets]
-                                    signal['profit_target_pct'] = targets[0]
-                                    signal['profit_targets_pct'] = targets
-                                    signal['profit_target_price'] = targets_as_prices[0]
-                                    signal['profit_targets'] = targets_as_prices
-                                    sys.stderr.write(f"[CONDITIONAL EXEC] Using signal targets: {targets}% = ${targets_as_prices}\n")
-                                    sys.stderr.flush()
-                        elif channel_settings:
+                                    are_prices = False
+                                    if triggered_price and triggered_price > 0:
+                                        for t in targets:
+                                            if 0.5 * triggered_price <= t <= 5.0 * triggered_price:
+                                                are_prices = True
+                                                break
+                                    
+                                    if are_prices:
+                                        targets_as_prices = [round(float(t), 2) for t in targets]
+                                        targets_as_pcts = [round(((t - triggered_price) / triggered_price) * 100, 2) for t in targets]
+                                        signal['profit_target_pct'] = targets_as_pcts[0] if targets_as_pcts else 0
+                                        signal['profit_targets_pct'] = targets_as_pcts
+                                        signal['profit_target_price'] = targets_as_prices[0]
+                                        signal['profit_targets'] = targets_as_prices
+                                        sys.stderr.write(f"[CONDITIONAL EXEC] Signal targets are PRICES: ${targets_as_prices} ({targets_as_pcts}%)\n")
+                                        sys.stderr.flush()
+                                    else:
+                                        targets_as_prices = [round(triggered_price * (1 + pct / 100), 2) for pct in targets]
+                                        signal['profit_target_pct'] = targets[0]
+                                        signal['profit_targets_pct'] = targets
+                                        signal['profit_target_price'] = targets_as_prices[0]
+                                        signal['profit_targets'] = targets_as_prices
+                                        sys.stderr.write(f"[CONDITIONAL EXEC] Signal targets are PERCENTAGES: {targets}% = ${targets_as_prices}\n")
+                                        sys.stderr.flush()
+                        if not has_signal_targets and channel_settings:
                             channel_targets_pct = []
                             for i in range(1, 5):
                                 pct = channel_settings.get(f'profit_target_{i}_pct')

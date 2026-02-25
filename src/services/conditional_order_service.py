@@ -749,20 +749,15 @@ class ConditionalOrderService:
                 qty_value = channel_settings.get('default_quantity')
                 print(f"[CONDITIONAL] Using channel default_quantity: {qty_value}")
         
-        # Profit targets: signal first, then channel settings
+        # Profit targets: only store signal-embedded targets (dollar prices)
+        # Channel percentage targets are read at execution time from live settings
         profit_targets = parsed_signal.get('profit_targets', [])
-        if not profit_targets:
-            # Build profit targets from channel risk settings
-            channel_targets = []
-            for i in range(1, 5):
-                pt_pct = channel_settings.get(f'profit_target_{i}_pct')
-                if pt_pct and pt_pct > 0:
-                    channel_targets.append(pt_pct)
-            if channel_targets:
-                profit_targets = channel_targets
-                print(f"[CONDITIONAL] Using channel profit targets: {profit_targets}")
-        
-        take_profit_json = json.dumps(profit_targets) if profit_targets else None
+        take_profit_json = None
+        if profit_targets:
+            take_profit_json = json.dumps(profit_targets)
+            print(f"[CONDITIONAL] Signal profit targets (prices): {profit_targets}")
+        else:
+            print(f"[CONDITIONAL] No signal targets - will use channel settings at trigger time")
         
         # Stop loss: signal first, then channel settings
         stop_loss = parsed_signal.get('stop_loss')
