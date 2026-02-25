@@ -1,10 +1,10 @@
 {
   "SCHWAB_SPY_694.0_2026-02-25_C": {
     "entry_price": 0.47,
-    "highest_price": 0.545,
+    "highest_price": 0.605,
     "trailing_activated": true,
-    "closing": true,
-    "closing_cycles": 51,
+    "closing": false,
+    "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "SCHWAB",
