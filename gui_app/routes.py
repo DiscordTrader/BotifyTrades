@@ -803,6 +803,23 @@ def register_routes(app):
             'is_admin_build': is_admin_build()
         }
     
+    import hashlib
+    _code_version = None
+    def _get_code_version():
+        nonlocal _code_version
+        if _code_version is None:
+            try:
+                tpl_path = os.path.join(os.path.dirname(__file__), 'templates', 'trades.html')
+                mtime = str(os.path.getmtime(tpl_path))
+                _code_version = hashlib.md5(mtime.encode()).hexdigest()[:8]
+            except:
+                _code_version = 'unknown'
+        return _code_version
+
+    @app.route('/api/code-version')
+    def code_version():
+        return jsonify({'version': _get_code_version()})
+
     # ============ GLOBAL ERROR HANDLERS ============
     
     @app.errorhandler(404)

@@ -2095,6 +2095,24 @@ function showToast(message, type = 'info') {
     }, 4000);
 }
 
+// ============ CODE VERSION AUTO-RELOAD ============
+(function() {
+    let _loadedVersion = null;
+    async function _checkVersion() {
+        try {
+            const r = await fetch('/api/code-version', {cache:'no-store'});
+            const d = await r.json();
+            if (!_loadedVersion) { _loadedVersion = d.version; return; }
+            if (d.version !== _loadedVersion) {
+                console.log('[VERSION] Code updated, reloading page...');
+                window.location.reload(true);
+            }
+        } catch(e) {}
+    }
+    _checkVersion();
+    setInterval(_checkVersion, 30000);
+})();
+
 // ============ QUICK TRADE PANEL ============
 let qtChainData = null;
 let qtWebhookChannels = [];
