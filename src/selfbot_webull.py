@@ -2883,13 +2883,15 @@ class WebullBroker:
                 now = datetime.now()
                 if (now - last_rest_ts).total_seconds() >= SLIPPAGE_RETRY_INTERVAL:
                     try:
-                        def _rest():
-                            return get_current_price_func()
-                        current_price = await asyncio.to_thread(_rest)
+                        if asyncio.iscoroutinefunction(get_current_price_func):
+                            current_price = await get_current_price_func()
+                        else:
+                            def _rest():
+                                return get_current_price_func()
+                            current_price = await asyncio.to_thread(_rest)
                         last_rest_ts = now
                         if current_price:
-                            src = "REST (hub miss)"
-                            print(f"[SLIPPAGE] #{retry_count} {src}: price={current_price:.4f}")
+                            print(f"[SLIPPAGE] #{retry_count} REST (hub miss): price={current_price:.4f}")
                     except Exception as e:
                         print(f"[SLIPPAGE] REST fetch error: {e}")
             else:
@@ -13572,7 +13574,76 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if _is_conditional_market_option:
                     _original_print(f"[{broker_name}] ⚡ Conditional option: price ${order_price:.2f} is stock trigger, switching to MARKET ORDER")
                     order_price = None
-                
+
+                # ── Central slippage wait (non-Webull conditional orders) ──────────────
+                # Webull handles this internally; all other brokers run through here.
+                _cond_id = signal.get('_conditional_order_id')
+                if (_cond_id and order_price is not None and 'WEBULL' not in broker_upper
+                        and signal.get('action', '').upper() in ('BTO', 'BTC')):
+                    _slippage_cfg = get_effective_slippage_settings(signal.get('channel_id'))
+                    if _slippage_cfg.get('enabled'):
+                        # Async quote fn — each broker has get_option_quote()
+                        async def _get_option_q():
+                            try:
+                                if hasattr(broker_instance, 'get_option_quote'):
+                                    q = await broker_instance.get_option_quote(
+                                        signal['symbol'], signal['strike'],
+                                        signal['expiry'], signal.get('opt_type') or signal.get('option_type'))
+                                    if isinstance(q, dict):
+                                        return (q.get('last') or q.get('ask') or
+                                                q.get('mark') or q.get('mid') or
+                                                q.get('price'))
+                                    if isinstance(q, (int, float)):
+                                        return float(q)
+                            except Exception:
+                                pass
+                            return None
+
+                        _cur_opt_price = await _get_option_q()
+                        _decision_c, _slippage_pct_c = self._evaluate_slippage(
+                            order_price, _cur_opt_price,
+                            threshold_override=_slippage_cfg['threshold_percent'])
+
+                        if _decision_c == SlippageDecision.ABORT:
+                            _eff_w = _slippage_cfg.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
+                            _original_print(f"[{broker_name}] [SLIPPAGE] ⏳ Cond order - price-wait {_eff_w} min "
+                                            f"(slippage {_slippage_pct_c:.2f}%)")
+
+                            # Hub function: Schwab streams options via LEVELONE_OPTIONS
+                            def _non_wb_opt_hub():
+                                if 'SCHWAB' in broker_upper:
+                                    try:
+                                        from src.services.schwab_data_hub import get_schwab_data_hub
+                                        _sh = get_schwab_data_hub()
+                                        if _sh:
+                                            _yr = (signal.get('expiry_year') or '')
+                                            _exp = (signal.get('expiry') or '').replace('/', '')
+                                            _yr2 = _yr[2:] if len(_yr) >= 4 else ''
+                                            _ot = (signal.get('opt_type') or signal.get('option_type') or '').upper()
+                                            _occ = f"{signal['symbol']:<6}{_yr2}{_exp}{_ot}{int((signal.get('strike') or 0)*1000):08d}"
+                                            return _sh.get_quote_price(_occ)
+                                    except Exception:
+                                        pass
+                                return None
+
+                            _ws = {'price': order_price, 'symbol': signal['symbol']}
+                            _fd, _fp = await self._wait_for_better_price(
+                                _ws, _get_option_q,
+                                wait_minutes=_eff_w,
+                                hub_price_func=_non_wb_opt_hub,
+                                keep_watching=True)
+                            if _fd == SlippageDecision.ABORT:
+                                _original_print(f"[{broker_name}] [SLIPPAGE] ❌ Conditional option CANCELED "
+                                                f"- price did not recover within {_eff_w} min")
+                                return {'success': False,
+                                        'msg': f'Order canceled: slippage did not recover within {_eff_w} minutes',
+                                        'error': 'SLIPPAGE_TIMEOUT'}
+                            if _fp and _fp > 0:
+                                _original_print(f"[{broker_name}] [SLIPPAGE] ✓ Price recovered: "
+                                                f"${order_price:.4f} → ${_fp:.4f}")
+                                order_price = _fp
+                # ─────────────────────────────────────────────────────────────────────
+
                 _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${order_price}")
                 
                 if uses_modern_signature:
@@ -13691,7 +13762,63 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
                         stock_order_price = signal['_limit_price']
                         _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${stock_order_price:.4f} (max allowed)")
-                
+
+                # ── Central slippage wait for stock orders (non-Webull conditional) ──
+                # Webull handles stock slippage internally in its place_stock_order.
+                _cond_id_s = signal.get('_conditional_order_id')
+                if (_cond_id_s and stock_order_price is not None and 'WEBULL' not in broker_upper
+                        and signal.get('action', '').upper() in ('BTO', 'BTC')):
+                    _slippage_cfg_s = get_effective_slippage_settings(signal.get('channel_id'))
+                    if _slippage_cfg_s.get('enabled'):
+                        async def _get_stock_q():
+                            try:
+                                if hasattr(broker_instance, 'get_quote'):
+                                    p = await broker_instance.get_quote(signal['symbol'])
+                                    if p:
+                                        return float(p)
+                            except Exception:
+                                pass
+                            return None
+
+                        _cur_stk_price = await _get_stock_q()
+                        _decision_s, _slippage_pct_s = self._evaluate_slippage(
+                            stock_order_price, _cur_stk_price,
+                            threshold_override=_slippage_cfg_s['threshold_percent'])
+
+                        if _decision_s == SlippageDecision.ABORT:
+                            _eff_ws = _slippage_cfg_s.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
+                            _original_print(f"[{broker_name}] [SLIPPAGE] ⏳ Cond stock order - price-wait {_eff_ws} min "
+                                            f"(slippage {_slippage_pct_s:.2f}%)")
+
+                            def _non_wb_stk_hub():
+                                if 'SCHWAB' in broker_upper:
+                                    try:
+                                        from src.services.schwab_data_hub import get_schwab_data_hub
+                                        _sh = get_schwab_data_hub()
+                                        if _sh:
+                                            return _sh.get_quote_price(signal['symbol'])
+                                    except Exception:
+                                        pass
+                                return None
+
+                            _ws2 = {'price': stock_order_price, 'symbol': signal['symbol']}
+                            _fd2, _fp2 = await self._wait_for_better_price(
+                                _ws2, _get_stock_q,
+                                wait_minutes=_eff_ws,
+                                hub_price_func=_non_wb_stk_hub,
+                                keep_watching=True)
+                            if _fd2 == SlippageDecision.ABORT:
+                                _original_print(f"[{broker_name}] [SLIPPAGE] ❌ Conditional stock CANCELED "
+                                                f"- price did not recover within {_eff_ws} min")
+                                return {'success': False,
+                                        'msg': f'Order canceled: slippage did not recover within {_eff_ws} minutes',
+                                        'error': 'SLIPPAGE_TIMEOUT'}
+                            if _fp2 and _fp2 > 0:
+                                _original_print(f"[{broker_name}] [SLIPPAGE] ✓ Stock price recovered: "
+                                                f"${stock_order_price:.4f} → ${_fp2:.4f}")
+                                stock_order_price = _fp2
+                # ─────────────────────────────────────────────────────────────────────
+
                 if uses_modern_signature:
                     if 'ALPACA' in broker_upper:
                         result = await broker_instance.place_stock_order(
