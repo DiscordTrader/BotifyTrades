@@ -15838,6 +15838,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[CONDITIONAL] ❌ Order #{cond_order_id} marked as ERROR: {error_msg[:100]}")
                         except Exception as e:
                             _original_print(f"[CONDITIONAL] ⚠️ Could not update order status: {e}")
+                        try:
+                            from gui_app.discord_notifier import notify_conditional_failed
+                            notify_conditional_failed(
+                                symbol=signal.get('symbol', 'UNKNOWN'),
+                                broker=broker_name or signal.get('_broker_override', 'Unknown'),
+                                order_id=cond_order_id,
+                                error=error_msg[:200],
+                                stage="broker_rejected"
+                            )
+                        except Exception as _notif_e:
+                            _original_print(f"[CONDITIONAL] ⚠️ Could not send failure notification: {_notif_e}")
                     
                     # Update signal execution status in database
                     if DATABASE_MODULE_AVAILABLE and signal.get('message_id'):
