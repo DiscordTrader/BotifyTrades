@@ -671,6 +671,24 @@ class BaseConditionalOrderService(ABC):
                 self._upgrade_to_streaming(broker_key, hub),
                 self._loop
             )
+            # Also wait for hub to become streaming (handles Schwab which connects after hub registration)
+            asyncio.run_coroutine_threadsafe(
+                self._upgrade_when_streaming(broker_key, hub),
+                self._loop
+            )
+
+    async def _upgrade_when_streaming(self, broker_key: str, hub: Any, timeout: float = 60.0):
+        """Wait until hub reports is_streaming(), then re-run monitor upgrade (fixes Schwab late-connect)."""
+        if not hasattr(hub, 'is_streaming'):
+            return
+        deadline = asyncio.get_event_loop().time() + timeout
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(1)
+            if hub.is_streaming():
+                sys.stderr.write(f"[{self.MARKET}] Hub for {broker_key} now streaming — upgrading any REST monitors\n")
+                sys.stderr.flush()
+                await self._upgrade_to_streaming(broker_key, hub)
+                return
     
     async def _upgrade_to_streaming(self, broker_key: str, hub: Any):
         """Upgrade Finnhub/REST monitors to streaming when a hub becomes available."""
