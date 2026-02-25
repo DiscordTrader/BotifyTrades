@@ -2218,20 +2218,20 @@ function qtRenderChain(data) {
         const callMoneyClass = (s.call_moneyness || 'OTM').toLowerCase();
         const putMoneyClass = (s.put_moneyness || 'OTM').toLowerCase();
 
-        html += `<tr class="${rowClass}" data-strike-idx="${idx}">`;
-        html += `<td><button class="qt-action-btn bto" onclick="qtExecute(${idx},'CALL','BUY')" title="Buy to Open Call">BTO</button></td>`;
-        html += `<td><button class="qt-action-btn stc" onclick="qtExecute(${idx},'CALL','SELL')" title="Sell to Close Call">STC</button></td>`;
-        html += `<td><span class="qt-price bid" onclick="qtSetPrice(${idx},'CALL','bid')" title="Select bid price">$${cBid.toFixed(2)}</span></td>`;
-        html += `<td><span class="qt-price mid" onclick="qtSetPrice(${idx},'CALL','mid')" title="Select mid price">$${cMid.toFixed(2)}</span></td>`;
-        html += `<td><span class="qt-price ask" onclick="qtSetPrice(${idx},'CALL','ask')" title="Select ask price">$${cAsk.toFixed(2)}</span></td>`;
+        html += `<tr class="${rowClass}" data-strike-idx="${idx}" data-strike="${s.strike}">`;
+        html += `<td><button class="qt-action-btn bto" onclick="qtExecute(${idx},'CALL','BUY',${s.strike})" title="Buy to Open Call">BTO</button></td>`;
+        html += `<td><button class="qt-action-btn stc" onclick="qtExecute(${idx},'CALL','SELL',${s.strike})" title="Sell to Close Call">STC</button></td>`;
+        html += `<td><span class="qt-price bid" onclick="qtSetPrice(${idx},'CALL','bid',${s.strike})" title="Select bid price">$${cBid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price mid" onclick="qtSetPrice(${idx},'CALL','mid',${s.strike})" title="Select mid price">$${cMid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price ask" onclick="qtSetPrice(${idx},'CALL','ask',${s.strike})" title="Select ask price">$${cAsk.toFixed(2)}</span></td>`;
         html += `<td style="border-right:2px solid rgba(255,255,255,0.1); font-size:10px; color:#6E7681;"><span class="moneyness ${callMoneyClass}">${s.call_moneyness || ''}</span> ${cDelta ? 'D:'+cDelta : ''}</td>`;
         html += `<td class="strike-cell"><strong>$${strikeDisplay}</strong></td>`;
         html += `<td style="border-left:2px solid rgba(255,255,255,0.1); font-size:10px; color:#6E7681;"><span class="moneyness ${putMoneyClass}">${s.put_moneyness || ''}</span> ${pDelta ? 'D:'+pDelta : ''}</td>`;
-        html += `<td><span class="qt-price bid" onclick="qtSetPrice(${idx},'PUT','bid')" title="Select bid price">$${pBid.toFixed(2)}</span></td>`;
-        html += `<td><span class="qt-price mid" onclick="qtSetPrice(${idx},'PUT','mid')" title="Select mid price">$${pMid.toFixed(2)}</span></td>`;
-        html += `<td><span class="qt-price ask" onclick="qtSetPrice(${idx},'PUT','ask')" title="Select ask price">$${pAsk.toFixed(2)}</span></td>`;
-        html += `<td><button class="qt-action-btn bto" onclick="qtExecute(${idx},'PUT','BUY')" title="Buy to Open Put">BTO</button></td>`;
-        html += `<td><button class="qt-action-btn stc" onclick="qtExecute(${idx},'PUT','SELL')" title="Sell to Close Put">STC</button></td>`;
+        html += `<td><span class="qt-price bid" onclick="qtSetPrice(${idx},'PUT','bid',${s.strike})" title="Select bid price">$${pBid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price mid" onclick="qtSetPrice(${idx},'PUT','mid',${s.strike})" title="Select mid price">$${pMid.toFixed(2)}</span></td>`;
+        html += `<td><span class="qt-price ask" onclick="qtSetPrice(${idx},'PUT','ask',${s.strike})" title="Select ask price">$${pAsk.toFixed(2)}</span></td>`;
+        html += `<td><button class="qt-action-btn bto" onclick="qtExecute(${idx},'PUT','BUY',${s.strike})" title="Buy to Open Put">BTO</button></td>`;
+        html += `<td><button class="qt-action-btn stc" onclick="qtExecute(${idx},'PUT','SELL',${s.strike})" title="Sell to Close Put">STC</button></td>`;
         html += '</tr>';
     });
 
@@ -2242,7 +2242,7 @@ function qtRenderChain(data) {
     html += '<select class="qt-select" id="qt-signal-strike" style="min-width:100px; font-size:11px;">';
     strikes.forEach((s, idx) => {
         const d = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
-        html += `<option value="${idx}">$${d} ${s.moneyness}</option>`;
+        html += `<option value="${s.strike}">$${d} ${s.moneyness}</option>`;
     });
     html += '</select>';
     html += '<select class="qt-select" id="qt-signal-type" style="min-width:70px; font-size:11px;"><option value="CALL">Call</option><option value="PUT">Put</option></select>';
@@ -2253,25 +2253,41 @@ function qtRenderChain(data) {
     container.innerHTML = html;
 }
 
-function qtSetPrice(idx, optType, priceType) {
+function qtResolveIdx(idx, expectedStrike) {
+    if (!qtChainData || !qtChainData.strikes) return -1;
+    if (qtChainData.strikes[idx] && qtChainData.strikes[idx].strike === expectedStrike) return idx;
+    const found = qtChainData.strikes.findIndex(st => st.strike === expectedStrike);
+    if (found >= 0) return found;
+    return idx;
+}
+
+function qtSetPrice(idx, optType, priceType, expectedStrike) {
     if (!qtChainData) return;
+    idx = qtResolveIdx(idx, expectedStrike);
+    if (idx < 0 || !qtChainData.strikes[idx]) { showToast('Strike no longer in chain - reload', 'error'); return; }
     const s = qtChainData.strikes[idx];
     const opt = (optType === 'CALL' ? s.call : s.put) || {};
     const price = priceType === 'bid' ? (opt.bid||0) : priceType === 'ask' ? (opt.ask||0) : (opt.mid||0);
     if (price <= 0) { showToast('No valid price', 'error'); return; }
-    const key = `${idx}_${optType}`;
-    qtSelectedPrice[key] = { price: price, type: priceType };
+    const key = `${s.strike}_${optType}`;
+    qtSelectedPrice[key] = { price: price, type: priceType, strike: s.strike };
     const qty = parseInt(document.getElementById('qt-qty').value) || 1;
     const total = (price * qty * 100).toFixed(0);
     const strikeD = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
     showToast(`Selected ${optType} $${strikeD} ${priceType.toUpperCase()}: $${price.toFixed(2)} x ${qty} = $${total}`, 'info');
 }
 
-async function qtExecute(idx, optType, side) {
+async function qtExecute(idx, optType, side, expectedStrike) {
     if (!qtChainData) return;
+    idx = qtResolveIdx(idx, expectedStrike);
+    if (idx < 0 || !qtChainData.strikes[idx]) { showToast('Strike no longer in chain - please reload', 'error'); return; }
     const s = qtChainData.strikes[idx];
+    if (expectedStrike && s.strike !== expectedStrike) {
+        showToast(`Strike mismatch: expected $${expectedStrike} but got $${s.strike} - reload chain`, 'error');
+        return;
+    }
     const opt = (optType === 'CALL' ? s.call : s.put) || {};
-    const key = `${idx}_${optType}`;
+    const key = `${s.strike}_${optType}`;
     const selected = qtSelectedPrice[key];
     const price = selected ? selected.price : ((opt.mid||0) > 0 ? opt.mid : ((opt.ask||0) > 0 ? opt.ask : (opt.bid||0)));
     const qty = parseInt(document.getElementById('qt-qty').value) || 1;
@@ -2327,9 +2343,10 @@ async function qtSendWebhook(action) {
     const idxSel = document.getElementById('qt-signal-strike');
     const typeSel = document.getElementById('qt-signal-type');
     if (!idxSel || !typeSel) return;
-    const idx = parseInt(idxSel.value);
+    const strikeVal = parseFloat(idxSel.value);
     const optType = typeSel.value;
-    const s = qtChainData.strikes[idx];
+    const s = qtChainData.strikes.find(st => st.strike === strikeVal);
+    if (!s) { showToast('Strike not found in chain - reload', 'error'); return; }
     const opt = (optType === 'CALL' ? s.call : s.put) || {};
     const price = (opt.mid||0) > 0 ? opt.mid : ((opt.ask||0) > 0 ? opt.ask : (opt.bid||0));
     if (price <= 0) { showToast('No valid price for signal', 'error'); return; }
