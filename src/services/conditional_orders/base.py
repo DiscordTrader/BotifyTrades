@@ -633,6 +633,10 @@ class BaseConditionalOrderService(ABC):
         self._thread_logs = deque(maxlen=100)
         self.finnhub_api_key = os.getenv('FINNHUB_API_KEY', '')
         self.data_hubs: Dict[str, Any] = {}
+        # Breakout-reset guard: if the price is already past the trigger when an
+        # order is created, wait for it to pull back to the other side first
+        # before allowing the order to fire. Prevents immediate execution.
+        self._price_reset_needed: Dict[int, bool] = {}
         
         self._init_rate_limiters()
     
@@ -941,6 +945,7 @@ class BaseConditionalOrderService(ABC):
                         del self.monitor_tasks[order_id]
                     if order_id in self.pending_orders:
                         del self.pending_orders[order_id]
+                    self._price_reset_needed.pop(order_id, None)
     
     def create_order(self, channel_id: str, parsed_signal: Dict[str, Any], broker: str) -> Optional[int]:
         """Create a new conditional order."""
@@ -1184,6 +1189,8 @@ class BaseConditionalOrderService(ABC):
         )
         
         self.pending_orders[order_id] = order
+        # Arm the breakout-reset guard for this order.
+        self._price_reset_needed[order_id] = True
         
         if self.is_running and self._loop:
             asyncio.run_coroutine_threadsafe(
@@ -1242,6 +1249,7 @@ class BaseConditionalOrderService(ABC):
                         del self.pending_orders[oid]
                     if oid in self.monitor_tasks:
                         del self.monitor_tasks[oid]
+                    self._price_reset_needed.pop(oid, None)
             except asyncio.CancelledError:
                 self._log(f"Monitor #{oid} cancelled")
             except Exception as e:
@@ -1284,6 +1292,30 @@ class BaseConditionalOrderService(ABC):
             order['_last_logged_price'] = price
             self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {adjusted_trigger})")
         
+        # ── Breakout-reset guard ──────────────────────────────────────────────────
+        # If the price was already past the trigger when the order was created,
+        # require it to pull back to the opposite side before we allow firing.
+        if self._price_reset_needed.get(order_id, False):
+            already_past = (
+                (trigger_type == 'over'  and price >= adjusted_trigger) or
+                (trigger_type == 'under' and price <= adjusted_trigger)
+            )
+            if already_past:
+                self._log(
+                    f"#{order_id} reset pending — {price:.4f} already "
+                    f"{'above' if trigger_type == 'over' else 'below'} "
+                    f"trigger {adjusted_trigger}. Waiting for pullback."
+                )
+                return
+            else:
+                self._price_reset_needed[order_id] = False
+                self._log(
+                    f"#{order_id} reset complete — {price:.4f} now "
+                    f"{'below' if trigger_type == 'over' else 'above'} "
+                    f"trigger {adjusted_trigger}. Watching for breakout."
+                )
+        # ─────────────────────────────────────────────────────────────────────────
+
         triggered = False
         if trigger_type == 'over' and price >= adjusted_trigger:
             triggered = True
@@ -1392,6 +1424,7 @@ class BaseConditionalOrderService(ABC):
                         del self.monitor_tasks[order_id]
                     if order_id in self.pending_orders:
                         del self.pending_orders[order_id]
+                    self._price_reset_needed.pop(order_id, None)
                     return
             else:
                 min_allowed_price = original_trigger * (1 - slippage_max_pct / 100)
@@ -1423,6 +1456,7 @@ class BaseConditionalOrderService(ABC):
                         del self.monitor_tasks[order_id]
                     if order_id in self.pending_orders:
                         del self.pending_orders[order_id]
+                    self._price_reset_needed.pop(order_id, None)
                     return
             
             self._log(f"✓ Slippage OK: ${trigger_price:.2f} within {slippage_max_pct}% of ${original_trigger:.2f}")
@@ -1438,6 +1472,7 @@ class BaseConditionalOrderService(ABC):
         
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
+        self._price_reset_needed.pop(order_id, None)
         
         update_conditional_order_status(
             order_id,
@@ -1517,6 +1552,7 @@ class BaseConditionalOrderService(ABC):
         
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
+        self._price_reset_needed.pop(order_id, None)
         
         result = cancel_conditional_order(order_id)
         
@@ -1543,6 +1579,7 @@ class BaseConditionalOrderService(ABC):
         self.monitors.clear()
         self.monitor_tasks.clear()
         self.pending_orders.clear()
+        self._price_reset_needed.clear()
         
         if self._loop:
             self._loop.call_soon_threadsafe(self._loop.stop)
