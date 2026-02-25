@@ -572,6 +572,10 @@ class ConditionalOrderService:
         self.notification_callback: Optional[Callable] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
+        # Tracks orders that were created while price was already past the trigger.
+        # The price must cross to the opposite side first (reset) before the order
+        # is allowed to fire. This prevents immediate execution on creation.
+        self._price_reset_needed: Dict[int, bool] = {}
         
         self._init_rate_limiters()
     
@@ -850,6 +854,10 @@ class ConditionalOrderService:
         )
         
         self.pending_orders[order_id] = order
+        # Arm the breakout-reset guard. If the price is already past the trigger
+        # when the first price tick arrives, the flag stays set until the price
+        # crosses back to the opposite side — only then can the order fire.
+        self._price_reset_needed[order_id] = True
         
         if self.is_running and self._loop:
             asyncio.run_coroutine_threadsafe(
@@ -1008,6 +1016,7 @@ class ConditionalOrderService:
                         del self.pending_orders[oid]
                     if oid in self.monitor_tasks:
                         del self.monitor_tasks[oid]
+                    self._price_reset_needed.pop(oid, None)
             except asyncio.CancelledError:
                 print(f"[CONDITIONAL] Monitor #{oid} cancelled")
             except Exception as e:
@@ -1050,6 +1059,36 @@ class ConditionalOrderService:
         sys.stderr.write(f"[CONDITIONAL] Checking trigger: {trigger_type} {trigger_price}, current={price:.2f}\n")
         sys.stderr.flush()
         
+        # ── Breakout-reset guard ─────────────────────────────────────────────────
+        # When an order is first created, we arm a reset flag. If the price is
+        # already past the trigger at that moment (e.g. "over 1.30" but price is
+        # already $1.40), the flag stays set until the price drops back below the
+        # trigger. This prevents immediate execution on creation and ensures we
+        # only fire on a true breakout from the correct side.
+        if self._price_reset_needed.get(order_id, False):
+            already_past = (
+                (trigger_type == 'over'  and price >= trigger_price) or
+                (trigger_type == 'under' and price <= trigger_price)
+            )
+            if already_past:
+                sys.stderr.write(
+                    f"[CONDITIONAL] #{order_id} ⏳ Reset pending — price {price:.4f} already "
+                    f"{'above' if trigger_type == 'over' else 'below'} trigger {trigger_price}. "
+                    f"Waiting for price to pull back first.\n"
+                )
+                sys.stderr.flush()
+                return
+            else:
+                # Price has crossed to the opposite side — reset complete.
+                self._price_reset_needed[order_id] = False
+                sys.stderr.write(
+                    f"[CONDITIONAL] #{order_id} ✓ Reset complete — price {price:.4f} now "
+                    f"{'below' if trigger_type == 'over' else 'above'} trigger {trigger_price}. "
+                    f"Watching for breakout.\n"
+                )
+                sys.stderr.flush()
+        # ─────────────────────────────────────────────────────────────────────────
+
         triggered = False
         if trigger_type == 'over' and price >= trigger_price:
             triggered = True
@@ -1153,6 +1192,7 @@ class ConditionalOrderService:
         
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
+        self._price_reset_needed.pop(order_id, None)
         
         if self.notification_callback:
             await self.notification_callback(order, triggered_price, 'TRIGGERED')
@@ -1326,6 +1366,7 @@ class ConditionalOrderService:
         
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
+        self._price_reset_needed.pop(order_id, None)
         
         return cancel_conditional_order(order_id, reason)
     
@@ -1486,6 +1527,7 @@ class ConditionalOrderService:
         
         self.monitors.clear()
         self.pending_orders.clear()
+        self._price_reset_needed.clear()
         
         print("[CONDITIONAL] Service stopped")
     
