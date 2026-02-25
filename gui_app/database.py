@@ -2584,7 +2584,7 @@ def update_channel(channel_id: int, **kwargs):
                    'ignore_signal_position_size', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
                    'conditional_order_enabled', 'conditional_auto_execute', 'conditional_order_expiry',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'trigger_offset_mode', 'trigger_offset_value', 'order_timeout_minutes',
-                   'slippage_protection_enabled', 'slippage_max_pct', 'limit_cap_enabled', 'limit_cap_pct',
+                   'slippage_protection_enabled', 'slippage_max_pct', 'slippage_wait_minutes', 'limit_cap_enabled', 'limit_cap_pct',
                    'signal_update_automation', 'signal_update_automation_override',
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
@@ -10945,6 +10945,10 @@ def migrate_channels_for_conditional_orders():
         if 'order_timeout_minutes' not in columns:
             cursor.execute('ALTER TABLE channels ADD COLUMN order_timeout_minutes INTEGER DEFAULT NULL')
             print("[DATABASE] ✓ Added order_timeout_minutes column to channels (applies to ALL orders)")
+
+        if 'slippage_wait_minutes' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN slippage_wait_minutes INTEGER DEFAULT NULL')
+            print("[DATABASE] ✓ Added slippage_wait_minutes column to channels (NULL = use global default)")
         
         if 'ndx_to_qqq_enabled' not in columns:
             cursor.execute('ALTER TABLE channels ADD COLUMN ndx_to_qqq_enabled INTEGER DEFAULT 0')

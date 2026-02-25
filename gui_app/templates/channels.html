@@ -1323,6 +1323,17 @@ function renderChannels() {
                             <span style="font-size: 9px; color: #6B7A90;">%</span>
                         </div>
                     </div>
+                    <div style="background: #0F1319; padding: 8px 10px;" title="Slippage Wait: How long to wait for price to come back within threshold before cancelling (minutes). Blank = use global default (5 min). Only applies to conditional orders.">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">SlpWait</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 3px;">
+                            <input type="number" id="slippage-wait-${channel.id}" value="${channel.slippage_wait_minutes || ''}" placeholder="5" min="1" max="120" step="1"
+                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                                   onchange="updateSlippageWait(${channel.id}, this.value)">
+                            <span style="font-size: 9px; color: #6B7A90;">m</span>
+                        </div>
+                    </div>
                     <div style="background: #0F1319; padding: 8px 10px;" title="Limit Cap: Maximum price above trigger for conditional orders (prevents chasing runaway prices)">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                             <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">LimCap</span>
@@ -1800,6 +1811,26 @@ async function updateSlippageProtection(channelId, enabled, maxPct) {
             }
         } else {
             showNotification('Error updating slippage protection', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateSlippageWait(channelId, minutes) {
+    try {
+        const waitVal = minutes ? parseInt(minutes) : null;
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slippage_wait_minutes: waitVal })
+        });
+        if (response.ok) {
+            showNotification(waitVal ? `Slippage wait set to ${waitVal} min` : 'Slippage wait reset to global default');
+        } else {
+            showNotification('Error updating slippage wait', 'error');
             await loadChannels();
         }
     } catch (error) {

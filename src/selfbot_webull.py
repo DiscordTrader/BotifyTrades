@@ -1585,22 +1585,28 @@ def get_effective_slippage_settings(channel_id: str = None):
     """Get effective slippage settings for a channel with fallback to global settings.
     
     Priority: Channel settings (if enabled) > Global settings
+    wait_minutes is always resolved: channel-level first, then global SLIPPAGE_WAIT_MINUTES.
     """
+    channel_wait = None
     if channel_id and DATABASE_MODULE_AVAILABLE:
         try:
             channel = db.get_channel_by_discord_id(str(channel_id))
-            if channel and channel.get('slippage_protection_enabled'):
-                return {
-                    'enabled': True,
-                    'threshold_percent': channel.get('slippage_max_pct') or 50.0,
-                    'source': 'channel'
-                }
+            if channel:
+                channel_wait = channel.get('slippage_wait_minutes')
+                if channel.get('slippage_protection_enabled'):
+                    return {
+                        'enabled': True,
+                        'threshold_percent': channel.get('slippage_max_pct') or 50.0,
+                        'wait_minutes': int(channel_wait) if channel_wait else SLIPPAGE_WAIT_MINUTES,
+                        'source': 'channel'
+                    }
         except Exception as e:
             print(f"[SLIPPAGE] Warning: Could not load channel slippage settings: {e}")
     
     # Fallback to global settings
     global_settings = get_slippage_settings()
     global_settings['source'] = 'global'
+    global_settings['wait_minutes'] = int(channel_wait) if channel_wait else SLIPPAGE_WAIT_MINUTES
     return global_settings
 
 # Load initial slippage settings
@@ -2819,9 +2825,10 @@ class WebullBroker:
             print(f"[SLIPPAGE] ❌ ABORT - slippage {slippage_pct:.2f}% > {threshold}%")
             return (SlippageDecision.ABORT, slippage_pct)
     
-    async def _wait_for_better_price(self, signal: dict, get_current_price_func) -> Tuple[SlippageDecision, Optional[float]]:
+    async def _wait_for_better_price(self, signal: dict, get_current_price_func, wait_minutes: int = None) -> Tuple[SlippageDecision, Optional[float]]:
         """
-        Wait and retry for better price within configured time limit
+        Wait and retry for better price within configured time limit.
+        wait_minutes: override for channel-level setting (None = use global SLIPPAGE_WAIT_MINUTES)
         Returns: (final_decision, final_current_price)
         """
         signal_price = signal.get('price')
@@ -2831,10 +2838,11 @@ class WebullBroker:
             print(f"[SLIPPAGE] Market order detected - skipping price wait")
             return (SlippageDecision.IMMEDIATE, None)
         
-        wait_until = datetime.now() + timedelta(minutes=SLIPPAGE_WAIT_MINUTES)
+        effective_wait = wait_minutes if (wait_minutes and wait_minutes > 0) else SLIPPAGE_WAIT_MINUTES
+        wait_until = datetime.now() + timedelta(minutes=effective_wait)
         retry_count = 0
         
-        print(f"[SLIPPAGE] ⏳ Waiting up to {SLIPPAGE_WAIT_MINUTES} minutes for better price...")
+        print(f"[SLIPPAGE] ⏳ Waiting up to {effective_wait} minutes for better price...")
         print(f"[SLIPPAGE] Will retry every {SLIPPAGE_RETRY_INTERVAL} seconds")
         
         while datetime.now() < wait_until:
@@ -2858,7 +2866,7 @@ class WebullBroker:
                 return (decision, current_price)
         
         # Timeout reached
-        print(f"[SLIPPAGE] ⏰ Wait timeout reached ({SLIPPAGE_WAIT_MINUTES} minutes)")
+        print(f"[SLIPPAGE] ⏰ Wait timeout reached ({effective_wait} minutes)")
         print(f"[SLIPPAGE] ❌ Canceling order - price never improved")
         return (SlippageDecision.ABORT, None)
     
@@ -2919,13 +2927,39 @@ class WebullBroker:
             # Use dynamic threshold from database
             decision, slippage_pct = self._evaluate_slippage(_slippage_reference, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
             
+            _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
+            _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
+
             if decision == SlippageDecision.ABORT:
-                print(f"[SLIPPAGE] ❌ Order ABORTED - excessive slippage or illiquid")
-                return {
-                    'success': False,
-                    'msg': f'Order canceled: price slippage {slippage_pct:.2f}% exceeds threshold or option is illiquid',
-                    'error': 'EXCESSIVE_SLIPPAGE'
-                }
+                if _is_conditional_order:
+                    # Conditional orders: wait for price to recover instead of hard-aborting
+                    print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes} min)")
+                    _wait_signal = {
+                        'action': action,
+                        'symbol': symbol,
+                        'strike': strike,
+                        'opt_type': opt_type,
+                        'expiry': expiry_mmdd,
+                        'price': limit_price
+                    }
+                    final_decision, final_price = await self._wait_for_better_price(_wait_signal, get_quote, wait_minutes=_eff_wait_minutes)
+                    if final_decision == SlippageDecision.ABORT:
+                        print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes} min")
+                        return {
+                            'success': False,
+                            'msg': f'Order canceled: price slippage did not recover within {_eff_wait_minutes} minutes',
+                            'error': 'SLIPPAGE_TIMEOUT'
+                        }
+                    if final_price and final_price > 0:
+                        print(f"[SLIPPAGE] ✓ Price recovered: ${limit_price:.2f} → ${final_price:.2f}")
+                        limit_price = final_price
+                else:
+                    print(f"[SLIPPAGE] ❌ Order ABORTED - excessive slippage or illiquid")
+                    return {
+                        'success': False,
+                        'msg': f'Order canceled: price slippage {slippage_pct:.2f}% exceeds threshold or option is illiquid',
+                        'error': 'EXCESSIVE_SLIPPAGE'
+                    }
             
             elif decision == SlippageDecision.WAIT:
                 # Enter wait-and-retry loop
@@ -2938,13 +2972,13 @@ class WebullBroker:
                     'price': limit_price
                 }
                 
-                final_decision, final_price = await self._wait_for_better_price(signal, get_quote)
+                final_decision, final_price = await self._wait_for_better_price(signal, get_quote, wait_minutes=_eff_wait_minutes)
                 
                 if final_decision == SlippageDecision.ABORT:
                     print(f"[SLIPPAGE] ❌ Order CANCELED - price never improved after waiting")
                     return {
                         'success': False,
-                        'msg': f'Order canceled: price did not improve within {SLIPPAGE_WAIT_MINUTES} minutes',
+                        'msg': f'Order canceled: price did not improve within {_eff_wait_minutes} minutes',
                         'error': 'SLIPPAGE_TIMEOUT'
                     }
                 
@@ -3549,13 +3583,32 @@ class WebullBroker:
             # Use dynamic threshold from database
             decision, slippage_pct = self._evaluate_slippage(limit_price, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
             
+            _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
+            _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
+
             if decision == SlippageDecision.ABORT:
-                print(f"[SLIPPAGE] ❌ Order ABORTED - excessive slippage or no quote available")
-                return {
-                    'success': False,
-                    'msg': f'Order canceled: price slippage {slippage_pct:.2f}% exceeds threshold or stock has no quote',
-                    'error': 'EXCESSIVE_SLIPPAGE'
-                }
+                if _is_conditional_order:
+                    # Conditional orders: wait for price to recover instead of hard-aborting
+                    print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes} min)")
+                    _wait_signal = {'action': action, 'symbol': symbol, 'price': limit_price}
+                    final_decision, final_price = await self._wait_for_better_price(_wait_signal, get_quote, wait_minutes=_eff_wait_minutes)
+                    if final_decision == SlippageDecision.ABORT:
+                        print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes} min")
+                        return {
+                            'success': False,
+                            'msg': f'Order canceled: price slippage did not recover within {_eff_wait_minutes} minutes',
+                            'error': 'SLIPPAGE_TIMEOUT'
+                        }
+                    if final_price and final_price > 0:
+                        print(f"[SLIPPAGE] ✓ Price recovered: ${limit_price:.2f} → ${final_price:.2f}")
+                        limit_price = final_price
+                else:
+                    print(f"[SLIPPAGE] ❌ Order ABORTED - excessive slippage or no quote available")
+                    return {
+                        'success': False,
+                        'msg': f'Order canceled: price slippage {slippage_pct:.2f}% exceeds threshold or stock has no quote',
+                        'error': 'EXCESSIVE_SLIPPAGE'
+                    }
             
             elif decision == SlippageDecision.WAIT:
                 # Enter wait-and-retry loop
@@ -3565,13 +3618,13 @@ class WebullBroker:
                     'price': limit_price
                 }
                 
-                final_decision, final_price = await self._wait_for_better_price(signal, get_quote)
+                final_decision, final_price = await self._wait_for_better_price(signal, get_quote, wait_minutes=_eff_wait_minutes)
                 
                 if final_decision == SlippageDecision.ABORT:
                     print(f"[SLIPPAGE] ❌ Order CANCELED - price never improved after waiting")
                     return {
                         'success': False,
-                        'msg': f'Order canceled: price did not improve within {SLIPPAGE_WAIT_MINUTES} minutes',
+                        'msg': f'Order canceled: price did not improve within {_eff_wait_minutes} minutes',
                         'error': 'SLIPPAGE_TIMEOUT'
                     }
                 
