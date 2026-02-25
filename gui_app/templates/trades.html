@@ -2422,12 +2422,18 @@ function qtFlashPrice(el, direction) {
 }
 
 async function qtStreamQuotePoll() {
-    if (!qtChainData) return;
+    if (!qtChainData) { console.log('[QT_STREAM] No chainData, skipping poll'); return; }
     const symbol = qtChainData.symbol;
     const broker = document.getElementById('qt-broker').value;
     try {
         const r = await fetch(`/api/options/stream-quotes?symbol=${symbol}&broker=${broker}`, { credentials: 'include' });
+        if (!r.ok) { console.warn('[QT_STREAM] stream-quotes HTTP', r.status); return; }
         const data = await r.json();
+        if (!qtStreamQuotePoll._logCount) qtStreamQuotePoll._logCount = 0;
+        qtStreamQuotePoll._logCount++;
+        if (qtStreamQuotePoll._logCount <= 5) {
+            console.log('[QT_STREAM] poll#' + qtStreamQuotePoll._logCount, 'count=' + data.count, 'streaming=' + data.streaming, 'keys=', Object.keys(data.quotes || {}).slice(0, 3));
+        }
         if (!data.quotes || data.count === 0) return;
 
         const rows = document.querySelectorAll('.qt-chain tbody tr');
@@ -2512,7 +2518,7 @@ async function qtStreamQuotePoll() {
             const srcLabel = broker.includes('SCHWAB') ? 'Schwab WS' : 'Webull MQTT';
             srcEl.innerHTML = `<span class="qt-source" style="background:#22c55e22; color:#22c55e;">\u26A1 ${srcLabel} Stream</span>`;
         }
-    } catch (e) { /* silent */ }
+    } catch (e) { console.error('[QT_STREAM] poll error:', e); }
 }
 
 function qtStartAutoRefresh() {

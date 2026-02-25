@@ -9997,6 +9997,8 @@ def register_routes(app):
             symbol_prefix_underscore = symbol + '_'
             symbol_prefix_space = symbol.ljust(6)
 
+            hub_quote_count = len(hub._quotes) if hasattr(hub, '_quotes') else -1
+
             with hub._quotes_lock:
                 now = time.time()
                 for key, quote in hub._quotes.items():
@@ -10012,10 +10014,16 @@ def register_routes(app):
                                 'streaming': age < 5
                             }
 
-            if quotes and not hasattr(api_get_option_stream_quotes, '_debug_logged'):
-                api_get_option_stream_quotes._debug_logged = True
-                for k, v in list(quotes.items())[:3]:
-                    print(f"[STREAM_QUOTES_DEBUG] key={repr(k)} bid={v['bid']:.2f} ask={v['ask']:.2f} last={v['last']:.2f} age={v['age_ms']}ms streaming={v['streaming']}")
+            if not hasattr(api_get_option_stream_quotes, '_debug_count'):
+                api_get_option_stream_quotes._debug_count = 0
+            api_get_option_stream_quotes._debug_count += 1
+            if api_get_option_stream_quotes._debug_count <= 10:
+                hub_id = id(hub)
+                hub_keys_sample = list(hub._quotes.keys())[:3] if hasattr(hub, '_quotes') else []
+                print(f"[STREAM_QUOTES_DEBUG] call#{api_get_option_stream_quotes._debug_count} broker={broker} symbol={symbol} hub_id={hub_id} hub_quotes={hub_quote_count} matched={len(quotes)} prefix_us={repr(symbol_prefix_underscore)} prefix_sp={repr(symbol_prefix_space)} hub_keys_sample={hub_keys_sample} streaming={streaming}")
+                if quotes:
+                    for k, v in list(quotes.items())[:3]:
+                        print(f"[STREAM_QUOTES_DEBUG]   key={repr(k)} bid={v['bid']:.2f} ask={v['ask']:.2f} last={v['last']:.2f} age={v['age_ms']}ms streaming={v['streaming']}")
 
             return jsonify({
                 'quotes': quotes,
