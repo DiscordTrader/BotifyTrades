@@ -284,6 +284,26 @@ class StreamingPriceMonitor(PriceMonitor):
                     sys.stderr.write(f"[STREAM_MON] Ticker lookup error for {self.symbol}: {e}\n")
                     sys.stderr.flush()
                     
+            # ── Schwab WebSocket (subscribe_equities / subscribe_options) ──
+            if hasattr(client, 'subscribe_equities'):
+                try:
+                    import asyncio as _asyncio
+                    loop = _asyncio.get_event_loop()
+                    if self.symbol.count(' ') >= 1 and len(self.symbol) >= 15:
+                        # Looks like an OCC option key → use subscribe_options
+                        loop.create_task(client.subscribe_options([self.symbol]))
+                        sys.stderr.write(f"[STREAM_MON] ✓ Schwab: subscribing option {self.symbol} to WebSocket stream\n")
+                    else:
+                        loop.create_task(client.subscribe_equities([self.symbol]))
+                        sys.stderr.write(f"[STREAM_MON] ✓ Schwab: subscribing equity {self.symbol} to WebSocket stream\n")
+                    sys.stderr.flush()
+                    return True
+                except Exception as e:
+                    sys.stderr.write(f"[STREAM_MON] Schwab subscribe error for {self.symbol}: {e}\n")
+                    sys.stderr.flush()
+                return False
+
+            # ── Webull MQTT (subscribe_symbol with ticker_id) ──────────────
             if ticker_id and str(ticker_id) != '0':
                 client.subscribe_symbol(self.symbol, str(ticker_id))
                 sys.stderr.write(f"[STREAM_MON] ✓ Subscribed {self.symbol} to streaming (tid={ticker_id})\n")
