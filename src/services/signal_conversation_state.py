@@ -441,7 +441,9 @@ def process_follow_up_message(
             'order_id': ctx.order_id,
             'symbol': symbol,
             'stop_loss_value': update.get('stop_loss_update'),
+            'stop_loss_pct_update': update.get('stop_loss_pct_update'),
             'profit_target_update': update.get('profit_target_update'),
+            'profit_targets_update': update.get('profit_targets_update'),
         }
     
     return None

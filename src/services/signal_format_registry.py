@@ -100,12 +100,10 @@ class SignalFormatRegistry:
     
     def _strip_discord_mentions(self, text: str) -> str:
         """Strip Discord mentions from text to allow pattern matching."""
-        # Strip role mentions: <@&123456789>
         text = re.sub(r'<@&\d+>\s*', '', text)
-        # Strip user mentions: <@123456789> or <@!123456789>
         text = re.sub(r'<@!?\d+>\s*', '', text)
-        # Strip channel mentions: <#123456789>
         text = re.sub(r'<#\d+>\s*', '', text)
+        text = re.sub(r'@(?:everyone|here)\s*', '', text)
         return text.strip()
     
     def parse(self, text: str) -> Optional[Dict[str, Any]]:

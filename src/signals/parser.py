@@ -380,11 +380,15 @@ CONDITIONAL_TARGET_RANGE_PATTERN = re.compile(
 # Partial exit patterns: "selling 80% MLTX", "selling 60%", "selling half", "selling 80% here EVTV"
 # Phoenix formats: "selling 80% here", "selling 10% more CRVS", "selling 80% here IBRX"
 PARTIAL_EXIT_PATTERN = re.compile(
-    r'(?:selling|sold|trimm?(?:ing|ed)?|taking\s+(?:off|profit))\s+'
-    r'(?:(?P<percent>\d+(?:\.\d+)?)\s*%|(?P<fraction>half|quarter|third))\s*'
+    r'(?:(?:will\s+be\s+)?selling|sold|trimm?(?:ing|ed)?|taking\s+(?:off|profit))\s+'
+    r'(?:'
+    r'(?P<percent>\d+(?:\.\d+)?)\s*%|'
+    r'(?P<fraction>half|quarter|third)|'
+    r'(?P<pre_symbol>[A-Z]{1,5})\s+(?P<pre_percent>\d+(?:\.\d+)?)\s*%'
+    r')\s*'
     r'(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?'
-    r'(?:(?:here|now|on|more)\s*)*'  # Location/continuation words (consume but don't capture)
-    r'(?:\$?(?P<symbol>(?!here|now|on|more)[A-Z]{1,5})(?![a-z]))?',  # Symbol - exclude reserved words
+    r'(?:(?:here|now|on|more)\s*)*'
+    r'(?:\$?(?P<symbol>(?!here|now|on|more)[A-Z]{1,5})(?![a-z]))?',
     re.IGNORECASE
 )
 
@@ -447,10 +451,11 @@ HYBRID_SL_PATTERN = re.compile(
 # Follow-up message patterns for sequential monitoring
 # Detects delayed SL/PT updates: "SL now at 14.60", "PT raised to 17.50", "moving my SL to 1.88"
 FOLLOW_UP_SL_PATTERN = re.compile(
-    r'(?:(?:moving|mov(?:e|ed)?)\s+(?:my\s+)?)?'  # Optional "moving my" prefix
+    r'(?:(?:moving|mov(?:e|ed)?)\s+(?:my\s+)?)?'
     r'(?:SL|stop\s*loss|stop)\s*'
+    r'(?:(?:for|on)\s+\$?[A-Z]{1,5}\s+)?'
     r'(?:now\s+)?(?:at|to|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
-    r'[:\s@]*\$?(?P<price>[\d.]+)(?!\s*%)',  # Fixed price, NOT percentage
+    r'[:\s@]*\$?(?P<price>[\d.]+)(?!\s*%)',
     re.IGNORECASE
 )
 
@@ -464,15 +469,20 @@ FOLLOW_UP_SL_PERCENT_PATTERN = re.compile(
 )
 
 FOLLOW_UP_PT_PATTERN = re.compile(
-    r'(?:PT|target|profit\s*target|take\s*profit|TP)\s*'
-    r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
+    r'(?:(?:first|second|third|next)\s+)?'
+    r'(?:PT|targets?|profits?|profit\s*target|take\s*profit|TP)\s*'
+    r'(?:(?:for|of|on)\s+\$?[A-Z]{1,5}\s+)?'
+    r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to)|hit[,\s])?\s*'
+    r'(?:\$?[A-Z]{1,5}\s+)?'
     r'[:\s@]*\$?(?P<price>[\d.]+)',
     re.IGNORECASE
 )
 
-# Range targets pattern for Phoenix-style: "targets 3.25-3.50", "PT 3.25-3.50"
 FOLLOW_UP_PT_RANGE_PATTERN = re.compile(
-    r'(?:targets?|PT|profit\s*target|take\s*profit|TP)\s*'
+    r'(?:(?:first|second|third|next)\s+)?'
+    r'(?:targets?|profits?|PT|profit\s*target|take\s*profit|TP)\s*'
+    r'(?:(?:for|of|on)\s+\$?[A-Z]{1,5}\s+)?'
+    r'(?:\$?[A-Z]{1,5}\s+)?'
     r'[:\s@]*\$?(?P<price1>[\d.]+)\s*[-–—to]+\s*\$?(?P<price2>[\d.]+)',
     re.IGNORECASE
 )
@@ -1115,15 +1125,18 @@ def parse_partial_exit_signal(text: str) -> Optional[Dict[str, Any]]:
               f"{' of ' + symbol.upper() if symbol else ''}")
         return result
     
-    # Check for regular partial exit patterns
     exit_match = PARTIAL_EXIT_PATTERN.search(text)
     if exit_match:
         percent = exit_match.group('percent')
         fraction = exit_match.group('fraction')
         symbol = exit_match.group('symbol')
+        pre_symbol = exit_match.group('pre_symbol')
+        pre_percent = exit_match.group('pre_percent')
         
-        # Convert fractions to percentages
-        if fraction:
+        if pre_symbol and pre_percent:
+            symbol = pre_symbol
+            exit_pct = float(pre_percent)
+        elif fraction:
             fraction_map = {'half': 50.0, 'quarter': 25.0, 'third': 33.33}
             exit_pct = fraction_map.get(fraction.lower(), 50.0)
         else:
@@ -1340,10 +1353,27 @@ def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Di
             updates['profit_target_update'] = float(price_str)
     
     if updates:
+        embedded_symbol = None
+        sym_patterns = [
+            re.search(r'(?:targets?|PT|SL|stop\s*loss)\s+(?:for|of|on)\s+\$?([A-Z]{1,5})\b', text, re.IGNORECASE),
+            re.search(r'(?:targets?|PT)\s+([A-Z]{1,5})\s+[\d.]', text, re.IGNORECASE),
+            re.search(r'(?:SL|stop\s*loss)\s+(?:for|of|on)\s+\$?([A-Z]{1,5})\b', text, re.IGNORECASE),
+            re.search(r'(?:second|first|third|next)\s+target\s+([A-Z]{1,5})\s+[\d.]', text, re.IGNORECASE),
+        ]
+        for m in sym_patterns:
+            if m:
+                candidate = m.group(1).upper()
+                reserved = {'FOR', 'OF', 'ON', 'AT', 'TO', 'NOW', 'HIT', 'MY', 'THE', 'SET', 'HERE', 'MORE', 'WITH'}
+                if candidate not in reserved:
+                    embedded_symbol = candidate
+                    break
+
+        resolved_symbol = embedded_symbol or context_symbol
+
         result = {
             'format': 'FOLLOW_UP_UPDATE',
             'action': 'UPDATE',
-            'symbol': context_symbol,
+            'symbol': resolved_symbol,
             **updates,
             '_original_message': text,
         }
@@ -1360,7 +1390,7 @@ def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Di
             update_strs.append(f"PT=${pts[0]}-${pts[1]}")
         
         print(f"[FOLLOW-UP] Update detected: {', '.join(update_strs)}"
-              f"{' for ' + context_symbol if context_symbol else ''}")
+              f"{' for ' + resolved_symbol if resolved_symbol else ''}")
         return result
     
     return None
