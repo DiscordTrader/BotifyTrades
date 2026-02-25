@@ -738,28 +738,61 @@ class SignalRoutingEngine:
                             if loop_count % skip_interval != 0:
                                 continue
                         
-                        quote_agg = get_quote_aggregator()
-                        from src.services.quote_aggregator import BrokerCapability
-                        connected_brokers = quote_agg.get_connected_brokers(BrokerCapability.OPTION_QUOTE)
-                        
-                        quote_result = await asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: quote_agg.get_option_quote(
-                                symbol=position.symbol,
-                                strike=position.strike,
-                                opt_type=position.option_type,
-                                expiry=expiry_fmt
-                            )
-                        )
-                        price = quote_result.mid if quote_result.success else None
-                        if quote_result.success:
+                        # ── Hub-first pricing (Webull MQTT / Schwab WebSocket) ────────────
+                        # Check streaming hubs before any REST call. Zero API cost, sub-100ms.
+                        price = None
+                        _hub_source = None
+                        occ_key = getattr(position, 'option_key', None)
+                        is_option = bool(position.strike)
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            _wb_hub = get_webull_data_hub()
+                            if _wb_hub.is_streaming():
+                                _lookup = occ_key if is_option else position.symbol
+                                if _lookup:
+                                    price = _wb_hub.get_quote_price(_lookup)
+                                    if price and price > 0:
+                                        _hub_source = 'webull_hub'
+                        except Exception:
+                            pass
+                        if not price:
+                            try:
+                                from src.services.schwab_data_hub import get_schwab_data_hub
+                                _sw_hub = get_schwab_data_hub()
+                                if _sw_hub.is_streaming():
+                                    _lookup = occ_key if is_option else position.symbol
+                                    if _lookup:
+                                        price = _sw_hub.get_quote_price(_lookup)
+                                        if price and price > 0:
+                                            _hub_source = 'schwab_hub'
+                            except Exception:
+                                pass
+
+                        if price and price > 0:
                             _quote_fail_counts.pop(pos_key, None)
                         else:
-                            _quote_fail_counts[pos_key] = fail_count + 1
+                            # Hub miss — fall back to REST via QuoteAggregator
+                            quote_agg = get_quote_aggregator()
+                            from src.services.quote_aggregator import BrokerCapability
+                            connected_brokers = quote_agg.get_connected_brokers(BrokerCapability.OPTION_QUOTE)
+                            quote_result = await asyncio.get_event_loop().run_in_executor(
+                                None,
+                                lambda: quote_agg.get_option_quote(
+                                    symbol=position.symbol,
+                                    strike=position.strike,
+                                    opt_type=position.option_type,
+                                    expiry=expiry_fmt
+                                )
+                            )
+                            price = quote_result.mid if quote_result.success else None
+                            if quote_result.success:
+                                _quote_fail_counts.pop(pos_key, None)
+                            else:
+                                _quote_fail_counts[pos_key] = fail_count + 1
                         should_log_detail = loop_count <= 3 or loop_count % 20 == 0
-                        if should_log_detail or not quote_result.success:
-                            error_info = quote_result.error if not quote_result.success else ""
-                            sys.stderr.write(f"[ROUTING_ENGINE] {position.symbol} {position.strike}{position.option_type} {expiry_fmt}: price={price} (entry={position.entry_price}) brokers={connected_brokers} {error_info}\n")
+                        _price_src = _hub_source or 'rest'
+                        if should_log_detail or (price is None):
+                            sys.stderr.write(f"[ROUTING_ENGINE] {position.symbol} {position.strike}{position.option_type} {expiry_fmt}: price={price} src={_price_src} (entry={position.entry_price})\n")
                             sys.stderr.flush()
                         if price and price > 0:
                             self.ledger.update_price(position.id, price, staleness_sec=0)
