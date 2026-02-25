@@ -2375,6 +2375,8 @@ let qtStreamQuoteTimer = null;
 let qtStreamSubscribed = false;
 let qtPrevPrices = {};
 let qtInitialPollTimeout = null;
+let qtStreamingActive = false;
+let qtStreamingLastUpdate = 0;
 
 async function qtSubscribeStream() {
     if (!qtChainData || !qtChainData.strikes) return;
@@ -2490,6 +2492,13 @@ async function qtStreamQuotePoll() {
             }
         });
 
+        if (anyStreaming) {
+            qtStreamingActive = true;
+            qtStreamingLastUpdate = Date.now();
+        } else if (Date.now() - qtStreamingLastUpdate > 10000) {
+            qtStreamingActive = false;
+        }
+
         if (qtInd) {
             if (anyStreaming) {
                 qtInd.style.display = 'inline';
@@ -2513,6 +2522,8 @@ function qtStartAutoRefresh() {
     if (qtInitialPollTimeout) clearTimeout(qtInitialPollTimeout);
     qtPrevPrices = {};
     qtStreamSubscribed = false;
+    qtStreamingActive = false;
+    qtStreamingLastUpdate = 0;
 
     qtSubscribeStream();
 
@@ -2529,23 +2540,44 @@ function qtStartAutoRefresh() {
             const r = await fetch(`/api/options/quick-chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}&count=4`, { credentials: 'include' });
             const data = await r.json();
             if (data.error || !data.strikes) return;
-            qtChainData = data;
-            if (!qtStreamSubscribed) qtSubscribeStream();
-            const rows = document.querySelectorAll('.qt-chain tbody tr');
-            data.strikes.forEach((s, idx) => {
-                const row = rows[idx];
-                if (!row) return;
-                const prices = row.querySelectorAll('.qt-price');
-                if (prices.length >= 6) {
-                    const newVals = [s.call.bid, s.call.mid, s.call.ask, s.put.bid, s.put.mid, s.put.ask];
-                    prices.forEach((el, i) => {
-                        const newText = '$' + newVals[i].toFixed(2);
-                        if (el.textContent !== newText) {
-                            el.textContent = newText;
-                        }
-                    });
-                }
-            });
+            if (!qtStreamSubscribed) {
+                qtChainData = data;
+                qtSubscribeStream();
+            } else {
+                data.strikes.forEach((s, idx) => {
+                    if (!qtChainData.strikes[idx]) return;
+                    qtChainData.strikes[idx].call.volume = s.call.volume;
+                    qtChainData.strikes[idx].call.oi = s.call.oi;
+                    qtChainData.strikes[idx].call.iv = s.call.iv;
+                    qtChainData.strikes[idx].call.delta = s.call.delta;
+                    qtChainData.strikes[idx].put.volume = s.put.volume;
+                    qtChainData.strikes[idx].put.oi = s.put.oi;
+                    qtChainData.strikes[idx].put.iv = s.put.iv;
+                    qtChainData.strikes[idx].put.delta = s.put.delta;
+                    if (!qtChainData.strikes[idx].call.option_id && s.call.option_id)
+                        qtChainData.strikes[idx].call.option_id = s.call.option_id;
+                    if (!qtChainData.strikes[idx].put.option_id && s.put.option_id)
+                        qtChainData.strikes[idx].put.option_id = s.put.option_id;
+                });
+                if (data.stock_price > 0) qtChainData.stock_price = data.stock_price;
+            }
+            if (!qtStreamingActive) {
+                const rows = document.querySelectorAll('.qt-chain tbody tr');
+                data.strikes.forEach((s, idx) => {
+                    const row = rows[idx];
+                    if (!row) return;
+                    const prices = row.querySelectorAll('.qt-price');
+                    if (prices.length >= 6) {
+                        const newVals = [s.call.bid, s.call.mid, s.call.ask, s.put.bid, s.put.mid, s.put.ask];
+                        prices.forEach((el, i) => {
+                            const newText = '$' + newVals[i].toFixed(2);
+                            if (el.textContent !== newText) {
+                                el.textContent = newText;
+                            }
+                        });
+                    }
+                });
+            }
             if (data.stock_price > 0 && !qtLastStreamPrice) {
                 document.getElementById('qt-stock-price').innerHTML = `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`;
             }

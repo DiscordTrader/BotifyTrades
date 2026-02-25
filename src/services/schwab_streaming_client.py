@@ -240,6 +240,8 @@ class SchwabStreamingClient:
             self._hub.update_quote(symbol, decoded, source="stream_equity")
 
     def _process_option_quotes(self, content: list):
+        if not hasattr(self, '_option_quote_count'):
+            self._option_quote_count = 0
         for entry in content:
             symbol = entry.get('key', '')
             if not symbol:
@@ -251,6 +253,13 @@ class SchwabStreamingClient:
                     continue
                 label = OPTION_FIELD_MAP.get(str(num_key), num_key)
                 decoded[label] = value
+
+            self._option_quote_count += 1
+            if self._option_quote_count <= 3 or self._option_quote_count % 500 == 0:
+                bid = decoded.get('BID_PRICE', '?')
+                ask = decoded.get('ASK_PRICE', '?')
+                last = decoded.get('LAST_PRICE', '?')
+                print(f"[SCHWAB_STREAM] Option quote #{self._option_quote_count}: {symbol} bid={bid} ask={ask} last={last}")
 
             self._hub.update_quote(symbol, decoded, source="stream_option")
 

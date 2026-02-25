@@ -10012,6 +10012,11 @@ def register_routes(app):
                                 'streaming': age < 5
                             }
 
+            if quotes and not hasattr(api_get_option_stream_quotes, '_debug_logged'):
+                api_get_option_stream_quotes._debug_logged = True
+                for k, v in list(quotes.items())[:3]:
+                    print(f"[STREAM_QUOTES_DEBUG] key={repr(k)} bid={v['bid']:.2f} ask={v['ask']:.2f} last={v['last']:.2f} age={v['age_ms']}ms streaming={v['streaming']}")
+
             return jsonify({
                 'quotes': quotes,
                 'streaming': streaming,
