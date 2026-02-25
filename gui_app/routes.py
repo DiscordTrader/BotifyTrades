@@ -9099,15 +9099,18 @@ def register_routes(app):
                 if not settings.get('enabled', True):
                     return jsonify({'success': False, 'error': 'Discord notifications are disabled. Enable them in Settings → Notifications.'}), 400
             
+            skip_tag = data.get('no_qt_tag', False)
+            tagged_signal = signal if skip_tag else f"[QT] {signal}"
+
             payload = {
-                "content": signal,
+                "content": tagged_signal,
                 "username": bot_name
             }
             
             response = http_requests.post(webhook_url, json=payload, timeout=5)
             
             if response.status_code in [200, 204]:
-                print(f"[DISCORD] Signal sent: {signal}")
+                print(f"[DISCORD] Signal sent: {tagged_signal}")
                 return jsonify({'success': True, 'message': 'Signal sent to Discord'})
             else:
                 print(f"[DISCORD] Webhook failed: {response.status_code} - {response.text}")
@@ -10386,7 +10389,7 @@ def register_routes(app):
                                     symbol=symbol,
                                     quantity=quantity,
                                     price=price,
-                                    entry_price=0.0,  # TODO: Database lookup
+                                    entry_price=0.0,
                                     strike=strike,
                                     expiry=expiry,
                                     call_put=option_type
@@ -10394,12 +10397,38 @@ def register_routes(app):
                         except Exception as e:
                             print(f"[NOTIFICATION] Failed to send Discord notification: {e}")
                         
+                        # Server-side webhook send for tracking channel (correct strike/price guaranteed)
+                        webhook_sent = False
+                        if tracking_channel_id:
+                            try:
+                                import requests as http_requests
+                                from . import webhook_service
+                                wh_channel = webhook_service.get_webhook_channel(int(tracking_channel_id))
+                                if wh_channel and wh_channel.get('webhook_url'):
+                                    strike_d = f"{int(strike)}" if strike == int(strike) else f"{strike:.2f}"
+                                    expiry_fmt = expiry
+                                    if expiry and '-' in expiry:
+                                        parts = expiry.split('-')
+                                        if len(parts) == 3:
+                                            expiry_fmt = f"{parts[1]}/{parts[2]}"
+                                    signal_msg = f"[QT] {action} {quantity} {symbol} {strike_d}{option_type[0].lower()} {expiry_fmt} @ {price:.2f}"
+                                    wh_payload = {"content": signal_msg, "username": wh_channel.get('bot_name', 'BotifyTrades')}
+                                    wh_resp = http_requests.post(wh_channel['webhook_url'], json=wh_payload, timeout=5)
+                                    if wh_resp.status_code in [200, 204]:
+                                        webhook_sent = True
+                                        print(f"[OPTIONS API] ✓ Server-side webhook sent: {signal_msg}")
+                                    else:
+                                        print(f"[OPTIONS API] Webhook send failed: {wh_resp.status_code}")
+                            except Exception as wh_err:
+                                print(f"[OPTIONS API] Webhook send error: {wh_err}")
+                        
                         return jsonify({
                             'success': True,
                             'order_id': order_id,
                             'trade_id': trade_id if 'trade_id' in dir() else None,
                             'broker': broker_name,
                             'order_status': 'PENDING',
+                            'webhook_sent': webhook_sent,
                             'message': f'Order submitted to {broker_name}: {side} {quantity} {symbol} ${strike}{option_type[0]} — pending fill',
                             'tracked': tracking_db_channel_id is not None if 'tracking_db_channel_id' in dir() else False,
                             'tracking_channel': tracking_discord_id if 'tracking_discord_id' in dir() else None,

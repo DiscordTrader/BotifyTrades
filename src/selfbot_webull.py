@@ -9469,6 +9469,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # This enables testing via webhooks and automation while still preventing Trade Monitor loops
         print(f"[DEBUG] Checking webhook: has_attr={hasattr(message, 'webhook_id')}, webhook_id={getattr(message, 'webhook_id', None)}")
         is_webhook_message = hasattr(message, 'webhook_id') and message.webhook_id
+        
+        # Skip [QT] tagged messages — these are Quick Trade tracking webhooks, not signals to execute
+        raw_content = message.content.strip() if message.content else ''
+        if raw_content.startswith('[QT] '):
+            print(f"[QT] ⏭️ Skipping Quick Trade webhook (tracking only): {raw_content[:60]}")
+            return
+        
         if is_webhook_message:
             if ALLOW_SELF_MESSAGES:
                 print(f"[DEBUG] ✓ Webhook message ALLOWED - ALLOW_SELF_MESSAGES is True")
