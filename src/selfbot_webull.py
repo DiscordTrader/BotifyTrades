@@ -2825,49 +2825,96 @@ class WebullBroker:
             print(f"[SLIPPAGE] ❌ ABORT - slippage {slippage_pct:.2f}% > {threshold}%")
             return (SlippageDecision.ABORT, slippage_pct)
     
-    async def _wait_for_better_price(self, signal: dict, get_current_price_func, wait_minutes: int = None) -> Tuple[SlippageDecision, Optional[float]]:
+    async def _wait_for_better_price(self, signal: dict, get_current_price_func,
+                                      wait_minutes: int = None,
+                                      hub_price_func=None,
+                                      keep_watching: bool = False) -> Tuple[SlippageDecision, Optional[float]]:
         """
         Wait and retry for better price within configured time limit.
-        wait_minutes: override for channel-level setting (None = use global SLIPPAGE_WAIT_MINUTES)
+
+        Parameters:
+          wait_minutes    : override for channel-level setting (None = SLIPPAGE_WAIT_MINUTES)
+          hub_price_func  : callable → float|None — returns price from streaming hub (sub-ms,
+                            no API cost). When provided the loop checks every 1 second via hub
+                            and only falls back to REST every SLIPPAGE_RETRY_INTERVAL seconds
+                            when the hub has no cached quote.
+          keep_watching   : when True (conditional-order mode) the loop does NOT abort when
+                            the price worsens — it keeps watching until price recovers or
+                            the window expires. When False (legacy WAIT path) it aborts
+                            immediately on further worsening.
+
         Returns: (final_decision, final_current_price)
         """
         signal_price = signal.get('price')
-        
-        # For market orders (price is None), skip slippage wait - execute immediately
+
+        # Market orders have no limit price — skip slippage wait entirely
         if signal_price is None:
             print(f"[SLIPPAGE] Market order detected - skipping price wait")
             return (SlippageDecision.IMMEDIATE, None)
-        
+
         effective_wait = wait_minutes if (wait_minutes and wait_minutes > 0) else SLIPPAGE_WAIT_MINUTES
         wait_until = datetime.now() + timedelta(minutes=effective_wait)
         retry_count = 0
-        
-        print(f"[SLIPPAGE] ⏳ Waiting up to {effective_wait} minutes for better price...")
-        print(f"[SLIPPAGE] Will retry every {SLIPPAGE_RETRY_INTERVAL} seconds")
-        
+
+        # Hub-first: check every 1 s (memory read); REST fallback every SLIPPAGE_RETRY_INTERVAL s
+        # No hub: REST poll every SLIPPAGE_RETRY_INTERVAL s (legacy behaviour)
+        check_interval = 1 if hub_price_func else SLIPPAGE_RETRY_INTERVAL
+        last_rest_ts = datetime.now() - timedelta(seconds=SLIPPAGE_RETRY_INTERVAL)  # allow immediate first REST
+
+        if hub_price_func:
+            print(f"[SLIPPAGE] ⏳ Waiting up to {effective_wait} min — streaming hub (1 s checks), REST fallback every {SLIPPAGE_RETRY_INTERVAL} s")
+        else:
+            print(f"[SLIPPAGE] ⏳ Waiting up to {effective_wait} min — REST poll every {SLIPPAGE_RETRY_INTERVAL} s")
+
         while datetime.now() < wait_until:
+            await asyncio.sleep(check_interval)
             retry_count += 1
-            await asyncio.sleep(SLIPPAGE_RETRY_INTERVAL)
-            
-            # Check current price again
-            def check_price():
-                return get_current_price_func()
-            
-            current_price = await asyncio.to_thread(check_price)
+
+            # 1. Try streaming hub first (zero API cost)
+            current_price = None
+            if hub_price_func:
+                try:
+                    current_price = hub_price_func()
+                except Exception:
+                    current_price = None
+
+            # 2. REST fallback when hub has no cached price
+            if not current_price:
+                now = datetime.now()
+                if (now - last_rest_ts).total_seconds() >= SLIPPAGE_RETRY_INTERVAL:
+                    try:
+                        def _rest():
+                            return get_current_price_func()
+                        current_price = await asyncio.to_thread(_rest)
+                        last_rest_ts = now
+                        if current_price:
+                            src = "REST (hub miss)"
+                            print(f"[SLIPPAGE] #{retry_count} {src}: price={current_price:.4f}")
+                    except Exception as e:
+                        print(f"[SLIPPAGE] REST fetch error: {e}")
+            else:
+                if retry_count <= 5 or retry_count % 60 == 0:
+                    print(f"[SLIPPAGE] #{retry_count} hub: price={current_price:.4f}")
+
+            if not current_price:
+                continue  # Neither hub nor REST had a price yet
+
             decision, slippage_pct = self._evaluate_slippage(signal_price, current_price)
-            
-            print(f"[SLIPPAGE] Retry #{retry_count}: Decision = {decision.value}, Slippage = {slippage_pct:.2f}%")
-            
+
             if decision == SlippageDecision.IMMEDIATE:
-                print(f"[SLIPPAGE] ✅ Price improved! Proceeding with order")
+                print(f"[SLIPPAGE] ✅ Price recovered at ${current_price:.4f} (slippage {slippage_pct:.2f}%) — proceeding")
                 return (decision, current_price)
             elif decision == SlippageDecision.ABORT:
-                print(f"[SLIPPAGE] ❌ Price worsened or became illiquid. Canceling order")
-                return (decision, current_price)
-        
+                if keep_watching:
+                    # Conditional-order mode: keep watching even if price worsens further
+                    if retry_count <= 5 or retry_count % 60 == 0:
+                        print(f"[SLIPPAGE] Still above threshold ({slippage_pct:.2f}%) — continuing to watch")
+                else:
+                    print(f"[SLIPPAGE] ❌ Price worsened or became illiquid — canceling")
+                    return (decision, current_price)
+
         # Timeout reached
-        print(f"[SLIPPAGE] ⏰ Wait timeout reached ({effective_wait} minutes)")
-        print(f"[SLIPPAGE] ❌ Canceling order - price never improved")
+        print(f"[SLIPPAGE] ⏰ Wait timeout reached ({effective_wait} minutes) — price never recovered")
         return (SlippageDecision.ABORT, None)
     
     async def place_option_order(self, symbol: str = None, strike: float = None,
@@ -2930,9 +2977,39 @@ class WebullBroker:
             _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
             _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
 
+            # Build streaming hub lookup for the option premium (Webull MQTT / Schwab WebSocket)
+            # The OCC key format: "{symbol:<6}{YYMMDD}{C|P}{strike*1000:08d}"
+            def _build_option_hub_func():
+                try:
+                    _yr = expiry_year[2:] if expiry_year and len(expiry_year) >= 4 else ''
+                    _exp = expiry_mmdd.replace('/', '') if expiry_mmdd else ''
+                    _occ = f"{symbol:<6}{_yr}{_exp}{(opt_type or '').upper()}{int((strike or 0) * 1000):08d}"
+                    def _hub_price():
+                        # Try Webull hub first (MQTT topic 105 subscriptions)
+                        if self._data_hub:
+                            p = self._data_hub.get_quote_price(_occ)
+                            if p:
+                                return p
+                        # Try Schwab hub (LEVELONE_OPTIONS WebSocket)
+                        try:
+                            from src.services.schwab_data_hub import get_schwab_data_hub
+                            _sh = get_schwab_data_hub()
+                            if _sh:
+                                p = _sh.get_quote_price(_occ)
+                                if p:
+                                    return p
+                        except Exception:
+                            pass
+                        return None
+                    return _hub_price
+                except Exception:
+                    return None
+
             if decision == SlippageDecision.ABORT:
                 if _is_conditional_order:
-                    # Conditional orders: wait for price to recover instead of hard-aborting
+                    # Conditional orders: wait for price to recover instead of hard-aborting.
+                    # Use streaming hub (1 s checks) with REST fallback — keep_watching=True
+                    # so the loop never exits early on further worsening.
                     print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes} min)")
                     _wait_signal = {
                         'action': action,
@@ -2942,7 +3019,12 @@ class WebullBroker:
                         'expiry': expiry_mmdd,
                         'price': limit_price
                     }
-                    final_decision, final_price = await self._wait_for_better_price(_wait_signal, get_quote, wait_minutes=_eff_wait_minutes)
+                    final_decision, final_price = await self._wait_for_better_price(
+                        _wait_signal, get_quote,
+                        wait_minutes=_eff_wait_minutes,
+                        hub_price_func=_build_option_hub_func(),
+                        keep_watching=True
+                    )
                     if final_decision == SlippageDecision.ABORT:
                         print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes} min")
                         return {
@@ -2962,7 +3044,7 @@ class WebullBroker:
                     }
             
             elif decision == SlippageDecision.WAIT:
-                # Enter wait-and-retry loop
+                # Enter wait-and-retry loop (non-conditional path, legacy)
                 signal = {
                     'action': action,
                     'symbol': symbol,
@@ -2972,7 +3054,11 @@ class WebullBroker:
                     'price': limit_price
                 }
                 
-                final_decision, final_price = await self._wait_for_better_price(signal, get_quote, wait_minutes=_eff_wait_minutes)
+                final_decision, final_price = await self._wait_for_better_price(
+                    signal, get_quote,
+                    wait_minutes=_eff_wait_minutes,
+                    hub_price_func=_build_option_hub_func()
+                )
                 
                 if final_decision == SlippageDecision.ABORT:
                     print(f"[SLIPPAGE] ❌ Order CANCELED - price never improved after waiting")
@@ -3586,12 +3672,29 @@ class WebullBroker:
             _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
             _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
 
+            # Build streaming hub lookup for the stock price (Webull MQTT equity stream)
+            def _build_stock_hub_func():
+                _hub = self._data_hub
+                _sym = symbol
+                if _hub:
+                    def _hub_price():
+                        return _hub.get_quote_price(_sym)
+                    return _hub_price
+                return None
+
             if decision == SlippageDecision.ABORT:
                 if _is_conditional_order:
-                    # Conditional orders: wait for price to recover instead of hard-aborting
+                    # Conditional orders: wait for price to recover instead of hard-aborting.
+                    # Use streaming hub (1 s checks) with REST fallback — keep_watching=True
+                    # so the loop never exits early on further worsening.
                     print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes} min)")
                     _wait_signal = {'action': action, 'symbol': symbol, 'price': limit_price}
-                    final_decision, final_price = await self._wait_for_better_price(_wait_signal, get_quote, wait_minutes=_eff_wait_minutes)
+                    final_decision, final_price = await self._wait_for_better_price(
+                        _wait_signal, get_quote,
+                        wait_minutes=_eff_wait_minutes,
+                        hub_price_func=_build_stock_hub_func(),
+                        keep_watching=True
+                    )
                     if final_decision == SlippageDecision.ABORT:
                         print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes} min")
                         return {
@@ -3611,14 +3714,18 @@ class WebullBroker:
                     }
             
             elif decision == SlippageDecision.WAIT:
-                # Enter wait-and-retry loop
+                # Enter wait-and-retry loop (non-conditional path, legacy)
                 signal = {
                     'action': action,
                     'symbol': symbol,
                     'price': limit_price
                 }
                 
-                final_decision, final_price = await self._wait_for_better_price(signal, get_quote, wait_minutes=_eff_wait_minutes)
+                final_decision, final_price = await self._wait_for_better_price(
+                    signal, get_quote,
+                    wait_minutes=_eff_wait_minutes,
+                    hub_price_func=_build_stock_hub_func()
+                )
                 
                 if final_decision == SlippageDecision.ABORT:
                     print(f"[SLIPPAGE] ❌ Order CANCELED - price never improved after waiting")
