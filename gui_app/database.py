@@ -5209,7 +5209,10 @@ def get_pending_order_metadata(broker: str, broker_order_id: str = None, client_
     else:
         return None
     
-    return cursor.fetchone()
+    row = cursor.fetchone()
+    if row:
+        return dict(row)
+    return None
 
 
 def update_pending_order_status(broker: str, broker_order_id: str, status: str, filled_order_id: str = None):

@@ -14,16 +14,7 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "original_qty": 3,
-    "pending_orders": {
-      "c71d5508-5329-4718-9a1a-9a8be9334fca": {
-        "order_id": "c71d5508-5329-4718-9a1a-9a8be9334fca",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-02-26T16:50:59.248854"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-02-26T16:45:43.453203",
     "max_pnl_seen": 30.76923076923076,
     "dynamic_sl_price": null,
