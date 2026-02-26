@@ -976,15 +976,7 @@ class BaseConditionalOrderService(ABC):
                         )
                     except Exception as e:
                         self._log(f"Notification error (expired): {e}")
-                    if order_id in self.monitors:
-                        await self.monitors[order_id].stop()
-                        del self.monitors[order_id]
-                    if order_id in self.monitor_tasks:
-                        self.monitor_tasks[order_id].cancel()
-                        del self.monitor_tasks[order_id]
-                    if order_id in self.pending_orders:
-                        del self.pending_orders[order_id]
-                    self._price_reset_needed.pop(order_id, None)
+                    await self._cleanup_order(order_id)
     
     def create_order(self, channel_id: str, parsed_signal: Dict[str, Any], broker: str) -> Optional[int]:
         """Create a new conditional order."""
@@ -1305,6 +1297,20 @@ class BaseConditionalOrderService(ABC):
         
         self._log(f"Started monitor task for #{order_id}")
     
+    async def _cleanup_order(self, order_id: int):
+        """Remove an order from all in-memory tracking structures."""
+        if order_id in self.monitors:
+            await self.monitors[order_id].stop()
+            del self.monitors[order_id]
+        if order_id in self.monitor_tasks:
+            self.monitor_tasks[order_id].cancel()
+            del self.monitor_tasks[order_id]
+        if order_id in self.pending_orders:
+            del self.pending_orders[order_id]
+        self._price_reset_needed.pop(order_id, None)
+        if hasattr(self, '_price_log_counters'):
+            self._price_log_counters.pop(order_id, None)
+    
     async def _on_price_update(self, order_id: int, symbol: str, price: float):
         """Handle price update from monitor."""
         order = self.pending_orders.get(order_id)
@@ -1312,6 +1318,22 @@ class BaseConditionalOrderService(ABC):
             return
         
         expires_at = order.get('expires_at')
+        if not expires_at:
+            created_at = order.get('created_at')
+            channel_id = order.get('channel_id')
+            if created_at and channel_id:
+                try:
+                    ch_settings = get_channel_conditional_settings(str(channel_id))
+                    tm = ch_settings.get('order_timeout_minutes') or ch_settings.get('conditional_order_timeout_minutes')
+                    if tm:
+                        created_dt = datetime.strptime(created_at.replace('T', ' ').split('.')[0], '%Y-%m-%d %H:%M:%S')
+                        computed_expires = (created_dt + timedelta(minutes=tm)).strftime('%Y-%m-%d %H:%M:%S')
+                        order['expires_at'] = computed_expires
+                        expires_at = computed_expires
+                        self._log(f"#{order_id} {symbol}: Computed missing expires_at from created_at + {tm}m → {computed_expires} UTC")
+                except Exception as e:
+                    self._log(f"#{order_id} expires_at fallback error: {e}")
+        
         if expires_at:
             try:
                 expiry_dt = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
@@ -1322,16 +1344,7 @@ class BaseConditionalOrderService(ABC):
                         event='EXPIRED_AT_TRIGGER',
                         details=f'Order expired at trigger check (expires_at={expires_at})'
                     )
-                    if order_id in self.monitors:
-                        await self.monitors[order_id].stop()
-                        del self.monitors[order_id]
-                    if order_id in self.monitor_tasks:
-                        self.monitor_tasks[order_id].cancel()
-                        del self.monitor_tasks[order_id]
-                    if order_id in self.pending_orders:
-                        del self.pending_orders[order_id]
-                    self._price_reset_needed.pop(order_id, None)
-                    self._price_log_counters.pop(order_id, None) if hasattr(self, '_price_log_counters') else None
+                    await self._cleanup_order(order_id)
                     try:
                         notify_conditional_expired(
                             symbol=symbol,
@@ -1415,6 +1428,39 @@ class BaseConditionalOrderService(ABC):
         symbol = order.get('symbol', 'UNKNOWN')
         channel_id = order.get('channel_id')
         
+        # SAFETY CHECK 0: Final expiry guard (defense-in-depth)
+        expires_at = order.get('expires_at')
+        if expires_at:
+            try:
+                expiry_dt = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
+                if datetime.utcnow() >= expiry_dt:
+                    self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Order EXPIRED at execution stage (expires_at={expires_at} UTC)")
+                    update_conditional_order_status(
+                        order_id, 'EXPIRED',
+                        event='EXPIRED_AT_EXECUTION',
+                        details=f'Order expired at final execution check (expires_at={expires_at})'
+                    )
+                    await self._cleanup_order(order_id)
+                    try:
+                        notify_conditional_expired(
+                            symbol=symbol,
+                            trigger_price=order.get('trigger_price', 0),
+                            broker=order.get('broker_primary', ''),
+                            order_id=order_id,
+                            reason=f"Expired at execution (timeout {expires_at} UTC)"
+                        )
+                    except Exception:
+                        pass
+                    return
+            except (ValueError, TypeError):
+                pass
+        
+        db_order = get_conditional_order_by_id(order_id)
+        if db_order and db_order.get('status') == 'EXPIRED':
+            self._log(f"⚠️ BLOCKED #{order_id} {symbol}: DB status is EXPIRED — blocking execution")
+            await self._cleanup_order(order_id)
+            return
+        
         # SAFETY CHECK 1: Price staleness guard (30 second threshold)
         monitor = self.monitors.get(order_id)
         if monitor:
@@ -1490,15 +1536,7 @@ class BaseConditionalOrderService(ABC):
                         )
                     except Exception as e:
                         self._log(f"Notification error (slippage): {e}")
-                    if order_id in self.monitors:
-                        await self.monitors[order_id].stop()
-                        del self.monitors[order_id]
-                    if order_id in self.monitor_tasks:
-                        self.monitor_tasks[order_id].cancel()
-                        del self.monitor_tasks[order_id]
-                    if order_id in self.pending_orders:
-                        del self.pending_orders[order_id]
-                    self._price_reset_needed.pop(order_id, None)
+                    await self._cleanup_order(order_id)
                     return
             else:
                 min_allowed_price = original_trigger * (1 - slippage_max_pct / 100)
@@ -1522,15 +1560,7 @@ class BaseConditionalOrderService(ABC):
                         )
                     except Exception as e:
                         self._log(f"Notification error (slippage): {e}")
-                    if order_id in self.monitors:
-                        await self.monitors[order_id].stop()
-                        del self.monitors[order_id]
-                    if order_id in self.monitor_tasks:
-                        self.monitor_tasks[order_id].cancel()
-                        del self.monitor_tasks[order_id]
-                    if order_id in self.pending_orders:
-                        del self.pending_orders[order_id]
-                    self._price_reset_needed.pop(order_id, None)
+                    await self._cleanup_order(order_id)
                     return
             
             self._log(f"✓ Slippage OK: ${trigger_price:.2f} within {slippage_max_pct}% of ${original_trigger:.2f}")

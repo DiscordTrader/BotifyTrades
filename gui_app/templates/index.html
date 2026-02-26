@@ -2530,17 +2530,15 @@ async function loadConditionalOrders() {
             
             const isActive = statusLower === 'active_monitoring' || statusLower === 'pending' || statusLower === 'tracking' || statusLower === 'fallback_monitoring';
             
-            // Calculate time remaining if expires_at exists
             let timeRemaining = '';
             if (order.expires_at) {
-                // expires_at is stored in UTC - append 'Z' if not present to ensure correct parsing
                 const expiresAtStr = order.expires_at.includes('Z') || order.expires_at.includes('+') 
                     ? order.expires_at 
                     : order.expires_at.replace(' ', 'T') + 'Z';
                 const expiresAt = new Date(expiresAtStr);
                 const now = new Date();
                 const diffMs = expiresAt - now;
-                if (diffMs > 0) {
+                if (isActive && diffMs > 0) {
                     const hours = Math.floor(diffMs / (1000 * 60 * 60));
                     const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
                     if (hours > 24) {
@@ -2550,6 +2548,17 @@ async function loadConditionalOrders() {
                         timeRemaining = `${hours}h ${mins}m`;
                     } else {
                         timeRemaining = `${mins}m`;
+                    }
+                } else if (statusLower === 'expired') {
+                    timeRemaining = 'Timed out';
+                } else if (!isActive) {
+                    const createdAt = new Date((order.created_at || '').replace(' ', 'T') + 'Z');
+                    const timeoutMs = expiresAt - createdAt;
+                    if (timeoutMs > 0) {
+                        const tMins = Math.round(timeoutMs / (1000 * 60));
+                        timeRemaining = `${tMins}m limit`;
+                    } else {
+                        timeRemaining = 'Had limit';
                     }
                 } else {
                     timeRemaining = 'Expired';
@@ -2633,7 +2642,7 @@ async function loadConditionalOrders() {
                         <!-- Timeout -->
                         <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
                             <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Timeout</div>
-                            <div style="font-size: 0.95rem; font-weight: 600; color: ${timeRemaining === 'Expired' ? '#ef4444' : timeRemaining ? '#f59e0b' : 'var(--text-muted)'};">${timeRemaining || 'No limit'}</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: ${timeRemaining === 'Timed out' || timeRemaining === 'Expired' ? '#ef4444' : timeRemaining && timeRemaining.includes('limit') ? '#6b7280' : timeRemaining ? '#f59e0b' : 'var(--text-muted)'};">${timeRemaining || 'No limit'}</div>
                         </div>
                         
                         <!-- Slippage -->
