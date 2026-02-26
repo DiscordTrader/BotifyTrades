@@ -1962,12 +1962,161 @@ class WebullBroker:
         import time as _time
         cache_key = f"{symbol}_{float(strike):.2f}_{expiry}_{option_type.upper()}"
         entry = self._option_id_cache.get(cache_key)
-        if entry and (_time.time() - entry['cached_at']) < self._option_id_cache_ttl:
-            print(f"[{self.name}] [CACHE] Hit for {cache_key} → option_id={entry['option_id']}")
-            return entry['option_id']
         if entry:
+            ttl = 28800 if entry.get('prewarm') else self._option_id_cache_ttl  # 8h for prewarm, 5m for live
+            if (_time.time() - entry['cached_at']) < ttl:
+                source = 'PREWARM' if entry.get('prewarm') else 'CACHE'
+                print(f"[{self.name}] [{source}] Hit for {cache_key} → option_id={entry['option_id']}")
+                return entry['option_id']
             del self._option_id_cache[cache_key]
         return None
+
+    def _prewarm_option_cache(self, wb, symbols=None):
+        """
+        Pre-fetch option IDs for commonly traded symbols at startup.
+        Runs in a background thread — eliminates the 4-second REST lookup delay
+        on the first signal for each symbol/expiry/strike combination.
+        """
+        import time as _time
+        from datetime import datetime, timedelta
+
+        if symbols is None:
+            symbols = ['SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'IWM', 'AMD', 'PLTR', 'MSTR', 'SPX']
+
+        # Try to load additional symbols from recently active signals
+        try:
+            from gui_app import database as db
+            conn = db.get_db_connection()
+            rows = conn.execute(
+                "SELECT DISTINCT symbol FROM signals WHERE created_at > datetime('now','-7 days') AND symbol IS NOT NULL LIMIT 20"
+            ).fetchall()
+            conn.close()
+            for r in rows:
+                s = r[0].upper().strip() if r[0] else None
+                if s and s not in symbols:
+                    symbols.append(s)
+        except Exception:
+            pass
+
+        # Today + next 4 trading days (covers 0DTE through next weekly)
+        expiry_dates = []
+        d = datetime.now()
+        while len(expiry_dates) < 5:
+            if d.weekday() < 5:
+                expiry_dates.append(d.strftime('%Y-%m-%d'))
+            d += timedelta(days=1)
+
+        def iter_rows(obj):
+            if isinstance(obj, dict):
+                yield obj
+                for v in obj.values():
+                    yield from iter_rows(v)
+            elif isinstance(obj, list):
+                for it in obj:
+                    yield from iter_rows(it)
+
+        def extract_candidate(row, direction):
+            if not isinstance(row, dict):
+                return None
+            strike_raw = row.get('strikePrice') or row.get('strike')
+            try:
+                strike_val = float(strike_raw) if strike_raw is not None else None
+            except Exception:
+                strike_val = None
+            exp = row.get('expireDate') or row.get('expiry') or row.get('date')
+            side = (row.get('callPut') or row.get('optionType') or row.get('direction') or '').lower()
+            nested = row.get(direction)
+            nested_oid = None
+            nested_exp = None
+            if isinstance(nested, dict):
+                nested_oid = nested.get('tickerId') or nested.get('id') or nested.get('optionId')
+                nested_exp = nested.get('expireDate') or nested.get('expiry') or nested.get('date')
+            oid = row.get('tickerId') or row.get('optionId') or row.get('id')
+            if not side and isinstance(nested, dict):
+                side = direction
+            side = {'c': 'call', 'p': 'put'}.get(side[:1], side) if side else side
+            if nested_oid:
+                oid = nested_oid
+            if nested_exp:
+                exp = nested_exp
+            if strike_val is None or oid is None:
+                return None
+            return {'strike': strike_val, 'side': side, 'expiry': exp, 'option_id': oid}
+
+        total = 0
+        skipped = 0
+        print(f"[PREWARM] 🔥 Starting option ID cache warm-up for {len(symbols)} symbols × {len(expiry_dates)} expiries...")
+
+        for symbol in symbols:
+            sym_count = 0
+            try:
+                tId = wb.get_ticker(symbol)
+                if not tId:
+                    skipped += 1
+                    continue
+                for exp_iso in expiry_dates:
+                    for direction in ('call', 'put'):
+                        opt_type = 'C' if direction == 'call' else 'P'
+                        try:
+                            data = wb.get_options(stock=symbol, direction=direction, expireDate=exp_iso)
+                            if not data:
+                                continue
+                            for row in iter_rows(data):
+                                cand = extract_candidate(row, direction)
+                                if not cand or cand['side'] != direction:
+                                    continue
+                                exp_val = cand.get('expiry') or exp_iso
+                                exp_norm = str(exp_val)[:10] if exp_val else exp_iso
+                                cache_key = f"{symbol}_{float(cand['strike']):.2f}_{exp_norm}_{opt_type}"
+                                self._option_id_cache[cache_key] = {
+                                    'option_id': str(cand['option_id']),
+                                    'cached_at': _time.time(),
+                                    'prewarm': True
+                                }
+                                sym_count += 1
+                            _time.sleep(0.05)
+                        except Exception:
+                            pass
+                total += sym_count
+                if sym_count:
+                    print(f"[PREWARM] ✓ {symbol}: {sym_count} contracts cached")
+            except Exception as e:
+                print(f"[PREWARM] ⚠️ {symbol}: {e}")
+                skipped += 1
+
+        print(f"[PREWARM] ✅ Done — {total} option contract IDs cached ({skipped} symbols skipped). First signal for each will skip the 4s REST lookup.")
+
+    async def _prewarm_scheduler(self):
+        """Run option ID pre-warm at startup and refresh daily at 9:30 AM EST."""
+        import asyncio
+        from datetime import datetime, timezone, timedelta
+
+        wb = self._client
+        if not wb:
+            print("[PREWARM] ⚠️ No Webull client available — pre-warm skipped")
+            return
+
+        # Run immediately in background thread so it doesn't block the event loop
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._prewarm_option_cache, wb)
+
+        # Then refresh every day at 9:30 AM EST (14:30 UTC)
+        while True:
+            try:
+                now_utc = datetime.now(timezone.utc)
+                # Next 9:30 AM EST = 14:30 UTC
+                target = now_utc.replace(hour=14, minute=30, second=0, microsecond=0)
+                if now_utc >= target:
+                    target += timedelta(days=1)
+                wait_seconds = (target - now_utc).total_seconds()
+                await asyncio.sleep(wait_seconds)
+                print("[PREWARM] 🔄 Daily refresh — re-warming option ID cache for new expirations...")
+                await loop.run_in_executor(None, self._prewarm_option_cache, self._client)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[PREWARM] Scheduler error: {e}")
+                await asyncio.sleep(3600)
     
     def _start_streaming(self):
         """Start MQTT streaming for real-time quotes and order updates."""
@@ -7237,6 +7386,14 @@ class SelfClient(discord.Client):
             _original_print(f"[QUOTE_AGG] ⚠️ Could not register brokers: {e}", flush=True)
         
         _original_print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked", flush=True)
+
+        # Start option ID pre-warm in background (eliminates 4s REST lookup on first signal)
+        try:
+            if self.broker and getattr(self.broker, '_client', None):
+                asyncio.ensure_future(self.broker._prewarm_scheduler())
+                _original_print("[PREWARM] 🔥 Option ID pre-warm task scheduled", flush=True)
+        except Exception as e:
+            _original_print(f"[PREWARM] ⚠️ Could not start pre-warm scheduler: {e}", flush=True)
     
     async def token_refresh_scheduler(self):
         """Automatically refresh Webull tokens every 12 hours"""
