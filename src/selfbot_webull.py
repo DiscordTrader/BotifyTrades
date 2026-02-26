@@ -11,36 +11,6 @@ import os
 import builtins
 _early_print = builtins.print  # Save original print before any override
 
-# Crash diagnostics - captures C-level and Python-level crashes
-import faulthandler
-faulthandler.enable()
-
-# Monkey-patch os._exit to capture traceback before process terminates
-_real_os_exit = os._exit
-def _traced_os_exit(code):
-    import traceback
-    print(f"\n[CRASH] os._exit({code}) called! Stack trace:", flush=True)
-    traceback.print_stack()
-    sys.stdout.flush()
-    import time; time.sleep(0.2)
-    _real_os_exit(code)
-os._exit = _traced_os_exit
-
-# Signal handlers to catch kill signals
-import signal
-def _signal_handler(signum, frame):
-    import traceback
-    print(f"\n[CRASH] Received signal {signum}! Stack trace:", flush=True)
-    traceback.print_stack(frame)
-    sys.stdout.flush()
-    import time; time.sleep(0.2)
-    _real_os_exit(1)
-for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-    try:
-        signal.signal(_sig, _signal_handler)
-    except (OSError, ValueError):
-        pass
-
 # Handle PyInstaller GUI mode where stdout/stderr may be None
 # Use UTF-8 encoding to support Unicode characters (checkmarks, etc.)
 if sys.stdout is None:
