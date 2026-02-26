@@ -3187,10 +3187,24 @@ class WebullBroker:
 
             if decision == SlippageDecision.ABORT:
                 if _is_conditional_order:
-                    # Conditional orders: wait for price to recover instead of hard-aborting.
-                    # Use streaming hub (1 s checks) with REST fallback — keep_watching=True
-                    # so the loop never exits early on further worsening.
-                    print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes} min)")
+                    _cond_expires_wb = kwargs.get('_conditional_expires_at')
+                    if _cond_expires_wb:
+                        try:
+                            _exp_dt_wb = datetime.strptime(_cond_expires_wb, '%Y-%m-%d %H:%M:%S')
+                            _remaining_wb = (_exp_dt_wb - datetime.utcnow()).total_seconds() / 60.0
+                            if _remaining_wb <= 0:
+                                print(f"[SLIPPAGE] ❌ Conditional order already expired — skipping wait")
+                                return {
+                                    'success': False,
+                                    'msg': 'Order expired before slippage wait could start',
+                                    'error': 'EXPIRED'
+                                }
+                            if _remaining_wb < _eff_wait_minutes:
+                                print(f"[SLIPPAGE] Capping wait: {_eff_wait_minutes} min → {_remaining_wb:.1f} min (order timeout)")
+                                _eff_wait_minutes = _remaining_wb
+                        except (ValueError, TypeError):
+                            pass
+                    print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes:.1f} min)")
                     _wait_signal = {
                         'action': action,
                         'symbol': symbol,
@@ -3206,10 +3220,10 @@ class WebullBroker:
                         keep_watching=True
                     )
                     if final_decision == SlippageDecision.ABORT:
-                        print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes} min")
+                        print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes:.1f} min")
                         return {
                             'success': False,
-                            'msg': f'Order canceled: price slippage did not recover within {_eff_wait_minutes} minutes',
+                            'msg': f'Order canceled: price slippage did not recover within {_eff_wait_minutes:.1f} minutes',
                             'error': 'SLIPPAGE_TIMEOUT'
                         }
                     if final_price and final_price > 0:
@@ -3865,10 +3879,24 @@ class WebullBroker:
 
             if decision == SlippageDecision.ABORT:
                 if _is_conditional_order:
-                    # Conditional orders: wait for price to recover instead of hard-aborting.
-                    # Use streaming hub (1 s checks) with REST fallback — keep_watching=True
-                    # so the loop never exits early on further worsening.
-                    print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes} min)")
+                    _cond_expires_stk = kwargs.get('_conditional_expires_at')
+                    if _cond_expires_stk:
+                        try:
+                            _exp_dt_stk = datetime.strptime(_cond_expires_stk, '%Y-%m-%d %H:%M:%S')
+                            _remaining_stk = (_exp_dt_stk - datetime.utcnow()).total_seconds() / 60.0
+                            if _remaining_stk <= 0:
+                                print(f"[SLIPPAGE] ❌ Conditional order already expired — skipping wait")
+                                return {
+                                    'success': False,
+                                    'msg': 'Order expired before slippage wait could start',
+                                    'error': 'EXPIRED'
+                                }
+                            if _remaining_stk < _eff_wait_minutes:
+                                print(f"[SLIPPAGE] Capping wait: {_eff_wait_minutes} min → {_remaining_stk:.1f} min (order timeout)")
+                                _eff_wait_minutes = _remaining_stk
+                        except (ValueError, TypeError):
+                            pass
+                    print(f"[SLIPPAGE] ⏳ Conditional order - entering price-wait phase ({_eff_wait_minutes:.1f} min)")
                     _wait_signal = {'action': action, 'symbol': symbol, 'price': limit_price}
                     final_decision, final_price = await self._wait_for_better_price(
                         _wait_signal, get_quote,
@@ -3877,10 +3905,10 @@ class WebullBroker:
                         keep_watching=True
                     )
                     if final_decision == SlippageDecision.ABORT:
-                        print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes} min")
+                        print(f"[SLIPPAGE] ❌ Conditional order CANCELED - price never recovered within {_eff_wait_minutes:.1f} min")
                         return {
                             'success': False,
-                            'msg': f'Order canceled: price slippage did not recover within {_eff_wait_minutes} minutes',
+                            'msg': f'Order canceled: price slippage did not recover within {_eff_wait_minutes:.1f} minutes',
                             'error': 'SLIPPAGE_TIMEOUT'
                         }
                     if final_price and final_price > 0:
@@ -8915,6 +8943,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             '_conditional_order_id': order['id'],
                             'channel_id': order.get('channel_id'),
                             '_trigger_price': triggered_price,
+                            '_conditional_expires_at': order.get('expires_at'),
                         }
                         
                         if all_enabled_brokers and len(all_enabled_brokers) > 1:
@@ -13792,7 +13821,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
                         if _decision_c == SlippageDecision.ABORT:
                             _eff_w = _slippage_cfg.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
-                            _original_print(f"[{broker_name}] [SLIPPAGE] ⏳ Cond order - price-wait {_eff_w} min "
+                            _cond_expires = signal.get('_conditional_expires_at')
+                            if _cond_expires:
+                                try:
+                                    _exp_dt = datetime.strptime(_cond_expires, '%Y-%m-%d %H:%M:%S')
+                                    _remaining = (_exp_dt - datetime.utcnow()).total_seconds() / 60.0
+                                    if _remaining <= 0:
+                                        _original_print(f"[{broker_name}] [SLIPPAGE] ❌ Conditional order already expired — skipping wait")
+                                        return {'success': False,
+                                                'msg': 'Order expired before slippage wait could start',
+                                                'error': 'EXPIRED'}
+                                    if _remaining < _eff_w:
+                                        _original_print(f"[{broker_name}] [SLIPPAGE] Capping wait: {_eff_w} min → {_remaining:.1f} min (order timeout)")
+                                        _eff_w = _remaining
+                                except (ValueError, TypeError):
+                                    pass
+                            _original_print(f"[{broker_name}] [SLIPPAGE] ⏳ Cond order - price-wait {_eff_w:.1f} min "
                                             f"(slippage {_slippage_pct_c:.2f}%)")
 
                             # Hub function: Schwab streams options via LEVELONE_OPTIONS
@@ -13820,9 +13864,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 keep_watching=True)
                             if _fd == SlippageDecision.ABORT:
                                 _original_print(f"[{broker_name}] [SLIPPAGE] ❌ Conditional option CANCELED "
-                                                f"- price did not recover within {_eff_w} min")
+                                                f"- price did not recover within {_eff_w:.1f} min")
                                 return {'success': False,
-                                        'msg': f'Order canceled: slippage did not recover within {_eff_w} minutes',
+                                        'msg': f'Order canceled: slippage did not recover within {_eff_w:.1f} minutes',
                                         'error': 'SLIPPAGE_TIMEOUT'}
                             if _fp and _fp > 0:
                                 _original_print(f"[{broker_name}] [SLIPPAGE] ✓ Price recovered: "
@@ -13850,9 +13894,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _option_kwargs['_qot_price'] = signal.get('_qot_price')
                         _option_kwargs['_trigger_price'] = signal.get('_trigger_price')
                         _option_kwargs['_risk_management_order'] = signal.get('_risk_management_order', False)
+                        _option_kwargs['_conditional_expires_at'] = signal.get('_conditional_expires_at')
                     if 'WEBULL' in broker_upper:
                         _option_kwargs['option_id'] = signal.get('option_id')
                         _option_kwargs['_risk_management_order'] = signal.get('_risk_management_order', False)
+                        _option_kwargs['_conditional_order_id'] = signal.get('_conditional_order_id')
+                        _option_kwargs['_conditional_expires_at'] = signal.get('_conditional_expires_at')
+                        _option_kwargs['_trigger_price'] = signal.get('_trigger_price')
+                        _option_kwargs['_qot_price'] = signal.get('_qot_price')
+                        _option_kwargs['_is_market_order'] = signal.get('is_market_order', False)
                         if _skip_retry:
                             _option_kwargs['_skip_internal_retry'] = True
                     result = await broker_instance.place_option_order(**_option_kwargs)
@@ -13974,7 +14024,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
                         if _decision_s == SlippageDecision.ABORT:
                             _eff_ws = _slippage_cfg_s.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
-                            _original_print(f"[{broker_name}] [SLIPPAGE] ⏳ Cond stock order - price-wait {_eff_ws} min "
+                            _cond_expires_s = signal.get('_conditional_expires_at')
+                            if _cond_expires_s:
+                                try:
+                                    _exp_dt_s = datetime.strptime(_cond_expires_s, '%Y-%m-%d %H:%M:%S')
+                                    _remaining_s = (_exp_dt_s - datetime.utcnow()).total_seconds() / 60.0
+                                    if _remaining_s <= 0:
+                                        _original_print(f"[{broker_name}] [SLIPPAGE] ❌ Conditional order already expired — skipping wait")
+                                        return {'success': False,
+                                                'msg': 'Order expired before slippage wait could start',
+                                                'error': 'EXPIRED'}
+                                    if _remaining_s < _eff_ws:
+                                        _original_print(f"[{broker_name}] [SLIPPAGE] Capping wait: {_eff_ws} min → {_remaining_s:.1f} min (order timeout)")
+                                        _eff_ws = _remaining_s
+                                except (ValueError, TypeError):
+                                    pass
+                            _original_print(f"[{broker_name}] [SLIPPAGE] ⏳ Cond stock order - price-wait {_eff_ws:.1f} min "
                                             f"(slippage {_slippage_pct_s:.2f}%)")
 
                             def _non_wb_stk_hub():
@@ -13996,9 +14061,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 keep_watching=True)
                             if _fd2 == SlippageDecision.ABORT:
                                 _original_print(f"[{broker_name}] [SLIPPAGE] ❌ Conditional stock CANCELED "
-                                                f"- price did not recover within {_eff_ws} min")
+                                                f"- price did not recover within {_eff_ws:.1f} min")
                                 return {'success': False,
-                                        'msg': f'Order canceled: slippage did not recover within {_eff_ws} minutes',
+                                        'msg': f'Order canceled: slippage did not recover within {_eff_ws:.1f} minutes',
                                         'error': 'SLIPPAGE_TIMEOUT'}
                             if _fp2 and _fp2 > 0:
                                 _original_print(f"[{broker_name}] [SLIPPAGE] ✓ Stock price recovered: "
