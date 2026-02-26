@@ -172,22 +172,71 @@ class QuoteAggregator:
                 sys.stderr.write(f"[QUOTE_AGG] {broker_name}: connected={is_connected}\n")
                 sys.stderr.flush()
     
+    def _check_streaming_hubs(self, symbol: str) -> Optional[float]:
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                price = hub.get_quote_price(symbol)
+                if price and price > 0:
+                    return price
+        except Exception:
+            pass
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            if hub.is_streaming():
+                price = hub.get_quote_price(symbol)
+                if price and price > 0:
+                    return price
+        except Exception:
+            pass
+        return None
+
+    def _check_streaming_hubs_detailed(self, symbol: str) -> Optional[dict]:
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(symbol)
+                if data and (data.get('last', 0) > 0 or data.get('bid', 0) > 0):
+                    return data
+        except Exception:
+            pass
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(symbol)
+                if data and (data.get('last', 0) > 0 or data.get('bid', 0) > 0):
+                    return data
+        except Exception:
+            pass
+        return None
+
     def get_stock_price(self, symbol: str) -> QuoteResult:
         """
         Get current stock price with broker fallback.
         
-        Tries each connected broker in priority order until success.
+        Tries streaming hubs first (zero API cost), then each connected broker in priority order.
         """
         cache_key = f"price:{symbol}"
         cached = self.price_cache.get(cache_key)
         if cached:
-            sys.stdout.write(f"[QUOTE_AGG] Cache hit for {symbol} price\n")
-            sys.stdout.flush()
             return cached
         
+        hub_price = self._check_streaming_hubs(symbol)
+        if hub_price:
+            result = QuoteResult(
+                success=True,
+                price=hub_price,
+                broker='streaming_hub',
+                timestamp=datetime.now()
+            )
+            self.price_cache.set(cache_key, result)
+            return result
+        
         brokers = self.get_connected_brokers(BrokerCapability.STOCK_QUOTE)
-        sys.stdout.write(f"[QUOTE_AGG] Getting {symbol} price from brokers: {brokers}\n")
-        sys.stdout.flush()
         
         errors = []
         for broker_name in brokers:
@@ -407,6 +456,31 @@ class QuoteAggregator:
         cached = self.price_cache.get(cache_key)
         if cached:
             return cached
+        
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            if schwab_hub.is_streaming():
+                from src.brokers.schwab_broker import SchwabBroker
+                occ = SchwabBroker._build_option_symbol(None, symbol, expiry, strike, opt_type)
+                hub_data = schwab_hub.get_quote_detailed(occ)
+                if hub_data and (hub_data.get('last', 0) > 0 or hub_data.get('bid', 0) > 0):
+                    bid = hub_data.get('bid', 0)
+                    ask = hub_data.get('ask', 0)
+                    last = hub_data.get('last', 0)
+                    mid = (bid + ask) / 2 if bid > 0 and ask > 0 else last
+                    result = OptionQuoteResult(
+                        success=True,
+                        bid=bid,
+                        ask=ask,
+                        last=last,
+                        mid=mid,
+                        broker='schwab_hub'
+                    )
+                    self.price_cache.set(cache_key, result)
+                    return result
+        except Exception:
+            pass
         
         brokers = self.get_connected_brokers(BrokerCapability.OPTION_QUOTE)
         

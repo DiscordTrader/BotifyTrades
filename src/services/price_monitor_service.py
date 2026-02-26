@@ -462,8 +462,72 @@ class PriceMonitorService:
             print(f"[PRICE_MONITOR] {broker_id} error for {symbol}: {e}")
             return None
     
+    def _check_streaming_hubs(self, pos: MonitoredPosition) -> Optional[float]:
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                if pos.asset_type == "option":
+                    ticker_id = None
+                    try:
+                        from gui_app.database import get_trade_by_id
+                        trade = get_trade_by_id(pos.position_id)
+                        if trade:
+                            ticker_id = trade.get('option_id')
+                    except Exception:
+                        pass
+                    if ticker_id:
+                        price = hub.get_quote_price(str(ticker_id))
+                        if price and price > 0:
+                            return price
+                else:
+                    price = hub.get_quote_price(pos.symbol)
+                    if price and price > 0:
+                        return price
+        except Exception:
+            pass
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            if schwab_hub.is_streaming() and pos.asset_type == "option" and pos.expiry and pos.strike:
+                expiry = pos.expiry
+                if '/' in expiry:
+                    parts = expiry.split('/')
+                    if len(parts) == 3:
+                        expiry = f"20{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                    elif len(parts) == 2:
+                        import datetime
+                        year = datetime.datetime.now().year
+                        expiry = f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                if '-' in expiry:
+                    opt_type = pos.option_type or 'C'
+                    underlying = pos.symbol.upper().ljust(6)
+                    ep = expiry.split('-')
+                    if len(ep) == 3:
+                        occ = f"{underlying}{ep[0][2:]}{ep[1]}{ep[2]}{opt_type.upper()}{int(float(pos.strike) * 1000):08d}"
+                        data = schwab_hub.get_quote_detailed(occ)
+                        if data:
+                            bid = data.get('bid', 0)
+                            ask = data.get('ask', 0)
+                            last = data.get('last', 0)
+                            if bid > 0 and ask > 0:
+                                return (bid + ask) / 2
+                            elif last > 0:
+                                return last
+            elif schwab_hub.is_streaming() and pos.asset_type != "option":
+                price = schwab_hub.get_quote_price(pos.symbol)
+                if price and price > 0:
+                    return price
+        except Exception:
+            pass
+        return None
+
     async def _fetch_price(self, pos: MonitoredPosition) -> Optional[float]:
-        """Fetch price using broker-aware fallback chain."""
+        """Fetch price using streaming hubs first (zero API cost), then broker-aware fallback chain."""
+        hub_price = self._check_streaming_hubs(pos)
+        if hub_price and hub_price > 0:
+            return hub_price
+
         asset_type_enum = AssetType.OPTION if pos.asset_type == "option" else AssetType.STOCK
         
         fallback_brokers = get_fallback_brokers(
@@ -525,8 +589,37 @@ class PriceMonitorService:
         Public method to fetch option price immediately.
         
         Used for instant price fetch on position creation (no poll delay).
-        Tries Webull first, then Alpaca fallback.
+        Tries streaming hubs first (zero API cost), then Webull, then Alpaca fallback.
         """
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            if schwab_hub.is_streaming() and expiry and strike:
+                norm_expiry = expiry
+                if '/' in norm_expiry:
+                    parts = norm_expiry.split('/')
+                    if len(parts) == 3:
+                        norm_expiry = f"20{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                    elif len(parts) == 2:
+                        import datetime as _dt
+                        norm_expiry = f"{_dt.datetime.now().year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                if '-' in norm_expiry:
+                    ep = norm_expiry.split('-')
+                    if len(ep) == 3:
+                        ot = (option_type or 'C').upper()
+                        occ = f"{symbol.upper().ljust(6)}{ep[0][2:]}{ep[1]}{ep[2]}{ot}{int(float(strike) * 1000):08d}"
+                        data = schwab_hub.get_quote_detailed(occ)
+                        if data:
+                            bid = data.get('bid', 0)
+                            ask = data.get('ask', 0)
+                            last = data.get('last', 0)
+                            if bid > 0 and ask > 0:
+                                return (bid + ask) / 2
+                            elif last > 0:
+                                return last
+        except Exception:
+            pass
+
         for source_name, fetch_func in [
             ('webull', self._fetch_option_price_webull),
             ('alpaca', self._fetch_option_price_alpaca),

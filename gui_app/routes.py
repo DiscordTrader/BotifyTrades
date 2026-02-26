@@ -6342,12 +6342,29 @@ def register_routes(app):
                     if requested_limit_price:
                         limit_price = float(requested_limit_price)
                     else:
-                        last_price = float(
-                            (option_position or {}).get('lastPrice') or
-                            (option_position or {}).get('price') or
-                            (option_position or {}).get('avgPrice') or 0
-                        )
-                        limit_price = max(0.01, round(last_price * 0.95, 2)) if last_price > 0 else 0.01
+                        hub_bid = 0
+                        hub_ask = 0
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            _wb_hub = get_webull_data_hub()
+                            if _wb_hub.is_streaming() and _option_id:
+                                _hub_data = _wb_hub.get_quote_detailed(str(_option_id))
+                                if _hub_data:
+                                    hub_bid = float(_hub_data.get('bid', 0) or 0)
+                                    hub_ask = float(_hub_data.get('ask', 0) or 0)
+                        except Exception:
+                            pass
+
+                        if hub_bid > 0 and hub_ask > 0:
+                            limit_price = round(hub_bid, 2)
+                            print(f"[WEBULL-CLOSE] Using streaming hub bid: ${hub_bid:.2f} (ask: ${hub_ask:.2f})", flush=True)
+                        else:
+                            last_price = float(
+                                (option_position or {}).get('lastPrice') or
+                                (option_position or {}).get('price') or
+                                (option_position or {}).get('avgPrice') or 0
+                            )
+                            limit_price = max(0.01, round(last_price * 0.95, 2)) if last_price > 0 else 0.01
                     
                     max_retries = 3
                     for attempt in range(max_retries):
