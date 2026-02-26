@@ -953,7 +953,7 @@ class BaseConditionalOrderService(ABC):
         for order in market_orders:
             order_id = order['id']
             self.pending_orders[order_id] = order
-            self._price_reset_needed[order_id] = True
+            self._price_reset_needed[order_id] = False
             await self._start_monitor(order_id, order)
         
         self._log(f"Restored {len(market_orders)} orders")
