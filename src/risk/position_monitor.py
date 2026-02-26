@@ -1984,6 +1984,47 @@ class RiskManager:
         try:
             stc_signal = self._build_stc_signal(position, decision)
             
+            hub_quotes = self._get_streaming_bid_ask(position)
+            hub_bid = hub_quotes['bid']
+            hub_ask = hub_quotes['ask']
+            hub_mid = hub_quotes['mid']
+            hub_src = hub_quotes['source']
+            if hub_bid > 0 or hub_ask > 0:
+                last_price = stc_signal['price']
+                spread_pct = 0
+                if hub_bid > 0 and hub_ask > 0:
+                    spread_pct = (hub_ask - hub_bid) / hub_bid * 100
+                if is_stop_exit or is_trailing_exit or is_giveback_exit:
+                    if hub_bid > 0:
+                        stc_signal['price'] = hub_bid
+                        print(f"[RISK] 💰 Exit price: bid ${hub_bid:.2f} "
+                              f"(ask ${hub_ask:.2f}, mid ${hub_mid:.2f}, last ${last_price:.2f}, spread {spread_pct:.1f}%) "
+                              f"via {hub_src}")
+                    else:
+                        print(f"[RISK] Hub has ask-only (${hub_ask:.2f}), no bid — using last ${last_price:.2f} for SL exit")
+                elif is_profit_exit:
+                    if hub_mid > 0 and spread_pct < 50:
+                        stc_signal['price'] = hub_mid
+                        print(f"[RISK] 💰 Exit price: mid ${hub_mid:.2f} "
+                              f"(bid ${hub_bid:.2f}, ask ${hub_ask:.2f}, last ${last_price:.2f}, spread {spread_pct:.1f}%) "
+                              f"via {hub_src}")
+                    elif hub_mid > 0 and spread_pct >= 50:
+                        print(f"[RISK] ⚠️ Wide spread {spread_pct:.1f}% (bid ${hub_bid:.2f}, ask ${hub_ask:.2f}) — "
+                              f"using last ${last_price:.2f} for PT exit")
+                    elif hub_bid > 0:
+                        stc_signal['price'] = hub_bid
+                        print(f"[RISK] 💰 PT exit: bid-only ${hub_bid:.2f} (no ask, last ${last_price:.2f}) via {hub_src}")
+                    else:
+                        print(f"[RISK] Hub partial quote (bid=0, ask=${hub_ask:.2f}) — using last ${last_price:.2f}")
+                else:
+                    if hub_mid > 0 and spread_pct < 50:
+                        stc_signal['price'] = hub_mid
+                        print(f"[RISK] 💰 Exit price: mid ${hub_mid:.2f} "
+                              f"(bid ${hub_bid:.2f}, ask ${hub_ask:.2f}, spread {spread_pct:.1f}%) via {hub_src}")
+                    elif hub_bid > 0:
+                        stc_signal['price'] = hub_bid
+                        print(f"[RISK] 💰 Exit price: bid ${hub_bid:.2f} (wide spread/partial, last ${last_price:.2f}) via {hub_src}")
+            
             call_put = self._normalize_call_put(position.direction)
             origin_trade = self.db_adapter.find_open_bto_trade(
                 symbol=position.symbol,
@@ -2073,6 +2114,76 @@ class RiskManager:
             self.cache.reset_closing(pos_key)
             print(f"[RISK] ✗ Failed to queue STC order for {pos_key}: {e}")
     
+    def _get_streaming_bid_ask(self, position: PositionSnapshot) -> Dict[str, float]:
+        """Get real-time bid/ask from streaming hubs for accurate exit pricing.
+        
+        Returns dict with 'bid', 'ask', 'mid', 'source' keys.
+        bid/ask/mid are 0 when unavailable. Accepts partial quotes (bid-only).
+        Checks WebullDataHub first, then SchwabDataHub.
+        Hub staleness is enforced by the hubs themselves (QUOTE_STALE_THRESHOLD=120s).
+        """
+        result = {'bid': 0, 'ask': 0, 'mid': 0, 'source': ''}
+
+        def _extract_quotes(data, source_name):
+            if not data:
+                return None
+            bid = float(data.get('bid', 0) or 0)
+            ask = float(data.get('ask', 0) or 0)
+            last = float(data.get('last', 0) or data.get('price', 0) or 0)
+            if bid > 0 or ask > 0:
+                mid = round((bid + ask) / 2, 2) if bid > 0 and ask > 0 else 0
+                return {'bid': bid, 'ask': ask, 'mid': mid, 'last': last, 'source': source_name}
+            return None
+
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                lookup_key = None
+                if position.asset == 'option' and position.option_id:
+                    lookup_key = str(position.option_id)
+                elif position.asset != 'option':
+                    lookup_key = position.symbol
+                if lookup_key:
+                    q = _extract_quotes(hub.get_quote_detailed(lookup_key), 'webull_hub')
+                    if q:
+                        return q
+        except Exception:
+            pass
+
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            if schwab_hub.is_streaming():
+                if position.asset == 'option' and position.expiry and position.strike:
+                    expiry = position.expiry or ''
+                    if '/' in expiry:
+                        parts = expiry.split('/')
+                        if len(parts) == 3:
+                            expiry = f"20{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                        elif len(parts) == 2:
+                            import datetime
+                            year = datetime.datetime.now().year
+                            expiry = f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                    if '-' in expiry:
+                        opt_type = (position.direction or 'C').upper()
+                        if opt_type == 'CALL': opt_type = 'C'
+                        elif opt_type == 'PUT': opt_type = 'P'
+                        else: opt_type = opt_type[0] if opt_type else 'C'
+                        from src.brokers.schwab_broker import SchwabBroker
+                        occ = SchwabBroker._build_option_symbol(None, position.symbol, expiry, position.strike, opt_type)
+                        q = _extract_quotes(schwab_hub.get_quote_detailed(occ), 'schwab_hub')
+                        if q:
+                            return q
+                elif position.asset != 'option':
+                    q = _extract_quotes(schwab_hub.get_quote_detailed(position.symbol), 'schwab_hub')
+                    if q:
+                        return q
+        except Exception:
+            pass
+
+        return result
+
     def _build_stc_signal(self, position: PositionSnapshot, decision: ExitDecision) -> Dict:
         """Build STC signal dict for order queue."""
         stc_signal = {
