@@ -1,8 +1,8 @@
 @echo off
-REM Quick start script for Windows
+REM Quick start script for Windows - with auto-restart on crash
 
 echo ╔════════════════════════════════════════════════════════════╗
-echo ║        Ψ∿ QuantumPulse - Local Launcher                   ║
+echo ║              BotifyTrades - Local Launcher                 ║
 echo ║          Professional Discord Trading Bot                  ║
 echo ╚════════════════════════════════════════════════════════════╝
 echo.
@@ -57,21 +57,30 @@ if exist "test_setup.py" (
     echo.
 )
 
-REM Ask user to continue
-set /p continue="Start QuantumPulse bot? (Y/N): "
-if /i not "%continue%"=="Y" (
+echo.
+echo Starting bot with auto-restart enabled...
+echo The bot will automatically restart if it crashes unexpectedly.
+echo Press Ctrl+C to fully stop the bot.
+echo.
+
+:restart_loop
+echo [%TIME%] Starting BotifyTrades...
+python src/selfbot_webull.py
+set EXIT_CODE=%ERRORLEVEL%
+
+REM Exit code 0 = clean shutdown (Ctrl+C), do not restart
+if %EXIT_CODE% EQU 0 (
     echo.
-    echo Exiting. Fix any errors above before running.
-    pause
-    exit /b 0
+    echo Bot stopped cleanly.
+    goto end
 )
 
+REM Any non-zero exit code = crash, auto-restart after delay
 echo.
-echo Starting bot...
-echo Press Ctrl+C to stop
-echo.
+echo [%TIME%] Bot stopped unexpectedly (exit code %EXIT_CODE%). Restarting in 5 seconds...
+echo Press Ctrl+C now to cancel restart.
+timeout /t 5 /nobreak >nul
+goto restart_loop
 
-REM Run the bot
-python src/selfbot_webull.py
-
+:end
 pause

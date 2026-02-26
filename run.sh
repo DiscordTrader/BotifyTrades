@@ -1,8 +1,8 @@
 #!/bin/bash
-# Quick start script for Mac/Linux
+# Quick start script for Mac/Linux - with auto-restart on crash
 
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║        Ψ∿ QuantumPulse - Local Launcher                   ║"
+echo "║              BotifyTrades - Local Launcher                 ║"
 echo "║          Professional Discord Trading Bot                  ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
@@ -46,9 +46,26 @@ if ! python3 -c "import discord" 2>/dev/null; then
 fi
 
 echo ""
-echo "Starting bot..."
-echo "Press Ctrl+C to stop"
+echo "Starting bot with auto-restart enabled..."
+echo "The bot will automatically restart if it crashes unexpectedly."
+echo "Press Ctrl+C to fully stop the bot."
 echo ""
 
-# Run the bot
-python3 src/selfbot_webull.py
+while true; do
+    echo "[$(date '+%H:%M:%S')] Starting BotifyTrades..."
+    python3 src/selfbot_webull.py
+    EXIT_CODE=$?
+
+    # Exit code 0 = clean shutdown (Ctrl+C), do not restart
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo ""
+        echo "Bot stopped cleanly."
+        break
+    fi
+
+    # Any non-zero exit code = crash, auto-restart after delay
+    echo ""
+    echo "[$(date '+%H:%M:%S')] Bot stopped unexpectedly (exit code $EXIT_CODE). Restarting in 5 seconds..."
+    echo "Press Ctrl+C now to cancel restart."
+    sleep 5
+done

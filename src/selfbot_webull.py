@@ -31,6 +31,32 @@ _early_print("=" * 60)
 if sys.stdout and hasattr(sys.stdout, 'flush'):
     sys.stdout.flush()
 
+import faulthandler
+import signal
+import traceback
+faulthandler.enable()
+
+def _crash_handler(signum, frame):
+    print(f"\n[CRASH] Received signal {signum}", flush=True)
+    traceback.print_stack(frame)
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+try:
+    signal.signal(signal.SIGTERM, _crash_handler)
+    signal.signal(signal.SIGABRT, _crash_handler)
+except (OSError, ValueError):
+    pass
+
+_real_os_exit = os._exit
+def _traced_exit(code):
+    print(f"\n[CRASH] os._exit({code}) called! Stack:", flush=True)
+    traceback.print_stack()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    _real_os_exit(code)
+os._exit = _traced_exit
+
 import re
 import json
 import asyncio
@@ -2096,8 +2122,12 @@ class WebullBroker:
             print("[PREWARM] ⚠️ No Webull client available — pre-warm skipped")
             return
 
-        # Run immediately in background thread so it doesn't block the event loop
-        loop = asyncio.get_event_loop()
+        # Delay startup pre-warm to avoid competing with MQTT streaming and initial sync
+        # on the shared Webull client (Webull SDK is not thread-safe at startup)
+        print("[PREWARM] ⏳ Waiting 5 minutes for bot to fully stabilize before pre-warming cache...")
+        await asyncio.sleep(300)
+
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._prewarm_option_cache, wb)
 
         # Then refresh every day at 9:30 AM EST (14:30 UTC)
@@ -2111,7 +2141,8 @@ class WebullBroker:
                 wait_seconds = (target - now_utc).total_seconds()
                 await asyncio.sleep(wait_seconds)
                 print("[PREWARM] 🔄 Daily refresh — re-warming option ID cache for new expirations...")
-                await loop.run_in_executor(None, self._prewarm_option_cache, self._client)
+                current_loop = asyncio.get_running_loop()
+                await current_loop.run_in_executor(None, self._prewarm_option_cache, self._client)
             except asyncio.CancelledError:
                 break
             except Exception as e:

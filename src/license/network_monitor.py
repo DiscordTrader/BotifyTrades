@@ -76,8 +76,10 @@ class NetworkMonitor:
         
         for host, port in test_hosts:
             try:
-                socket.setdefaulttimeout(3)
-                socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(3)
+                sock.connect((host, port))
+                sock.close()
                 return True
             except (socket.error, socket.timeout, OSError):
                 continue
