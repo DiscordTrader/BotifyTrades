@@ -2263,6 +2263,18 @@ class WebullBroker:
             print(f"[ORDER DEDUPE] ✓ Order permitted: {dedupe_key}")
             return True
 
+    def _clear_dedupe_for_failed_order(self, symbol: str, strike: float, opt_type: str, expiry: str, side: str, qty: int, price: float):
+        """Remove dedupe cache entry for a failed order so token-refresh retry isn't blocked."""
+        strike_norm = f"{float(strike):.2f}" if strike is not None else "0.00"
+        price_norm = f"{float(price):.2f}" if price is not None else "market"
+        expiry_norm = expiry.replace('/', '').strip() if expiry else ""
+        opt_type_norm = str(opt_type).upper() if opt_type else ""
+        dedupe_key = f"{self.name}_{symbol}_{strike_norm}_{opt_type_norm}_{expiry_norm}_{side}_{qty}_{price_norm}"
+        with WebullBroker._order_dedupe_lock:
+            if dedupe_key in WebullBroker._order_dedupe_cache:
+                del WebullBroker._order_dedupe_cache[dedupe_key]
+                print(f"[ORDER DEDUPE] ✓ Cleared failed order from cache: {dedupe_key}")
+
     def _patch_headers(self, wb):
         if hasattr(wb, "_session") and hasattr(wb, "_headers"):
             safe_device = _latin1(WB_DEVICE or "AndroidDevice")
@@ -3610,6 +3622,7 @@ class WebullBroker:
         
         if resp and isinstance(resp, dict) and _needs_token_retry and not resp.get('orderId'):
             print(f"[{self.name}] Trade token issue detected (code={resp_code}) - attempting auto-refresh...")
+            self._clear_dedupe_for_failed_order(symbol, strike, opt_type, expiry_mmdd, side, adjusted_qty, limit_price)
             refresh_success = await self._refresh_trade_token()
             if refresh_success:
                 print(f"[{self.name}] Token refreshed, retrying option order...")
@@ -13839,6 +13852,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _option_kwargs['_risk_management_order'] = signal.get('_risk_management_order', False)
                     if 'WEBULL' in broker_upper:
                         _option_kwargs['option_id'] = signal.get('option_id')
+                        _option_kwargs['_risk_management_order'] = signal.get('_risk_management_order', False)
                         if _skip_retry:
                             _option_kwargs['_skip_internal_retry'] = True
                     result = await broker_instance.place_option_order(**_option_kwargs)
