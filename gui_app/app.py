@@ -100,7 +100,7 @@ def start_gui_server(host='0.0.0.0', port=None):
     def run():
         print(f"[GUI] Starting web control panel on http://{host}:{port}")
         print(f"[GUI] Open your browser to access the control panel")
-        app.run(host=host, port=port, debug=True, use_reloader=False)
+        app.run(host=host, port=port, debug=False, use_reloader=False)
     
     thread = threading.Thread(target=run, daemon=True)
     thread.start()

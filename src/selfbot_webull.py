@@ -11,6 +11,36 @@ import os
 import builtins
 _early_print = builtins.print  # Save original print before any override
 
+# Crash diagnostics - captures C-level and Python-level crashes
+import faulthandler
+faulthandler.enable()
+
+# Monkey-patch os._exit to capture traceback before process terminates
+_real_os_exit = os._exit
+def _traced_os_exit(code):
+    import traceback
+    print(f"\n[CRASH] os._exit({code}) called! Stack trace:", flush=True)
+    traceback.print_stack()
+    sys.stdout.flush()
+    import time; time.sleep(0.2)
+    _real_os_exit(code)
+os._exit = _traced_os_exit
+
+# Signal handlers to catch kill signals
+import signal
+def _signal_handler(signum, frame):
+    import traceback
+    print(f"\n[CRASH] Received signal {signum}! Stack trace:", flush=True)
+    traceback.print_stack(frame)
+    sys.stdout.flush()
+    import time; time.sleep(0.2)
+    _real_os_exit(1)
+for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+    try:
+        signal.signal(_sig, _signal_handler)
+    except (OSError, ValueError):
+        pass
+
 # Handle PyInstaller GUI mode where stdout/stderr may be None
 # Use UTF-8 encoding to support Unicode characters (checkmarks, etc.)
 if sys.stdout is None:
@@ -30,32 +60,6 @@ _early_print(f"BUILD VERSION: {_build_version}")
 _early_print("=" * 60)
 if sys.stdout and hasattr(sys.stdout, 'flush'):
     sys.stdout.flush()
-
-import faulthandler
-import signal
-import traceback
-faulthandler.enable()
-
-def _crash_handler(signum, frame):
-    print(f"\n[CRASH] Received signal {signum}", flush=True)
-    traceback.print_stack(frame)
-    sys.stdout.flush()
-    sys.stderr.flush()
-
-try:
-    signal.signal(signal.SIGTERM, _crash_handler)
-    signal.signal(signal.SIGABRT, _crash_handler)
-except (OSError, ValueError):
-    pass
-
-_real_os_exit = os._exit
-def _traced_exit(code):
-    print(f"\n[CRASH] os._exit({code}) called! Stack:", flush=True)
-    traceback.print_stack()
-    sys.stdout.flush()
-    sys.stderr.flush()
-    _real_os_exit(code)
-os._exit = _traced_exit
 
 import re
 import json
@@ -17234,7 +17238,7 @@ Environment Variables:
                         _original_print("[LICENSE] Starting network connectivity monitor...")
                         start_network_monitor(
                             license_key=license_key,
-                            check_interval=10,
+                            check_interval=600,
                             show_message_callback=show_license_expired_popup
                         )
                     else:
@@ -17344,7 +17348,7 @@ Environment Variables:
                 print("[LICENSE] Starting network connectivity monitor...")
                 start_network_monitor(
                     license_key=license_key,
-                    check_interval=10,
+                    check_interval=600,
                     show_message_callback=show_license_expired_popup
                 )
             else:
