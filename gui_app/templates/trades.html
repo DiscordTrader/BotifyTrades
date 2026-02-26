@@ -1049,12 +1049,21 @@ async function closePosition(evt, tradeId, symbol, maxQuantity, assetType) {
     qtyInput.disabled = true;
 
     try {
+        const bodyData = { quantity: qtyToClose };
+        const tradeData = currentTrades.find(t => String(t.id) === String(tradeId));
+        if (tradeData) {
+            bodyData.symbol = tradeData.symbol || symbol;
+            bodyData.broker = tradeData.broker || '';
+            bodyData.asset_type = tradeData.asset_type || assetType || 'stock';
+            bodyData.strike = tradeData.strike || null;
+            bodyData.expiry = tradeData.expiry || null;
+            bodyData.call_put = tradeData.call_put || '';
+            bodyData.option_id = tradeData.option_id || null;
+        }
         const response = await fetch(`/api/trades/${tradeId}/close`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                quantity: qtyToClose
-            })
+            body: JSON.stringify(bodyData)
         });
 
         const result = await response.json();
@@ -1066,7 +1075,6 @@ async function closePosition(evt, tradeId, symbol, maxQuantity, assetType) {
             }
         } else {
             alert(`❌ Failed to close position: ${result.error || 'Unknown error'}`);
-            // Re-enable on error
             closeBtn.disabled = false;
             closeBtn.textContent = originalText;
             qtyInput.disabled = false;
@@ -1074,12 +1082,10 @@ async function closePosition(evt, tradeId, symbol, maxQuantity, assetType) {
     } catch (err) {
         console.error('Error calling closePosition API:', err);
         alert('❌ Network or server error while closing position. Check console/logs.');
-        // Re-enable on error
         closeBtn.disabled = false;
         closeBtn.textContent = originalText;
         qtyInput.disabled = false;
     } finally {
-        // ALWAYS release global lock
         isClosingPosition = false;
         console.log('[CLOSE] Global lock released');
     }
@@ -1555,6 +1561,16 @@ async function quickClose(evt, tradeId, symbol, maxQuantity, priceType) {
     try {
         const body = { quantity: qtyToClose };
         if (limitPrice) body.limit_price = limitPrice;
+        const tradeData = currentTrades.find(t => String(t.id) === String(tradeId));
+        if (tradeData) {
+            body.symbol = tradeData.symbol || symbol;
+            body.broker = tradeData.broker || '';
+            body.asset_type = tradeData.asset_type || 'stock';
+            body.strike = tradeData.strike || null;
+            body.expiry = tradeData.expiry || null;
+            body.call_put = tradeData.call_put || '';
+            body.option_id = tradeData.option_id || null;
+        }
         const response = await fetch(`/api/trades/${tradeId}/close`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

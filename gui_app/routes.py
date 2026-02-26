@@ -5812,7 +5812,7 @@ def register_routes(app):
         
         return jsonify({'success': False, 'error': 'Unexpected error'}), 500
     
-    @app.route('/api/trades/<int:trade_id>/close', methods=['POST'])
+    @app.route('/api/trades/<trade_id>/close', methods=['POST'])
     def close_position_by_id(trade_id):
         """Close a position by trade ID (used by Dashboard) - Uses LIVE broker quantity"""
         print(f"[API] ========== CLOSE ENDPOINT CALLED FOR TRADE ID {trade_id} ==========")
@@ -5821,12 +5821,10 @@ def register_routes(app):
                 print(f"[API] ERROR: Bot instance is None!")
                 return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
             
-            # Get custom quantity and limit price from request body (optional)
             data = request.get_json(silent=True) or {}
             requested_quantity = data.get('quantity')
             requested_limit_price = data.get('limit_price')
             
-            # Convert limit_price to float if provided
             if requested_limit_price is not None:
                 try:
                     requested_limit_price = float(requested_limit_price)
@@ -5838,14 +5836,41 @@ def register_routes(app):
             order_type = f"LIMIT @ ${requested_limit_price}" if requested_limit_price else "MARKET"
             print(f"[API] Close request: qty={requested_quantity}, order_type={order_type}")
             
-            print(f"[API] Bot instance OK, fetching trade {trade_id} from database...")
-            # Get trade from database
-            trade = db.get_trade_by_id(trade_id)
-            print(f"[API] Trade data: {trade}", flush=True)
-            if not trade:
-                return jsonify({'success': False, 'error': f'Trade {trade_id} not found'}), 404
+            is_db_trade = False
+            try:
+                numeric_id = int(trade_id)
+                is_db_trade = True
+            except (ValueError, TypeError):
+                numeric_id = None
             
-            # Extract trade details
+            trade = None
+            if is_db_trade:
+                print(f"[API] Bot instance OK, fetching trade {trade_id} from database...")
+                trade = db.get_trade_by_id(numeric_id)
+                print(f"[API] Trade data: {trade}", flush=True)
+            
+            if not trade:
+                symbol = data.get('symbol', '')
+                broker_from_body = data.get('broker', '')
+                asset_type_from_body = data.get('asset_type', '')
+                if not symbol and not is_db_trade:
+                    parts = str(trade_id).split('_', 1)
+                    if len(parts) == 2:
+                        symbol = parts[1]
+                if not symbol:
+                    return jsonify({'success': False, 'error': f'Trade {trade_id} not found'}), 404
+                trade = {
+                    'symbol': symbol,
+                    'asset_type': asset_type_from_body or 'stock',
+                    'strike': data.get('strike'),
+                    'expiry': data.get('expiry'),
+                    'call_put': data.get('call_put', ''),
+                    'broker': broker_from_body or 'Webull',
+                    'entry_price': 0,
+                    'option_id': data.get('option_id'),
+                }
+                print(f"[API] Using request body for live position: {trade}", flush=True)
+            
             symbol = trade.get('symbol')
             asset_type = (trade.get('asset_type') or 'stock').lower()
             strike = trade.get('strike')
@@ -5960,7 +5985,8 @@ def register_routes(app):
                         result = executor.submit(_alpaca_close_direct).result(timeout=10)
                     
                     if result.get('success'):
-                        db.close_trade(trade_id, result.get('fill_price', 0) or requested_limit_price or 0, 'manual_close')
+                        if is_db_trade:
+                            db.close_trade(numeric_id, result.get('fill_price', 0) or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"Position closed: {quantity_to_close} {close_symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': result.get('error', 'Alpaca close failed')}), 500
@@ -6028,7 +6054,8 @@ def register_routes(app):
                             success = True
                     
                     if success:
-                        db.close_trade(trade_id, fill_price or requested_limit_price or 0, 'manual_close')
+                        if is_db_trade:
+                            db.close_trade(numeric_id, fill_price or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Robinhood close failed: {error_msg or "Unknown error"}'}), 500
@@ -6073,7 +6100,8 @@ def register_routes(app):
                         result = executor.submit(_schwab_close_direct).result(timeout=15)
                     
                     if result and result.success:
-                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        if is_db_trade:
+                            db.close_trade(numeric_id, result.fill_price or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"Schwab position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Schwab close failed: {result.message if result else "Unknown error"}'}), 500
@@ -6118,7 +6146,8 @@ def register_routes(app):
                         result = executor.submit(_ibkr_close_direct).result(timeout=15)
                     
                     if result and result.success:
-                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        if is_db_trade:
+                            db.close_trade(numeric_id, result.fill_price or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"IBKR position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'IBKR close failed: {result.message if result else "Unknown error"}'}), 500
@@ -6163,7 +6192,8 @@ def register_routes(app):
                         result = executor.submit(_tt_close_direct).result(timeout=15)
                     
                     if result and result.success:
-                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        if is_db_trade:
+                            db.close_trade(numeric_id, result.fill_price or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"Tastytrade position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Tastytrade close failed: {result.message if result else "Unknown error"}'}), 500

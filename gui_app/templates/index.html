@@ -2120,11 +2120,16 @@ async function executeClose(tradeId, symbol, quantity, broker, limitPrice, order
                 limit_price: limitPrice
             });
         } else {
-            // Webull uses trade ID-based close
             url = `/api/trades/${tradeId}/close`;
             body = JSON.stringify({ 
                 quantity: quantity,
-                limit_price: limitPrice
+                limit_price: limitPrice,
+                symbol: symbol,
+                broker: effectiveBroker,
+                asset_type: (strike || callPut) ? 'option' : 'stock',
+                strike: strike || null,
+                expiry: expiry || null,
+                call_put: callPut || ''
             });
         }
         
