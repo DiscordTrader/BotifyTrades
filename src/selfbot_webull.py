@@ -2660,7 +2660,19 @@ class WebullBroker:
             if option_id == 0:
                 print(f"[SLIPPAGE] ⚠️  Could not find option ID for {symbol} ${strike}{opt_type} {expiry_mmdd}")
                 return None
-            
+
+            # Cache option_id immediately so order placement skips the second full lookup
+            try:
+                _yr = expiry_year or datetime.now().strftime('%Y')
+                if '/' in expiry_mmdd:
+                    _parts = expiry_mmdd.split('/')
+                    _full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
+                else:
+                    _full_expiry = expiry_mmdd
+                self.cache_option_id(symbol, float(strike), _full_expiry, opt_type, str(option_id))
+            except Exception:
+                pass
+
             # Get option quote data
             quote = wb.get_option_quote(stock=symbol, optionId=str(option_id))
             if not quote:

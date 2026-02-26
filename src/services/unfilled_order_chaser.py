@@ -829,7 +829,10 @@ class UnfilledOrderChaser:
                         price = await result
                     else:
                         price = result
-                    return price
+                    if isinstance(price, dict):
+                        price = (price.get('last') or price.get('close') or
+                                 price.get('price') or price.get('latestPrice'))
+                    return float(price) if price is not None else None
             
             return None
         except Exception as e:
