@@ -13500,13 +13500,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     pct_from_channel = signal.get('_pct_from_channel', False)  # Channel wants calculated sizing
                                     
                                     if calculate_qty or pct_from_signal or pct_from_channel:
-                                        # Calculate channel max qty from position sizing percentage
-                                        channel_max_qty = min(pct_qty, affordable_qty)
+                                        if pct_qty == 0 and affordable_qty >= 1:
+                                            channel_max_qty = min(original_qty, affordable_qty)
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 contract (${actual_cost:.0f}), using buying power instead")
+                                        else:
+                                            channel_max_qty = min(pct_qty, affordable_qty)
                                         
-                                        # Check if we have a signal qty to cap (signal intent should be respected)
                                         signal_qty_to_cap = signal.get('_signal_qty_to_cap')
                                         if signal_qty_to_cap and signal_qty_to_cap > 0:
-                                            # Signal has qty - use min(signal, channel_max) to respect trader intent
                                             new_qty = min(signal_qty_to_cap, channel_max_qty)
                                             if new_qty == 0:
                                                 _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
@@ -13517,7 +13518,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             else:
                                                 _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using signal qty={new_qty} (within channel {position_size_pct}% limit of {channel_max_qty})")
                                         else:
-                                            # No signal qty - use full channel percentage
                                             new_qty = channel_max_qty
                                             if new_qty == 0:
                                                 _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
@@ -13572,13 +13572,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     pct_from_channel = signal.get('_pct_from_channel', False)  # Channel wants calculated sizing
                                     
                                     if calculate_qty or pct_from_signal or pct_from_channel:
-                                        # Calculate channel max qty from position sizing percentage
-                                        channel_max_qty = min(pct_qty, affordable_qty)
+                                        if pct_qty == 0 and affordable_qty >= 1:
+                                            channel_max_qty = min(original_qty, affordable_qty)
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 share (${price:.2f}), using buying power instead")
+                                        else:
+                                            channel_max_qty = min(pct_qty, affordable_qty)
                                         
-                                        # Check if we have a signal qty to cap (signal intent should be respected)
                                         signal_qty_to_cap = signal.get('_signal_qty_to_cap')
                                         if signal_qty_to_cap and signal_qty_to_cap > 0:
-                                            # Signal has qty - use min(signal, channel_max) to respect trader intent
                                             new_qty = min(signal_qty_to_cap, channel_max_qty)
                                             if new_qty == 0:
                                                 _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
@@ -13589,7 +13590,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             else:
                                                 _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using signal qty={new_qty} (within channel {position_size_pct}% limit of {channel_max_qty})")
                                         else:
-                                            # No signal qty - use full channel percentage
                                             new_qty = channel_max_qty
                                             if new_qty == 0:
                                                 _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
