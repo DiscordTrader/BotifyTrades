@@ -2210,9 +2210,16 @@ async function qtLoadChain() {
             ? `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`
             : '';
         const src = (data.data_source || '').toLowerCase();
-        document.getElementById('qt-data-source').innerHTML = data.data_source
-            ? `<span class="qt-source ${src.includes('alpaca') ? 'alpaca' : 'webull'}">${data.data_source}</span>`
-            : '';
+        const isSchwab = broker.includes('SCHWAB');
+        if (isSchwab) {
+            document.getElementById('qt-data-source').innerHTML = '<span class="qt-source" style="background:#ffc80022;color:#ffc800;">⏳ Schwab REST (connecting stream...)</span>';
+        } else {
+            document.getElementById('qt-data-source').innerHTML = data.data_source
+                ? `<span class="qt-source ${src.includes('alpaca') ? 'alpaca' : 'webull'}">${data.data_source}</span>`
+                : '';
+        }
+        const qtInd = document.getElementById('qt-streaming-indicator');
+        if (qtInd) { qtInd.style.display = 'none'; qtInd.textContent = ''; }
         qtRenderChain(data);
         qtStartAutoRefresh();
     } catch (e) {
@@ -2561,6 +2568,8 @@ async function qtStreamQuotePoll() {
                 qtInd.style.display = 'inline';
                 qtInd.textContent = '\u26A1 LIVE';
                 qtInd.style.color = '#22c55e';
+            } else {
+                qtInd.style.display = 'none';
             }
         }
 
@@ -2568,6 +2577,11 @@ async function qtStreamQuotePoll() {
         if (srcEl && anyStreaming) {
             const srcLabel = broker.includes('SCHWAB') ? 'Schwab WS' : 'Webull MQTT';
             srcEl.innerHTML = `<span class="qt-source" style="background:#22c55e22; color:#22c55e;">\u26A1 ${srcLabel} Stream</span>`;
+        } else if (srcEl && !anyStreaming && data.count > 0) {
+            const curSrc = srcEl.innerHTML;
+            if (!curSrc.includes('connecting') && !curSrc.includes('Stream')) {
+                srcEl.innerHTML = '<span class="qt-source" style="background:#ffc80022;color:#ffc800;">\u23F3 REST (waiting for stream...)</span>';
+            }
         }
     } catch (e) { console.error('[QT_STREAM] poll error:', e); }
 }

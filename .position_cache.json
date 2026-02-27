@@ -4,7 +4,7 @@
     "highest_price": 0.025,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 53,
+    "closing_cycles": 43,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "SCHWAB",

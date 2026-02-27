@@ -10004,11 +10004,16 @@ def register_routes(app):
 
     @app.route('/api/options/subscribe-stream', methods=['POST'])
     def api_subscribe_option_stream():
+        import sys
+        print(f"[OPTIONS_STREAM] >>> ENDPOINT HIT <<<", flush=True)
+        sys.stdout.flush()
         try:
             data = request.json
             symbol = data.get('symbol', '').upper()
             broker = data.get('broker', 'WEBULL').upper()
             contracts = data.get('contracts', [])
+            print(f"[OPTIONS_STREAM] symbol={symbol} broker={broker} contracts={len(contracts)}", flush=True)
+            sys.stdout.flush()
 
             if not symbol or not contracts:
                 return jsonify({'error': 'Symbol and contracts required'}), 400
@@ -10065,7 +10070,7 @@ def register_routes(app):
                         schwab_broker = _bot_instance.brokers_dict.get('schwab') or _bot_instance.brokers_dict.get('SCHWAB')
 
                 streaming_client = getattr(schwab_broker, '_streaming_client', None) if schwab_broker else None
-                print(f"[OPTIONS_STREAM] Schwab subscribe: broker={'found' if schwab_broker else 'NOT FOUND'}, streaming_client={'found' if streaming_client else 'NOT FOUND'}, connected={streaming_client.is_connected() if streaming_client else 'N/A'}")
+                print(f"[OPTIONS_STREAM] Schwab subscribe: broker={'found' if schwab_broker else 'NOT FOUND'}, streaming_client={'found' if streaming_client else 'NOT FOUND'}, connected={streaming_client.is_connected() if streaming_client else 'N/A'}", flush=True)
 
                 option_symbols = []
                 for c in contracts:
