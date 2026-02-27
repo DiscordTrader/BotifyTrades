@@ -878,6 +878,19 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     if re.search(r'\bWATCHING\s+[A-Z]+\s+OVER\b', text_upper):
         return False
     
+    # Exclude market commentary patterns — these describe price action, not trade signals
+    # Examples: "$QQQ under 605 can see $602.50 can see $599"
+    #           "SPY over 500 looking for 510 next"
+    #           "AAPL above 180 could go to 185"
+    commentary_patterns = [
+        r'\b(?:CAN\s+SEE|LOOKING\s+(?:FOR|AT)|COULD\s+(?:GO|SEE|HEAD|MOVE)|HEADING\s+(?:TO|TOWARD)|EXPECTING|EYEING|MIGHT\s+(?:GO|SEE|HIT|REACH)|SHOULD\s+(?:GO|SEE|HIT|REACH))\b',
+        r'\b(?:WATCH(?:ING)?|MONITOR(?:ING)?)\s+(?:FOR|THE|THIS|IT)\b',
+    ]
+    for pat in commentary_patterns:
+        if re.search(pat, text_upper):
+            print(f"[CONDITIONAL] ⚠️ Skipped commentary pattern: {text[:80]}")
+            return False
+    
     # Must have over/under trigger
     has_over_trigger = CONDITIONAL_TRIGGER_PATTERN.search(text) is not None
     has_under_trigger = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text) is not None
