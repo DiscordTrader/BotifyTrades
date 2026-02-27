@@ -402,6 +402,87 @@ async function loadChannels() {
                                         </div>
                                     </div>
                                 </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 188, 212, 0.05); border: 1px solid rgba(0, 188, 212, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">📊</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00bcd4;">EMA Risk Management</label>
+                                            <span style="font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: ${channel.ema_risk_enabled ? 'rgba(0, 188, 212, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.ema_risk_enabled ? 'rgba(0, 188, 212, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; color: ${channel.ema_risk_enabled ? '#00bcd4' : '#8E8E93'};">${channel.ema_risk_enabled ? 'ENABLED' : 'DISABLED'}</span>
+                                        </div>
+                                        <label class="toggle-switch" title="Monitor EMA crossovers for exit/escalation signals">
+                                            <input type="checkbox" id="risk-ema-enabled-${channel.id}" ${channel.ema_risk_enabled ? 'checked' : ''} onchange="document.getElementById('ema-settings-grid-${channel.id}').style.display = this.checked ? 'block' : 'none';">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Builds live candles from streaming data, computes EMA, and exits when price crosses below EMA (calls/stocks) or above (puts).</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Priority 2.5:</strong> Runs after Dynamic SL but before Giveback Guard. Can also escalate stop loss toward EMA level.</p>
+                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: EMA needs ${channel.ema_period || 5} completed candles to seed. Until then, other risk rules protect your position.</p>
+                                    <div id="ema-settings-grid-${channel.id}" style="display: ${channel.ema_risk_enabled ? 'block' : 'none'};">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">EMA Period</label>
+                                                <select id="risk-ema-period-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                                    <option value="3" ${(channel.ema_period || 5) == 3 ? 'selected' : ''}>3 (Fast)</option>
+                                                    <option value="5" ${(channel.ema_period || 5) == 5 ? 'selected' : ''}>5 (Standard)</option>
+                                                    <option value="8" ${(channel.ema_period || 5) == 8 ? 'selected' : ''}>8 (Moderate)</option>
+                                                    <option value="13" ${(channel.ema_period || 5) == 13 ? 'selected' : ''}>13 (Slow)</option>
+                                                    <option value="21" ${(channel.ema_period || 5) == 21 ? 'selected' : ''}>21 (Very Slow)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Candle Timeframe</label>
+                                                <select id="risk-ema-timeframe-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                                    <option value="1" ${(channel.ema_timeframe_minutes || 5) == 1 ? 'selected' : ''}>1 min (Fastest seed)</option>
+                                                    <option value="2" ${(channel.ema_timeframe_minutes || 5) == 2 ? 'selected' : ''}>2 min</option>
+                                                    <option value="3" ${(channel.ema_timeframe_minutes || 5) == 3 ? 'selected' : ''}>3 min</option>
+                                                    <option value="5" ${(channel.ema_timeframe_minutes || 5) == 5 ? 'selected' : ''}>5 min (Recommended)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Buffer %</label>
+                                                <input type="number" id="risk-ema-buffer-${channel.id}" value="${channel.ema_buffer_pct != null ? channel.ema_buffer_pct : 0.1}" placeholder="0.1" step="0.05" min="0" max="2" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;" title="Buffer zone around EMA to prevent whipsaw exits">
+                                            </div>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch" title="Exit position when price crosses EMA unfavorably">
+                                                    <input type="checkbox" id="risk-ema-exit-${channel.id}" ${channel.ema_exit_enabled !== 0 ? 'checked' : ''}>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Exit on Cross</label>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch" title="Escalate stop loss toward EMA when price is favorable">
+                                                    <input type="checkbox" id="risk-ema-escalation-${channel.id}" ${channel.ema_escalation_enabled !== 0 ? 'checked' : ''}>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Stop Escalation</label>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">No-Trend Guard:</label>
+                                                <input type="number" id="risk-ema-no-trend-${channel.id}" value="${channel.ema_no_trend_candles != null ? channel.ema_no_trend_candles : 3}" placeholder="3" step="1" min="1" max="20" style="width: 50px; padding: 6px 8px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;" title="Auto-exit if price never moves to favorable side of EMA after this many completed candles">
+                                                <span style="font-size: 10px; color: #666;">candles</span>
+                                            </div>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch" title="For options like SPY 600C, monitor SPY's chart instead of the option price. Underlying has cleaner price action for EMA signals.">
+                                                    <input type="checkbox" id="risk-ema-underlying-${channel.id}" ${channel.ema_use_underlying !== 0 ? 'checked' : ''}>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Use Underlying Chart</label>
+                                                <span style="font-size: 10px; color: #555; cursor: help;" title="For options like SPY 600C, monitor SPY's chart instead of the option price. Underlying has cleaner price action for EMA signals.">ℹ️</span>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch" title="Build candles during pre-market/after-hours (4AM-8PM ET)">
+                                                    <input type="checkbox" id="risk-ema-extended-${channel.id}" ${channel.ema_extended_hours ? 'checked' : ''}>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Extended Hours</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div style="margin-top: 16px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
@@ -1295,7 +1376,18 @@ async function saveRiskManagement(channelId) {
         const enableEarlyTrailing = document.getElementById(`risk-early-trailing-${channelId}`)?.checked ? 1 : 0;
         const earlyTrailingActivationPct = document.getElementById(`risk-early-activation-${channelId}`).value;
         const earlyTrailingStepPct = document.getElementById(`risk-early-step-${channelId}`).value;
-        
+
+        // EMA Risk Management settings
+        const emaRiskEnabled = document.getElementById(`risk-ema-enabled-${channelId}`)?.checked ? 1 : 0;
+        const emaPeriod = document.getElementById(`risk-ema-period-${channelId}`)?.value || '5';
+        const emaTimeframe = document.getElementById(`risk-ema-timeframe-${channelId}`)?.value || '5';
+        const emaBuffer = document.getElementById(`risk-ema-buffer-${channelId}`)?.value;
+        const emaExitEnabled = document.getElementById(`risk-ema-exit-${channelId}`)?.checked ? 1 : 0;
+        const emaEscalationEnabled = document.getElementById(`risk-ema-escalation-${channelId}`)?.checked ? 1 : 0;
+        const emaNoTrend = document.getElementById(`risk-ema-no-trend-${channelId}`)?.value || '3';
+        const emaUseUnderlying = document.getElementById(`risk-ema-underlying-${channelId}`)?.checked ? 1 : 0;
+        const emaExtendedHours = document.getElementById(`risk-ema-extended-${channelId}`)?.checked ? 1 : 0;
+
         // Mutual exclusion validation: Early Trailing and Legacy Trailing cannot both be active
         if (enableEarlyTrailing && trailingStop && parseFloat(trailingStop) > 0) {
             showMessage('⚠️ Early Trailing and Legacy Trailing Stop are mutually exclusive. Please disable one.', 'error');
@@ -1336,6 +1428,15 @@ async function saveRiskManagement(channelId) {
                 enable_early_trailing: enableEarlyTrailing,
                 early_trailing_activation_pct: earlyTrailingActivationPct ? parseFloat(earlyTrailingActivationPct) : 5.0,
                 early_trailing_step_pct: earlyTrailingStepPct ? parseFloat(earlyTrailingStepPct) : 3.0,
+                ema_risk_enabled: emaRiskEnabled,
+                ema_period: parseInt(emaPeriod),
+                ema_timeframe_minutes: parseInt(emaTimeframe),
+                ema_buffer_pct: emaBuffer ? parseFloat(emaBuffer) : 0.1,
+                ema_exit_enabled: emaExitEnabled,
+                ema_escalation_enabled: emaEscalationEnabled,
+                ema_no_trend_candles: parseInt(emaNoTrend),
+                ema_use_underlying: emaUseUnderlying,
+                ema_extended_hours: emaExtendedHours,
                 use_global_risk_settings: 0
             })
         });

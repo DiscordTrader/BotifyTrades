@@ -7409,6 +7409,40 @@ class SelfClient(discord.Client):
         except Exception as e:
             _original_print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
         
+        # Start EMA Candlestick Risk Engine pre-warm service
+        try:
+            from src.risk.ema_engine import get_candle_service
+            ema_service = get_candle_service()
+            ema_hubs = []
+            if webull_hub:
+                ema_hubs.append(webull_hub)
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub as _get_schwab_ema
+                _schwab_ema = _get_schwab_ema()
+                if _schwab_ema:
+                    ema_hubs.append(_schwab_ema)
+            except Exception:
+                pass
+            try:
+                from gui_app.database import get_db
+                _ema_db = get_db()
+                _ema_conn = _ema_db.get_connection()
+                _ema_cursor = _ema_conn.cursor()
+                _ema_cursor.execute("SELECT value FROM trading_settings WHERE key = 'ema_risk_global_enabled'")
+                _ema_row = _ema_cursor.fetchone()
+                if _ema_row and str(_ema_row[0]) == '0':
+                    ema_service.set_global_enabled(False)
+                    _original_print("[EMA] Global EMA toggle is OFF — pre-warm service will not start", flush=True)
+                else:
+                    ema_service.set_global_enabled(True)
+            except Exception:
+                pass
+            if ema_service.is_global_enabled():
+                ema_service.start(hubs=ema_hubs)
+                _original_print(f"[EMA] ✓ CandlePreWarmService started with {len(ema_hubs)} hub(s) — pre-warming SPY, QQQ, SPX, NDX", flush=True)
+        except Exception as e:
+            _original_print(f"[EMA] ⚠️ Could not start EMA pre-warm service: {e}", flush=True)
+
         # Register brokers with QuoteAggregator for multi-broker quote fallback
         try:
             from src.services.quote_aggregator import register_broker_with_aggregator

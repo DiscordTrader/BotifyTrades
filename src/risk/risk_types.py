@@ -92,6 +92,17 @@ class ChannelRiskSettings:
     enable_early_trailing: bool = False  # Enable early trailing stop
     early_trailing_activation_pct: float = 5.0  # Move to breakeven at this % gain
     early_trailing_step_pct: float = 3.0  # Lock profit in this % increments
+
+    # EMA Risk Management Settings (EMA-5 Candlestick Risk Engine)
+    ema_risk_enabled: bool = False
+    ema_period: int = 5
+    ema_timeframe_minutes: int = 5
+    ema_buffer_pct: float = 0.1
+    ema_exit_enabled: bool = True
+    ema_escalation_enabled: bool = True
+    ema_extended_hours: bool = False
+    ema_use_underlying: bool = True
+    ema_no_trend_candles: int = 3
     
     @property
     def has_tiered_targets(self) -> bool:
@@ -105,7 +116,8 @@ class ChannelRiskSettings:
         return (self.has_tiered_targets or 
                 self.stop_loss_pct > 0 or 
                 self.trailing_stop_pct > 0 or
-                self.enable_early_trailing)
+                self.enable_early_trailing or
+                self.ema_risk_enabled)
     
     def compute_settings_hash(self) -> str:
         """
@@ -125,7 +137,10 @@ class ChannelRiskSettings:
             self.giveback_allowed_pct, self.dynamic_sl_profile,
             self.enable_early_trailing, self.early_trailing_activation_pct,
             self.early_trailing_step_pct,
-            self.trim_order_mode, self.sl_order_mode
+            self.trim_order_mode, self.sl_order_mode,
+            self.ema_risk_enabled, self.ema_period, self.ema_timeframe_minutes,
+            self.ema_buffer_pct, self.ema_exit_enabled, self.ema_escalation_enabled,
+            self.ema_no_trend_candles
         )
         hash_input = str(key_fields).encode()
         return hashlib.md5(hash_input).hexdigest()[:12]
@@ -248,6 +263,10 @@ class PositionCacheEntry:
     early_trailing_active: bool = False  # True once breakeven locked
     early_stop_price: Optional[float] = None  # Current early trailing stop price
     early_steps_locked: int = 0  # Number of profit steps locked (0=breakeven, 1=+step%, 2=+2*step%, ...)
+
+    # EMA Risk state (position-level tracking, EMA value lives in CandlePreWarmService)
+    ema_no_trend_count: int = 0
+    ema_last_cross_state: str = 'unknown'
     
     # Position instance identity - prevents stale SL/PT from old orders
     source_order_id: Optional[int] = None  # Conditional order ID that seeded this entry
@@ -301,7 +320,9 @@ class PositionCacheEntry:
             'manual_pt_targets': self.manual_pt_targets,
             'source_order_id': self.source_order_id,
             'source_trade_id': self.source_trade_id,
-            'seed_time': self.seed_time
+            'seed_time': self.seed_time,
+            'ema_no_trend_count': self.ema_no_trend_count,
+            'ema_last_cross_state': self.ema_last_cross_state
         }
     
     @classmethod

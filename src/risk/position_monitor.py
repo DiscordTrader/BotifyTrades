@@ -331,7 +331,10 @@ class RiskDBAdapter:
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                    c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                    t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
+                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
+                                   c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
+                                   c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
+                                   c.ema_use_underlying, c.ema_no_trend_candles
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -352,7 +355,10 @@ class RiskDBAdapter:
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                    c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                    t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
+                                   c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
+                                   c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
+                                   c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
+                                   c.ema_use_underlying, c.ema_no_trend_candles
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -381,7 +387,10 @@ class RiskDBAdapter:
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
+                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
+                               c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
+                               c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
+                               c.ema_use_underlying, c.ema_no_trend_candles
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -402,7 +411,10 @@ class RiskDBAdapter:
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
                                t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
-                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings
+                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
+                               c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
+                               c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
+                               c.ema_use_underlying, c.ema_no_trend_candles
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -536,7 +548,18 @@ class RiskDBAdapter:
                 
                 # Extract SL limit offset (index 31, after sl_order_mode)
                 sl_limit_offset = row[31] if len(row) > 31 and row[31] is not None else 0.03
-                
+
+                # Extract EMA Risk settings (indices 35-43, after use_global_risk_settings at 34)
+                ema_risk_enabled = bool(row[35]) if len(row) > 35 and row[35] else False
+                ema_period = row[36] if len(row) > 36 and row[36] is not None else 5
+                ema_timeframe_minutes = row[37] if len(row) > 37 and row[37] is not None else 5
+                ema_buffer_pct = row[38] if len(row) > 38 and row[38] is not None else 0.1
+                ema_exit_enabled = bool(row[39]) if len(row) > 39 and row[39] is not None else True
+                ema_escalation_enabled = bool(row[40]) if len(row) > 40 and row[40] is not None else True
+                ema_extended_hours = bool(row[41]) if len(row) > 41 and row[41] else False
+                ema_use_underlying = bool(row[42]) if len(row) > 42 and row[42] is not None else True
+                ema_no_trend_candles = row[43] if len(row) > 43 and row[43] is not None else 3
+
                 # Risk management is enabled - return settings
                 return ChannelRiskSettings(
                     channel_id=str(row[0]),
@@ -567,7 +590,16 @@ class RiskDBAdapter:
                     dynamic_sl_profile=dynamic_sl_profile,
                     enable_early_trailing=enable_early_trailing,
                     early_trailing_activation_pct=early_trailing_activation_pct,
-                    early_trailing_step_pct=early_trailing_step_pct
+                    early_trailing_step_pct=early_trailing_step_pct,
+                    ema_risk_enabled=ema_risk_enabled,
+                    ema_period=ema_period,
+                    ema_timeframe_minutes=ema_timeframe_minutes,
+                    ema_buffer_pct=ema_buffer_pct,
+                    ema_exit_enabled=ema_exit_enabled,
+                    ema_escalation_enabled=ema_escalation_enabled,
+                    ema_extended_hours=ema_extended_hours,
+                    ema_use_underlying=ema_use_underlying,
+                    ema_no_trend_candles=ema_no_trend_candles
                 )
             
             return None
@@ -1628,8 +1660,8 @@ class RiskManager:
                 decision.reason = format_tier_reason(decision, channel_settings.channel_name)
                 return decision
         
-        if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard):
-            engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings)
+        if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled):
+            engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
             if engine_decision and engine_decision.should_exit:
                 return engine_decision
         
@@ -1679,10 +1711,11 @@ class RiskManager:
         self,
         position: PositionSnapshot,
         cache: PositionCacheEntry,
-        channel_settings: ChannelRiskSettings
+        channel_settings: ChannelRiskSettings,
+        position_snapshot: PositionSnapshot = None
     ) -> Optional[ExitDecision]:
         """
-        Evaluate Enhanced Risk v2.0 features: Dynamic SL and Giveback Guard.
+        Evaluate Enhanced Risk v2.0 features: Dynamic SL, Giveback Guard, and EMA Risk.
         Updates cache state and returns exit decision if triggered.
         """
         original_qty = cache.original_qty if cache.original_qty else int(position.quantity)
@@ -1693,7 +1726,36 @@ class RiskManager:
             remaining_qty=int(position.quantity)
         )
         state.copy_from_cache(cache)
-        
+
+        if channel_settings.ema_risk_enabled and position_snapshot:
+            try:
+                from .ema_engine import get_candle_service
+                candle_svc = get_candle_service()
+                if candle_svc.is_global_enabled():
+                    ema_symbol = position_snapshot.symbol
+                    tf = channel_settings.ema_timeframe_minutes
+                    pd = channel_settings.ema_period
+
+                    if not candle_svc.is_tracking(ema_symbol):
+                        candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd)
+
+                    ema_state = candle_svc.get_ema_state(ema_symbol, timeframe=tf, period=pd)
+                    state.ema_value = ema_state.value
+                    state.ema_cross_state = ema_state.cross_state
+                    state.ema_candles_count = ema_state.candles_count
+                    state.ema_no_trend_count = cache.ema_no_trend_count
+                    if ema_state.last_candle:
+                        state.ema_last_candle = ema_state.last_candle.to_dict()
+
+                    if position_snapshot.direction in ('C', 'Call', 'call'):
+                        state.position_direction = 'C'
+                    elif position_snapshot.direction in ('P', 'Put', 'put'):
+                        state.position_direction = 'P'
+                    else:
+                        state.position_direction = 'stock'
+            except Exception as e:
+                print(f"[RISK] EMA state lookup failed for {position_snapshot.symbol}: {e}")
+
         actions, updated_state = evaluate_exit_actions(state, channel_settings, verbose=False)
         
         old_max_pnl = cache.max_pnl_seen
@@ -1769,7 +1831,37 @@ class RiskManager:
                 old_display = f"${old_stop:.2f}" if old_stop else "entry"
                 print(f"[RISK] 📈 Early Trail PROFIT LOCKED: {old_display} → ${action.new_stop_price:.2f} (step {cache.early_steps_locked})")
                 self.cache.persist_early_trailing_state(position.position_key)
-        
+
+            elif action.action_type == ActionType.EMA_EXIT:
+                channel_name = channel_settings.channel_name
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"EMA EXIT [{channel_name}] {action.reason}",
+                    exit_qty=action.qty,
+                    is_partial=(action.qty < int(position.quantity)),
+                    risk_trigger='ema_exit'
+                )
+
+            elif action.action_type == ActionType.EMA_NO_TREND_EXIT:
+                cache.ema_no_trend_count = updated_state.ema_no_trend_count
+                channel_name = channel_settings.channel_name
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"EMA NO-TREND [{channel_name}] {action.reason}",
+                    exit_qty=action.qty,
+                    is_partial=False,
+                    risk_trigger='ema_no_trend'
+                )
+
+            elif action.action_type == ActionType.EMA_ESCALATE_STOP and action.new_stop_price:
+                if cache.dynamic_sl_price is None or action.new_stop_price > cache.dynamic_sl_price:
+                    cache.dynamic_sl_price = action.new_stop_price
+                    print(f"[RISK] 📊 EMA Stop escalated to ${action.new_stop_price:.2f} ({action.reason})")
+
+        cache.ema_no_trend_count = updated_state.ema_no_trend_count
+        if updated_state.ema_cross_state and updated_state.ema_cross_state not in ('seeding', 'frozen', ''):
+            cache.ema_last_cross_state = updated_state.ema_cross_state
+
         return None
     
     async def _execute_exit(

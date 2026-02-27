@@ -51,6 +51,17 @@ from .risk_engine import (
     apply_actions_to_cache,
     DYNAMIC_SL_PROFILES
 )
+from .ema_engine import (
+    CandleAggregator,
+    EMAEngine,
+    EMAExitEvaluator,
+    CandlePreWarmService,
+    get_candle_service,
+    EMAState,
+    EMADecision,
+    EMAEvalResult,
+    Candle
+)
 
 __all__ = [
     'RiskManager',
@@ -75,4 +86,13 @@ __all__ = [
     'evaluate_exit_actions',
     'apply_actions_to_cache',
     'DYNAMIC_SL_PROFILES',
+    'CandleAggregator',
+    'EMAEngine',
+    'EMAExitEvaluator',
+    'CandlePreWarmService',
+    'get_candle_service',
+    'EMAState',
+    'EMADecision',
+    'EMAEvalResult',
+    'Candle',
 ]

@@ -3,6 +3,7 @@ Risk Engine - Enhanced Exit Evaluation
 =======================================
 Industry-grade risk management with:
 - Dynamic SL escalation after PT hits
+- EMA-5 Candlestick Risk Engine (exit/escalation on EMA cross)
 - Max Profit Giveback Guard
 - Early Trailing Stop (percentage-based breakeven + profit locking)
 - Priority-ordered exit evaluation
@@ -11,8 +12,9 @@ Industry-grade risk management with:
 Exit Priority Order:
 1. Hard SL (immediate protection)
 2. Dynamic SL (after PT hits)
+2.5. EMA Exit/Escalation (candlestick-based trend monitoring)
 3. Giveback Guard (max profit protection)
-4. Early Trailing Stop (breakeven + profit locking) - NEW
+4. Early Trailing Stop (breakeven + profit locking)
 5. Tiered Profit Targets (partial exits)
 6. Legacy Trailing Stop (after activation)
 """
@@ -34,6 +36,9 @@ class ActionType(Enum):
     ACTIVATE_GIVEBACK = "activate_giveback"
     ACTIVATE_EARLY_TRAIL = "activate_early_trail"
     UPDATE_EARLY_STOP = "update_early_stop"
+    EMA_EXIT = "ema_exit"
+    EMA_ESCALATE_STOP = "ema_escalate_stop"
+    EMA_NO_TREND_EXIT = "ema_no_trend_exit"
 
 
 @dataclass
@@ -94,6 +99,14 @@ class TradeState:
     early_steps_locked: int = 0
     
     last_evaluated_price: Optional[float] = None
+
+    # EMA Risk state
+    ema_value: Optional[float] = None
+    ema_cross_state: str = 'seeding'
+    ema_candles_count: int = 0
+    ema_no_trend_count: int = 0
+    ema_last_candle: Optional[Dict] = None
+    position_direction: str = 'stock'
     
     @property
     def pnl_pct(self) -> float:
@@ -123,6 +136,7 @@ class TradeState:
         self.early_trailing_active = cache.early_trailing_active
         self.early_stop_price = cache.early_stop_price
         self.early_steps_locked = cache.early_steps_locked
+        self.ema_no_trend_count = cache.ema_no_trend_count
         return self
 
 
@@ -274,7 +288,88 @@ def evaluate_exit_actions(
                     priority=2
                 ))
                 return actions, state
-    
+
+    # 2.5. EMA Exit/Escalation (candlestick-based trend monitoring)
+    if (config.ema_risk_enabled and 
+        config.exit_strategy_mode != 'signal' and
+        state.ema_cross_state not in ('seeding', 'frozen', '') and
+        state.ema_candles_count >= config.ema_period and
+        state.ema_value is not None):
+
+        from .ema_engine import EMAExitEvaluator, EMADecision, EMAState, Candle
+
+        ema_st = EMAState(
+            value=state.ema_value,
+            cross_state=state.ema_cross_state,
+            candles_count=state.ema_candles_count,
+            seeded=True
+        )
+        if state.ema_last_candle and isinstance(state.ema_last_candle, dict):
+            ema_st.last_candle = Candle(
+                open=state.ema_last_candle.get('open', 0),
+                high=state.ema_last_candle.get('high', 0),
+                low=state.ema_last_candle.get('low', 0),
+                close=state.ema_last_candle.get('close', 0),
+                timestamp=state.ema_last_candle.get('timestamp', 0),
+                finalized=True
+            )
+
+        ema_config = {
+            'ema_buffer_pct': config.ema_buffer_pct,
+            'ema_exit_enabled': config.ema_exit_enabled,
+            'ema_escalation_enabled': config.ema_escalation_enabled,
+            'ema_no_trend_candles': config.ema_no_trend_candles,
+            'ema_no_trend_count': state.ema_no_trend_count
+        }
+
+        ema_result = EMAExitEvaluator.evaluate(state.position_direction, ema_st, ema_config)
+
+        if ema_result.decision == EMADecision.EXIT:
+            if config.leave_runner_enabled and state.remaining_qty > 1:
+                runner_qty = max(1, int(state.remaining_qty * config.leave_runner_pct / 100))
+                sell_qty = state.remaining_qty - runner_qty
+                if sell_qty > 0:
+                    actions.append(RiskAction(
+                        action_type=ActionType.EMA_EXIT,
+                        reason=f"EMA Exit (Leave Runner): {ema_result.reason}",
+                        qty=sell_qty,
+                        priority=2
+                    ))
+                    state.remaining_qty -= sell_qty
+            else:
+                actions.append(RiskAction(
+                    action_type=ActionType.EMA_EXIT,
+                    reason=ema_result.reason,
+                    qty=state.remaining_qty,
+                    priority=2
+                ))
+                return actions, state
+
+        elif ema_result.decision == EMADecision.ESCALATE and ema_result.new_stop_price:
+            current_stop = state.dynamic_sl_price or state.current_stop_price or 0
+            if ema_result.new_stop_price > current_stop:
+                actions.append(RiskAction(
+                    action_type=ActionType.EMA_ESCALATE_STOP,
+                    reason=ema_result.reason,
+                    new_stop_price=ema_result.new_stop_price,
+                    priority=2
+                ))
+            state.ema_no_trend_count = 0
+
+        elif ema_result.decision == EMADecision.NO_TREND_EXIT:
+            state.ema_no_trend_count += 1
+            if state.ema_no_trend_count >= config.ema_no_trend_candles:
+                actions.append(RiskAction(
+                    action_type=ActionType.EMA_NO_TREND_EXIT,
+                    reason=ema_result.reason,
+                    qty=state.remaining_qty,
+                    priority=2
+                ))
+                return actions, state
+
+        elif ema_result.decision == EMADecision.HOLD:
+            pass
+
     if config.enable_giveback_guard:
         if config.trailing_stop_pct > 0 and config.trailing_activation_pct > 0:
             activation_threshold = config.trailing_activation_pct
@@ -438,6 +533,9 @@ def apply_actions_to_cache(
     cache.early_trailing_active = state.early_trailing_active
     cache.early_stop_price = state.early_stop_price
     cache.early_steps_locked = state.early_steps_locked
+    cache.ema_no_trend_count = state.ema_no_trend_count
+    if state.ema_cross_state and state.ema_cross_state not in ('seeding', 'frozen', ''):
+        cache.ema_last_cross_state = state.ema_cross_state
     return cache
 
 
@@ -460,4 +558,10 @@ def format_action_log(action: RiskAction, symbol: str, channel_name: str = "") -
         return f"{prefix}{symbol}: ✓ BREAKEVEN LOCKED - {action.reason}"
     elif action.action_type == ActionType.UPDATE_EARLY_STOP:
         return f"{prefix}{symbol}: 📈 EARLY TRAIL → ${action.new_stop_price:.2f} - {action.reason}"
+    elif action.action_type == ActionType.EMA_EXIT:
+        return f"{prefix}{symbol}: 📊 EMA EXIT - {action.reason}"
+    elif action.action_type == ActionType.EMA_ESCALATE_STOP:
+        return f"{prefix}{symbol}: 📊 EMA ESCALATE → ${action.new_stop_price:.2f} - {action.reason}"
+    elif action.action_type == ActionType.EMA_NO_TREND_EXIT:
+        return f"{prefix}{symbol}: ⚠️ EMA NO-TREND EXIT - {action.reason}"
     return f"{prefix}{symbol}: {action.action_type.value} - {action.reason}"

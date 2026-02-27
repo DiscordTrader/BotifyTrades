@@ -1982,6 +1982,8 @@ def register_routes(app):
                        'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode',
                        'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                        'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
+                       'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
+                       'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                        'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
                        'trim_order_mode', 'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct',
                        'order_chase_enabled', 'entry_chase_enabled'}

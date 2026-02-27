@@ -611,6 +611,22 @@ def init_db():
         cursor.execute('ALTER TABLE channels ADD COLUMN early_trailing_step_pct REAL DEFAULT 3.0')
         conn.commit()
         print("[DATABASE] ✓ Added Early Trailing Stop columns: enable_early_trailing, activation_pct, step_pct")
+
+    # Migrate: Add EMA Risk Management columns (EMA-5 Candlestick Risk Engine)
+    try:
+        cursor.execute('SELECT ema_risk_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_risk_enabled INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_period INTEGER DEFAULT 5')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_timeframe_minutes INTEGER DEFAULT 5')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_buffer_pct REAL DEFAULT 0.1')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_exit_enabled INTEGER DEFAULT 1')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_escalation_enabled INTEGER DEFAULT 1')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_extended_hours INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_use_underlying INTEGER DEFAULT 1')
+        cursor.execute('ALTER TABLE channels ADD COLUMN ema_no_trend_candles INTEGER DEFAULT 3')
+        conn.commit()
+        print("[DATABASE] ✓ Added EMA Risk Management columns: ema_risk_enabled, period, timeframe, buffer, exit, escalation, extended_hours, use_underlying, no_trend")
     
     # Migrate: Add channel-level max position size for per-channel dollar cap
     try:
@@ -1196,6 +1212,14 @@ def init_db():
         cursor.execute('ALTER TABLE trading_settings ADD COLUMN trade_summary_enabled INTEGER DEFAULT 1')
         conn.commit()
         print("[DATABASE] ✓ Added trade_summary_enabled column to trading_settings (global toggle)")
+
+    # Migrate: Add ema_risk_global_enabled to trading_settings (global EMA kill switch)
+    try:
+        cursor.execute('SELECT ema_risk_global_enabled FROM trading_settings LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE trading_settings ADD COLUMN ema_risk_global_enabled INTEGER DEFAULT 1')
+        conn.commit()
+        print("[DATABASE] ✓ Added ema_risk_global_enabled column to trading_settings")
     
     # Discord settings (moved from config.ini to GUI)
     cursor.execute('''
@@ -2588,6 +2612,8 @@ def update_channel(channel_id: int, **kwargs):
                    'signal_update_automation', 'signal_update_automation_override',
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
+                   'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
+                   'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled', 'entry_chase_enabled',
                    'ticker_filter_mode', 'ticker_filter_list']:
@@ -2785,7 +2811,9 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'max_profit_giveback_enabled', 'max_profit_giveback_pct',
         'exit_strategy_mode', 'price_monitor_enabled', 'price_monitor_interval_seconds',
         'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
-        'order_chase_enabled', 'entry_chase_enabled'
+        'order_chase_enabled', 'entry_chase_enabled',
+        'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
+        'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles'
     ]
     
     updates = []
