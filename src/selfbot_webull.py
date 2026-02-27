@@ -3271,6 +3271,8 @@ class WebullBroker:
                 print(f"[SLIPPAGE] ✅ Proceeding with order - acceptable slippage {slippage_pct:.2f}%")
 
 
+        side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
+        
         def _blocking_place():
             import inspect
             import sys
@@ -3290,7 +3292,6 @@ class WebullBroker:
                 else:
                     full_expiry = expiry_mmdd
                 self.cache_option_id(symbol, float(strike), full_expiry, opt_type, str(option_id))
-            side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
             
             adjusted_qty = qty
             
@@ -3636,7 +3637,7 @@ class WebullBroker:
         
         if resp and isinstance(resp, dict) and _needs_token_retry and not resp.get('orderId'):
             print(f"[{self.name}] Trade token issue detected (code={resp_code}) - attempting auto-refresh...")
-            self._clear_dedupe_for_failed_order(symbol, strike, opt_type, expiry_mmdd, side, adjusted_qty, limit_price)
+            self._clear_dedupe_for_failed_order(symbol, strike, opt_type, expiry_mmdd, side, qty, limit_price)
             refresh_success = await self._refresh_trade_token()
             if refresh_success:
                 print(f"[{self.name}] Token refreshed, retrying option order...")
@@ -3952,6 +3953,8 @@ class WebullBroker:
             else:  # IMMEDIATE
                 print(f"[SLIPPAGE] ✅ Proceeding with order - acceptable slippage {slippage_pct:.2f}%")
 
+        side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
+        
         def _blocking_place():
             import inspect
             wb = self._client
@@ -3962,8 +3965,6 @@ class WebullBroker:
             if not tId:
                 raise RuntimeError(f"Symbol not found: {base_sym}")
 
-            side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
-            
             effective_price = limit_price
             is_market_order = effective_price is None
             
