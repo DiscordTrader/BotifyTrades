@@ -7426,11 +7426,10 @@ class SelfClient(discord.Client):
                 pass
             _ema_should_start = False
             try:
-                from gui_app.database import get_db
-                _ema_db = get_db()
-                _ema_conn = _ema_db.get_connection()
+                from gui_app.database import get_connection as _ema_get_conn
+                _ema_conn = _ema_get_conn()
                 _ema_cursor = _ema_conn.cursor()
-                _ema_cursor.execute("SELECT value FROM trading_settings WHERE key = 'ema_risk_global_enabled'")
+                _ema_cursor.execute("SELECT ema_risk_global_enabled FROM trading_settings LIMIT 1")
                 _ema_row = _ema_cursor.fetchone()
                 if _ema_row and str(_ema_row[0]) == '0':
                     ema_service.set_global_enabled(False)
@@ -7444,8 +7443,9 @@ class SelfClient(discord.Client):
                     else:
                         ema_service.set_global_enabled(True)
                         _original_print("[EMA] No channels have EMA enabled — pre-warm service on standby", flush=True)
-            except Exception:
-                pass
+            except Exception as _ema_db_err:
+                _original_print(f"[EMA] ⚠️ Could not check EMA settings from DB: {_ema_db_err}", flush=True)
+                _ema_should_start = True
             if _ema_should_start:
                 ema_service.start(hubs=ema_hubs)
                 _original_print(f"[EMA] ✓ CandlePreWarmService started with {len(ema_hubs)} hub(s) — pre-warming SPY, QQQ, SPX, NDX", flush=True)
