@@ -7449,7 +7449,6 @@ def init_channel_mappings_table():
         pass  # Columns already exist or table just created
     
     conn.commit()
-    print("[DATABASE] ✓ Channel mappings table ready")
 
 
 def migrate_channel_mappings_to_webhook():

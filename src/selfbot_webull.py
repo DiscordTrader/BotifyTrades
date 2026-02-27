@@ -8696,8 +8696,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         """Overridden to add gateway-level message event diagnostics."""
         import time as _time_mod
         self._last_message_time = _time_mod.time()
-        is_self = self.user and message.author.id == self.user.id
-        self._watchdog_log(f"[MSG] ch={message.channel.id} author={message.author.name} self={is_self} content={message.content[:60]}")
+        is_configured = message.channel.id in CHANNEL_IDS
+        if is_configured:
+            is_self = self.user and message.author.id == self.user.id
+            self._watchdog_log(f"[MSG] ch={message.channel.id} author={message.author.name} self={is_self} content={message.content[:60]}")
         if not self._gateway_diag_printed:
             self._gateway_diag_printed = True
             _original_print(f"[Discord GATEWAY] ✓ First on_message event! Channel: {message.channel.id} Author: {message.author.name}", flush=True)
