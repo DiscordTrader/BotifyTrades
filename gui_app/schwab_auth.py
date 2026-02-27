@@ -925,6 +925,14 @@ def _hot_connect_schwab_broker(creds: dict):
                 pass
             
             try:
+                from src.services.broker_health_monitor import get_health_monitor
+                health_monitor = get_health_monitor()
+                health_monitor.update_broker_status('SCHWAB', True, account_info={})
+                print(f"[SCHWAB HOT-CONNECT] ✓ Health monitor updated - orders will route immediately")
+            except Exception as he:
+                print(f"[SCHWAB HOT-CONNECT] Health monitor update skipped: {he}")
+            
+            try:
                 from gui_app.discord_notifier import notify_broker_reconnected
                 notify_broker_reconnected(f'Schwab {mode}')
             except Exception:
@@ -1050,6 +1058,7 @@ def schwab_manual_code():
         
         if success:
             db.update_broker_connection_status('SCHWAB', True)
+            _hot_connect_schwab_broker(creds)
             return jsonify({'success': True, 'message': 'Successfully connected to Schwab!'})
         else:
             # Get detailed error from Schwab
