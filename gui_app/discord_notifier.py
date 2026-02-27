@@ -717,11 +717,12 @@ def notify_order_placed(
         option_str = f" ${strike}{opt_type} {expiry}"
     
     title = f"[{broker_label}] {action.upper()} ORDER PLACED: {symbol}{option_str}"
-    message = f"**{broker_label}**: {quantity} {unit_label} @ ${price:.2f}"
+    price_str = f"${price:.2f}" if price is not None else "MARKET"
+    message = f"**{broker_label}**: {quantity} {unit_label} @ {price_str}"
     
     details = {
         'Qty': quantity,
-        'Limit': f"${price:.2f}",
+        'Price': price_str,
         'Status': 'PENDING'
     }
     if order_id:

@@ -693,7 +693,7 @@ class RiskDBAdapter:
                             SELECT id FROM trades
                             WHERE symbol = ? AND asset_type = 'option'
                             AND strike = ? AND expiry = ? AND call_put = ?
-                            AND status = 'OPEN' AND direction = 'BTO'
+                            AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
                             AND LOWER(broker) = LOWER(?)
                             ORDER BY id DESC LIMIT 1
                         ''', (symbol, strike, exp_try, cp_normalized, broker))
@@ -702,7 +702,7 @@ class RiskDBAdapter:
                             SELECT id FROM trades
                             WHERE symbol = ? AND asset_type = 'option'
                             AND strike = ? AND expiry = ?
-                            AND status = 'OPEN' AND direction = 'BTO'
+                            AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
                             AND LOWER(broker) = LOWER(?)
                             ORDER BY id DESC LIMIT 1
                         ''', (symbol, strike, exp_try, broker))
@@ -715,7 +715,7 @@ class RiskDBAdapter:
                 cursor.execute('''
                     SELECT id FROM trades
                     WHERE symbol = ? AND asset_type = 'option'
-                    AND strike = ? AND status = 'OPEN' AND direction = 'BTO'
+                    AND strike = ? AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
                     AND LOWER(broker) = LOWER(?)
                     ORDER BY id DESC LIMIT 1
                 ''', (symbol, strike, broker))
@@ -725,7 +725,7 @@ class RiskDBAdapter:
                 cursor.execute('''
                     SELECT id FROM trades
                     WHERE symbol = ? AND asset_type = 'stock'
-                    AND status = 'OPEN' AND direction = 'BTO'
+                    AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
                     AND LOWER(broker) = LOWER(?)
                     ORDER BY id DESC LIMIT 1
                 ''', (symbol, broker))
