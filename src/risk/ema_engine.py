@@ -73,6 +73,7 @@ class EMADecision(Enum):
     EXIT = 'exit'
     ESCALATE = 'escalate'
     NO_TREND_EXIT = 'no_trend_exit'
+    NO_TREND_TICK = 'no_trend_tick'
     NOT_READY = 'not_ready'
 
 
@@ -451,6 +452,13 @@ class EMAExitEvaluator:
                         ema_value=ema_val,
                         candle=candle
                     )
+                else:
+                    return EMAEvalResult(
+                        decision=EMADecision.NO_TREND_TICK,
+                        reason=f"Unfavorable candle {new_count}/{no_trend_candles} (close below EMA for {direction})",
+                        ema_value=ema_val,
+                        candle=candle
+                    )
         else:
             favorable_side = candle.close < ema_val
             cross_through = candle.open <= ema_val and candle.close > ema_val
@@ -479,6 +487,13 @@ class EMAExitEvaluator:
                     return EMAEvalResult(
                         decision=EMADecision.NO_TREND_EXIT,
                         reason=f"No bearish trend after {new_count} candles (close above EMA for {direction})",
+                        ema_value=ema_val,
+                        candle=candle
+                    )
+                else:
+                    return EMAEvalResult(
+                        decision=EMADecision.NO_TREND_TICK,
+                        reason=f"Unfavorable candle {new_count}/{no_trend_candles} (close above EMA for {direction})",
                         ema_value=ema_val,
                         candle=candle
                     )

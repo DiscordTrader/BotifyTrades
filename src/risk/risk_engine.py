@@ -346,26 +346,30 @@ def evaluate_exit_actions(
                 return actions, state
 
         elif ema_result.decision == EMADecision.ESCALATE and ema_result.new_stop_price:
-            current_stop = state.dynamic_sl_price or state.current_stop_price or 0
-            if ema_result.new_stop_price > current_stop:
-                actions.append(RiskAction(
-                    action_type=ActionType.EMA_ESCALATE_STOP,
-                    reason=ema_result.reason,
-                    new_stop_price=ema_result.new_stop_price,
-                    priority=2
-                ))
+            is_option = state.position_direction in ('C', 'P')
+            if not is_option:
+                current_stop = state.dynamic_sl_price or state.current_stop_price or 0
+                if ema_result.new_stop_price > current_stop:
+                    actions.append(RiskAction(
+                        action_type=ActionType.EMA_ESCALATE_STOP,
+                        reason=ema_result.reason,
+                        new_stop_price=ema_result.new_stop_price,
+                        priority=2
+                    ))
             state.ema_no_trend_count = 0
 
         elif ema_result.decision == EMADecision.NO_TREND_EXIT:
             state.ema_no_trend_count += 1
-            if state.ema_no_trend_count >= config.ema_no_trend_candles:
-                actions.append(RiskAction(
-                    action_type=ActionType.EMA_NO_TREND_EXIT,
-                    reason=ema_result.reason,
-                    qty=state.remaining_qty,
-                    priority=2
-                ))
-                return actions, state
+            actions.append(RiskAction(
+                action_type=ActionType.EMA_NO_TREND_EXIT,
+                reason=ema_result.reason,
+                qty=state.remaining_qty,
+                priority=2
+            ))
+            return actions, state
+
+        elif ema_result.decision == EMADecision.NO_TREND_TICK:
+            state.ema_no_trend_count += 1
 
         elif ema_result.decision == EMADecision.HOLD:
             pass
