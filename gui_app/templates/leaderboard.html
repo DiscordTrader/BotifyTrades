@@ -4,15 +4,6 @@
 
 {% block content %}
 
-<!-- Market Tabs -->
-<div class="market-tabs" style="margin-bottom: 24px; display: flex; gap: 8px;">
-    <button id="usMarketTab" class="market-tab active" onclick="switchMarket('US')" style="padding: 12px 32px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
-        <span style="font-size: 20px;">🇺🇸</span> US Market <span class="currency-badge" style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 6px; font-size: 12px;">USD</span>
-    </button>
-    <button id="indiaMarketTab" class="market-tab" onclick="switchMarket('INDIA')" style="padding: 12px 32px; background: #3A3A3C; color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
-        <span style="font-size: 20px;">🇮🇳</span> India Market <span class="currency-badge" style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 6px; font-size: 12px;">INR</span>
-    </button>
-</div>
 
 <!-- Top Performer Banner -->
 <div class="alert info" style="margin-bottom: 32px;">
@@ -130,45 +121,8 @@ let customStartDate = null;
 let customEndDate = null;
 let currentSort = { column: 'score', direction: 'desc' };
 let leaderboardData = { channels: [], users: [] };
-let currentMarket = 'US';  // 'US' or 'INDIA'
-
-// Format currency based on market
-function formatCurrency(amount, market) {
-    market = market || currentMarket;
-    if (market === 'INDIA') {
-        // Indian Rupee formatting with lakhs/crores
-        if (Math.abs(amount) >= 10000000) {
-            return '₹' + (amount / 10000000).toFixed(2) + ' Cr';
-        } else if (Math.abs(amount) >= 100000) {
-            return '₹' + (amount / 100000).toFixed(2) + ' L';
-        }
-        return '₹' + amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+function formatCurrency(amount) {
     return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// Switch between US and India market
-function switchMarket(market) {
-    currentMarket = market;
-    
-    // Update tab styling
-    const usTab = document.getElementById('usMarketTab');
-    const indiaTab = document.getElementById('indiaMarketTab');
-    
-    if (market === 'US') {
-        usTab.style.background = 'linear-gradient(135deg, #00d4ff 0%, #0080ff 100%)';
-        usTab.classList.add('active');
-        indiaTab.style.background = '#3A3A3C';
-        indiaTab.classList.remove('active');
-    } else {
-        indiaTab.style.background = 'linear-gradient(135deg, #ff9933 0%, #138808 100%)';  // India colors
-        indiaTab.classList.add('active');
-        usTab.style.background = '#3A3A3C';
-        usTab.classList.remove('active');
-    }
-    
-    // Reload leaderboard with new market filter
-    loadLeaderboard();
 }
 
 function switchView(view, event) {
@@ -293,7 +247,7 @@ function loadLeaderboard() {
     const endpoint = currentView === 'channels' ? '/api/leaderboard' : '/api/leaderboard/users';
     
     // Build query params
-    let url = `${endpoint}?period=${currentPeriod}&market=${currentMarket}`;
+    let url = `${endpoint}?period=${currentPeriod}&market=US`;
     if (currentPeriod === 'custom' && customStartDate && customEndDate) {
         url += `&start_date=${customStartDate}&end_date=${customEndDate}`;
     }

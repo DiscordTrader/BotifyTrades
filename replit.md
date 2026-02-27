@@ -2,7 +2,7 @@
 
 ## Overview
 
-BotifyTrades is a production-grade, cross-platform automated trading bot designed to monitor Discord and Telegram for trade signals and execute them across multiple brokers. It features a comprehensive Flask-based web control panel with real-time dashboards, advanced risk management, WebSocket streaming, AI-powered analysis, and detailed portfolio analytics. The project aims to provide automated trading capabilities for US, Canadian, and Indian markets, offering users a powerful tool for managing and optimizing their trading strategies.
+BotifyTrades is a production-grade, cross-platform automated trading bot designed to monitor Discord and Telegram for trade signals and execute them across multiple brokers. It features a comprehensive Flask-based web control panel with real-time dashboards, advanced risk management, WebSocket streaming, AI-powered analysis, and detailed portfolio analytics. The project aims to provide automated trading capabilities for US and Canadian markets, offering users a powerful tool for managing and optimizing their trading strategies.
 
 ## User Preferences
 

@@ -10,9 +10,6 @@
         <button id="usMarketTab" class="market-tab active" onclick="switchMarket('US')" style="padding: 14px 32px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.3s ease; position: relative; z-index: 2;">
             US
         </button>
-        <button id="indiaMarketTab" class="market-tab" onclick="switchMarket('INDIA')" style="padding: 14px 32px; background: #2C2C2E; color: #8E8E93; border: none; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.3s ease; margin-left: 4px;">
-            IN
-        </button>
     </div>
     
     <!-- P&L Type Subtabs (nested within market context) -->
@@ -394,57 +391,8 @@
 <script>
 let positionsData = [];
 let channelsData = [];
-let currentMarket = 'US';  // 'US' or 'INDIA'
-
-// Format currency based on market
-function formatCurrency(amount, market) {
-    market = market || currentMarket;
-    if (market === 'INDIA') {
-        // Indian Rupee formatting with lakhs/crores
-        if (Math.abs(amount) >= 10000000) {
-            return '₹' + (amount / 10000000).toFixed(2) + ' Cr';
-        } else if (Math.abs(amount) >= 100000) {
-            return '₹' + (amount / 100000).toFixed(2) + ' L';
-        }
-        return '₹' + amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+function formatCurrency(amount) {
     return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// Switch between US and India market
-function switchMarket(market) {
-    currentMarket = market;
-    
-    // Update market tab styling
-    const usTab = document.getElementById('usMarketTab');
-    const indiaTab = document.getElementById('indiaMarketTab');
-    
-    if (market === 'US') {
-        usTab.style.background = 'linear-gradient(135deg, #00d4ff 0%, #0080ff 100%)';
-        usTab.style.color = '#fff';
-        usTab.style.zIndex = '2';
-        usTab.classList.add('active');
-        indiaTab.style.background = '#2C2C2E';
-        indiaTab.style.color = '#8E8E93';
-        indiaTab.style.zIndex = '1';
-        indiaTab.classList.remove('active');
-    } else {
-        indiaTab.style.background = 'linear-gradient(135deg, #ff9933 0%, #138808 100%)';
-        indiaTab.style.color = '#fff';
-        indiaTab.style.zIndex = '2';
-        indiaTab.classList.add('active');
-        usTab.style.background = '#2C2C2E';
-        usTab.style.color = '#8E8E93';
-        usTab.style.zIndex = '1';
-        usTab.classList.remove('active');
-    }
-    
-    // Reload data for current P&L type with new market filter
-    if (currentPnlType === 'signal') {
-        loadPNLData();
-    } else {
-        loadExecutionData();
-    }
 }
 
 // Get date range based on filter selection
@@ -585,7 +533,7 @@ async function loadPNLData() {
         if (statusFilter) params.push(`status=${statusFilter}`);
         if (startDate) params.push(`start_date=${startDate}`);
         if (endDate) params.push(`end_date=${endDate}`);
-        params.push(`market=${currentMarket}`);  // Add market filter
+        params.push(`market=US`);
         url += params.join('&');
         
         const response = await fetch(url);
