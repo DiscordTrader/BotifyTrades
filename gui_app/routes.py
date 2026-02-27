@@ -9952,7 +9952,8 @@ def register_routes(app):
                 elif 'WEBULL' in broker:
                     from src.services.webull_data_hub import get_webull_data_hub
                     hub = get_webull_data_hub()
-                if hub:
+                hub_is_streaming = hub and hasattr(hub, 'is_streaming') and hub.is_streaming()
+                if hub and not hub_is_streaming:
                     for sd in strikes_data:
                         for side_key, opt_type in [('call', 'C'), ('put', 'P')]:
                             opt = sd.get(side_key, {})
@@ -9964,7 +9965,7 @@ def register_routes(app):
                             else:
                                 hub_key = f"{symbol}_{sd['strike']}_{opt_type}"
                             existing = hub.get_quote(hub_key)
-                            if existing and (time.time() - existing.timestamp) < 5:
+                            if existing:
                                 continue
                             seed = {}
                             if opt.get('bid', 0) > 0:
