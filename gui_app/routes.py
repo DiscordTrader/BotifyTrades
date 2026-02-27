@@ -5765,9 +5765,10 @@ def register_routes(app):
             'alpacapaper': 'alpaca',
             'webull': 'webull',
             'robinhood': 'robinhood',
+            'schwab': 'schwab',
         }
         
-        UNSUPPORTED_BROKERS = ['schwab', 'ibkr', 'tastytrade', 'questrade']
+        UNSUPPORTED_BROKERS = ['ibkr', 'tastytrade', 'questrade']
         
         if broker_lower in UNSUPPORTED_BROKERS:
             return jsonify({
@@ -5814,6 +5815,21 @@ def register_routes(app):
                     return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
                 else:
                     return jsonify({'success': False, 'error': result.get('error', 'Failed to cancel')}), 400
+            
+            elif resolved_broker == 'schwab':
+                if not _bot_instance or not hasattr(_bot_instance, 'schwab_broker') or not _bot_instance.schwab_broker:
+                    return jsonify({'success': False, 'error': 'Schwab broker not initialized'}), 500
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.schwab_broker.cancel_order(order_id),
+                    _bot_instance.loop
+                )
+                result = future.result(timeout=15)
+                
+                if result.get('success'):
+                    return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
+                else:
+                    return jsonify({'success': False, 'error': result.get('message', 'Failed to cancel')}), 400
             
             elif resolved_broker == 'robinhood':
                 if not _bot_instance or not hasattr(_bot_instance, 'robinhood_broker') or not _bot_instance.robinhood_broker:
