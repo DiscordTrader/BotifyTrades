@@ -18,7 +18,7 @@ BotifyTrades is a production-grade, cross-platform automated trading bot designe
 
 **UI/UX Decisions:**
 The web control panel is built with Flask, providing a responsive and interactive user experience. Key UI/UX features include:
-- **Real-time Dashboards**: `index.html` offers an immediate overview of broker status, live positions, P&L, and risk statuses.
+- **Real-time Dashboards**: `index.html` offers an immediate overview of broker status, live positions, P&L, and risk statuses. Uses smart differential DOM updates — position cards only rebuild when positions are added/removed; price/P&L updates happen in-place via cached element references and `requestAnimationFrame` to eliminate full-page re-renders every 30s. Drawer state (expanded risk/close panels) persists across data refreshes.
 - **Trade Monitoring**: `trades.html` includes five tabs for live positions (with real-time price updates and glowing effects), pending orders, filled orders, signals, and an event log.
 - **Performance Analytics**: `analytics.html` provides over 30 performance metrics, trade journaling, time-series charts, P&L heatmaps, and edge analysis using Chart.js.
 - **Intuitive Settings**: Dedicated sections for Discord, Telegram, Brokers, Trading, Risk Management, Notifications, and AI Analysis ensure easy configuration.

@@ -1442,6 +1442,10 @@ function checkInitialBrokerStatus() {
 
 function onBrokerChange(value) {
     currentBroker = value;
+    _currentPositionIds = [];
+    _clearElCache();
+    _isFirstLoad = true;
+    _streamingIndicator = null;
     loadTrades();
     loadStats();
 }
@@ -1468,8 +1472,11 @@ function togglePrivacy() {
 
 async function switchTab(tab) {
     currentTab = tab;
+    _currentPositionIds = [];
+    _clearElCache();
+    _isFirstLoad = true;
+    _streamingIndicator = null;
     
-    // Update tab buttons
     document.querySelectorAll('.tab').forEach(btn => {
         btn.classList.remove('active');
     });
@@ -1691,14 +1698,115 @@ async function loadFilledOrders() {
     }
 }
 
-async function loadTrades() {
-    console.log('[loadTrades] Starting...');
-    const container = document.getElementById('trades-table-container');
-    if (!container) {
-        console.error('[loadTrades] Container element not found!');
-        return;
+let _currentPositionIds = [];
+let _lastTradeData = {};
+let _isFirstLoad = true;
+let _elCache = {};
+
+function _cacheEl(field, pid) {
+    const k = field + '_' + pid;
+    if (!_elCache[k]) {
+        _elCache[k] = document.querySelector(`[data-field="${field}"][data-trade-id="${pid}"]`);
     }
-    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    return _elCache[k];
+}
+
+function _clearElCache() {
+    _elCache = {};
+}
+
+function _getOpenDrawerIds() {
+    const ids = [];
+    document.querySelectorAll('.position-drawer').forEach(d => {
+        if (d.style.display === 'block' || d.style.display === 'flex') {
+            const m = (d.id || '').match(/^drawer-(.+)$/);
+            if (m) ids.push(m[1]);
+        }
+    });
+    return ids;
+}
+
+function _restoreDrawers(ids) {
+    ids.forEach(id => {
+        const d = document.getElementById('drawer-' + id);
+        if (d) d.style.display = 'block';
+    });
+}
+
+function _updatePositionCardInPlace(trade) {
+    const pid = trade.id;
+    const pnl = parseFloat(trade.pnl) || 0;
+    const pnlPercent = parseFloat(trade.pnl_percent) || 0;
+    const currentPrice = parseFloat(trade.current_price) || parseFloat(trade.entry_price) || 0;
+    const pnlSign = pnl >= 0 ? '+' : '';
+    const color = pnl >= 0 ? '#22c55e' : '#ef4444';
+
+    const priceEl = _cacheEl('current-price', pid);
+    if (priceEl) {
+        const oldVal = priceEl.textContent.replace(/[^0-9.]/g, '');
+        const newVal = currentPrice.toFixed(2);
+        if (oldVal !== newVal) {
+            priceEl.style.color = color;
+            priceEl.textContent = '$' + newVal;
+        }
+    }
+
+    const pnlEl = _cacheEl('pnl-value', pid);
+    if (pnlEl) {
+        pnlEl.textContent = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+        pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+    }
+
+    const pctEl = _cacheEl('pnl-pct', pid);
+    if (pctEl) {
+        pctEl.textContent = pnlSign + pnlPercent.toFixed(1) + '%';
+        pctEl.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+    }
+
+    const card = document.getElementById('position-' + pid);
+    if (card) {
+        card.classList.remove('profit', 'loss');
+        card.classList.add(pnl >= 0 ? 'profit' : 'loss');
+    }
+
+    const bidPrice = parseFloat(trade.bid_price) || (currentPrice * 0.995);
+    const askPrice = parseFloat(trade.ask_price) || (currentPrice * 1.005);
+    const midPrice = (bidPrice + askPrice) / 2;
+    const bidBtn = document.querySelector(`#drawer-${pid} .btn-quote.bid .quote-price`);
+    const midBtn = document.querySelector(`#drawer-${pid} .btn-quote.mid .quote-price`);
+    const askBtn = document.querySelector(`#drawer-${pid} .btn-quote.ask .quote-price`);
+    if (bidBtn) bidBtn.textContent = '$' + bidPrice.toFixed(2);
+    if (midBtn) midBtn.textContent = '$' + midPrice.toFixed(2);
+    if (askBtn) askBtn.textContent = '$' + askPrice.toFixed(2);
+
+    const limitInput = document.getElementById('limit-' + pid);
+    if (limitInput && document.activeElement !== limitInput) {
+        limitInput.value = currentPrice.toFixed(2);
+    }
+
+    const qtyDisplay = trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ?
+        `${trade.remaining_qty}/${trade.original_qty}` : String(trade.quantity);
+    const qtyEl = _cacheEl('qty-display', pid);
+    if (qtyEl) qtyEl.textContent = qtyDisplay;
+}
+
+function _positionsChanged(newTrades) {
+    const newIds = newTrades.map(t => String(t.id)).sort();
+    const oldIds = _currentPositionIds.slice().sort();
+    if (newIds.length !== oldIds.length) return true;
+    for (let i = 0; i < newIds.length; i++) {
+        if (newIds[i] !== oldIds[i]) return true;
+    }
+    return false;
+}
+
+async function loadTrades() {
+    const container = document.getElementById('trades-table-container');
+    if (!container) return;
+
+    if (_isFirstLoad) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    }
     
     try {
         const statusMap = { 'live': 'OPEN', 'pending': 'PENDING', 'filled': 'CLOSED' };
@@ -1728,30 +1836,51 @@ async function loadTrades() {
         if (summaryEl) summaryEl.textContent = summaryText;
         
         if (filteredTrades.length === 0) {
+            _currentPositionIds = [];
+            _clearElCache();
             container.innerHTML = `
                 <div class="empty-positions">
                     <div class="empty-icon">📊</div>
                     <div class="empty-text">No ${currentTab} positions</div>
                 </div>
             `;
+            _isFirstLoad = false;
             return;
         }
         
         if (currentTab === 'live') {
-            container.innerHTML = renderPositionCards(filteredTrades);
-            fetchDashboardRiskStates();
+            const needsRebuild = _isFirstLoad || _positionsChanged(filteredTrades);
+
+            if (needsRebuild) {
+                const openDrawers = _getOpenDrawerIds();
+                _clearElCache();
+                container.innerHTML = renderPositionCards(filteredTrades);
+                _currentPositionIds = filteredTrades.map(t => String(t.id));
+                _restoreDrawers(openDrawers);
+                fetchDashboardRiskStates();
+            } else {
+                requestAnimationFrame(() => {
+                    filteredTrades.forEach(t => _updatePositionCardInPlace(t));
+                });
+            }
         } else {
+            _currentPositionIds = [];
+            _clearElCache();
             container.innerHTML = renderTradesTable(filteredTrades);
         }
         
+        _isFirstLoad = false;
+        
     } catch (err) {
         console.error('[loadTrades] Error:', err);
-        container.innerHTML = `
-            <div style="text-align: center; padding: 40px;">
-                <div style="color: var(--error);">Error loading trades</div>
-                <div style="color: var(--text-secondary); margin-top: 8px;">${err.message}</div>
-            </div>
-        `;
+        if (_isFirstLoad) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="color: var(--error);">Error loading trades</div>
+                    <div style="color: var(--text-secondary); margin-top: 8px;">${err.message}</div>
+                </div>
+            `;
+        }
     }
 }
 
@@ -1814,9 +1943,9 @@ function renderPositionCards(trades) {
                     </div>
                     <div class="symbol-details">
                         ${optionDetails ? `<span>${optionDetails}</span>` : ''}
-                        <span>${trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ? 
+                        <span data-field="qty-display" data-trade-id="${trade.id}">${trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ? 
                             `${trade.remaining_qty}/${trade.original_qty}` : 
-                            trade.quantity} ${trade.asset_type === 'option' ? 'contracts' : 'shares'}${trade.display_status === 'PARTIAL' ? ' <span style="color:#f59e0b;font-size:10px">(PARTIAL)</span>' : ''}</span>
+                            trade.quantity}</span> ${trade.asset_type === 'option' ? 'contracts' : 'shares'}${trade.display_status === 'PARTIAL' ? ' <span style="color:#f59e0b;font-size:10px">(PARTIAL)</span>' : ''}
                     </div>
                 </div>
                 
@@ -3146,6 +3275,10 @@ function renderMultiBrokerSelector() {
 
 function selectBroker(brokerKey) {
     currentBroker = brokerKey;
+    _currentPositionIds = [];
+    _clearElCache();
+    _isFirstLoad = true;
+    _streamingIndicator = null;
     document.getElementById('broker-filter').value = brokerKey;
     BrokerStore.setSelected(brokerKey);
     renderMultiBrokerSelector();
@@ -3202,6 +3335,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 let _lastStreamingStatus = {};
+let _streamingIndicator = null;
 
 async function streamingQuotePoll() {
     if (currentTab !== 'live') return;
@@ -3213,72 +3347,72 @@ async function streamingQuotePoll() {
         const quotes = data.quotes || {};
         const status = data.streaming_status || {};
 
-        const indicator = document.getElementById('streaming-indicator');
-        if (indicator) {
+        if (!_streamingIndicator) _streamingIndicator = document.getElementById('streaming-indicator');
+        if (_streamingIndicator) {
             const broker = (currentBroker || '').toUpperCase();
             const showWebull = status.webull && (!broker || broker.includes('WEBULL'));
             const showSchwab = status.schwab && (!broker || broker === 'SCHWAB');
             const anyRelevant = showWebull || showSchwab;
-            indicator.style.display = anyRelevant ? 'inline' : 'none';
+            _streamingIndicator.style.display = anyRelevant ? 'inline' : 'none';
             if (anyRelevant) {
                 if (broker) {
                     const label = broker.replace('_PAPER', ' Paper').replace('_', ' ');
-                    indicator.textContent = '\u26A1 LIVE \u2022 ' + label;
+                    _streamingIndicator.textContent = '\u26A1 LIVE \u2022 ' + label;
                 } else {
                     const parts = [];
                     if (showWebull) parts.push('Webull');
                     if (showSchwab) parts.push('Schwab');
-                    indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
+                    _streamingIndicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
                 }
             }
         }
 
-        for (const [pid, q] of Object.entries(quotes)) {
-            const priceEl = document.querySelector(`[data-field="current-price"][data-trade-id="${pid}"]`);
-            const pnlEl = document.querySelector(`[data-field="pnl-value"][data-trade-id="${pid}"]`);
-            const pctEl = document.querySelector(`[data-field="pnl-pct"][data-trade-id="${pid}"]`);
+        requestAnimationFrame(() => {
+            for (const [pid, q] of Object.entries(quotes)) {
+                const priceEl = _cacheEl('current-price', pid);
+                if (!priceEl) continue;
 
-            if (!priceEl) continue;
+                const last = parseFloat(q.last) || 0;
+                if (last <= 0) continue;
 
-            const last = parseFloat(q.last) || 0;
-            if (last <= 0) continue;
+                const isStream = q.source === 'stream';
+                const pnl = parseFloat(q.unrealized_pnl) || 0;
+                const pnlPct = parseFloat(q.pnl_pct) || 0;
+                const pnlSign = pnl >= 0 ? '+' : '';
+                const color = pnl >= 0 ? '#22c55e' : '#ef4444';
 
-            const isStream = q.source === 'stream';
-            const pnl = parseFloat(q.unrealized_pnl) || 0;
-            const pnlPct = parseFloat(q.pnl_pct) || 0;
-            const pnlSign = pnl >= 0 ? '+' : '';
-            const color = pnl >= 0 ? '#22c55e' : '#ef4444';
+                const newPrice = last.toFixed(2);
+                const oldPrice = priceEl.textContent.replace(/[^0-9.]/g, '');
+                if (oldPrice !== newPrice) {
+                    priceEl.style.color = color;
+                    priceEl.textContent = '$' + newPrice;
+                    if (isStream) {
+                        priceEl.style.textShadow = `0 0 6px ${color}60`;
+                        setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
+                    }
+                }
 
-            const oldPrice = priceEl.textContent.replace(/[^0-9.]/g, '');
-            if (oldPrice !== last.toFixed(2)) {
-                priceEl.style.transition = 'color 0.3s';
-                priceEl.style.color = color;
-                priceEl.textContent = '$' + last.toFixed(2);
-                if (isStream) {
-                    priceEl.style.textShadow = `0 0 6px ${color}60`;
-                    setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
+                const pnlEl = _cacheEl('pnl-value', pid);
+                if (pnlEl) {
+                    pnlEl.textContent = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+                    pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                }
+                const pctEl = _cacheEl('pnl-pct', pid);
+                if (pctEl) {
+                    pctEl.textContent = pnlSign + pnlPct.toFixed(1) + '%';
+                    pctEl.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                }
+
+                const card = document.getElementById('position-' + pid);
+                if (card) {
+                    card.classList.remove('profit', 'loss');
+                    card.classList.add(pnl >= 0 ? 'profit' : 'loss');
                 }
             }
-
-            if (pnlEl) {
-                pnlEl.textContent = pnlSign + '$' + Math.abs(pnl).toFixed(2);
-                pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
-            }
-            if (pctEl) {
-                pctEl.textContent = pnlSign + pnlPct.toFixed(1) + '%';
-                pctEl.className = 'pnl-percent ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
-            }
-
-            const card = document.getElementById('position-' + pid);
-            if (card) {
-                card.classList.remove('profit', 'loss');
-                card.classList.add(pnl >= 0 ? 'profit' : 'loss');
-            }
-        }
+        });
 
         _lastStreamingStatus = status;
     } catch (e) {
-        // Silent fail - next poll will retry
     }
 }
 </script>
