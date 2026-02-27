@@ -10065,6 +10065,7 @@ def register_routes(app):
                         schwab_broker = _bot_instance.brokers_dict.get('schwab') or _bot_instance.brokers_dict.get('SCHWAB')
 
                 streaming_client = getattr(schwab_broker, '_streaming_client', None) if schwab_broker else None
+                print(f"[OPTIONS_STREAM] Schwab subscribe: broker={'found' if schwab_broker else 'NOT FOUND'}, streaming_client={'found' if streaming_client else 'NOT FOUND'}, connected={streaming_client.is_connected() if streaming_client else 'N/A'}")
 
                 option_symbols = []
                 for c in contracts:
@@ -10072,6 +10073,8 @@ def register_routes(app):
                     if occ_symbol and len(occ_symbol) > 5:
                         option_symbols.append(occ_symbol)
                         subscribed.append(occ_symbol)
+
+                print(f"[OPTIONS_STREAM] Schwab: {len(option_symbols)} option symbols to subscribe: {option_symbols[:3]}...")
 
                 if streaming_client and streaming_client.is_connected() and option_symbols:
                     loop = get_webull_loop()
@@ -10081,8 +10084,22 @@ def register_routes(app):
                                 streaming_client.subscribe_options(option_symbols), loop
                             )
                             future.result(timeout=5)
+                            print(f"[OPTIONS_STREAM] ✓ Schwab subscribe success: {len(option_symbols)} options")
                         except Exception as e:
-                            print(f"[OPTIONS_STREAM] Schwab subscribe error: {e}")
+                            print(f"[OPTIONS_STREAM] ❌ Schwab subscribe error: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    else:
+                        print(f"[OPTIONS_STREAM] ❌ No event loop available (loop={loop}, closed={loop.is_closed() if loop else 'N/A'})")
+                else:
+                    reasons = []
+                    if not streaming_client:
+                        reasons.append("no streaming_client")
+                    elif not streaming_client.is_connected():
+                        reasons.append("streaming not connected")
+                    if not option_symbols:
+                        reasons.append("no option symbols")
+                    print(f"[OPTIONS_STREAM] ⚠️ Schwab subscribe skipped: {', '.join(reasons)}")
 
                 with _option_stream_lock:
                     _option_stream_subscriptions[symbol] = {
