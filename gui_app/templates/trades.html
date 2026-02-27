@@ -2618,7 +2618,7 @@ function qtStartAutoRefresh() {
                 });
                 if (data.stock_price > 0) qtChainData.stock_price = data.stock_price;
             }
-            if (!qtStreamingActive) {
+            {
                 const rows = document.querySelectorAll('.qt-chain tbody tr');
                 data.strikes.forEach((s, idx) => {
                     const row = rows[idx];
@@ -2632,6 +2632,16 @@ function qtStartAutoRefresh() {
                                 el.textContent = newText;
                             }
                         });
+                    }
+                    if (qtChainData.strikes[idx]) {
+                        qtChainData.strikes[idx].call.bid = s.call.bid;
+                        qtChainData.strikes[idx].call.ask = s.call.ask;
+                        qtChainData.strikes[idx].call.mid = s.call.mid;
+                        qtChainData.strikes[idx].call.last = s.call.last;
+                        qtChainData.strikes[idx].put.bid = s.put.bid;
+                        qtChainData.strikes[idx].put.ask = s.put.ask;
+                        qtChainData.strikes[idx].put.mid = s.put.mid;
+                        qtChainData.strikes[idx].put.last = s.put.last;
                     }
                 });
             }

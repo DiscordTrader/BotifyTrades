@@ -6,6 +6,7 @@ import asyncio
 import time
 import json
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Optional, Any, Dict, Callable
@@ -208,7 +209,8 @@ _api_cache: Dict[str, tuple] = {}  # {key: (value, timestamp)}
 
 # Option chain cache to avoid re-fetching for same symbol/expiry
 _option_chain_cache: Dict[str, tuple] = {}  # {symbol_expiry: (chain_data, timestamp)}
-_CHAIN_CACHE_TTL = 30  # Cache for 30 seconds
+_CHAIN_CACHE_TTL = 10  # Cache for 10 seconds (options move fast)
+_TRAILING_ZERO_RE = re.compile(r'_(\d+)\.0_([CP])$')
 
 _standalone_webull_broker = None
 
@@ -9942,6 +9944,43 @@ def register_routes(app):
                     }
                 })
             
+            try:
+                hub = None
+                if 'SCHWAB' in broker:
+                    from src.services.schwab_data_hub import get_schwab_data_hub
+                    hub = get_schwab_data_hub()
+                elif 'WEBULL' in broker:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                if hub:
+                    for sd in strikes_data:
+                        for side_key, opt_type in [('call', 'C'), ('put', 'P')]:
+                            opt = sd.get(side_key, {})
+                            oid = opt.get('option_id', '')
+                            if not oid:
+                                continue
+                            if 'SCHWAB' in broker:
+                                hub_key = oid
+                            else:
+                                hub_key = f"{symbol}_{sd['strike']}_{opt_type}"
+                            existing = hub.get_quote(hub_key)
+                            if existing and (time.time() - existing.timestamp) < 5:
+                                continue
+                            seed = {}
+                            if opt.get('bid', 0) > 0:
+                                seed['bid'] = opt['bid']
+                                seed['BID_PRICE'] = opt['bid']
+                            if opt.get('ask', 0) > 0:
+                                seed['ask'] = opt['ask']
+                                seed['ASK_PRICE'] = opt['ask']
+                            if opt.get('last', 0) > 0:
+                                seed['last'] = opt['last']
+                                seed['LAST_PRICE'] = opt['last']
+                            if seed:
+                                hub.update_quote(hub_key, seed, source="rest_chain")
+            except Exception:
+                pass
+
             return jsonify({
                 'success': True,
                 'symbol': symbol,
@@ -10101,7 +10140,7 @@ def register_routes(app):
                     if key.startswith(symbol_prefix_underscore) or key.startswith(symbol_prefix_space) or key == symbol:
                         age = now - quote.timestamp
                         if age < 120:
-                            quotes[key] = {
+                            q_data = {
                                 'bid': quote.bid,
                                 'ask': quote.ask,
                                 'last': quote.last,
@@ -10109,6 +10148,10 @@ def register_routes(app):
                                 'age_ms': int(age * 1000),
                                 'streaming': age < 5
                             }
+                            quotes[key] = q_data
+                            norm = _TRAILING_ZERO_RE.sub(r'_\1_\2', key)
+                            if norm != key:
+                                quotes[norm] = q_data
 
             if not hasattr(api_get_option_stream_quotes, '_debug_count'):
                 api_get_option_stream_quotes._debug_count = 0
