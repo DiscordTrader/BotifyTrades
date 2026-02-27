@@ -1998,6 +1998,31 @@ def register_routes(app):
             except Exception as e:
                 cache_warning = f"Risk settings saved but invalidation request failed: {e}"
                 print(f"[RISK] ⚠️ {cache_warning}")
+        if data.get('ema_risk_enabled') == 1 or data.get('ema_risk_enabled') == True:
+            try:
+                from src.risk.ema_engine import get_candle_service
+                svc = get_candle_service()
+                if svc.is_global_enabled() and not svc._running:
+                    hubs = []
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        wh = get_webull_data_hub()
+                        if wh:
+                            hubs.append(wh)
+                    except Exception:
+                        pass
+                    try:
+                        from src.services.schwab_data_hub import get_schwab_data_hub
+                        sh = get_schwab_data_hub()
+                        if sh:
+                            hubs.append(sh)
+                    except Exception:
+                        pass
+                    if hubs:
+                        svc.start(hubs=hubs)
+                        print(f"[EMA] ✓ CandlePreWarmService auto-started — channel enabled EMA")
+            except Exception as e:
+                print(f"[EMA] ⚠️ Could not auto-start pre-warm service: {e}")
         
         response = {'success': True, 'verified': True}
         if cache_warning:

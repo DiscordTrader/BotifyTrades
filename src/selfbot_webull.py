@@ -7423,6 +7423,7 @@ class SelfClient(discord.Client):
                     ema_hubs.append(_schwab_ema)
             except Exception:
                 pass
+            _ema_should_start = False
             try:
                 from gui_app.database import get_db
                 _ema_db = get_db()
@@ -7434,10 +7435,17 @@ class SelfClient(discord.Client):
                     ema_service.set_global_enabled(False)
                     _original_print("[EMA] Global EMA toggle is OFF — pre-warm service will not start", flush=True)
                 else:
-                    ema_service.set_global_enabled(True)
+                    _ema_cursor.execute("SELECT COUNT(*) FROM channels WHERE ema_risk_enabled = 1")
+                    _ema_ch_count = _ema_cursor.fetchone()
+                    if _ema_ch_count and _ema_ch_count[0] > 0:
+                        ema_service.set_global_enabled(True)
+                        _ema_should_start = True
+                    else:
+                        ema_service.set_global_enabled(True)
+                        _original_print("[EMA] No channels have EMA enabled — pre-warm service on standby", flush=True)
             except Exception:
                 pass
-            if ema_service.is_global_enabled():
+            if _ema_should_start:
                 ema_service.start(hubs=ema_hubs)
                 _original_print(f"[EMA] ✓ CandlePreWarmService started with {len(ema_hubs)} hub(s) — pre-warming SPY, QQQ, SPX, NDX", flush=True)
         except Exception as e:
