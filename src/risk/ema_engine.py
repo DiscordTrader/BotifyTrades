@@ -22,6 +22,21 @@ from collections import deque
 
 
 PRE_WARM_SYMBOLS = ['SPY', 'QQQ', 'SPX', 'NDX']
+
+def _get_et_timezone():
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo("America/New_York")
+    except ImportError:
+        pass
+    try:
+        from pytz import timezone as pytz_tz
+        return pytz_tz("America/New_York")
+    except ImportError:
+        pass
+    return None
+
+_ET_TZ = _get_et_timezone()
 MAX_TRACKED_SYMBOLS = 50
 STALE_TICK_THRESHOLD_SECONDS = 120
 
@@ -87,7 +102,10 @@ class EMAEvalResult:
 
 
 def _get_candle_boundary(timestamp: float, timeframe_minutes: int) -> float:
-    dt = datetime.fromtimestamp(timestamp)
+    if _ET_TZ:
+        dt = datetime.fromtimestamp(timestamp, tz=_ET_TZ)
+    else:
+        dt = datetime.utcfromtimestamp(timestamp) - timedelta(hours=5)
     minute_of_day = dt.hour * 60 + dt.minute
     boundary_minute = (minute_of_day // timeframe_minutes) * timeframe_minutes
     boundary_dt = dt.replace(hour=boundary_minute // 60, minute=boundary_minute % 60, second=0, microsecond=0)
@@ -100,12 +118,13 @@ def _is_market_hours(timestamp: float, extended_hours: bool = False) -> bool:
         return is_market_open()
     except Exception:
         pass
-    dt = datetime.fromtimestamp(timestamp)
+    if _ET_TZ:
+        dt = datetime.fromtimestamp(timestamp, tz=_ET_TZ)
+    else:
+        dt = datetime.utcfromtimestamp(timestamp) - timedelta(hours=5)
     if dt.weekday() >= 5:
         return False
-    hour = dt.hour
-    minute = dt.minute
-    time_minutes = hour * 60 + minute
+    time_minutes = dt.hour * 60 + dt.minute
     if extended_hours:
         return 240 <= time_minutes < 1200
     return 570 <= time_minutes < 960
@@ -259,7 +278,10 @@ class CandleAggregator:
                     }
 
     def _check_daily_reset(self, timestamp: float):
-        dt = datetime.fromtimestamp(timestamp)
+        if _ET_TZ:
+            dt = datetime.fromtimestamp(timestamp, tz=_ET_TZ)
+        else:
+            dt = datetime.utcfromtimestamp(timestamp) - timedelta(hours=5)
         date_str = dt.strftime('%Y-%m-%d')
         reset_hour = 4 if self._extended_hours else 9
         reset_minute = 0 if self._extended_hours else 30
@@ -524,6 +546,8 @@ class CandlePreWarmService:
         self._running = False
         self._lock = threading.Lock()
         self._global_enabled = True
+        self._last_tick_time: Dict[str, float] = {}
+        self._poll_logged: set = set()
         print("[EMA] CandlePreWarmService initialized")
 
     def start(self, hubs: List[Any] = None):
@@ -546,6 +570,11 @@ class CandlePreWarmService:
             self._ensure_tracking(symbol, is_prewarm=True)
             self._fetch_historical_candles(symbol)
 
+        self._start_hub_subscriptions()
+
+        self._poll_thread = threading.Thread(target=self._poll_loop, daemon=True, name="ema-poll")
+        self._poll_thread.start()
+
         print(f"[EMA] Pre-warm service started - tracking {', '.join(PRE_WARM_SYMBOLS)}")
 
     def stop(self):
@@ -564,16 +593,21 @@ class CandlePreWarmService:
 
     def subscribe_symbol(self, symbol: str, timeframe: int = 5, period: int = 5) -> bool:
         symbol = symbol.upper()
+        ema_key = f"{symbol}_{timeframe}m_{period}"
         with self._lock:
             if symbol in self._tracked_symbols:
-                return True
-            if len(self._tracked_symbols) >= MAX_TRACKED_SYMBOLS:
+                existing = self._tracked_symbols[symbol]
+                if existing['ema_key'] == ema_key:
+                    return True
+                if ema_key in self._ema_engines:
+                    return True
+            if len(self._tracked_symbols) >= MAX_TRACKED_SYMBOLS and symbol not in self._tracked_symbols:
                 print(f"[EMA] Cannot subscribe {symbol}: max {MAX_TRACKED_SYMBOLS} symbols reached")
                 return False
 
-        self._ensure_tracking(symbol, is_prewarm=False, timeframe=timeframe, period=period)
+        self._ensure_tracking_multi(symbol, is_prewarm=False, timeframe=timeframe, period=period)
         self._dynamic_symbols.add(symbol)
-        self._fetch_historical_candles(symbol)
+        self._fetch_historical_candles_multi(symbol, timeframe, period)
         print(f"[EMA] Dynamically subscribed {symbol} (timeframe={timeframe}m, period={period})")
         return True
 
@@ -623,7 +657,8 @@ class CandlePreWarmService:
                 'prewarm_symbols': [s for s in PRE_WARM_SYMBOLS if s in self._tracked_symbols],
                 'dynamic_symbols': list(self._dynamic_symbols),
                 'hubs_connected': len(self._hubs),
-                'symbols': {}
+                'symbols': {},
+                'engines': {}
             }
             for sym, info in self._tracked_symbols.items():
                 key = f"{sym}_{info['timeframe']}m_{info['period']}"
@@ -639,6 +674,17 @@ class CandlePreWarmService:
                         'seeded': ema_state.seeded,
                         'is_prewarm': info.get('is_prewarm', False)
                     }
+            for ema_key, engine in self._ema_engines.items():
+                parts = ema_key.rsplit('_', 2)
+                if len(parts) >= 3:
+                    sym = parts[0]
+                    ema_state = engine.get_state(sym)
+                    status['engines'][ema_key] = {
+                        'ema_value': ema_state.value,
+                        'cross_state': ema_state.cross_state,
+                        'candles_count': ema_state.candles_count,
+                        'seeded': ema_state.seeded
+                    }
             return status
 
     def _ensure_tracking(self, symbol: str, is_prewarm: bool = False,
@@ -649,15 +695,27 @@ class CandlePreWarmService:
 
         with self._lock:
             if symbol in self._tracked_symbols:
-                return
+                existing = self._tracked_symbols[symbol]
+                if agg_key not in existing.get('agg_keys', [existing.get('agg_key', '')]):
+                    pass
+                else:
+                    return
 
-            self._tracked_symbols[symbol] = {
-                'timeframe': timeframe,
-                'period': period,
-                'is_prewarm': is_prewarm,
-                'agg_key': agg_key,
-                'ema_key': ema_key
-            }
+            if symbol not in self._tracked_symbols:
+                self._tracked_symbols[symbol] = {
+                    'timeframe': timeframe,
+                    'period': period,
+                    'is_prewarm': is_prewarm,
+                    'agg_key': agg_key,
+                    'ema_key': ema_key,
+                    'agg_keys': [agg_key]
+                }
+            else:
+                existing = self._tracked_symbols[symbol]
+                if 'agg_keys' not in existing:
+                    existing['agg_keys'] = [existing.get('agg_key', '')]
+                if agg_key not in existing['agg_keys']:
+                    existing['agg_keys'].append(agg_key)
 
             if agg_key not in self._aggregators:
                 agg = CandleAggregator(timeframe_minutes=timeframe)
@@ -670,6 +728,10 @@ class CandlePreWarmService:
             agg = self._aggregators[agg_key]
             engine = self._ema_engines[ema_key]
             agg.on_candle_complete(lambda sym, candles, e=engine: e.process_candles(sym, candles))
+
+    def _ensure_tracking_multi(self, symbol: str, is_prewarm: bool = False,
+                               timeframe: int = 5, period: int = 5):
+        self._ensure_tracking(symbol, is_prewarm=is_prewarm, timeframe=timeframe, period=period)
 
     def _on_quote_updated(self, event_data: Dict[str, Any]):
         if not self._running or not self._global_enabled:
@@ -693,10 +755,40 @@ class CandlePreWarmService:
                 price = float(quote.get('last_price') or quote.get('close') or quote.get('price', 0))
 
         if price and price > 0:
-            agg_key = info['agg_key']
-            agg = self._aggregators.get(agg_key)
-            if agg:
-                agg.process_tick(symbol, price)
+            self._last_tick_time[symbol] = time.time()
+            agg_keys = info.get('agg_keys', [info.get('agg_key', '')])
+            for agg_key in agg_keys:
+                agg = self._aggregators.get(agg_key)
+                if agg:
+                    agg.process_tick(symbol, price)
+
+    def _fetch_historical_candles_multi(self, symbol: str, timeframe: int, period: int):
+        symbol = symbol.upper()
+        ema_key = f"{symbol}_{timeframe}m_{period}"
+        engine = self._ema_engines.get(ema_key)
+        if not engine:
+            return
+
+        def _do_fetch():
+            candles = self._try_broker_candles(symbol, timeframe)
+            if candles and len(candles) >= period:
+                candle_objects = []
+                for c in candles:
+                    candle_objects.append(Candle(
+                        open=c['open'], high=c['high'], low=c['low'], close=c['close'],
+                        timestamp=c.get('timestamp', 0), tick_count=0, finalized=True
+                    ))
+                engine.seed_from_candles(symbol, candle_objects)
+                print(f"[EMA] Pre-seeded {symbol} ({timeframe}m/{period}p) with {len(candle_objects)} historical candles")
+            else:
+                count = len(candles) if candles else 0
+                print(f"[EMA] {symbol} ({timeframe}m): Only {count} historical candles, need {period} to seed. Building from live ticks.")
+
+        try:
+            t = threading.Thread(target=_do_fetch, daemon=True, name=f"ema-preseed-{symbol}-{timeframe}m")
+            t.start()
+        except Exception as e:
+            print(f"[EMA] Failed to start pre-seed thread for {symbol} ({timeframe}m): {e}")
 
     def _fetch_historical_candles(self, symbol: str):
         symbol = symbol.upper()
@@ -788,7 +880,130 @@ class CandlePreWarmService:
         except Exception:
             pass
 
-        print(f"[EMA] No historical candles available for {symbol} from any broker")
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            freq_map = {1: '1m', 2: '2m', 3: '5m', 5: '5m'}
+            yf_interval = freq_map.get(timeframe, '5m')
+            hist = ticker.history(period='1d', interval=yf_interval)
+            if hist is not None and len(hist) > 0:
+                candles = []
+                for idx, row in hist.iterrows():
+                    candles.append({
+                        'open': float(row['Open']),
+                        'high': float(row['High']),
+                        'low': float(row['Low']),
+                        'close': float(row['Close']),
+                        'timestamp': float(idx.timestamp())
+                    })
+                if candles:
+                    return candles
+        except Exception:
+            pass
+
+        print(f"[EMA] No historical candles available for {symbol} from any source")
+        return None
+
+    def _start_hub_subscriptions(self):
+        for hub in self._hubs:
+            hub_name = type(hub).__name__
+            for symbol in list(self._tracked_symbols.keys()):
+                try:
+                    if hasattr(hub, '_subscribed_symbols'):
+                        subs = hub._subscribed_symbols
+                        if isinstance(subs, set) and symbol.upper() in subs:
+                            continue
+                    if hasattr(hub, 'update_quote'):
+                        hub.update_quote(symbol, {'last': 0}, source='ema_prewarm')
+                        print(f"[EMA] Registered {symbol} in {hub_name} quote cache")
+                except Exception as e:
+                    print(f"[EMA] Hub subscription note for {symbol}: {e}")
+
+    def _poll_loop(self):
+        POLL_INTERVAL = 5
+        TICK_STALE_THRESHOLD = 15
+
+        print("[EMA] Poll fallback thread started (5s interval)")
+
+        while self._running:
+            try:
+                time.sleep(POLL_INTERVAL)
+                if not self._running or not self._global_enabled:
+                    continue
+
+                now = time.time()
+                with self._lock:
+                    symbols_to_poll = []
+                    for symbol, info in self._tracked_symbols.items():
+                        last_tick = self._last_tick_time.get(symbol, 0)
+                        if now - last_tick > TICK_STALE_THRESHOLD:
+                            symbols_to_poll.append(symbol)
+
+                if not symbols_to_poll:
+                    continue
+
+                for symbol in symbols_to_poll:
+                    price = self._poll_quote_rest(symbol)
+                    if price and price > 0:
+                        if symbol not in self._poll_logged:
+                            print(f"[EMA] REST poll active for {symbol} (no streaming ticks)")
+                            self._poll_logged.add(symbol)
+                        self._last_tick_time[symbol] = time.time()
+                        with self._lock:
+                            info = self._tracked_symbols.get(symbol)
+                        if info:
+                            agg_keys = info.get('agg_keys', [info.get('agg_key', '')])
+                            for agg_key in agg_keys:
+                                agg = self._aggregators.get(agg_key)
+                                if agg:
+                                    lock = agg._get_lock(symbol)
+                                    with lock:
+                                        old_count = len(agg._get_symbol_state(symbol)['completed_candles'])
+                                    agg.process_tick(symbol, price)
+                                    with lock:
+                                        new_count = len(agg._get_symbol_state(symbol)['completed_candles'])
+                                    if new_count > old_count:
+                                        print(f"[EMA] ✓ Candle #{new_count} completed for {symbol} via {agg_key} (price=${price:.2f})")
+
+            except Exception as e:
+                print(f"[EMA] Poll loop error: {e}")
+                time.sleep(10)
+
+    def _poll_quote_rest(self, symbol: str) -> Optional[float]:
+        for hub in self._hubs:
+            try:
+                if hasattr(hub, 'get_quote_price'):
+                    price = hub.get_quote_price(symbol)
+                    if price and price > 0:
+                        return price
+            except Exception:
+                pass
+
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            webull_hub = get_webull_data_hub()
+            if webull_hub and hasattr(webull_hub, '_broker') and webull_hub._broker:
+                broker = webull_hub._broker
+                if hasattr(broker, '_wb'):
+                    wb = broker._wb
+                    if hasattr(wb, 'get_quote'):
+                        quote_data = wb.get_quote(stock=symbol)
+                        if quote_data and isinstance(quote_data, dict):
+                            price = float(quote_data.get('close', 0) or quote_data.get('last', 0) or 0)
+                            if price > 0:
+                                return price
+        except Exception:
+            pass
+
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            info = ticker.fast_info
+            if hasattr(info, 'last_price') and info.last_price:
+                return float(info.last_price)
+        except Exception:
+            pass
+
         return None
 
     def daily_reset(self):

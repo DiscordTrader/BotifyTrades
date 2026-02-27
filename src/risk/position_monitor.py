@@ -1731,13 +1731,12 @@ class RiskManager:
             try:
                 from .ema_engine import get_candle_service
                 candle_svc = get_candle_service()
-                if candle_svc.is_global_enabled():
+                if candle_svc and candle_svc.is_global_enabled():
                     ema_symbol = position_snapshot.symbol
                     tf = channel_settings.ema_timeframe_minutes
                     pd = channel_settings.ema_period
 
-                    if not candle_svc.is_tracking(ema_symbol):
-                        candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd)
+                    candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd)
 
                     ema_state = candle_svc.get_ema_state(ema_symbol, timeframe=tf, period=pd)
                     state.ema_value = ema_state.value
@@ -2797,6 +2796,13 @@ class RiskManager:
                     enhanced_status += f" | [GIVEBACK ✓] Max:{max_pnl:.0f}%, Exit@{threshold:.0f}%"
                 else:
                     enhanced_status += f" | [GIVEBACK] {channel_settings.giveback_allowed_pct}% guard"
+            
+            if channel_settings.ema_risk_enabled:
+                ema_cs = getattr(cache, 'ema_last_cross_state', '')
+                if ema_cs and ema_cs not in ('', 'unknown', 'seeding'):
+                    enhanced_status += f" | [EMA ✓] {ema_cs}"
+                else:
+                    enhanced_status += f" | [EMA] seeding ({channel_settings.ema_timeframe_minutes}m/{channel_settings.ema_period}p)"
         
         if sl_price or target_price:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
