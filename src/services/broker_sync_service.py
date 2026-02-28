@@ -1661,6 +1661,26 @@ class BrokerSyncService:
                 if symbol.upper() in pending_sell_pos_keys:
                     print(f"[SYNC] ⏭️ Skipping import of {broker_name} {symbol} ({asset_type}) - pending exit order in flight")
                     continue
+                
+                # Skip positions with permanent failures (expired/invalid symbols)
+                # (prevents re-import loop for positions that can never be closed via API)
+                try:
+                    full_pos_key = f"{broker_name}_{pos_key}"
+                    from src.risk.position_monitor import risk_manager_instance
+                    if risk_manager_instance and hasattr(risk_manager_instance, '_permanent_failure_keys'):
+                        if full_pos_key in risk_manager_instance._permanent_failure_keys:
+                            continue
+                    else:
+                        from pathlib import Path
+                        import json as _json
+                        _pf_file = Path.cwd() / '.permanent_failures.json'
+                        if _pf_file.exists():
+                            with open(_pf_file, 'r') as _f:
+                                _pf_keys = set(_json.load(_f))
+                            if full_pos_key in _pf_keys:
+                                continue
+                except Exception:
+                    pass
                 # Try to find origin channel_id using multi-pass matching
                 origin_channel_id = find_origin_channel(position)
                 

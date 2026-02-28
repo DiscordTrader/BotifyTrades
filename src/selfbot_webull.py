@@ -16072,46 +16072,69 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 is_stop_loss = signal.get('risk_trigger') == 'stop_loss'
                                 cache.record_exit_failure(signal['_position_key'], error_msg, is_stop_loss=is_stop_loss)
                                 retry_state = cache.get_retry_state(signal['_position_key'])
-                                mode = "⚡ EMERGENCY" if retry_state.get('emergency_mode') else ""
-                                _original_print(f"[RISK-RETRY] {mode} Exit failed - attempt {retry_state['retry_count']}/{retry_state['max_retries']} | Cooldown: {retry_state['cooldown_remaining']:.0f}s", flush=True)
+                                
+                                if retry_state.get('permanent_failure'):
+                                    _original_print(f"[RISK-RETRY] 🛑 PERMANENT FAILURE for {signal['_position_key']}: {error_msg}", flush=True)
+                                    _original_print(f"[RISK-RETRY] 🛑 Retries STOPPED — position will be auto-cleaned on next risk cycle", flush=True)
+                                else:
+                                    mode = "⚡ EMERGENCY" if retry_state.get('emergency_mode') else ""
+                                    _original_print(f"[RISK-RETRY] {mode} Exit failed - attempt {retry_state['retry_count']}/{retry_state['max_retries']} | Cooldown: {retry_state['cooldown_remaining']:.0f}s", flush=True)
                                 
                                 try:
                                     from gui_app.database import record_order_event
-                                    retry_severity = 'critical' if retry_state.get('exhausted') else 'warning'
-                                    retry_reason = f"Attempt {retry_state['retry_count']}/{retry_state['max_retries']}"
-                                    if retry_state.get('exhausted'):
-                                        retry_reason += " - MAX RETRIES EXHAUSTED"
-                                    elif retry_state.get('use_market'):
-                                        retry_reason += " - escalating to MARKET order"
-                                    record_order_event(
-                                        'RETRY_ATTEMPT' if not retry_state.get('exhausted') else 'ORDER_FAILED',
-                                        symbol=signal.get('symbol'),
-                                        broker=signal.get('broker'),
-                                        direction=signal.get('action'),
-                                        quantity=signal.get('qty'),
-                                        price=signal.get('price'),
-                                        channel_name=signal.get('_channel_name'),
-                                        reason=retry_reason,
-                                        details=f"Exit reason: {signal.get('exit_reason', 'N/A')}",
-                                        severity=retry_severity,
-                                        source='risk_manager',
-                                        position_key=signal.get('_position_key')
-                                    )
-                                    if retry_state.get('use_market'):
+                                    if retry_state.get('permanent_failure'):
                                         record_order_event(
-                                            'MARKET_ORDER_ESCALATION',
+                                            'ORDER_FAILED',
                                             symbol=signal.get('symbol'),
                                             broker=signal.get('broker'),
                                             direction=signal.get('action'),
-                                            reason="Limit orders failed, switching to market order",
-                                            severity='warning',
+                                            quantity=signal.get('qty'),
+                                            price=signal.get('price'),
+                                            channel_name=signal.get('_channel_name'),
+                                            reason=f"PERMANENT FAILURE: {error_msg}",
+                                            details=f"Exit reason: {signal.get('exit_reason', 'N/A')}",
+                                            severity='critical',
                                             source='risk_manager',
                                             position_key=signal.get('_position_key')
                                         )
+                                    else:
+                                        retry_severity = 'critical' if retry_state.get('exhausted') else 'warning'
+                                        retry_reason = f"Attempt {retry_state['retry_count']}/{retry_state['max_retries']}"
+                                        if retry_state.get('exhausted'):
+                                            retry_reason += " - MAX RETRIES EXHAUSTED"
+                                        elif retry_state.get('use_market'):
+                                            retry_reason += " - escalating to MARKET order"
+                                        record_order_event(
+                                            'RETRY_ATTEMPT' if not retry_state.get('exhausted') else 'ORDER_FAILED',
+                                            symbol=signal.get('symbol'),
+                                            broker=signal.get('broker'),
+                                            direction=signal.get('action'),
+                                            quantity=signal.get('qty'),
+                                            price=signal.get('price'),
+                                            channel_name=signal.get('_channel_name'),
+                                            reason=retry_reason,
+                                            details=f"Exit reason: {signal.get('exit_reason', 'N/A')}",
+                                            severity=retry_severity,
+                                            source='risk_manager',
+                                            position_key=signal.get('_position_key')
+                                        )
+                                        if retry_state.get('use_market'):
+                                            record_order_event(
+                                                'MARKET_ORDER_ESCALATION',
+                                                symbol=signal.get('symbol'),
+                                                broker=signal.get('broker'),
+                                                direction=signal.get('action'),
+                                                reason="Limit orders failed, switching to market order",
+                                                severity='warning',
+                                                source='risk_manager',
+                                                position_key=signal.get('_position_key')
+                                            )
                                 except Exception:
                                     pass
                                 
-                                if retry_state.get('exhausted'):
+                                if retry_state.get('permanent_failure'):
+                                    pass  # Already logged above
+                                elif retry_state.get('exhausted'):
                                     _original_print(f"[RISK-RETRY] ❌ Max retries exhausted for {signal['_position_key']}", flush=True)
                                     _original_print(f"[RISK-RETRY] ❌ MANUAL INTERVENTION REQUIRED - Close position manually", flush=True)
                                 elif retry_state.get('use_market'):

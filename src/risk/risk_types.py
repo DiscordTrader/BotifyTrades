@@ -408,6 +408,22 @@ class PositionCacheEntry:
     extended_retry_mode: bool = False  # Persistent retry after fast retries exhausted
     exhausted_notified: bool = False  # Track if Discord notification was sent
     is_emergency_exit: bool = False  # Flag for stop loss / emergency exits (faster retry)
+    permanent_failure: bool = False  # Set True when error is unrecoverable (expired symbol, etc.)
+    permanent_failure_reason: Optional[str] = None
+    
+    PERMANENT_ERROR_PATTERNS = [
+        'symbol is expired', 'expired', 'symbol not found', 'invalid symbol',
+        'contract is no longer', 'does not exist', 'delisted', 'not tradeable',
+        'no longer available', 'contract expired', 'invalid contract',
+        'unknown symbol', 'security not found', 'instrument not found',
+    ]
+    
+    def _is_permanent_error(self, reason: str) -> bool:
+        """Check if error indicates a permanent/unrecoverable failure."""
+        if not reason:
+            return False
+        reason_lower = reason.lower()
+        return any(pattern in reason_lower for pattern in self.PERMANENT_ERROR_PATTERNS)
     
     def record_exit_failure(self, reason: str, is_stop_loss: bool = False) -> None:
         """Record a failed exit attempt with backoff.
@@ -419,6 +435,14 @@ class PositionCacheEntry:
         from datetime import timedelta
         self.exit_retry_count += 1
         self.last_exit_failure_reason = reason
+        
+        if self._is_permanent_error(reason):
+            self.permanent_failure = True
+            self.permanent_failure_reason = reason
+            print(f"[RISK-RETRY] 🛑 PERMANENT FAILURE detected — stopping all retries for this position")
+            print(f"[RISK-RETRY] 🛑 Reason: {reason}")
+            print(f"[RISK-RETRY] 🛑 Position should be removed from tracking (expired/invalid symbol)")
+            return
         
         # Track if this is an emergency exit (stop loss)
         if is_stop_loss:
@@ -462,10 +486,12 @@ class PositionCacheEntry:
             print(f"[RISK-RETRY] Will retry in {backoff_seconds // 60} minutes (persistent until success)")
     
     def can_retry_exit(self) -> bool:
-        """Check if retry is allowed (cooldown expired). Never stops in extended mode."""
+        """Check if retry is allowed (cooldown expired). Stops on permanent failures."""
+        if self.permanent_failure:
+            return False
         if self.exit_retry_cooldown_until and datetime.now() < self.exit_retry_cooldown_until:
             return False
-        return True  # Always allow retry - extended mode never gives up
+        return True
     
     def retry_cooldown_remaining(self) -> float:
         """Get seconds remaining in cooldown, or 0 if ready."""

@@ -551,11 +551,25 @@ class PositionCache:
             return True  # New position, can try
         return entry.can_retry_exit()
     
+    def is_permanent_failure(self, position_key: str) -> bool:
+        """Check if position has a permanent/unrecoverable failure (expired symbol, etc.)."""
+        entry = self._cache.get(position_key)
+        if not entry:
+            return False
+        return getattr(entry, 'permanent_failure', False)
+    
+    def get_permanent_failure_reason(self, position_key: str) -> Optional[str]:
+        """Get the reason for permanent failure, if any."""
+        entry = self._cache.get(position_key)
+        if not entry:
+            return None
+        return getattr(entry, 'permanent_failure_reason', None)
+    
     def get_retry_state(self, position_key: str) -> dict:
         """Get retry state for debugging/logging."""
         entry = self._cache.get(position_key)
         if not entry:
-            return {'retry_count': 0, 'cooldown_remaining': 0, 'use_market': False, 'extended_mode': False, 'emergency_mode': False}
+            return {'retry_count': 0, 'cooldown_remaining': 0, 'use_market': False, 'extended_mode': False, 'emergency_mode': False, 'permanent_failure': False}
         return {
             'retry_count': entry.exit_retry_count,
             'max_retries': entry.MAX_FAST_RETRIES,
@@ -563,7 +577,9 @@ class PositionCache:
             'use_market': entry.use_market_order,
             'extended_mode': entry.in_extended_retry_mode(),
             'emergency_mode': getattr(entry, 'is_emergency_exit', False),
-            'last_failure': entry.last_exit_failure_reason
+            'last_failure': entry.last_exit_failure_reason,
+            'permanent_failure': getattr(entry, 'permanent_failure', False),
+            'permanent_failure_reason': getattr(entry, 'permanent_failure_reason', None)
         }
     
     def reset_exit_retry_state(self, position_key: str) -> None:

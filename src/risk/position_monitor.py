@@ -977,6 +977,31 @@ class RiskManager:
         
         self.cache = PositionCache()
         self._running = False
+        self._permanent_failure_keys = self._load_permanent_failures()
+    
+    _PERMANENT_FAILURES_FILE = Path.cwd() / '.permanent_failures.json'
+    
+    def _load_permanent_failures(self) -> set:
+        try:
+            import json
+            if self._PERMANENT_FAILURES_FILE.exists():
+                with open(self._PERMANENT_FAILURES_FILE, 'r') as f:
+                    data = json.load(f)
+                keys = set(data) if isinstance(data, list) else set()
+                if keys:
+                    print(f"[RISK] ✓ Loaded {len(keys)} permanent failure blocklist entries from disk")
+                return keys
+        except Exception as e:
+            print(f"[RISK] ⚠️ Failed to load permanent failures file: {e}")
+        return set()
+    
+    def _save_permanent_failures(self) -> None:
+        try:
+            import json
+            with open(self._PERMANENT_FAILURES_FILE, 'w') as f:
+                json.dump(list(self._permanent_failure_keys), f, indent=2)
+        except Exception as e:
+            print(f"[RISK] ⚠️ Failed to save permanent failures file: {e}")
     
     async def start_monitoring(self) -> None:
         """Start the position monitoring loop with enable gate and standby support."""
@@ -1167,8 +1192,14 @@ class RiskManager:
         
         broker_position_keys = set()
         
+        if not hasattr(self, '_permanent_failure_keys'):
+            self._permanent_failure_keys = self._load_permanent_failures()
+        
         for position in positions:
             try:
+                pos_key = position.position_key
+                if pos_key in self._permanent_failure_keys:
+                    continue
                 await self._evaluate_position(position, risk_settings, broker_position_keys)
             except Exception as e:
                 print(f"[RISK] ⚠️ Error processing position {position.symbol}: {e}")
@@ -1874,6 +1905,41 @@ class RiskManager:
         from datetime import datetime
         pos_key = position.position_key
         timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        # Check for permanent/unrecoverable failure (expired symbol, invalid contract, etc.)
+        if self.cache.is_permanent_failure(pos_key):
+            pf_reason = self.cache.get_permanent_failure_reason(pos_key) or 'Unknown'
+            print(f"[RISK] 🛑 PERMANENT FAILURE — skipping retries for {pos_key}")
+            print(f"[RISK] 🛑 Reason: {pf_reason}")
+            print(f"[RISK] 🛑 Auto-closing position in database (symbol expired/invalid)")
+            try:
+                trade_id = self.cache.get_trade_id(pos_key)
+                if trade_id:
+                    from gui_app.database import close_trade
+                    entry_price = position.avg_cost or 0
+                    pnl = -entry_price * position.quantity if entry_price else 0
+                    pnl_pct = -100.0 if entry_price else 0
+                    close_trade(trade_id, close_price=0, pnl=pnl, pnl_percent=pnl_pct)
+                    print(f"[RISK] 🛑 Trade #{trade_id} marked as closed in database (expired worthless)")
+                self.cache.remove(pos_key)
+                if not hasattr(self, '_permanent_failure_keys'):
+                    self._permanent_failure_keys = self._load_permanent_failures()
+                self._permanent_failure_keys.add(pos_key)
+                self._save_permanent_failures()
+                print(f"[RISK] 🛑 Position {pos_key} removed from risk monitoring cache")
+                print(f"[RISK] 🛑 Position added to permanent failure blocklist (persisted to disk)")
+                try:
+                    from gui_app.discord_notifier import send_notification
+                    send_notification(
+                        title="Position Auto-Closed (Expired)",
+                        description=f"**{pos_key}**\n{pf_reason}\n\nPosition removed from monitoring. Check broker account for any cleanup needed.",
+                        color=0xFF5252
+                    )
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"[RISK] 🛑 Error during auto-close cleanup: {e}")
+            return
         
         # Check if entering extended retry mode - send Discord notification once
         if self.cache.needs_extended_notification(pos_key):
