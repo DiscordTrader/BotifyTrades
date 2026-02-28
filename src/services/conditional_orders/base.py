@@ -1095,13 +1095,14 @@ class BaseConditionalOrderService(ABC):
         # For SELL orders: limit_price = trigger - cap% (floor)
         limit_price = None
         if limit_cap_enabled and limit_cap_pct and limit_cap_pct > 0 and adjusted_price:
-            if trigger_type in ('ABOVE', 'PRICE_ABOVE', 'BTO'):
+            if trigger_type in ('over', 'ABOVE', 'PRICE_ABOVE', 'BTO'):
                 # Buy: max price = trigger + cap%
                 limit_price = round(adjusted_price * (1 + limit_cap_pct / 100), 4)
+                self._log(f"Limit cap computed: trigger=${adjusted_price} + {limit_cap_pct}% = limit=${limit_price} (BUY ceiling)")
             else:
                 # Sell: min price = trigger - cap%
                 limit_price = round(adjusted_price * (1 - limit_cap_pct / 100), 4)
-            self._log(f"Limit cap computed: trigger=${adjusted_price} + {limit_cap_pct}% = limit=${limit_price}")
+                self._log(f"Limit cap computed: trigger=${adjusted_price} - {limit_cap_pct}% = limit=${limit_price} (SELL floor)")
         
         # Trailing stop - signal overrides channel settings
         trailing_stop_pct = parsed_signal.get('trailing_stop_pct') or channel_settings.get('trailing_stop_pct')
