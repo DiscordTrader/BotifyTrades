@@ -5,23 +5,60 @@ async function updateBotStatus() {
     try {
         const indicator = document.getElementById('bot-status');
         const userSpan = document.getElementById('bot-user');
-        
-        // Check if elements exist (they won't exist on pages like /options)
+        const badge = document.getElementById('discord-status-badge');
+
         if (!indicator || !userSpan) {
-            return; // Silently skip update if elements don't exist
+            return;
         }
-        
+
         const status = await fetch('/api/status').then(r => r.json());
-        
+
+        if (badge) {
+            badge.classList.remove('connected', 'disconnected', 'connecting');
+        }
+
         if (status.connected) {
             indicator.style.background = '#10b981';
-            userSpan.textContent = status.bot_user;
+            indicator.style.boxShadow = '0 0 8px rgba(16, 185, 129, 0.6)';
+            userSpan.textContent = 'Discord Connected';
+            if (badge) {
+                badge.classList.add('connected');
+                badge.title = 'Discord Connected as ' + (status.bot_user || 'Unknown');
+            }
         } else {
-            indicator.style.background = '#ef4444';
-            userSpan.textContent = 'Disconnected';
+            const isConnecting = status.bot_user && status.bot_user !== 'Not connected' && status.bot_user !== 'Loading...';
+            if (isConnecting) {
+                indicator.style.background = '#f59e0b';
+                indicator.style.boxShadow = '0 0 8px rgba(245, 158, 11, 0.6)';
+                userSpan.textContent = 'Connecting...';
+                if (badge) {
+                    badge.classList.add('connecting');
+                    badge.title = 'Discord is connecting...';
+                }
+            } else {
+                indicator.style.background = '#ef4444';
+                indicator.style.boxShadow = '0 0 8px rgba(239, 68, 68, 0.6)';
+                userSpan.textContent = 'Discord Offline';
+                if (badge) {
+                    badge.classList.add('disconnected');
+                    badge.title = 'Discord is not connected';
+                }
+            }
         }
     } catch (error) {
         console.error('Failed to update bot status:', error);
+        const indicator = document.getElementById('bot-status');
+        const userSpan = document.getElementById('bot-user');
+        const badge = document.getElementById('discord-status-badge');
+        if (indicator && userSpan) {
+            indicator.style.background = '#ef4444';
+            indicator.style.boxShadow = '0 0 8px rgba(239, 68, 68, 0.6)';
+            userSpan.textContent = 'Discord Offline';
+            if (badge) {
+                badge.classList.remove('connected', 'disconnected', 'connecting');
+                badge.classList.add('disconnected');
+            }
+        }
     }
 }
 

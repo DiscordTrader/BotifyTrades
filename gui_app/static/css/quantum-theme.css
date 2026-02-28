@@ -339,43 +339,117 @@ body {
     backdrop-filter: blur(10px);
 }
 
-.status-indicator {
-    width: 10px;
-    height: 10px;
+.connection-status-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    cursor: default;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.connection-status-group .conn-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: all 0.3s ease;
+}
+
+.connection-status-group.connected {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.08) 100%);
+    border-color: rgba(16, 185, 129, 0.25);
+}
+
+.connection-status-group.connected .conn-icon {
+    color: #10b981;
+    opacity: 1;
+}
+
+.connection-status-group.disconnected {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.06) 100%);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.connection-status-group.disconnected .conn-icon {
+    color: #ef4444;
+    opacity: 0.8;
+}
+
+.connection-status-group.connecting {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.06) 100%);
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+.connection-status-group.connecting .conn-icon {
+    color: #f59e0b;
+    opacity: 0.9;
+    animation: conn-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes conn-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+.conn-indicator {
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-    box-shadow: 0 0 12px rgba(34, 197, 94, 0.6), 0 0 4px rgba(34, 197, 94, 0.8);
-    animation: pulse-glow 2s ease-in-out infinite;
+    background: #6b7280;
+    flex-shrink: 0;
     position: relative;
+    transition: all 0.3s ease;
 }
 
-.status-indicator::after {
-    content: '';
-    position: absolute;
-    inset: -3px;
-    border-radius: 50%;
-    background: rgba(34, 197, 94, 0.2);
-    animation: pulse-ring 2s ease-in-out infinite;
+.connection-status-group.connected .conn-indicator {
+    background: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    animation: status-pulse 2s ease-in-out infinite;
 }
 
-@keyframes pulse-glow {
-    0%, 100% { 
-        box-shadow: 0 0 12px rgba(34, 197, 94, 0.6), 0 0 4px rgba(34, 197, 94, 0.8);
-    }
-    50% { 
-        box-shadow: 0 0 20px rgba(34, 197, 94, 0.8), 0 0 8px rgba(34, 197, 94, 1);
-    }
+.connection-status-group.disconnected .conn-indicator {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+    animation: none;
 }
 
-@keyframes pulse-ring {
-    0%, 100% { 
-        transform: scale(1);
-        opacity: 0.6;
-    }
-    50% { 
-        transform: scale(1.3);
-        opacity: 0.3;
-    }
+.connection-status-group.connecting .conn-indicator {
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+    animation: status-pulse 1s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.conn-label {
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+}
+
+.connection-status-group.connected .conn-label {
+    color: #10b981;
+}
+
+.connection-status-group.disconnected .conn-label {
+    color: #ef4444;
+}
+
+.connection-status-group.connecting .conn-label {
+    color: #f59e0b;
+}
+
+.status-indicator {
+    display: none;
 }
 
 #bot-user {
