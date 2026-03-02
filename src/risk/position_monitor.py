@@ -1769,7 +1769,9 @@ class RiskManager:
                     tf = channel_settings.ema_timeframe_minutes
                     pd = channel_settings.ema_period
 
-                    candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd)
+                    is_option = position_snapshot.direction in ('C', 'Call', 'call', 'P', 'Put', 'put')
+                    yf_only = is_option and channel_settings.ema_use_underlying
+                    candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd, yfinance_only=yf_only)
 
                     ema_state = candle_svc.get_ema_state(ema_symbol, timeframe=tf, period=pd)
                     state.ema_value = ema_state.value

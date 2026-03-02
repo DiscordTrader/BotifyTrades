@@ -542,6 +542,7 @@ class CandlePreWarmService:
         self._ema_engines: Dict[str, EMAEngine] = {}
         self._tracked_symbols: Dict[str, Dict[str, Any]] = {}
         self._dynamic_symbols: set = set()
+        self._yfinance_only_symbols: set = set()
         self._hubs: List[Any] = []
         self._running = False
         self._lock = threading.Lock()
@@ -591,15 +592,19 @@ class CandlePreWarmService:
     def is_global_enabled(self) -> bool:
         return self._global_enabled
 
-    def subscribe_symbol(self, symbol: str, timeframe: int = 5, period: int = 5) -> bool:
+    def subscribe_symbol(self, symbol: str, timeframe: int = 5, period: int = 5, yfinance_only: bool = False) -> bool:
         symbol = symbol.upper()
         ema_key = f"{symbol}_{timeframe}m_{period}"
         with self._lock:
             if symbol in self._tracked_symbols:
                 existing = self._tracked_symbols[symbol]
                 if existing['ema_key'] == ema_key:
+                    if yfinance_only:
+                        self._yfinance_only_symbols.add(symbol)
                     return True
                 if ema_key in self._ema_engines:
+                    if yfinance_only:
+                        self._yfinance_only_symbols.add(symbol)
                     return True
             if len(self._tracked_symbols) >= MAX_TRACKED_SYMBOLS and symbol not in self._tracked_symbols:
                 print(f"[EMA] Cannot subscribe {symbol}: max {MAX_TRACKED_SYMBOLS} symbols reached")
@@ -607,8 +612,11 @@ class CandlePreWarmService:
 
         self._ensure_tracking_multi(symbol, is_prewarm=False, timeframe=timeframe, period=period)
         self._dynamic_symbols.add(symbol)
+        if yfinance_only:
+            self._yfinance_only_symbols.add(symbol)
         self._fetch_historical_candles_multi(symbol, timeframe, period)
-        print(f"[EMA] Dynamically subscribed {symbol} (timeframe={timeframe}m, period={period})")
+        yf_tag = " [yfinance-only]" if yfinance_only else ""
+        print(f"[EMA] Dynamically subscribed {symbol} (timeframe={timeframe}m, period={period}){yf_tag}")
         return True
 
     def unsubscribe_symbol(self, symbol: str):
@@ -621,6 +629,7 @@ class CandlePreWarmService:
             self._aggregators.pop(symbol, None)
             self._ema_engines.pop(symbol, None)
             self._dynamic_symbols.discard(symbol)
+            self._yfinance_only_symbols.discard(symbol)
         print(f"[EMA] Unsubscribed dynamic symbol {symbol}")
 
     def get_ema_state(self, symbol: str, timeframe: int = 5, period: int = 5) -> EMAState:
@@ -740,6 +749,9 @@ class CandlePreWarmService:
         symbol = event_data.get('symbol', '').upper()
         quote = event_data.get('quote')
 
+        if symbol in self._yfinance_only_symbols:
+            return
+
         with self._lock:
             info = self._tracked_symbols.get(symbol)
         if not info:
@@ -747,12 +759,16 @@ class CandlePreWarmService:
 
         price = None
         if quote:
-            if hasattr(quote, 'last_price') and quote.last_price:
+            if hasattr(quote, 'last') and quote.last:
+                price = float(quote.last)
+            elif hasattr(quote, 'last_price') and quote.last_price:
                 price = float(quote.last_price)
+            elif hasattr(quote, 'close_price') and quote.close_price:
+                price = float(quote.close_price)
             elif hasattr(quote, 'close') and quote.close:
                 price = float(quote.close)
             elif isinstance(quote, dict):
-                price = float(quote.get('last_price') or quote.get('close') or quote.get('price', 0))
+                price = float(quote.get('last') or quote.get('last_price') or quote.get('close') or quote.get('price', 0))
 
         if price and price > 0:
             self._last_tick_time[symbol] = time.time()
@@ -935,18 +951,23 @@ class CandlePreWarmService:
                 with self._lock:
                     symbols_to_poll = []
                     for symbol, info in self._tracked_symbols.items():
-                        last_tick = self._last_tick_time.get(symbol, 0)
-                        if now - last_tick > TICK_STALE_THRESHOLD:
+                        if symbol in self._yfinance_only_symbols:
                             symbols_to_poll.append(symbol)
+                        else:
+                            last_tick = self._last_tick_time.get(symbol, 0)
+                            if now - last_tick > TICK_STALE_THRESHOLD:
+                                symbols_to_poll.append(symbol)
 
                 if not symbols_to_poll:
                     continue
 
                 for symbol in symbols_to_poll:
-                    price = self._poll_quote_rest(symbol)
+                    use_yf_only = symbol in self._yfinance_only_symbols
+                    price = self._poll_quote_rest(symbol, skip_hub=use_yf_only)
                     if price and price > 0:
                         if symbol not in self._poll_logged:
-                            print(f"[EMA] REST poll active for {symbol} (no streaming ticks)")
+                            reason = "yfinance-only/underlying" if use_yf_only else "no streaming ticks"
+                            print(f"[EMA] REST poll active for {symbol} ({reason}, price=${price:.2f})")
                             self._poll_logged.add(symbol)
                         self._last_tick_time[symbol] = time.time()
                         with self._lock:
@@ -969,31 +990,32 @@ class CandlePreWarmService:
                 print(f"[EMA] Poll loop error: {e}")
                 time.sleep(10)
 
-    def _poll_quote_rest(self, symbol: str) -> Optional[float]:
-        for hub in self._hubs:
+    def _poll_quote_rest(self, symbol: str, skip_hub: bool = False) -> Optional[float]:
+        if not skip_hub:
+            for hub in self._hubs:
+                try:
+                    if hasattr(hub, 'get_quote_price'):
+                        price = hub.get_quote_price(symbol)
+                        if price and price > 0:
+                            return price
+                except Exception:
+                    pass
+
             try:
-                if hasattr(hub, 'get_quote_price'):
-                    price = hub.get_quote_price(symbol)
-                    if price and price > 0:
-                        return price
+                from src.services.webull_data_hub import get_webull_data_hub
+                webull_hub = get_webull_data_hub()
+                if webull_hub and hasattr(webull_hub, '_broker') and webull_hub._broker:
+                    broker = webull_hub._broker
+                    if hasattr(broker, '_wb'):
+                        wb = broker._wb
+                        if hasattr(wb, 'get_quote'):
+                            quote_data = wb.get_quote(stock=symbol)
+                            if quote_data and isinstance(quote_data, dict):
+                                price = float(quote_data.get('close', 0) or quote_data.get('last', 0) or 0)
+                                if price > 0:
+                                    return price
             except Exception:
                 pass
-
-        try:
-            from src.services.webull_data_hub import get_webull_data_hub
-            webull_hub = get_webull_data_hub()
-            if webull_hub and hasattr(webull_hub, '_broker') and webull_hub._broker:
-                broker = webull_hub._broker
-                if hasattr(broker, '_wb'):
-                    wb = broker._wb
-                    if hasattr(wb, 'get_quote'):
-                        quote_data = wb.get_quote(stock=symbol)
-                        if quote_data and isinstance(quote_data, dict):
-                            price = float(quote_data.get('close', 0) or quote_data.get('last', 0) or 0)
-                            if price > 0:
-                                return price
-        except Exception:
-            pass
 
         try:
             import yfinance as yf
