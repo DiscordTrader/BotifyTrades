@@ -3637,7 +3637,10 @@ class WebullBroker:
         
         if resp and isinstance(resp, dict) and _needs_token_retry and not resp.get('orderId'):
             print(f"[{self.name}] Trade token issue detected (code={resp_code}) - attempting auto-refresh...")
-            self._clear_dedupe_for_failed_order(symbol, strike, opt_type, expiry_mmdd, side, qty, limit_price)
+            try:
+                self._clear_dedupe_for_failed_order(symbol, strike, opt_type, expiry_mmdd, side, qty, limit_price)
+            except Exception as _dedupe_err:
+                print(f"[{self.name}] Dedupe clear warning: {_dedupe_err}")
             refresh_success = await self._refresh_trade_token()
             if refresh_success:
                 print(f"[{self.name}] Token refreshed, retrying option order...")
