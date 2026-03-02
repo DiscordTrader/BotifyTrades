@@ -1086,6 +1086,9 @@ class BaseConditionalOrderService(ABC):
         slippage_protection_enabled = 1 if channel_settings.get('slippage_protection_enabled') else 0
         slippage_max_pct = channel_settings.get('slippage_max_pct')
         
+        # Breakout Reset Guard - require pullback before triggering if price already past trigger
+        breakout_reset_enabled = 1 if channel_settings.get('breakout_reset_enabled', 1) else 0
+        
         # Limit Cap - price ceiling for limit orders to prevent chasing
         limit_cap_enabled = 1 if channel_settings.get('limit_cap_enabled') else 0
         limit_cap_pct = channel_settings.get('limit_cap_pct') or 5.0
@@ -1123,6 +1126,8 @@ class BaseConditionalOrderService(ABC):
             settings_sources.append(f"slippage:channel({slippage_max_pct}%)")
         if limit_cap_enabled:
             settings_sources.append(f"limit_cap:channel({limit_cap_pct}%)")
+        if not breakout_reset_enabled:
+            settings_sources.append("breakout_reset:disabled")
         if trailing_stop_pct and not parsed_signal.get('trailing_stop_pct'):
             settings_sources.append(f"trailing:channel({trailing_stop_pct}%)")
         if exit_strategy_mode != 'signal':
@@ -1169,6 +1174,7 @@ class BaseConditionalOrderService(ABC):
             limit_cap_pct=limit_cap_pct,
             limit_price=limit_price,
             message_id=parsed_signal.get('message_id'),
+            breakout_reset_enabled=breakout_reset_enabled,
         )
         
         if order_id:
@@ -1221,8 +1227,7 @@ class BaseConditionalOrderService(ABC):
         )
         
         self.pending_orders[order_id] = order
-        # Arm the breakout-reset guard for this order.
-        self._price_reset_needed[order_id] = True
+        self._price_reset_needed[order_id] = bool(order.get('breakout_reset_enabled', 1))
         
         if self.is_running and self._loop:
             asyncio.run_coroutine_threadsafe(

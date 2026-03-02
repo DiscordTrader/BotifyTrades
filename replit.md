@@ -46,6 +46,7 @@ The web control panel is built with Flask, providing a responsive and interactiv
 - **Graceful Degradation**: Automatically falls back to REST polling if streaming services become unavailable.
 - **Modular Broker Abstraction**: A common interface is used to manage diverse broker APIs.
 - **Market Isolation**: Conditional order services for US, India, and Canada operate independently.
+- **Conditional Order Guards**: Per-channel **Breakout Reset Guard** (`breakout_reset_enabled`, default ON) requires price to pull back past the trigger before firing if price is already beyond trigger at order creation. Per-channel **Limit Cap** (`limit_cap_enabled`/`limit_cap_pct`) sets a price ceiling/floor on the resulting limit order to prevent chasing.
 
 ## External Dependencies
 
