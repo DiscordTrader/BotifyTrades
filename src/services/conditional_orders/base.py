@@ -1221,15 +1221,14 @@ class BaseConditionalOrderService(ABC):
         )
         
         self.pending_orders[order_id] = order
-        self._price_reset_needed[order_id] = False
+        # Arm the breakout-reset guard for this order.
+        self._price_reset_needed[order_id] = True
         
         if self.is_running and self._loop:
             asyncio.run_coroutine_threadsafe(
                 self._start_monitor(order_id, order),
                 self._loop
             )
-        else:
-            self._log(f"⚠️ Event loop not ready for #{order_id} — will be picked up by restore on next cycle")
     
     async def _start_monitor(self, order_id: int, order: Dict):
         """Start a price monitor for an order using market-specific logic."""
