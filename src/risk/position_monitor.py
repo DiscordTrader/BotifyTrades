@@ -296,16 +296,16 @@ class RiskDBAdapter:
                 # Database may have: "12/17", "1/21", "2025-12-17", "12/17/25", etc.
                 expiry_variants = [expiry] if expiry else []
                 if expiry:
-                    # If format is YYYY-MM-DD, also try MM/DD (with and without leading zeros)
                     if '-' in expiry and len(expiry) == 10:
                         parts = expiry.split('-')
                         month = parts[1]
                         day = parts[2]
-                        expiry_variants.append(f"{month}/{day}")  # 01/21 (with zeros)
-                        expiry_variants.append(f"{int(month)}/{int(day)}")  # 1/21 (without zeros)
+                        expiry_variants.append(f"{month}/{day}")  # 01/21
+                        expiry_variants.append(f"{int(month)}/{int(day)}")  # 1/21
+                        expiry_variants.append(f"{int(month)}/{day}")  # 1/21 (mixed: stripped month, padded day)
+                        expiry_variants.append(f"{month}/{int(day)}")  # 01/1 (mixed: padded month, stripped day)
                         expiry_variants.append(f"{month}/{day}/{parts[0][2:]}")  # 01/21/26
                         expiry_variants.append(f"{int(month)}/{int(day)}/{parts[0][2:]}")  # 1/21/26
-                    # If format is MM/DD, also try variants
                     elif '/' in expiry and len(expiry) <= 5:
                         parts = expiry.split('/')
                         from datetime import datetime
@@ -313,8 +313,10 @@ class RiskDBAdapter:
                         month = parts[0]
                         day = parts[1]
                         expiry_variants.append(f"{year}-{month.zfill(2)}-{day.zfill(2)}")  # YYYY-MM-DD
-                        expiry_variants.append(f"{int(month)}/{int(day)}")  # M/D (without leading zeros)
-                        expiry_variants.append(f"{month.zfill(2)}/{day.zfill(2)}")  # MM/DD (with leading zeros)
+                        expiry_variants.append(f"{int(month)}/{int(day)}")  # M/D
+                        expiry_variants.append(f"{month.zfill(2)}/{day.zfill(2)}")  # MM/DD
+                        expiry_variants.append(f"{int(month)}/{day.zfill(2)}")  # M/DD (mixed)
+                        expiry_variants.append(f"{month.zfill(2)}/{int(day)}")  # MM/D (mixed)
                 
                 # Try each expiry variant - filter by broker to get correct channel settings
                 # Include routing_mapping_id (index 23) for routed trade discrimination
