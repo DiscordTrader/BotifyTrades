@@ -66,22 +66,44 @@ def _resolve_broker(trade_broker, channel_id, conn):
 
 def _build_broker_filter(broker):
     return """
-        lc.lot_id IN (
-            SELECT sl_bf.id FROM signal_lots sl_bf
-            JOIN trades t_bf ON t_bf.id = sl_bf.trade_id
-            WHERE UPPER(COALESCE(t_bf.broker, '')) = UPPER(?)
+        (
+            lc.lot_id IN (
+                SELECT sl_bf.id FROM signal_lots sl_bf
+                JOIN trades t_bf ON t_bf.id = sl_bf.trade_id
+                WHERE UPPER(COALESCE(t_bf.broker, '')) = UPPER(?)
+            )
+            OR (
+                lc.lot_id IN (
+                    SELECT sl_bf2.id FROM signal_lots sl_bf2
+                    LEFT JOIN trades t_bf2 ON t_bf2.id = sl_bf2.trade_id
+                    LEFT JOIN channels c_bf ON CAST(c_bf.id AS TEXT) = sl_bf2.channel_id
+                    LEFT JOIN channels c_bf2 ON c_bf2.discord_channel_id = CAST(sl_bf2.channel_id AS TEXT)
+                    WHERE t_bf2.id IS NULL
+                      AND (
+                          UPPER(COALESCE(c_bf.enabled_brokers, c_bf2.enabled_brokers, '')) LIKE '%"' || UPPER(?) || '"%'
+                      )
+                )
+            )
         )
     """
 
 
 def _broker_filter_params(broker):
-    return [broker]
+    return [broker, broker]
 
 
 def _resolve_broker_from_row(row):
     b = row.get('broker') if isinstance(row, dict) else (row['broker'] if row else None)
     if b:
         return b.upper()
+    eb = row.get('ch_enabled_brokers') if isinstance(row, dict) else None
+    if eb:
+        try:
+            brokers = json.loads(eb)
+            if isinstance(brokers, list) and brokers:
+                return brokers[0].upper()
+        except (json.JSONDecodeError, TypeError):
+            pass
     return ''
 
 
@@ -345,6 +367,19 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
     }
 
 
+def _resolve_broker_chain(trade_broker, enabled_brokers_json):
+    if trade_broker:
+        return trade_broker.upper()
+    if enabled_brokers_json:
+        try:
+            brokers = json.loads(enabled_brokers_json)
+            if isinstance(brokers, list) and brokers:
+                return brokers[0].upper()
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return 'Unknown'
+
+
 def get_broker_breakdown(user_id, start_date=None, end_date=None, period=None):
     sd, ed = _resolve_date_range(period, start_date, end_date)
     conn = get_connection()
@@ -354,10 +389,13 @@ def get_broker_breakdown(user_id, start_date=None, end_date=None, period=None):
     where += _build_date_filter("lc.closed_at", sd, ed, params)
 
     sql = f"""
-        SELECT t.broker, lc.pnl, lc.lot_id
+        SELECT t.broker, lc.pnl, lc.lot_id,
+               COALESCE(c.enabled_brokers, c2.enabled_brokers) as ch_enabled_brokers
         FROM lot_closures lc
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         LEFT JOIN trades t ON t.id = sl.trade_id
+        LEFT JOIN channels c ON CAST(c.id AS TEXT) = sl.channel_id
+        LEFT JOIN channels c2 ON c2.discord_channel_id = CAST(sl.channel_id AS TEXT)
         WHERE {' AND '.join(where)}
           AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
         ORDER BY t.broker
@@ -366,8 +404,7 @@ def get_broker_breakdown(user_id, start_date=None, end_date=None, period=None):
 
     lot_agg = {}
     for r in rows:
-        b = r['broker']
-        b = (b or 'Unknown').upper() if b else 'Unknown'
+        b = _resolve_broker_chain(r['broker'], r['ch_enabled_brokers'])
         lot_id = r['lot_id'] or id(r)
         key = (b, lot_id)
         if key not in lot_agg:
