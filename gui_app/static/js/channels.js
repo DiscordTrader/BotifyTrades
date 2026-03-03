@@ -1363,7 +1363,7 @@ async function saveRiskManagement(channelId) {
         const slOrderMode = document.querySelector(`input[name="sl-order-mode-${channelId}"]:checked`)?.value || 'limit';
         const slLimitOffset = document.getElementById(`risk-sl-limit-offset-${channelId}`).value;
         const entryOrderMode = document.querySelector(`input[name="entry-order-mode-${channelId}"]:checked`)?.value || 'limit';
-        const exitStrategyMode = document.getElementById(`exit-strategy-mode-${channelId}`)?.value || 'hybrid';
+        const exitStrategyEl = document.getElementById(`exit-strategy-mode-${channelId}`);
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         
         // Enhanced risk settings
@@ -1394,10 +1394,7 @@ async function saveRiskManagement(channelId) {
             return;
         }
         
-        const response = await fetch(`/api/channels/${channelId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+        const payload = {
                 risk_management_enabled: riskEnabled,
                 profit_target_1_pct: profitTarget1 ? parseFloat(profitTarget1) : null,
                 profit_target_2_pct: profitTarget2 ? parseFloat(profitTarget2) : null,
@@ -1419,7 +1416,6 @@ async function saveRiskManagement(channelId) {
                 sl_order_mode: slOrderMode,
                 sl_limit_offset: slLimitOffset ? parseFloat(slLimitOffset) / 100 : 0.03,
                 entry_order_mode: entryOrderMode,
-                exit_strategy_mode: exitStrategyMode,
                 trade_summary_enabled: tradeSummaryEnabled,
                 enable_dynamic_sl: enableDynamicSl,
                 dynamic_sl_profile: dynamicSlProfile,
@@ -1438,7 +1434,14 @@ async function saveRiskManagement(channelId) {
                 ema_use_underlying: emaUseUnderlying,
                 ema_extended_hours: emaExtendedHours,
                 use_global_risk_settings: 0
-            })
+        };
+        if (exitStrategyEl) {
+            payload.exit_strategy_mode = exitStrategyEl.value;
+        }
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
         
         const result = await response.json();
