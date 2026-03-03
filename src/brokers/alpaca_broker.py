@@ -257,11 +257,10 @@ class AlpacaBroker(BrokerInterface):
         try:
             side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
             
-            # Round prices to 2 decimal places (Alpaca doesn't allow sub-penny pricing for stocks > $1)
             if price is not None:
-                price = round(price, 2)
+                price = round(price, 4) if price < 1.0 else round(price, 2)
             if stop_price is not None:
-                stop_price = round(stop_price, 2)
+                stop_price = round(stop_price, 4) if stop_price < 1.0 else round(stop_price, 2)
             
             # Check extended hours setting (only applies to LIMIT orders, not STOP or MARKET)
             extended_hours = self._get_extended_hours_enabled() if price is not None and stop_price is None else False
@@ -398,13 +397,12 @@ class AlpacaBroker(BrokerInterface):
         try:
             side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
             
-            # Round prices to 2 decimal places (Alpaca doesn't allow sub-penny pricing for stocks > $1)
             if entry_price is not None:
-                entry_price = round(entry_price, 2)
+                entry_price = round(entry_price, 4) if entry_price < 1.0 else round(entry_price, 2)
             if stop_loss_price is not None:
-                stop_loss_price = round(stop_loss_price, 2)
+                stop_loss_price = round(stop_loss_price, 4) if stop_loss_price < 1.0 else round(stop_loss_price, 2)
             if profit_target_price is not None:
-                profit_target_price = round(profit_target_price, 2)
+                profit_target_price = round(profit_target_price, 4) if profit_target_price < 1.0 else round(profit_target_price, 2)
             
             # Alpaca BRACKET orders require BOTH stop_loss AND take_profit
             # If only one is provided, fall back to simple order

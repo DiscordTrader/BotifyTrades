@@ -3161,16 +3161,46 @@ class WebullBroker:
             print(f"[SLIPPAGE] Checking price slippage for {action} {symbol} ${strike}{opt_type} {expiry_mmdd}")
             print(f"[SLIPPAGE] Current threshold: {_current_slippage_settings['threshold_percent']}% (from {source_label})")
             
-            # Get current option quote
+            def _build_option_hub_func():
+                try:
+                    _yr = expiry_year[2:] if expiry_year and len(expiry_year) >= 4 else ''
+                    _exp = expiry_mmdd.replace('/', '') if expiry_mmdd else ''
+                    _occ = f"{symbol:<6}{_yr}{_exp}{(opt_type or '').upper()}{int((strike or 0) * 1000):08d}"
+                    def _hub_price():
+                        if self._data_hub:
+                            p = self._data_hub.get_quote_price(_occ)
+                            if p:
+                                return p
+                        try:
+                            from src.services.schwab_data_hub import get_schwab_data_hub
+                            _sh = get_schwab_data_hub()
+                            if _sh:
+                                p = _sh.get_quote_price(_occ)
+                                if p:
+                                    return p
+                        except Exception:
+                            pass
+                        return None
+                    return _hub_price
+                except Exception:
+                    return None
+
+            _hub_fn = _build_option_hub_func()
+            
             def get_quote():
                 return self._get_current_option_quote(self._client, symbol, strike, opt_type, expiry_mmdd, expiry_year)
             
-            current_price = await asyncio.to_thread(get_quote)
+            current_price = None
+            if _hub_fn:
+                current_price = _hub_fn()
+                if current_price and current_price > 0:
+                    print(f"[SLIPPAGE] ⚡ Hub hit: ${current_price:.4f} (0ms, no REST)")
             
-            # FIX: For conditional option orders where QOT failed, the limit_price is the
-            # STOCK trigger price (e.g. $602.10), not the option premium (e.g. $1.38).
-            # Detect this by checking if this is a conditional market order with no QOT price,
-            # and use the current option quote as the reference price instead.
+            if not current_price or current_price <= 0:
+                current_price = await asyncio.to_thread(get_quote)
+                if current_price:
+                    print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
+            
             _slippage_reference = limit_price
             _is_conditional = kwargs.get('_conditional_order_id') or kwargs.get('conditional_order_id')
             _is_conditional_stock_price = (
@@ -3185,39 +3215,10 @@ class WebullBroker:
                 print(f"[SLIPPAGE] Using option quote ${current_price:.2f} as slippage reference instead")
                 _slippage_reference = current_price
             
-            # Use dynamic threshold from database
             decision, slippage_pct = self._evaluate_slippage(_slippage_reference, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
             
             _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
             _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
-
-            # Build streaming hub lookup for the option premium (Webull MQTT / Schwab WebSocket)
-            # The OCC key format: "{symbol:<6}{YYMMDD}{C|P}{strike*1000:08d}"
-            def _build_option_hub_func():
-                try:
-                    _yr = expiry_year[2:] if expiry_year and len(expiry_year) >= 4 else ''
-                    _exp = expiry_mmdd.replace('/', '') if expiry_mmdd else ''
-                    _occ = f"{symbol:<6}{_yr}{_exp}{(opt_type or '').upper()}{int((strike or 0) * 1000):08d}"
-                    def _hub_price():
-                        # Try Webull hub first (MQTT topic 105 subscriptions)
-                        if self._data_hub:
-                            p = self._data_hub.get_quote_price(_occ)
-                            if p:
-                                return p
-                        # Try Schwab hub (LEVELONE_OPTIONS WebSocket)
-                        try:
-                            from src.services.schwab_data_hub import get_schwab_data_hub
-                            _sh = get_schwab_data_hub()
-                            if _sh:
-                                p = _sh.get_quote_price(_occ)
-                                if p:
-                                    return p
-                        except Exception:
-                            pass
-                        return None
-                    return _hub_price
-                except Exception:
-                    return None
 
             if decision == SlippageDecision.ABORT:
                 if _is_conditional_order:
@@ -3250,7 +3251,7 @@ class WebullBroker:
                     final_decision, final_price = await self._wait_for_better_price(
                         _wait_signal, get_quote,
                         wait_minutes=_eff_wait_minutes,
-                        hub_price_func=_build_option_hub_func(),
+                        hub_price_func=_hub_fn,
                         keep_watching=True
                     )
                     if final_decision == SlippageDecision.ABORT:
@@ -3285,7 +3286,7 @@ class WebullBroker:
                 final_decision, final_price = await self._wait_for_better_price(
                     signal, get_quote,
                     wait_minutes=_eff_wait_minutes,
-                    hub_price_func=_build_option_hub_func()
+                    hub_price_func=_hub_fn
                 )
                 
                 if final_decision == SlippageDecision.ABORT:
@@ -3907,26 +3908,45 @@ class WebullBroker:
             print(f"[SLIPPAGE] Checking price slippage for {action} {symbol}")
             print(f"[SLIPPAGE] Current threshold: {_current_slippage_settings['threshold_percent']}% (from {source_label})")
             
-            # Get current stock quote
-            def get_quote():
-                return self._get_current_stock_quote(self._client, symbol)
-            
-            current_price = await asyncio.to_thread(get_quote)
-            # Use dynamic threshold from database
-            decision, slippage_pct = self._evaluate_slippage(limit_price, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
-            
-            _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
-            _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
-
-            # Build streaming hub lookup for the stock price (Webull MQTT equity stream)
             def _build_stock_hub_func():
                 _hub = self._data_hub
                 _sym = symbol
                 if _hub:
                     def _hub_price():
-                        return _hub.get_quote_price(_sym)
+                        p = _hub.get_quote_price(_sym)
+                        if p:
+                            return p
+                        try:
+                            from src.services.schwab_data_hub import get_schwab_data_hub
+                            _sh = get_schwab_data_hub()
+                            if _sh:
+                                return _sh.get_quote_price(_sym)
+                        except Exception:
+                            pass
+                        return None
                     return _hub_price
                 return None
+
+            _stock_hub_fn = _build_stock_hub_func()
+            
+            def get_quote():
+                return self._get_current_stock_quote(self._client, symbol)
+            
+            current_price = None
+            if _stock_hub_fn:
+                current_price = _stock_hub_fn()
+                if current_price and current_price > 0:
+                    print(f"[SLIPPAGE] ⚡ Hub hit: ${current_price:.4f} (0ms, no REST)")
+            
+            if not current_price or current_price <= 0:
+                current_price = await asyncio.to_thread(get_quote)
+                if current_price:
+                    print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
+            
+            decision, slippage_pct = self._evaluate_slippage(limit_price, current_price, threshold_override=_current_slippage_settings['threshold_percent'])
+            
+            _eff_wait_minutes = _current_slippage_settings.get('wait_minutes', SLIPPAGE_WAIT_MINUTES)
+            _is_conditional_order = bool(kwargs.get('_conditional_order_id'))
 
             if decision == SlippageDecision.ABORT:
                 if _is_conditional_order:
@@ -3952,7 +3972,7 @@ class WebullBroker:
                     final_decision, final_price = await self._wait_for_better_price(
                         _wait_signal, get_quote,
                         wait_minutes=_eff_wait_minutes,
-                        hub_price_func=_build_stock_hub_func(),
+                        hub_price_func=_stock_hub_fn,
                         keep_watching=True
                     )
                     if final_decision == SlippageDecision.ABORT:
@@ -3984,7 +4004,7 @@ class WebullBroker:
                 final_decision, final_price = await self._wait_for_better_price(
                     signal, get_quote,
                     wait_minutes=_eff_wait_minutes,
-                    hub_price_func=_build_stock_hub_func()
+                    hub_price_func=_stock_hub_fn
                 )
                 
                 if final_decision == SlippageDecision.ABORT:
