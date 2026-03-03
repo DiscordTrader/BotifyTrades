@@ -12480,16 +12480,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except:
                         pass
                 
-                # Entry Order Mode: Force market orders if configured
-                entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
-                if entry_order_mode == 'market':
-                    action_upper = opt.get('action', 'BTO').upper()
-                    if action_upper == 'BTO':
+                # Order Mode: Apply per-channel market/limit setting for entries and exits
+                action_upper = opt.get('action', 'BTO').upper()
+                if action_upper == 'BTO':
+                    entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
+                    if entry_order_mode == 'market':
                         opt['_use_market_order'] = True
-                        print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
-                    elif action_upper == 'STC':
+                        print(f"[ORDER MODE] ✓ Market order for BTO (channel entry_order_mode=market)")
+                elif action_upper == 'STC':
+                    trim_order_mode = channel_info.get('trim_order_mode', 'limit') if channel_info else 'limit'
+                    if trim_order_mode == 'market':
                         opt['_use_market_order'] = True
-                        print(f"[ENTRY MODE] ✓ Market order enabled for STC exit (channel setting)")
+                        print(f"[ORDER MODE] ✓ Market order for STC (channel trim_order_mode=market)")
                 
                 # NDX→QQQ Conversion: Convert NDX options to QQQ with target delta
                 ndx_to_qqq_enabled = channel_info.get('ndx_to_qqq_enabled', 0) if channel_info else 0
@@ -13147,16 +13149,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except:
                         pass
                 
-                # Entry Order Mode: Force market orders if configured
-                entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
-                if entry_order_mode == 'market':
-                    stk_action = stk.get('action', 'BTO').upper()
-                    if stk_action == 'BTO':
+                # Order Mode: Apply per-channel market/limit setting for entries and exits
+                stk_action = stk.get('action', 'BTO').upper()
+                if stk_action == 'BTO':
+                    entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
+                    if entry_order_mode == 'market':
                         stk['_use_market_order'] = True
-                        print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
-                    elif stk_action == 'STC':
+                        print(f"[ORDER MODE] ✓ Market order for stock BTO (channel entry_order_mode=market)")
+                elif stk_action == 'STC':
+                    trim_order_mode = channel_info.get('trim_order_mode', 'limit') if channel_info else 'limit'
+                    if trim_order_mode == 'market':
                         stk['_use_market_order'] = True
-                        print(f"[ENTRY MODE] ✓ Market order enabled for STC exit (channel setting)")
+                        print(f"[ORDER MODE] ✓ Market order for stock STC (channel trim_order_mode=market)")
                 
                 # Add channel_record_id and channel_id for database saving after execution
                 if channel_info:
@@ -13871,18 +13875,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except Exception as e:
                         _original_print(f"[{broker_name}] Position check for STC failed (proceeding): {e}")
                 
-                # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
+                # MARKET ORDER: Check _use_market_order flag for market mode entries/exits
                 use_market_order = signal.get('_use_market_order', False)
-                # Webull requires a limit price for options - pass actual price, not None
-                # Other brokers (Alpaca, Schwab, etc.) support true market orders
                 is_webull_broker = 'WEBULL' in broker_upper
                 if use_market_order:
-                    if is_webull_broker:
-                        order_price = signal.get('price')
-                        _original_print(f"[{broker_name}] ⚡ MARKET ORDER for option {signal.get('action', 'STC')} - using limit price ${order_price} (Webull requires limit)")
-                    else:
-                        order_price = None
-                        _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for option {signal.get('action', 'STC')} (risk: {signal.get('risk_trigger', 'N/A')})")
+                    order_price = None
+                    _original_print(f"[{broker_name}] ⚡ MARKET ORDER for option {signal.get('action', 'BTO')} — price=None triggers real-time quote + aggressive limit")
                 else:
                     # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
                     # The limit_price acts as a ceiling - order fills at market or better, up to limit
