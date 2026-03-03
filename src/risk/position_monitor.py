@@ -468,7 +468,8 @@ class RiskDBAdapter:
                                 print(f"[RISK] ✓ Bracket PT override: ${trade_pt_price:.2f} ({pt_override}% from entry ${trade_entry_price:.2f})")
                         if sl_override > 0 or pt_override > 0:
                             channel_name = row[7] or 'Unknown'
-                            print(f"[RISK] ✓ Using signal bracket SL/PT for '{channel_name}' (global risk disabled, but signal has explicit levels)")
+                            channel_exit_mode = row[18] if len(row) > 18 and row[18] else 'hybrid'
+                            print(f"[RISK] ✓ Using signal bracket SL/PT for '{channel_name}' (global risk disabled, but signal has explicit levels, exit_mode={channel_exit_mode})")
                             return ChannelRiskSettings(
                                 channel_id=str(row[0]),
                                 channel_name=channel_name,
@@ -476,7 +477,7 @@ class RiskDBAdapter:
                                 stop_loss_pct=sl_override if sl_override > 0 else 0,
                                 trailing_stop_pct=row[5] or 0,
                                 trailing_activation_pct=row[6] or 15.0,
-                                exit_strategy_mode='hybrid',
+                                exit_strategy_mode=channel_exit_mode,
                             )
                     return None
                 else:

@@ -1707,6 +1707,8 @@ async function updateExitStrategy(channelId, mode) {
                 'risk': 'Risk (Auto Targets/Stops)',
                 'hybrid': 'Hybrid (Both)'
             };
+            const ch = allChannels.find(c => c.id === channelId);
+            if (ch) ch.exit_strategy_mode = mode;
             showNotification(`Exit strategy set to ${modeLabels[mode] || mode}`);
         } else {
             showNotification('Error updating exit strategy', 'error');
