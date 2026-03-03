@@ -325,13 +325,25 @@ class UnfilledOrderChaser:
                 order = self._tracked_orders[order_id]
                 order.status = OrderChaseStatus.FILLED
                 order.final_fill_price = fill_price
+                position_key = order.position_key
+                quantity = order.quantity
                 del self._tracked_orders[order_id]
                 print(f"[ORDER_CHASER] ✓ Order filled: {order_id} @ ${fill_price:.2f}" if fill_price else f"[ORDER_CHASER] ✓ Order filled: {order_id}")
                 try:
                     from gui_app.database import record_order_event
-                    record_order_event('ORDER_FILLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=fill_price or order.original_price, order_id=order_id, status='FILLED', reason=f"Order confirmed filled", severity='info', source='order_chaser', position_key=order.position_key)
+                    record_order_event('ORDER_FILLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=quantity, price=fill_price or order.original_price, order_id=order_id, status='FILLED', reason=f"Order confirmed filled", severity='info', source='order_chaser', position_key=position_key)
                 except Exception:
                     pass
+                if position_key and order.action == 'STC':
+                    try:
+                        from src.risk.position_cache import get_position_cache
+                        cache = get_position_cache()
+                        if cache:
+                            confirmed = cache.confirm_order_fill(position_key, order_id, int(quantity or 1))
+                            if confirmed:
+                                print(f"[ORDER_CHASER] ✓ Risk tier confirmed via chaser fill for {position_key}")
+                    except Exception as e:
+                        print(f"[ORDER_CHASER] Warning: Could not confirm risk tier: {e}")
     
     async def untrack_order(self, order_id: str):
         """Stop tracking an order (exit or entry)"""

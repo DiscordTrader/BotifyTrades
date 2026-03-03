@@ -548,6 +548,43 @@ class WebullBroker(BrokerInterface):
             traceback.print_exc()
             return []
     
+    async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """Get order status by checking pending orders first, then filled history.
+        
+        Args:
+            order_id: The Webull order ID to look up
+            
+        Returns:
+            Dict with 'status' (FILLED/PENDING/CANCELLED/etc) and 'filled_qty',
+            or None if order not found in any source
+        """
+        try:
+            pending = await self.get_pending_orders()
+            for order in (pending or []):
+                if str(order.get('order_id', '')) == str(order_id):
+                    raw_status = str(order.get('status', '')).upper()
+                    if raw_status == 'FILLED':
+                        return {'status': 'FILLED', 'filled_qty': int(order.get('filled_quantity', 0) or order.get('quantity', 0))}
+                    elif raw_status in ('CANCELLED', 'CANCELED'):
+                        return {'status': 'CANCELLED', 'filled_qty': 0}
+                    elif raw_status == 'REJECTED':
+                        return {'status': 'REJECTED', 'filled_qty': 0}
+                    else:
+                        filled = int(order.get('filled_quantity', 0))
+                        if filled > 0:
+                            return {'status': 'PARTIALLY_FILLED', 'filled_qty': filled}
+                        return {'status': 'PENDING', 'filled_qty': 0}
+
+            filled_orders = await self.get_order_history(count=20)
+            for order in (filled_orders or []):
+                if str(order.get('order_id', '')) == str(order_id):
+                    return {'status': 'FILLED', 'filled_qty': int(order.get('quantity', 0))}
+
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting order status for {order_id}: {e}")
+            return None
+
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """Cancel a pending order by order ID
         

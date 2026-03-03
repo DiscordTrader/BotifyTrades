@@ -2068,22 +2068,35 @@ class BrokerSyncService:
     async def _get_order_status(self, broker: str, order_id: str) -> Optional[Dict]:
         """Get order status from broker API"""
         try:
-            if broker == 'Webull':
+            broker_instance = None
+            if broker in ('Webull', 'Webull_Paper', 'WEBULL', 'WEBULL_PAPER'):
                 wb = getattr(self.broker_manager, 'webull_broker', None)
-                if wb and hasattr(wb, 'get_order_status'):
-                    return await wb.get_order_status(order_id)
-            elif 'Alpaca' in broker:
-                alpaca = getattr(self.broker_manager, 'alpaca_paper_broker', None)
-                if alpaca and hasattr(alpaca, 'get_order'):
-                    order = alpaca.get_order(order_id)
+                wb_paper = getattr(self.broker_manager, 'webull_paper_broker', None)
+                broker_instance = wb or wb_paper
+            elif 'Alpaca' in broker or 'ALPACA' in broker:
+                broker_instance = getattr(self.broker_manager, 'alpaca_paper_broker', None) or \
+                                  getattr(self.broker_manager, 'alpaca_broker', None)
+                if broker_instance and hasattr(broker_instance, 'get_order'):
+                    order = broker_instance.get_order(order_id)
                     if order:
                         status_str = str(order.status).replace('OrderStatus.', '').upper()
                         return {
                             'status': status_str,
                             'filled_qty': int(float(order.filled_qty or 0))
                         }
+                    return None
+            elif 'Schwab' in broker or 'SCHWAB' in broker:
+                broker_instance = getattr(self.broker_manager, 'schwab_broker', None)
+            elif 'Robinhood' in broker or 'ROBINHOOD' in broker:
+                broker_instance = getattr(self.broker_manager, 'robinhood_broker', None)
+            elif 'Tastytrade' in broker or 'TASTYTRADE' in broker:
+                broker_instance = getattr(self.broker_manager, 'tastytrade_broker', None)
+            elif 'IBKR' in broker:
+                broker_instance = getattr(self.broker_manager, 'ibkr_broker', None)
+
+            if broker_instance and hasattr(broker_instance, 'get_order_status'):
+                return await broker_instance.get_order_status(order_id)
         except Exception as e:
-            # Order may not exist or API error - return None
             pass
         return None
     
