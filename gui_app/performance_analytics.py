@@ -887,6 +887,8 @@ def get_edge_analysis(user_id, start_date=None, end_date=None, broker=None, peri
             exit_r = 'PROFIT_TARGET'
         elif 'STOP' in raw_exit or 'SL' == raw_exit:
             exit_r = 'STOP_LOSS'
+        elif 'EARLY TRAIL' in raw_exit or 'EARLY_TRAIL' in raw_exit:
+            exit_r = 'EARLY_TRAILING'
         elif 'TRAIL' in raw_exit:
             exit_r = 'TRAILING_STOP'
         elif 'MANUAL' in raw_exit:
@@ -895,6 +897,8 @@ def get_edge_analysis(user_id, start_date=None, end_date=None, broker=None, peri
             exit_r = 'SIGNAL_EXIT'
         elif 'CANCEL' in raw_exit:
             exit_r = 'CANCELLED'
+        elif 'EMA' in raw_exit:
+            exit_r = 'EMA_EXIT'
         elif 'GIVEBACK' in raw_exit:
             exit_r = 'GIVEBACK_GUARD'
         elif 'BREAKEVEN' in raw_exit:

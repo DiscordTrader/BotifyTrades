@@ -155,15 +155,18 @@
             <div class="controls-row">
                 <select id="brokerFilter" class="broker-select">
                     <option value="">All Brokers</option>
-                    <option value="Webull">Webull</option>
-                    <option value="WEBULL_PAPER">WEBULL_PAPER</option>
-                    <option value="ALPACA_PAPER">ALPACA_PAPER</option>
-                    <option value="ROBINHOOD">ROBINHOOD</option>
-                    <option value="SCHWAB">SCHWAB</option>
-                    <option value="TASTYTRADE_LIVE">TASTYTRADE_LIVE</option>
-                    <option value="TASTYTRADE_PAPER">TASTYTRADE_PAPER</option>
-                    <option value="IBKR">IBKR</option>
-                    <option value="QUESTRADE">QUESTRADE</option>
+                    <option value="WEBULL">Webull Live</option>
+                    <option value="WEBULL_PAPER">Webull Paper</option>
+                    <option value="ALPACA">Alpaca Live</option>
+                    <option value="ALPACA_PAPER">Alpaca Paper</option>
+                    <option value="SCHWAB">Schwab</option>
+                    <option value="ROBINHOOD">Robinhood</option>
+                    <option value="TASTYTRADE_LIVE">Tastytrade Live</option>
+                    <option value="TASTYTRADE_PAPER">Tastytrade Paper</option>
+                    <option value="IBKR_LIVE">IBKR Live</option>
+                    <option value="IBKR_PAPER">IBKR Paper</option>
+                    <option value="QUESTRADE">Questrade</option>
+                    <option value="UPSTOX">Upstox</option>
                 </select>
                 <div class="period-tabs">
                     <button class="period-tab" data-period="today">1D</button>
@@ -370,9 +373,12 @@ const CC = {
 };
 
 const brokerColors = {
-    'Webull':'#e53935','ALPACA_PAPER':'#43a047','ROBINHOOD':'#76ff03',
-    'SCHWAB':'#29b6f6','TASTYTRADE_LIVE':'#ff7043','TASTYTRADE_PAPER':'#ffab40',
-    'IBKR':'#ab47bc','QUESTRADE':'#26c6da'
+    'WEBULL':'#e53935','Webull':'#e53935','WEBULL_PAPER':'#ef5350',
+    'ALPACA':'#43a047','ALPACA_PAPER':'#66bb6a','ALPACA_LIVE':'#43a047',
+    'ROBINHOOD':'#76ff03','SCHWAB':'#29b6f6',
+    'TASTYTRADE_LIVE':'#ff7043','TASTYTRADE_PAPER':'#ffab40',
+    'IBKR':'#ab47bc','IBKR_LIVE':'#ab47bc','IBKR_PAPER':'#ce93d8',
+    'QUESTRADE':'#26c6da','UPSTOX':'#ff8f00','ZERODHA':'#2962ff','DHANQ':'#00bfa5'
 };
 
 function fmt$(v) { let n = parseFloat(v)||0; return (n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
