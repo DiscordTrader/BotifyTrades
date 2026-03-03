@@ -1947,6 +1947,23 @@ class WebullBroker:
         """
         return self._tokens_valid and self._logged_in
     
+    async def cancel_order(self, order_id: str) -> dict:
+        """Cancel a pending order via Webull SDK"""
+        if not self._client:
+            return {'success': False, 'error': 'Not connected'}
+        try:
+            result = await self.loop.run_in_executor(None, self._client.cancel_order, str(order_id))
+            if result and isinstance(result, dict) and result.get('success', True):
+                print(f"[{self.name}] ✓ Order {order_id} cancelled")
+                return {'success': True, 'result': result}
+            else:
+                err_msg = result.get('msg', str(result)) if isinstance(result, dict) else str(result)
+                print(f"[{self.name}] ⚠️ Cancel order {order_id} response: {err_msg}")
+                return {'success': True, 'result': result}
+        except Exception as e:
+            print(f"[{self.name}] ❌ Cancel order {order_id} failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
     def cache_option_id(self, symbol: str, strike: float, expiry: str, option_type: str, option_id: str):
         """Cache an option_id for faster exit order lookups"""
         import time as _time
@@ -2768,8 +2785,14 @@ class WebullBroker:
         if is_index_option:
             print(f"[WEBULL] 🔍 Index option detected: {symbol}")
         
-        tId = wb.get_ticker(symbol)
-        print(f"[WEBULL] get_ticker('{symbol}') returned: {tId}")
+        tId = self._ticker_id_cache.get(symbol.upper())
+        if tId:
+            print(f"[WEBULL] get_ticker('{symbol}') cached: {tId}")
+        else:
+            tId = wb.get_ticker(symbol)
+            print(f"[WEBULL] get_ticker('{symbol}') returned: {tId}")
+            if tId:
+                self._ticker_id_cache[symbol.upper()] = tId
         if not tId:
             raise RuntimeError(f"Symbol not found: {symbol}")
 
@@ -2822,7 +2845,18 @@ class WebullBroker:
         Returns None if no quote available (illiquid option)
         """
         try:
-            option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
+            _yr = expiry_year or datetime.now().strftime('%Y')
+            if '/' in expiry_mmdd:
+                _ps = expiry_mmdd.split('/')
+                _full_exp = f"{_yr}-{_ps[0].zfill(2)}-{_ps[1].zfill(2)}"
+            else:
+                _full_exp = expiry_mmdd
+            cached_id = self.get_cached_option_id(symbol, float(strike), _full_exp, opt_type)
+            if cached_id:
+                option_id = int(cached_id)
+                tId = self._ticker_id_cache.get(symbol.upper(), 0)
+            else:
+                option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
             if option_id == 0:
                 print(f"[SLIPPAGE] ⚠️  Could not find option ID for {symbol} ${strike}{opt_type} {expiry_mmdd}")
                 return None
@@ -3279,19 +3313,32 @@ class WebullBroker:
             wb = self._client
             if not wb:
                 raise RuntimeError("Webull client not initialized")
-            print(f"[WEBULL] 🔍 Looking up option_id for {symbol} ${strike}{opt_type} {expiry_mmdd}")
-            sys.stdout.flush()
-            option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
-            print(f"[WEBULL] ✓ Got option_id={option_id}, ticker_id={tId} for {symbol}")
-            sys.stdout.flush()
-            if option_id:
-                _yr = expiry_year or datetime.now().strftime('%Y')
-                if '/' in expiry_mmdd:
-                    _parts = expiry_mmdd.split('/')
-                    full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
-                else:
-                    full_expiry = expiry_mmdd
-                self.cache_option_id(symbol, float(strike), full_expiry, opt_type, str(option_id))
+            
+            _yr = expiry_year or datetime.now().strftime('%Y')
+            if '/' in expiry_mmdd:
+                _parts = expiry_mmdd.split('/')
+                full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
+            else:
+                full_expiry = expiry_mmdd
+            
+            cached_id = self.get_cached_option_id(symbol, float(strike), full_expiry, opt_type)
+            if cached_id:
+                option_id = int(cached_id)
+                tId = self._ticker_id_cache.get(symbol.upper())
+                if not tId:
+                    tId = wb.get_ticker(symbol)
+                    if tId:
+                        self._ticker_id_cache[symbol.upper()] = tId
+                print(f"[WEBULL] ✓ Cache hit option_id={option_id}, ticker_id={tId} for {symbol} (skipped REST)")
+                sys.stdout.flush()
+            else:
+                print(f"[WEBULL] 🔍 Looking up option_id for {symbol} ${strike}{opt_type} {expiry_mmdd}")
+                sys.stdout.flush()
+                option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
+                print(f"[WEBULL] ✓ Got option_id={option_id}, ticker_id={tId} for {symbol}")
+                sys.stdout.flush()
+                if option_id:
+                    self.cache_option_id(symbol, float(strike), full_expiry, opt_type, str(option_id))
             
             adjusted_qty = qty
             
