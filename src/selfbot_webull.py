@@ -14354,7 +14354,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     channel_id=str(channel_id) if channel_id else '',
                                     strike=float(signal.get('strike', 0)) if signal.get('strike') else None,
                                     expiry=signal.get('expiry'),
-                                    call_put=signal.get('call_put') or signal.get('direction'),
+                                    call_put=signal.get('opt_type') or signal.get('call_put') or signal.get('direction'),
                                     entry_range_high=entry_range_high,
                                     slippage_max_pct=slippage_max_pct,
                                     signal_price=float(signal_price) if signal_price else None,

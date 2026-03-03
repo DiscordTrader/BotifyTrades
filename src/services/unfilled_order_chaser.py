@@ -552,7 +552,10 @@ class UnfilledOrderChaser:
     async def _get_mid_price(self, broker, order: TrackedExitOrder) -> Optional[float]:
         """Get mid-price between bid and ask for the asset"""
         try:
-            if order.asset_type == 'option' and order.strike and order.expiry and order.call_put:
+            if order.asset_type == 'option':
+                if not (order.strike and order.expiry and order.call_put):
+                    print(f"[ORDER_CHASER] ⚠️ Exit option order missing fields: strike={order.strike}, expiry={order.expiry}, call_put={order.call_put} — cannot get option mid-price")
+                    return None
                 if hasattr(broker, 'get_option_quote'):
                     method = broker.get_option_quote
                     result = method(
@@ -573,6 +576,7 @@ class UnfilledOrderChaser:
                         if bid and ask:
                             return round((bid + ask) / 2, 2)
                         return quote.get('last')
+                return None
             else:
                 if hasattr(broker, 'get_quote_with_bid_ask'):
                     method = broker.get_quote_with_bid_ask
@@ -607,6 +611,9 @@ class UnfilledOrderChaser:
         """Place a replacement order at the specified price"""
         try:
             if order.asset_type == 'option':
+                if not order.call_put:
+                    print(f"[ORDER_CHASER] ❌ Cannot place exit option replacement — call_put is None for {order.symbol}")
+                    return None
                 result = await broker.place_option_order(
                     symbol=order.symbol,
                     quantity=int(order.quantity),
@@ -783,7 +790,10 @@ class UnfilledOrderChaser:
     async def _get_entry_chase_price(self, broker, order: TrackedEntryOrder) -> Optional[float]:
         """Get chase price for entry orders - use mid-price or ask for better fills"""
         try:
-            if order.asset_type == 'option' and order.strike and order.expiry and order.call_put:
+            if order.asset_type == 'option':
+                if not (order.strike and order.expiry and order.call_put):
+                    print(f"[ORDER_CHASER] ⚠️ Option order missing fields: strike={order.strike}, expiry={order.expiry}, call_put={order.call_put} — cannot get option chase price")
+                    return None
                 if hasattr(broker, 'get_option_quote'):
                     method = broker.get_option_quote
                     result = method(
@@ -806,6 +816,7 @@ class UnfilledOrderChaser:
                         if ask:
                             return ask
                         return quote.get('last')
+                return None
             else:
                 if hasattr(broker, 'get_quote_with_bid_ask'):
                     method = broker.get_quote_with_bid_ask
@@ -848,6 +859,9 @@ class UnfilledOrderChaser:
         """Place a replacement entry order at the specified price"""
         try:
             if order.asset_type == 'option':
+                if not order.call_put:
+                    print(f"[ORDER_CHASER] ❌ Cannot place option replacement — call_put is None for {order.symbol}")
+                    return None
                 result = await broker.place_option_order(
                     symbol=order.symbol,
                     quantity=int(order.quantity),
