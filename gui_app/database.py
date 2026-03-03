@@ -1966,7 +1966,7 @@ def init_db():
             pnl REAL NOT NULL,
             pnl_percent REAL NOT NULL,
             holding_days REAL,
-            exit_source TEXT NOT NULL CHECK(exit_source IN ('SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK')),
+            exit_source TEXT NOT NULL CHECK(exit_source IN ('SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK', 'EMA', 'GIVEBACK', 'EARLY_TRAILING')),
             closure_hash TEXT UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (execution_lot_id) REFERENCES execution_lots(id),
@@ -1977,6 +1977,32 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_filled ON execution_closures(filled_at)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_channel ON execution_closures(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_source ON execution_closures(exit_source)')
+    
+    try:
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='execution_closures'")
+        create_sql_row = cursor.fetchone()
+        if create_sql_row and create_sql_row[0] and "'EMA'" not in create_sql_row[0]:
+            print("[DATABASE] Migrating execution_closures CHECK constraint to support EMA/GIVEBACK/EARLY_TRAILING...")
+            cursor.execute("PRAGMA table_info(execution_closures)")
+            old_cols = [row[1] for row in cursor.fetchall()]
+            col_list = ', '.join(old_cols)
+            old_sql = create_sql_row[0]
+            new_sql = old_sql.replace(
+                "'SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK'",
+                "'SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK', 'EMA', 'GIVEBACK', 'EARLY_TRAILING'"
+            ).replace('execution_closures', 'execution_closures_new', 1)
+            cursor.execute(new_sql)
+            cursor.execute(f'INSERT INTO execution_closures_new ({col_list}) SELECT {col_list} FROM execution_closures')
+            cursor.execute('DROP TABLE execution_closures')
+            cursor.execute('ALTER TABLE execution_closures_new RENAME TO execution_closures')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_lot ON execution_closures(execution_lot_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_filled ON execution_closures(filled_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_channel ON execution_closures(channel_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_source ON execution_closures(exit_source)')
+            conn.commit()
+            print("[DATABASE] ✓ execution_closures CHECK constraint migrated successfully")
+    except Exception as migrate_err:
+        print(f"[DATABASE] ⚠️ CHECK constraint migration check: {migrate_err}")
     
     # Pending Order Metadata - Bridge between order placement and BrokerSyncService
     # Stores signal context when orders are submitted so fills can be linked back
@@ -5273,7 +5299,8 @@ def map_risk_trigger_to_exit_source(risk_trigger: str, tier: int = None) -> str:
     """
     Map risk_trigger from trades table to exit_source enum for execution_closures.
     
-    Valid exit_source values: 'SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK'
+    Valid exit_source values: 'SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 
+    'TRAILING', 'MANUAL', 'RISK', 'EMA', 'GIVEBACK', 'EARLY_TRAILING'
     
     Args:
         risk_trigger: Value from trades.risk_trigger (trailing_stop, profit_target, stop_loss, etc.)
@@ -5287,9 +5314,17 @@ def map_risk_trigger_to_exit_source(risk_trigger: str, tier: int = None) -> str:
     
     trigger_lower = risk_trigger.lower()
     
-    if 'trailing' in trigger_lower:
+    if trigger_lower in ('ema_exit', 'ema_no_trend', 'ema'):
+        return 'EMA'
+    elif 'giveback' in trigger_lower or trigger_lower == 'giveback_guard':
+        return 'GIVEBACK'
+    elif trigger_lower == 'early_trailing':
+        return 'EARLY_TRAILING'
+    elif 'trailing' in trigger_lower:
         return 'TRAILING'
     elif 'stop' in trigger_lower and 'loss' in trigger_lower:
+        return 'STOP_LOSS'
+    elif trigger_lower == 'stop_loss':
         return 'STOP_LOSS'
     elif 'profit' in trigger_lower or 'target' in trigger_lower or trigger_lower.startswith('pt'):
         if tier:
@@ -5307,8 +5342,6 @@ def map_risk_trigger_to_exit_source(risk_trigger: str, tier: int = None) -> str:
         return 'MANUAL'
     elif trigger_lower in ('risk', 'risk_management'):
         return 'RISK'
-    elif 'giveback' in trigger_lower or 'guard' in trigger_lower:
-        return 'TRAILING'
     
     return 'SIGNAL'
 

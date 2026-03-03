@@ -160,6 +160,10 @@
         <option value="PT4">PT4</option>
         <option value="STOP_LOSS">Stop Loss</option>
         <option value="TRAILING">Trailing</option>
+        <option value="EARLY_TRAILING">Early Trailing</option>
+        <option value="EMA">EMA</option>
+        <option value="GIVEBACK">Giveback</option>
+        <option value="RISK">Risk</option>
         <option value="MANUAL">Manual</option>
     </select>
     
@@ -1022,7 +1026,10 @@ function renderExecutionData(trades) {
                         const exitReason = exit.exit_source || 'SIGNAL';
                         const reasonColor = exitReason.includes('PT') ? '#30D158' : 
                                            (exitReason.includes('STOP') ? '#FF453A' : 
-                                           (exitReason.includes('TRAIL') ? '#FF9F0A' : '#00d4ff'));
+                                           (exitReason.includes('TRAIL') || exitReason === 'EARLY_TRAILING' ? '#FF9F0A' : 
+                                           (exitReason === 'EMA' ? '#00CED1' :
+                                           (exitReason === 'GIVEBACK' ? '#E040FB' :
+                                           (exitReason === 'RISK' ? '#FF6B6B' : '#00d4ff')))));
                         const entrySignalPrice = entryObj.signal_price != null ? entryObj.signal_price.toFixed(2) : '-';
                         const entryFillPrice = entryObj.fill_price != null ? entryObj.fill_price.toFixed(2) : '-';
                         const entrySlippage = entryObj.slippage_pct || 0;
