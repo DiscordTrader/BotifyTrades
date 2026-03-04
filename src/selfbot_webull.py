@@ -3417,25 +3417,31 @@ class WebullBroker:
                             if isinstance(item, dict) and 'key' in item and 'value' in item:
                                 account_data[item['key']] = item['value']
                     
-                    # DEBUG: Show what fields are available
-                    print(f"[DEBUG] Account fields available: {list(account_data.keys())}")
-                    
-                    # Try multiple possible field names for buying power
                     buying_power = 0.0
-                    for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower', 'accountMembers.0.buyingPower']:
+                    options_bp = 0.0
+                    bp_source = 'unknown'
+                    try:
+                        options_bp = float(account_data.get('optionBuyingPower', 0))
+                    except (ValueError, TypeError):
+                        pass
+                    for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower']:
                         if field in account_data:
                             try:
                                 buying_power = float(account_data[field])
                                 if buying_power > 0:
-                                    print(f"[DEBUG] Found buying power in field '{field}': ${buying_power:.2f}")
+                                    bp_source = field
                                     break
                             except (ValueError, TypeError):
                                 continue
+                    effective_bp = options_bp if options_bp > 0 else buying_power
+                    print(f"[DEBUG] Account fields available: {list(account_data.keys())}")
+                    print(f"[FUNDS] Options BP: ${options_bp:.2f}, Cash BP: ${buying_power:.2f} (from '{bp_source}'), Using: ${effective_bp:.2f}")
                     
                     order_cost = qty * effective_price * 100
                     
                     net_liq = float(account_data.get('netLiquidation', 0))
-                    print(f"[FUNDS] Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f} (Net liquidation: ${net_liq:.2f})")
+                    print(f"[FUNDS] Buying power: ${effective_bp:.2f}, Order cost: ${order_cost:.2f} (Net liquidation: ${net_liq:.2f})")
+                    buying_power = effective_bp
                     
                     if buying_power <= 0:
                         return {
