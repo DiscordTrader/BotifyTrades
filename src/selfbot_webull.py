@@ -13040,6 +13040,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as cb_err:
                     print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
                 
+                # Entry Confirmation: require price to go +X% above signal's watching price
+                entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
+                if entry_confirmation_pct > 0 and opt.get('action', '').upper() == 'BTO':
+                    watching_price = opt.get('trigger_price') or opt.get('price')
+                    if watching_price and float(watching_price) > 0:
+                        confirmation_trigger = round(float(watching_price) * (1 + entry_confirmation_pct / 100), 4)
+                        opt['trigger_price'] = confirmation_trigger
+                        opt['trigger_condition'] = 'above'
+                        opt['trigger_symbol'] = opt.get('trigger_symbol') or opt.get('symbol')
+                        opt['_entry_confirmation'] = True
+                        opt['_watching_price'] = float(watching_price)
+                        print(f"[ENTRY CONFIRM] ✓ Requires +{entry_confirmation_pct}% above ${watching_price} → trigger ${confirmation_trigger}")
+                
                 # Check for conditional order triggers (ABOVE/BELOW price triggers)
                 conditional_order_enabled = channel_info.get('conditional_order_enabled', 0) if channel_info else 0
                 trigger_price = opt.get('trigger_price')
@@ -13048,7 +13061,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 print(f"[DEBUG] CONDITIONAL CHECK: enabled={conditional_order_enabled}, trigger_price={trigger_price}, trigger_condition={trigger_condition}, trigger_symbol={trigger_symbol}")
                 
-                if conditional_order_enabled and trigger_price and trigger_condition:
+                if (conditional_order_enabled or opt.get('_entry_confirmation')) and trigger_price and trigger_condition:
                     print(f"[CONDITIONAL] ✓ Detected trigger: {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
                     print(f"[CONDITIONAL] Channel has conditional orders ENABLED - routing to conditional order service")
                     
@@ -13490,6 +13503,66 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             stk['profit_target_price'] = pt_price
                             stk['_pt_from_channel'] = True
                             print(f"[BRACKET AUTO] ✓ Channel PT1 {ch_pt_pct}% → ${pt_price:.2f} (entry: ${entry_price:.2f})")
+                
+                # Entry Confirmation for stocks: require price to go +X% above signal's watching price
+                stk_entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
+                if stk_entry_confirmation_pct > 0 and stk.get('action', '').upper() == 'BTO':
+                    stk_watching_price = stk.get('trigger_price') or stk.get('price')
+                    if stk_watching_price and float(stk_watching_price) > 0:
+                        stk_confirmation_trigger = round(float(stk_watching_price) * (1 + stk_entry_confirmation_pct / 100), 4)
+                        print(f"[ENTRY CONFIRM] ✓ Stock BTO requires +{stk_entry_confirmation_pct}% above ${stk_watching_price} → trigger ${stk_confirmation_trigger}")
+                        
+                        try:
+                            from src.services.conditional_orders.router import conditional_order_router
+                            
+                            if conditional_order_router.is_enabled():
+                                stk_cond_signal = {
+                                    'symbol': stk.get('symbol'),
+                                    'action': 'BTO',
+                                    'qty': stk.get('qty', 1),
+                                    'asset': 'stock',
+                                    'trigger_type': 'over',
+                                    'trigger_price': float(stk_confirmation_trigger),
+                                    'trigger_symbol': stk.get('symbol'),
+                                    'channel_record_id': stk.get('channel_record_id'),
+                                    'message_id': stk.get('message_id', ''),
+                                    'author_name': stk.get('author', ''),
+                                    'author_id': '',
+                                    'market': 'US',
+                                    'price': stk.get('price'),
+                                    'stop_loss': stk.get('stop_loss_price'),
+                                    'profit_targets': [stk.get('profit_target_price')] if stk.get('profit_target_price') else [],
+                                    '_entry_confirmation': True,
+                                    '_watching_price': float(stk_watching_price),
+                                    '_bracket_order': stk.get('_bracket_order', False),
+                                    '_calculate_qty': stk.get('_calculate_qty', False),
+                                    '_position_size_pct': stk.get('_position_size_pct'),
+                                    '_jacob_signal': stk.get('_jacob_signal', False),
+                                }
+                                
+                                enabled_brokers = stk.get('_enabled_brokers', [])
+                                broker = enabled_brokers[0] if enabled_brokers else (stk.get('_broker_override') or 'ALPACA_PAPER')
+                                
+                                order_id = conditional_order_router.create_order(
+                                    channel_id=stk.get('channel_id', str(message.channel.id)),
+                                    parsed_signal=stk_cond_signal,
+                                    broker=broker
+                                )
+                                
+                                if order_id:
+                                    print(f"[ENTRY CONFIRM] ✓ Created conditional order #{order_id} for {stk.get('symbol')} OVER ${stk_confirmation_trigger}")
+                                    print(f"[ENTRY CONFIRM]   Watching price: ${stk_watching_price} + {stk_entry_confirmation_pct}% = ${stk_confirmation_trigger}")
+                                else:
+                                    print(f"[ENTRY CONFIRM] ❌ Failed to create conditional order - falling back to immediate execution")
+                                    await self.order_queue.put(stk)
+                                    print(f"[QUEUE] ✓ Signal queued for LIVE execution (entry confirm fallback)")
+                                return
+                            else:
+                                print(f"[ENTRY CONFIRM] ⚠️ Conditional order service disabled - executing immediately")
+                        except Exception as ec_err:
+                            print(f"[ENTRY CONFIRM] ❌ Error: {ec_err} - executing immediately")
+                            import traceback
+                            traceback.print_exc()
                 
                 await self.order_queue.put(stk)
                 print(f"[QUEUE] ✓ Signal queued for LIVE execution")

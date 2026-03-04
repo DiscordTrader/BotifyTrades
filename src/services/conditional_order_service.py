@@ -677,7 +677,8 @@ class ConditionalOrderService:
                 return existing.get('id')  # Return existing order ID
         
         channel_settings = get_channel_conditional_settings(channel_id)
-        if not channel_settings.get('conditional_order_enabled', True):
+        is_entry_confirmation = parsed_signal.get('_entry_confirmation', False)
+        if not channel_settings.get('conditional_order_enabled', True) and not is_entry_confirmation:
             print(f"[CONDITIONAL] Conditional orders disabled for channel {channel_id}")
             return None
         
@@ -704,7 +705,10 @@ class ConditionalOrderService:
         trigger_price = parsed_signal.get('trigger_price', 0)
         trigger_type = parsed_signal.get('trigger_type', 'over')
         
-        if trigger_offset != 0:
+        if is_entry_confirmation:
+            adjusted_price = trigger_price
+            print(f"[CONDITIONAL] Entry confirmation order - trigger already includes +X% buffer, no additional offset applied (trigger=${trigger_price})", flush=True)
+        elif trigger_offset != 0:
             if trigger_type == 'over':
                 adjusted_price = trigger_price * (1 + trigger_offset / 100)
                 print(f"[CONDITIONAL] ✓ Applied +{trigger_offset}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)

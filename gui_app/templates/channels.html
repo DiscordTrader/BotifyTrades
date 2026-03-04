@@ -1840,6 +1840,19 @@ function buildConditionalTab(ch) {
                 </div>
             </div>
         </div>
+        <div class="settings-section green">
+            <div class="settings-section-title">📈 Entry Confirmation</div>
+            <div class="settings-row">
+                <div class="settings-field">
+                    <label>Confirmation Buffer (%)</label>
+                    <input type="number" id="modal-entry-confirmation-${ch.id}"
+                           value="${ch.entry_confirmation_pct || ''}"
+                           placeholder="0 (disabled)" min="0" max="50" step="0.1"
+                           onchange="updateEntryConfirmation(${ch.id}, this.value)">
+                    <div class="settings-helper">Only enter when price goes +X% above the signal's watching price. Works for all signal types including conditional orders and bracket orders. Set to 0 to disable.</div>
+                </div>
+            </div>
+        </div>
         <div class="settings-section amber">
             <div class="settings-section-title">🔄 Breakout Reset Guard</div>
             <div class="settings-toggle-row">
@@ -2167,6 +2180,28 @@ async function updateConditionalOrderEnabled(channelId, enabled) {
                 'Conditional Orders disabled');
         } else {
             showNotification('Error updating Conditional Order settings', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function updateEntryConfirmation(channelId, value) {
+    try {
+        const pctValue = value ? parseFloat(value) : 0;
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entry_confirmation_pct: pctValue })
+        });
+        
+        if (response.ok) {
+            updateLocalChannel(channelId, { entry_confirmation_pct: pctValue });
+            showNotification(pctValue > 0 ? 
+                `Entry Confirmation set to +${pctValue}% - trades will wait for price to confirm above watching price` : 
+                'Entry Confirmation disabled - trades execute immediately');
+        } else {
+            showNotification('Error updating Entry Confirmation', 'error');
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');

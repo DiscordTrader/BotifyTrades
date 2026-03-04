@@ -1167,6 +1167,7 @@ class SignalFormatRegistry:
             "price": price,
             "stop_loss": stop_loss,
             "is_market_order": price is None,
+            "trigger_price": price,
             "confidence": 1.0,
             "_phoenix_entry": True
         }
@@ -1199,6 +1200,7 @@ class SignalFormatRegistry:
             "stop_loss": stop_loss,
             "stop_loss_pct": stop_loss_pct,
             "is_market_order": price is None,
+            "trigger_price": price,
             "confidence": 1.0,
             "_phoenix_entry": True
         }
@@ -1282,6 +1284,7 @@ class SignalFormatRegistry:
             "expiry": None,
             "price": price,
             "is_market_order": True,
+            "trigger_price": price,
             "confidence": 1.0,
             "_phoenix_entry": True
         }

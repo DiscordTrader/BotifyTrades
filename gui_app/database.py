@@ -2649,7 +2649,7 @@ def update_channel(channel_id: int, **kwargs):
                    'trim_order_mode', 'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct', 'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
                    'ignore_signal_position_size', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
                    'conditional_order_enabled', 'conditional_auto_execute', 'conditional_order_expiry',
-                   'conditional_order_timeout_minutes', 'trigger_offset_percent', 'trigger_offset_mode', 'trigger_offset_value', 'order_timeout_minutes',
+                   'conditional_order_timeout_minutes', 'trigger_offset_percent', 'trigger_offset_mode', 'trigger_offset_value', 'order_timeout_minutes', 'entry_confirmation_pct',
                    'slippage_protection_enabled', 'slippage_max_pct', 'slippage_wait_minutes', 'limit_cap_enabled', 'limit_cap_pct', 'breakout_reset_enabled',
                    'signal_update_automation', 'signal_update_automation_override',
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
@@ -10993,6 +10993,10 @@ def migrate_channels_for_conditional_orders():
     try:
         cursor.execute("PRAGMA table_info(channels)")
         columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'entry_confirmation_pct' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN entry_confirmation_pct REAL DEFAULT 0.0')
+            print("[DATABASE] ✓ Added entry_confirmation_pct column to channels")
         
         if 'conditional_order_enabled' not in columns:
             cursor.execute('ALTER TABLE channels ADD COLUMN conditional_order_enabled INTEGER DEFAULT 1')
