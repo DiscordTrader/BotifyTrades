@@ -369,10 +369,15 @@ class SchwabStreamingClient:
                         self._subscribed_options.clear()
                         await self.subscribe_options(old_opt)
 
+                    print("[SCHWAB_STREAM] Entering receive loop", flush=True)
+                    msg_count = 0
                     while self._running:
                         try:
                             message = await asyncio.wait_for(ws.recv(), timeout=30)
                             self._decode_message(message)
+                            msg_count += 1
+                            if msg_count % 5 == 0:
+                                await asyncio.sleep(0)
                         except asyncio.TimeoutError:
                             pass
 
