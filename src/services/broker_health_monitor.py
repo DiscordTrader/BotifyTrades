@@ -74,12 +74,12 @@ BROKER_BUYING_POWER_FIELDS = {
         'fallback': 'buying_power'
     },
     'IBKR': {
-        'options': ['AvailableFunds', 'BuyingPower', 'availableFunds', 'buyingPower'],
-        'stocks': ['AvailableFunds', 'BuyingPower', 'availableFunds', 'buyingPower'],
+        'options': ['options_buying_power', 'AvailableFunds', 'BuyingPower', 'availableFunds', 'buyingPower'],
+        'stocks': ['buying_power', 'AvailableFunds', 'BuyingPower', 'availableFunds', 'buyingPower'],
         'fallback': 'AvailableFunds'
     },
     'TASTYTRADE': {
-        'options': ['option_buying_power', 'buying_power'],
+        'options': ['options_buying_power', 'option_buying_power', 'buying_power'],
         'stocks': ['buying_power', 'cash_balance'],
         'fallback': 'buying_power'
     },

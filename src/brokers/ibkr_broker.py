@@ -97,20 +97,25 @@ class IBKRBroker(BrokerInterface):
         """Get account information"""
         try:
             account_summary = self.ib.accountSummary()
-            result = {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            result = {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
             
             for item in account_summary:
                 if item.tag == 'BuyingPower':
                     result['buying_power'] = float(item.value)
+                elif item.tag == 'AvailableFunds':
+                    result['options_buying_power'] = float(item.value)
                 elif item.tag == 'TotalCashValue':
                     result['cash'] = float(item.value)
                 elif item.tag == 'NetLiquidation':
                     result['portfolio_value'] = float(item.value)
             
+            if result['options_buying_power'] <= 0:
+                result['options_buying_power'] = result['buying_power']
+            
             return result
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
-            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""

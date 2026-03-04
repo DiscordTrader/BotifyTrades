@@ -13946,32 +13946,61 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as e:
                     _original_print(f"[{broker_name}] [POSITION SIZE] Could not get account info for qty adjustment: {e}")
             
-            # Universal buying power check for ALL BTO orders (applies to all brokers)
-            # This runs if position_size_pct didn't already handle it
             if signal['action'] == 'BTO' and not position_size_pct:
                 try:
                     account_info = None
-                    if hasattr(broker_instance, 'get_account_info'):
-                        account_info = await broker_instance.get_account_info()
-                    elif hasattr(broker_instance, 'wb') and broker_instance.wb:
-                        import asyncio
-                        raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
-                        if raw_account:
-                            account_info = {
-                                'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
-                                'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
-                            }
-                    elif hasattr(broker_instance, 'get_account'):
-                        import asyncio
-                        raw_account = await asyncio.to_thread(broker_instance.get_account)
-                        if raw_account:
-                            account_info = {
-                                'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
-                                'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
-                            }
+                    sod_used = False
+                    sizing_mode = signal.get('_sizing_mode', 'live')
+                    
+                    if sizing_mode == 'start_of_day':
+                        try:
+                            from src.services.sod_balance_cache import get_sod_cache
+                            sod = get_sod_cache()
+                            sod_snapshot = sod.get_snapshot(broker_name)
+                            if sod_snapshot:
+                                account_info = {
+                                    'buying_power': sod_snapshot['buying_power'],
+                                    'options_buying_power': sod_snapshot['options_buying_power']
+                                }
+                                sod_used = True
+                                _original_print(f"[{broker_name}] [FUNDS] Using START-OF-DAY balance (captured {sod_snapshot['captured_at']})")
+                            else:
+                                _original_print(f"[{broker_name}] [FUNDS] ⚠️ SOD snapshot not available — falling back to live balance")
+                        except Exception as sod_err:
+                            _original_print(f"[{broker_name}] [FUNDS] ⚠️ SOD cache error: {sod_err} — falling back to live balance")
+                    
+                    if not sod_used:
+                        if hasattr(broker_instance, 'get_account_info'):
+                            account_info = await broker_instance.get_account_info()
+                        elif hasattr(broker_instance, 'wb') and broker_instance.wb:
+                            import asyncio
+                            raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
+                            if raw_account:
+                                account_info = {
+                                    'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
+                                    'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                                }
+                        elif hasattr(broker_instance, 'get_account'):
+                            import asyncio
+                            raw_account = await asyncio.to_thread(broker_instance.get_account)
+                            if raw_account:
+                                account_info = {
+                                    'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
+                                    'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                                }
                     
                     if account_info:
-                        buying_power = account_info.get('options_buying_power') or account_info.get('buying_power', 0)
+                        is_option = signal['asset'] == 'option'
+                        stock_bp = float(account_info.get('buying_power', 0))
+                        options_bp = float(account_info.get('options_buying_power', 0))
+                        if is_option:
+                            buying_power = options_bp if options_bp > 0 else stock_bp
+                        else:
+                            buying_power = stock_bp if stock_bp > 0 else options_bp
+                        bp_label = f"Options BP" if is_option else f"Stock BP"
+                        if sod_used:
+                            bp_label += " (SOD)"
+                        _original_print(f"[{broker_name}] [FUNDS] {bp_label}: ${buying_power:.2f} (Stock BP: ${stock_bp:.2f}, Options BP: ${options_bp:.2f})")
                         price = signal.get('price') or 0
                         qty = signal['qty']
                         
