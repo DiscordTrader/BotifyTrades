@@ -73,6 +73,16 @@ The web control panel is built with Flask, providing a responsive and interactiv
 - **Fix**: Replaced `asyncio.wait_for(lock.acquire(), timeout=0.1)` with `lock.acquire(blocking=False)` — instant non-blocking acquire compatible with `threading.Lock`
 - **Files**: `src/services/signal_routing_engine.py` (two locations: `_handle_risk_exit` and `handle_signal_exit`)
 
+### SPXW/Index Option Alias Fix
+- **Root cause**: Signal parser extracts "SPXW" from Discord messages, but brokers only recognize "SPX". Webull's `wb.get_ticker('SPXW')` throws `ValueError: TickerId could not be found`. Schwab's OCC symbol builder generates `SPXW  260304C...` instead of `SPX   260304C...`.
+- **Fix**: Added `INDEX_ALIASES_IN` dict (`SPXW→SPX`, `NDXP→NDX`, `VIXW→VIX`, `RUTW→RUT`) applied at all broker API call points:
+  - Webull `_blocking_place`: `broker_sym = fix_symbol(symbol, "in")` used for `get_ticker()`, `_get_market_price()`, and position matching
+  - Webull `_get_current_option_quote`: normalized symbol for `get_option_quote(stock=...)` 
+  - Webull `_build_option_hub_func`: normalized symbol for OCC key construction in slippage check
+  - Webull prewarm cache: SPX entries also stored under SPXW alias key for instant cache hits
+  - Schwab `_build_option_symbol`: centralized alias normalization so ALL callers (place_option_order, get_option_quote, get_options_chain, bracket orders) get correct OCC symbols
+- **Files**: `src/selfbot_webull.py`, `src/brokers/schwab_broker.py`
+
 ### Webhook Timeout Fix
 - **Root cause**: `aiohttp.ClientSession` in routing engine had no timeout (default 300s), halting the routing engine whenever a webhook endpoint was slow
 - **Fix**: `aiohttp.ClientSession` now created with `ClientTimeout(total=10)`; `_handle_risk_exit` wrapped with `asyncio.wait_for(timeout=15.0)`

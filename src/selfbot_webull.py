@@ -1904,11 +1904,14 @@ def _get_webull_min_lot_size(price: float) -> int:
     else:
         return 1
 
+INDEX_ALIASES_IN = {'SPXW': 'SPX', 'NDXP': 'NDX', 'VIXW': 'VIX', 'RUTW': 'RUT'}
+INDEX_ALIASES_OUT = {v: k for k, v in INDEX_ALIASES_IN.items()}
+
 def fix_symbol(symbol: str, direction: str) -> str:
     if direction == 'in':
-        return symbol.replace("SPXW", "SPX").replace("NDXP", "NDX")
+        return INDEX_ALIASES_IN.get(symbol.upper(), symbol)
     elif direction == 'out':
-        return symbol.replace("SPX", "SPXW").replace("NDX", "NDXP")
+        return INDEX_ALIASES_OUT.get(symbol.upper(), symbol)
     return symbol
 
 # Slippage decision enum
@@ -2085,11 +2088,16 @@ class WebullBroker:
                                 exp_val = cand.get('expiry') or exp_iso
                                 exp_norm = str(exp_val)[:10] if exp_val else exp_iso
                                 cache_key = f"{symbol}_{float(cand['strike']):.2f}_{exp_norm}_{opt_type}"
-                                self._option_id_cache[cache_key] = {
+                                cache_entry = {
                                     'option_id': str(cand['option_id']),
                                     'cached_at': _time.time(),
                                     'prewarm': True
                                 }
+                                self._option_id_cache[cache_key] = cache_entry
+                                alias_sym = fix_symbol(symbol, "out")
+                                if alias_sym != symbol:
+                                    alias_key = f"{alias_sym}_{float(cand['strike']):.2f}_{exp_norm}_{opt_type}"
+                                    self._option_id_cache[alias_key] = cache_entry
                                 sym_count += 1
                             _time.sleep(0.05)
                         except Exception:
@@ -2845,6 +2853,7 @@ class WebullBroker:
         Returns None if no quote available (illiquid option)
         """
         try:
+            broker_sym = fix_symbol(symbol, "in")
             _yr = expiry_year or datetime.now().strftime('%Y')
             if '/' in expiry_mmdd:
                 _ps = expiry_mmdd.split('/')
@@ -2854,14 +2863,13 @@ class WebullBroker:
             cached_id = self.get_cached_option_id(symbol, float(strike), _full_exp, opt_type)
             if cached_id:
                 option_id = int(cached_id)
-                tId = self._ticker_id_cache.get(symbol.upper(), 0)
+                tId = self._ticker_id_cache.get(broker_sym.upper(), 0)
             else:
                 option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
             if option_id == 0:
                 print(f"[SLIPPAGE] ⚠️  Could not find option ID for {symbol} ${strike}{opt_type} {expiry_mmdd}")
                 return None
 
-            # Cache option_id immediately so order placement skips the second full lookup
             try:
                 _yr = expiry_year or datetime.now().strftime('%Y')
                 if '/' in expiry_mmdd:
@@ -2873,8 +2881,7 @@ class WebullBroker:
             except Exception:
                 pass
 
-            # Get option quote data
-            quote = wb.get_option_quote(stock=symbol, optionId=str(option_id))
+            quote = wb.get_option_quote(stock=broker_sym, optionId=str(option_id))
             if not quote:
                 print(f"[SLIPPAGE] ⚠️  No quote data available for option {option_id}")
                 return None
@@ -3163,9 +3170,10 @@ class WebullBroker:
             
             def _build_option_hub_func():
                 try:
+                    _hub_sym = fix_symbol(symbol, "in")
                     _yr = expiry_year[2:] if expiry_year and len(expiry_year) >= 4 else ''
                     _exp = expiry_mmdd.replace('/', '') if expiry_mmdd else ''
-                    _occ = f"{symbol:<6}{_yr}{_exp}{(opt_type or '').upper()}{int((strike or 0) * 1000):08d}"
+                    _occ = f"{_hub_sym:<6}{_yr}{_exp}{(opt_type or '').upper()}{int((strike or 0) * 1000):08d}"
                     def _hub_price():
                         if self._data_hub:
                             p = self._data_hub.get_quote_price(_occ)
@@ -3315,6 +3323,8 @@ class WebullBroker:
             if not wb:
                 raise RuntimeError("Webull client not initialized")
             
+            broker_sym = fix_symbol(symbol, "in")
+            
             _yr = expiry_year or datetime.now().strftime('%Y')
             if '/' in expiry_mmdd:
                 _parts = expiry_mmdd.split('/')
@@ -3325,11 +3335,11 @@ class WebullBroker:
             cached_id = self.get_cached_option_id(symbol, float(strike), full_expiry, opt_type)
             if cached_id:
                 option_id = int(cached_id)
-                tId = self._ticker_id_cache.get(symbol.upper())
+                tId = self._ticker_id_cache.get(broker_sym.upper())
                 if not tId:
-                    tId = wb.get_ticker(symbol)
+                    tId = wb.get_ticker(broker_sym)
                     if tId:
-                        self._ticker_id_cache[symbol.upper()] = tId
+                        self._ticker_id_cache[broker_sym.upper()] = tId
                 print(f"[WEBULL] ✓ Cache hit option_id={option_id}, ticker_id={tId} for {symbol} (skipped REST)")
                 sys.stdout.flush()
             else:
@@ -3386,7 +3396,7 @@ class WebullBroker:
             if is_market_mode:
                 initial_buffer = market_buy_buffers[0] if side == 'BUY' else market_sell_buffers[0]
                 print(f"[WEBULL] ⚡ MARKET ORDER mode - aggressive limit with {initial_buffer*100:.0f}% initial buffer...", flush=True)
-                effective_price, _raw_price = _get_market_price(wb, symbol, option_id, side, initial_buffer)
+                effective_price, _raw_price = _get_market_price(wb, broker_sym, option_id, side, initial_buffer)
                 
                 if not effective_price or effective_price <= 0:
                     return {
@@ -3473,7 +3483,7 @@ class WebullBroker:
                             
                             pos_type = 'C' if pos_direction == 'CALL' else 'P' if pos_direction == 'PUT' else ''
                             
-                            if (pos_symbol == symbol and 
+                            if ((pos_symbol == symbol or pos_symbol == broker_sym) and 
                                 abs(pos_strike - strike) < 0.01 and 
                                 pos_type == opt_type.upper() and 
                                 pos_expiry_mmdd == expiry_mmdd and
@@ -3653,7 +3663,7 @@ class WebullBroker:
                                 print(f"[{self.name}] ⚠️ Cancel attempt: {cancel_err}", flush=True)
                             
                             _time.sleep(0.2)
-                            new_price, _ = _get_market_price(wb, symbol, option_id, side, new_buffer)
+                            new_price, _ = _get_market_price(wb, broker_sym, option_id, side, new_buffer)
                             if new_price and new_price > 0:
                                 effective_price = new_price
                                 result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, f"[Chase {retry_idx+1}/{len(buffers)}] ")
