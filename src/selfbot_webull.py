@@ -3205,9 +3205,24 @@ class WebullBroker:
                     print(f"[SLIPPAGE] ⚡ Hub hit: ${current_price:.4f} (0ms, no REST)")
             
             if not current_price or current_price <= 0:
-                current_price = await asyncio.to_thread(get_quote)
-                if current_price:
-                    print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
+                _chk_yr = expiry_year or datetime.now().strftime('%Y')
+                if '/' in expiry_mmdd:
+                    _chk_parts = expiry_mmdd.split('/')
+                    _chk_exp = f"{_chk_yr}-{_chk_parts[0].zfill(2)}-{_chk_parts[1].zfill(2)}"
+                else:
+                    _chk_exp = expiry_mmdd
+                cached_opt_id = self.get_cached_option_id(symbol, float(strike), _chk_exp, opt_type)
+                if cached_opt_id:
+                    current_price = await asyncio.to_thread(get_quote)
+                    if current_price:
+                        print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
+                elif ALLOW_ORDER_WHEN_NO_QUOTE:
+                    print(f"[SLIPPAGE] ⚡ No hub price & no cached option_id — skipping slow REST lookup (allow_when_no_quote=true)")
+                    print(f"[SLIPPAGE] Limit price ${limit_price:.2f} will protect against adverse fills")
+                else:
+                    current_price = await asyncio.to_thread(get_quote)
+                    if current_price:
+                        print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
             
             _slippage_reference = limit_price
             _is_conditional = kwargs.get('_conditional_order_id') or kwargs.get('conditional_order_id')
@@ -3407,39 +3422,57 @@ class WebullBroker:
             
             if side == 'BUY':
                 try:
-                    account_info = wb.get_account()
-                    account_members = account_info.get('accountMembers', [])
-                    
-                    # Convert list of {'key': 'name', 'value': 'value'} into a proper dict
-                    account_data = {}
-                    if account_members:
-                        for item in account_members:
-                            if isinstance(item, dict) and 'key' in item and 'value' in item:
-                                account_data[item['key']] = item['value']
-                    
-                    buying_power = 0.0
+                    effective_bp = 0.0
                     options_bp = 0.0
+                    buying_power = 0.0
+                    net_liq = 0.0
                     bp_source = 'unknown'
+                    
+                    cached_info = None
                     try:
-                        options_bp = float(account_data.get('optionBuyingPower', 0))
-                    except (ValueError, TypeError):
+                        from src.services.broker_health_monitor import get_health_monitor
+                        _hm = get_health_monitor()
+                        cached_info = _hm.get_cached_account_info(self.name)
+                    except Exception:
                         pass
-                    for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower']:
-                        if field in account_data:
-                            try:
-                                buying_power = float(account_data[field])
-                                if buying_power > 0:
-                                    bp_source = field
-                                    break
-                            except (ValueError, TypeError):
-                                continue
-                    effective_bp = options_bp if options_bp > 0 else buying_power
-                    print(f"[DEBUG] Account fields available: {list(account_data.keys())}")
-                    print(f"[FUNDS] Options BP: ${options_bp:.2f}, Cash BP: ${buying_power:.2f} (from '{bp_source}'), Using: ${effective_bp:.2f}")
+                    
+                    if cached_info:
+                        options_bp = float(cached_info.get('options_buying_power', 0) or 0)
+                        buying_power = float(cached_info.get('buying_power', 0) or 0)
+                        net_liq = float(cached_info.get('portfolio_value', 0) or 0)
+                        bp_source = 'cached'
+                        effective_bp = options_bp if options_bp > 0 else buying_power
+                        print(f"[FUNDS] ⚡ Using cached BP (0ms): Options=${options_bp:.2f}, Stock=${buying_power:.2f}, Using=${effective_bp:.2f}")
+                    else:
+                        print(f"[FUNDS] Cache miss — falling back to live API for options BP")
+                        account_info = wb.get_account()
+                        account_members = account_info.get('accountMembers', [])
+                        
+                        account_data = {}
+                        if account_members:
+                            for item in account_members:
+                                if isinstance(item, dict) and 'key' in item and 'value' in item:
+                                    account_data[item['key']] = item['value']
+                        
+                        try:
+                            options_bp = float(account_data.get('optionBuyingPower', 0))
+                        except (ValueError, TypeError):
+                            pass
+                        for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower']:
+                            if field in account_data:
+                                try:
+                                    buying_power = float(account_data[field])
+                                    if buying_power > 0:
+                                        bp_source = field
+                                        break
+                                except (ValueError, TypeError):
+                                    continue
+                        effective_bp = options_bp if options_bp > 0 else buying_power
+                        net_liq = float(account_data.get('netLiquidation', 0))
+                        print(f"[FUNDS] Options BP: ${options_bp:.2f}, Cash BP: ${buying_power:.2f} (from '{bp_source}'), Using: ${effective_bp:.2f}")
                     
                     order_cost = qty * effective_price * 100
                     
-                    net_liq = float(account_data.get('netLiquidation', 0))
                     print(f"[FUNDS] Buying power: ${effective_bp:.2f}, Order cost: ${order_cost:.2f} (Net liquidation: ${net_liq:.2f})")
                     buying_power = effective_bp
                     
@@ -4070,44 +4103,58 @@ class WebullBroker:
             
             if side == 'BUY':
                 try:
-                    account_info = wb.get_account()
-                    account_members = account_info.get('accountMembers', [])
-                    
-                    account_data = {}
-                    if account_members:
-                        for item in account_members:
-                            if isinstance(item, dict) and 'key' in item and 'value' in item:
-                                account_data[item['key']] = item['value']
-                    
                     buying_power = 0.0
+                    _bp_cached = False
                     
-                    if account_data:
-                        for field in ['buyingPower', 'cashAvailableForTrade', 'cashBalance', 'dayBuyingPower']:
-                            if field in account_data:
+                    try:
+                        from src.services.broker_health_monitor import get_health_monitor
+                        _hm = get_health_monitor()
+                        _cached = _hm.get_cached_account_info(self.name)
+                        if _cached:
+                            buying_power = float(_cached.get('buying_power', 0) or 0)
+                            _bp_cached = True
+                            print(f"[FUNDS] ⚡ Stock BP from cache (0ms): ${buying_power:.2f}")
+                    except Exception:
+                        pass
+                    
+                    if not _bp_cached:
+                        print(f"[FUNDS] Cache miss — falling back to live API for stock BP")
+                        account_info = wb.get_account()
+                        account_members = account_info.get('accountMembers', [])
+                        
+                        account_data = {}
+                        if account_members:
+                            for item in account_members:
+                                if isinstance(item, dict) and 'key' in item and 'value' in item:
+                                    account_data[item['key']] = item['value']
+                        
+                        if account_data:
+                            for field in ['buyingPower', 'cashAvailableForTrade', 'cashBalance', 'dayBuyingPower']:
+                                if field in account_data:
+                                    try:
+                                        buying_power = float(account_data[field])
+                                        if buying_power > 0:
+                                            break
+                                    except (ValueError, TypeError):
+                                        continue
+                        elif self._use_paper_account:
+                            paper_bp = account_info.get('totalCashValue') or account_info.get('netLiquidation') or account_info.get('totalMarketValue')
+                            if paper_bp is not None:
                                 try:
-                                    buying_power = float(account_data[field])
-                                    if buying_power > 0:
-                                        break
+                                    buying_power = float(paper_bp)
                                 except (ValueError, TypeError):
-                                    continue
-                    elif self._use_paper_account:
-                        paper_bp = account_info.get('totalCashValue') or account_info.get('netLiquidation') or account_info.get('totalMarketValue')
-                        if paper_bp is not None:
-                            try:
-                                buying_power = float(paper_bp)
-                            except (ValueError, TypeError):
-                                pass
-                        if buying_power <= 0:
-                            paper_summary = account_info.get('summary', {})
-                            if isinstance(paper_summary, dict):
-                                for field in ['totalCashValue', 'netLiquidation', 'buyingPower']:
-                                    if field in paper_summary:
-                                        try:
-                                            buying_power = float(paper_summary[field])
-                                            if buying_power > 0:
-                                                break
-                                        except (ValueError, TypeError):
-                                            continue
+                                    pass
+                            if buying_power <= 0:
+                                paper_summary = account_info.get('summary', {})
+                                if isinstance(paper_summary, dict):
+                                    for field in ['totalCashValue', 'netLiquidation', 'buyingPower']:
+                                        if field in paper_summary:
+                                            try:
+                                                buying_power = float(paper_summary[field])
+                                                if buying_power > 0:
+                                                    break
+                                            except (ValueError, TypeError):
+                                                continue
                         if buying_power <= 0:
                             buying_power = 100000.0
                             print(f"[FUNDS] Paper account - using default buying power: ${buying_power:.2f}")
@@ -13950,6 +13997,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 try:
                     account_info = None
                     sod_used = False
+                    cache_used = False
                     sizing_mode = signal.get('_sizing_mode', 'live')
                     
                     if sizing_mode == 'start_of_day':
@@ -13970,24 +14018,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[{broker_name}] [FUNDS] ⚠️ SOD cache error: {sod_err} — falling back to live balance")
                     
                     if not sod_used:
-                        if hasattr(broker_instance, 'get_account_info'):
-                            account_info = await broker_instance.get_account_info()
-                        elif hasattr(broker_instance, 'wb') and broker_instance.wb:
-                            import asyncio
-                            raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
-                            if raw_account:
-                                account_info = {
-                                    'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
-                                    'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
-                                }
-                        elif hasattr(broker_instance, 'get_account'):
-                            import asyncio
-                            raw_account = await asyncio.to_thread(broker_instance.get_account)
-                            if raw_account:
-                                account_info = {
-                                    'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
-                                    'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
-                                }
+                        try:
+                            from src.services.broker_health_monitor import get_health_monitor
+                            _hm = get_health_monitor()
+                            _cached = _hm.get_cached_account_info(broker_name)
+                            if _cached:
+                                account_info = _cached
+                                cache_used = True
+                                _original_print(f"[{broker_name}] [FUNDS] Using cached account data (0ms)")
+                        except Exception:
+                            pass
+                        
+                        if not account_info:
+                            _original_print(f"[{broker_name}] [FUNDS] Cache miss — falling back to live API")
+                            if hasattr(broker_instance, 'get_account_info'):
+                                account_info = await broker_instance.get_account_info()
+                            elif hasattr(broker_instance, 'wb') and broker_instance.wb:
+                                import asyncio
+                                raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
+                                if raw_account:
+                                    account_info = {
+                                        'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
+                                        'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                                    }
+                            elif hasattr(broker_instance, 'get_account'):
+                                import asyncio
+                                raw_account = await asyncio.to_thread(broker_instance.get_account)
+                                if raw_account:
+                                    account_info = {
+                                        'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
+                                        'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                                    }
                     
                     if account_info:
                         is_option = signal['asset'] == 'option'

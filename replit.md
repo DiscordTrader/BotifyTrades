@@ -89,6 +89,11 @@ The web control panel is built with Flask, providing a responsive and interactiv
 - **Fix**: `aiohttp.ClientSession` now created with `ClientTimeout(total=10)`; `_handle_risk_exit` wrapped with `asyncio.wait_for(timeout=15.0)`
 - **Files**: `src/services/signal_routing_engine.py`
 
+### Latency Optimizations (March 2026)
+- **Slippage REST skip**: When hub has no price AND option_id isn't cached (first-time SPX trade), skips the 5-6s options chain REST lookup if `allow_when_no_quote=true`. Limit price protects against adverse fills. If option_id IS cached (from prewarm or prior trade), REST quote proceeds normally.
+- **Cached BP checks**: Universal multi-broker BP check and Webull `_blocking_place` BP check now use health monitor's cached account data (0ms) instead of live API calls (~500ms each). Falls back to live API if cache unavailable.
+- **Files**: `src/selfbot_webull.py`
+
 ## Risk Engine Direct Exit Architecture
 
 The risk engine now has a dual-path exit execution system to ensure stop-loss orders ALWAYS execute, even when the event loop is blocked:
