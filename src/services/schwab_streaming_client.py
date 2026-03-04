@@ -369,7 +369,6 @@ class SchwabStreamingClient:
                         self._subscribed_options.clear()
                         await self.subscribe_options(old_opt)
 
-                    print("[SCHWAB_STREAM] Entering receive loop", flush=True)
                     msg_count = 0
                     while self._running:
                         try:

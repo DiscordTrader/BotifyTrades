@@ -480,17 +480,13 @@ class SchwabBroker(BrokerInterface):
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
         """Make HTTP request with rate limit, budget tracking, and token refresh handling"""
         import httpx
-        _short = url.split('/')[-1] if '/' in url else url
-        print(f"[{self.name}] mr:{method} {_short} enter", flush=True)
         if not is_exit_order and not is_entry_order:
             if self._should_block_non_order():
                 print(f"[{self.name}] ⚠️ API budget critical ({self._get_api_usage()}/{self._API_BUDGET_LIMIT}/min) - blocking non-order call")
                 return type('BudgetBlockedResponse', (), {'status_code': 503, 'text': 'Budget exceeded', 'json': lambda: {}, 'headers': {}, '_budget_blocked': True})()
 
         self._track_api_call()
-        print(f"[{self.name}] mr:{_short} pre-rate", flush=True)
         await self._async_rate_limit(is_exit_order=is_exit_order, is_entry_order=is_entry_order)
-        print(f"[{self.name}] mr:{_short} post-rate", flush=True)
 
         headers = kwargs.pop('headers', {})
         if 'Authorization' not in headers:
@@ -502,12 +498,10 @@ class SchwabBroker(BrokerInterface):
             with httpx.Client(timeout=15.0) as c:
                 return c.request(m, u, headers=h, **kw)
 
-        print(f"[{self.name}] mr:{_short} pre-thread", flush=True)
         response = await asyncio.wait_for(
             asyncio.to_thread(_sync_request, method, url, headers, kwargs),
             timeout=20.0
         )
-        print(f"[{self.name}] mr:{_short} post-thread s={response.status_code}", flush=True)
 
         if response.status_code == 429:
             retry_after = int(response.headers.get('Retry-After', '60'))
@@ -1321,7 +1315,6 @@ class SchwabBroker(BrokerInterface):
     async def get_positions_detailed(self) -> List[Dict[str, Any]]:
         """Get detailed positions for sync service"""
         try:
-            print(f"[{self.name}] gpd:1 enter", flush=True)
             if self._should_skip_non_critical():
                 if self._data_hub:
                     cached = self._data_hub.get_positions(detailed=True)
@@ -1330,25 +1323,23 @@ class SchwabBroker(BrokerInterface):
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     return list(self._last_valid_positions)
             
-            print(f"[{self.name}] gpd:2 pre-token", flush=True)
             if not await self._ensure_valid_token():
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     print(f"[{self.name}] Token refresh pending - returning {len(self._last_valid_positions)} cached positions")
                     return list(self._last_valid_positions)
                 return []
             
-            print(f"[{self.name}] gpd:3 post-token", flush=True)
             if not self.account_hash:
                 print(f"[{self.name}] No account_hash - cannot fetch positions")
                 return []
             
-            print(f"[{self.name}] gpd:4 pre-request", flush=True)
+
             response = await self._make_request(
                 'GET',
                 f"{self.BASE_URL}/accounts/{self.account_hash}",
                 params={'fields': 'positions'}
             )
-            print(f"[{self.name}] gpd:5 post-request status={response.status_code}", flush=True)
+
             
             if response.status_code in (429, 503) or getattr(response, '_budget_blocked', False):
                 print(f"[{self.name}] ⚠️ Rate limited/throttled on get_positions_detailed - returning {len(self._last_valid_positions)} cached positions")
