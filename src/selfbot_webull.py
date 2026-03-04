@@ -2121,14 +2121,6 @@ class WebullBroker:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._prewarm_option_cache, wb)
 
-        try:
-            from src.services.sod_balance_cache import get_sod_cache
-            sod = get_sod_cache()
-            if not sod._captured_date:
-                await sod.capture_all_brokers(self)
-        except Exception as sod_err:
-            print(f"[SOD] ⚠️ Initial SOD capture failed: {sod_err}")
-
         # Then refresh every day at 9:30 AM EST (14:30 UTC)
         while True:
             try:
@@ -2142,13 +2134,6 @@ class WebullBroker:
                 print("[PREWARM] 🔄 Daily refresh — re-warming option ID cache for new expirations...")
                 current_loop = asyncio.get_running_loop()
                 await current_loop.run_in_executor(None, self._prewarm_option_cache, self._client)
-                try:
-                    from src.services.sod_balance_cache import get_sod_cache
-                    sod = get_sod_cache()
-                    sod.clear()
-                    await sod.capture_all_brokers(self)
-                except Exception as sod_err:
-                    print(f"[SOD] ⚠️ Failed to capture start-of-day balances: {sod_err}")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -7568,7 +7553,48 @@ class SelfClient(discord.Client):
                 _original_print("[PREWARM] 🔥 Option ID pre-warm task scheduled", flush=True)
         except Exception as e:
             _original_print(f"[PREWARM] ⚠️ Could not start pre-warm scheduler: {e}", flush=True)
+        
+        try:
+            asyncio.ensure_future(self._sod_balance_scheduler())
+            _original_print("[SOD] 📸 Start-of-day balance scheduler started", flush=True)
+        except Exception as e:
+            _original_print(f"[SOD] ⚠️ Could not start SOD scheduler: {e}", flush=True)
     
+    async def _sod_balance_scheduler(self):
+        """Capture start-of-day balances at startup and daily at 9:30 AM ET."""
+        import asyncio
+        from datetime import datetime, timezone, timedelta
+
+        _original_print("[SOD] ⏳ Waiting 3 minutes for brokers to stabilize before initial SOD capture...")
+        await asyncio.sleep(180)
+
+        try:
+            from src.services.sod_balance_cache import get_sod_cache
+            sod = get_sod_cache()
+            await sod.capture_all_brokers(self)
+        except Exception as e:
+            _original_print(f"[SOD] ⚠️ Initial SOD capture failed: {e}")
+
+        while True:
+            try:
+                now_utc = datetime.now(timezone.utc)
+                target = now_utc.replace(hour=14, minute=30, second=0, microsecond=0)
+                if now_utc >= target:
+                    target += timedelta(days=1)
+                wait_seconds = (target - now_utc).total_seconds()
+                _original_print(f"[SOD] Next capture at 9:30 AM ET ({wait_seconds/3600:.1f}h from now)")
+                await asyncio.sleep(wait_seconds)
+                _original_print("[SOD] 🔄 Daily 9:30 AM ET — capturing start-of-day balances...")
+                from src.services.sod_balance_cache import get_sod_cache
+                sod = get_sod_cache()
+                sod.clear()
+                await sod.capture_all_brokers(self)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                _original_print(f"[SOD] ⚠️ Scheduler error: {e}")
+                await asyncio.sleep(3600)
+
     async def token_refresh_scheduler(self):
         """Automatically refresh Webull tokens every 12 hours"""
         await asyncio.sleep(3600)  # Wait 1 hour before first refresh
