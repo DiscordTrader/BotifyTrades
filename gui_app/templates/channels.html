@@ -259,7 +259,7 @@
 
     .channels-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
         gap: 20px;
     }
 
@@ -1074,6 +1074,28 @@
     </div>
 </div>
 
+<!-- Settings Modal -->
+<div class="settings-modal-overlay" id="channelSettingsModal">
+    <div class="settings-modal-container">
+        <div class="settings-modal-header">
+            <h3><span>⚙</span> <span id="settingsModalTitle">Channel Settings</span></h3>
+            <button class="modal-close" onclick="closeChannelSettings()">×</button>
+        </div>
+        <div class="settings-tab-bar">
+            <div class="settings-tab active" onclick="switchSettingsTab('sizing')" data-tab="sizing">Sizing</div>
+            <div class="settings-tab" onclick="switchSettingsTab('risk')" data-tab="risk">Risk Controls</div>
+            <div class="settings-tab" onclick="switchSettingsTab('orders')" data-tab="orders">Order Types</div>
+            <div class="settings-tab" onclick="switchSettingsTab('conditional')" data-tab="conditional">Conditional</div>
+        </div>
+        <div class="settings-modal-body">
+            <div class="settings-tab-content active" id="settingsTabSizing"></div>
+            <div class="settings-tab-content" id="settingsTabRisk"></div>
+            <div class="settings-tab-content" id="settingsTabOrders"></div>
+            <div class="settings-tab-content" id="settingsTabConditional"></div>
+        </div>
+    </div>
+</div>
+
 <style>
 .scanner-spinner {
     width: 40px; height: 40px; margin: 0 auto;
@@ -1083,6 +1105,255 @@
     animation: scanSpin 0.8s linear infinite;
 }
 @keyframes scanSpin { to { transform: rotate(360deg); } }
+
+.settings-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(12px);
+    z-index: 1100;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+.settings-modal-overlay.active { display: flex; }
+.settings-modal-container {
+    background: #0E1117;
+    border: 1px solid rgba(15, 240, 179, 0.15);
+    border-radius: 20px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transform: scale(0.95);
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(15, 240, 179, 0.05);
+}
+.settings-modal-container.open {
+    transform: scale(1);
+    opacity: 1;
+}
+.settings-modal-header {
+    background: linear-gradient(135deg, var(--mint) 0%, var(--violet) 100%);
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+.settings-modal-header h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    color: #000;
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.settings-tab-bar {
+    display: flex;
+    background: rgba(20, 24, 33, 0.95);
+    border-bottom: 1px solid rgba(139, 161, 199, 0.1);
+    padding: 0 24px;
+    flex-shrink: 0;
+}
+.settings-tab {
+    padding: 14px 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+.settings-tab:hover { color: rgba(255, 255, 255, 0.8); }
+.settings-tab.active {
+    color: var(--mint);
+    border-bottom-color: var(--mint);
+    text-shadow: 0 0 10px rgba(15, 240, 179, 0.3);
+}
+.settings-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+.settings-tab-content { display: none; }
+.settings-tab-content.active { display: block; }
+.settings-section {
+    background: rgba(20, 25, 39, 0.6);
+    border: 1px solid rgba(139, 161, 199, 0.08);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 16px;
+    border-left: 3px solid rgba(139, 161, 199, 0.15);
+}
+.settings-section.green { border-left-color: #10B981; }
+.settings-section.mint { border-left-color: var(--mint); }
+.settings-section.violet { border-left-color: var(--violet); }
+.settings-section.red { border-left-color: #EF4444; }
+.settings-section.amber { border-left-color: #F59E0B; }
+.settings-section.indigo { border-left-color: #6366F1; }
+.settings-section.cyan { border-left-color: #06B6D4; }
+.settings-section-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+.settings-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+.settings-field label {
+    display: block;
+    font-size: 0.78rem;
+    color: #8BA1C7;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.settings-field input,
+.settings-field select {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    background: #1C1C1E;
+    border: 1px solid rgba(139, 161, 199, 0.2);
+    border-radius: 8px;
+    color: #D1E4FF;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+.settings-field input:focus,
+.settings-field select:focus {
+    outline: none;
+    border-color: var(--mint);
+    box-shadow: 0 0 0 3px rgba(15, 240, 179, 0.1);
+}
+.settings-field select {
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%230FF0B3' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+}
+.settings-field select option {
+    background: #1a1f2e;
+    color: #D1E4FF;
+}
+.settings-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+}
+.settings-toggle-row span {
+    font-size: 0.85rem;
+    color: #D1E4FF;
+}
+.settings-helper {
+    font-size: 0.75rem;
+    color: #6B7A90;
+    margin-top: 4px;
+    line-height: 1.4;
+}
+.settings-gear-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 240, 179, 0.08);
+    border: 1px solid rgba(15, 240, 179, 0.2);
+    border-radius: 6px;
+    padding: 5px 12px;
+    color: var(--mint);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+.settings-gear-btn:hover {
+    background: rgba(15, 240, 179, 0.15);
+    border-color: var(--mint);
+    box-shadow: 0 0 12px rgba(15, 240, 179, 0.15);
+}
+.feature-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    background: rgba(139, 161, 199, 0.1);
+    color: #8BA1C7;
+    border: 1px solid rgba(139, 161, 199, 0.12);
+}
+.feature-badge.active {
+    background: rgba(15, 240, 179, 0.1);
+    color: var(--mint);
+    border-color: rgba(15, 240, 179, 0.2);
+}
+.settings-modal-body .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+.settings-modal-body .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.settings-modal-body .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    transition: 0.3s;
+}
+.settings-modal-body .slider::before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+.settings-modal-body input:checked + .slider {
+    background: linear-gradient(135deg, var(--mint) 0%, #06B6D4 100%);
+}
+.settings-modal-body input:checked + .slider::before {
+    transform: translateX(20px);
+}
+@media (max-width: 768px) {
+    .settings-modal-container { max-width: 100%; max-height: 95vh; border-radius: 12px; }
+    .settings-row { grid-template-columns: 1fr; }
+    .settings-row.three-col { grid-template-columns: 1fr; }
+    .settings-tab { padding: 10px 14px; font-size: 0.8rem; }
+    .settings-tab-bar { padding: 0 12px; overflow-x: auto; }
+    .settings-modal-body { padding: 16px; }
+}
 </style>
 
 <script>
@@ -1091,6 +1362,7 @@ let allChannels = [];
 let currentChannelId = null;
 let currentChannelName = '';
 let channelUserCounts = {};
+let currentSettingsChannelId = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadChannels();
@@ -1103,7 +1375,78 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('userModal').addEventListener('click', function(e) {
         if (e.target === this) closeUserModal();
     });
+
+    document.getElementById('channelSettingsModal').addEventListener('click', function(e) {
+        if (e.target === this) closeChannelSettings();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && currentSettingsChannelId !== null) {
+            closeChannelSettings();
+        }
+    });
 });
+
+function updateLocalChannel(channelId, updates) {
+    const ch = allChannels.find(c => c.id === channelId);
+    if (ch) Object.assign(ch, updates);
+    updateStats();
+    refreshCardSummary(channelId);
+}
+
+function refreshCardSummary(channelId) {
+    const channel = allChannels.find(c => c.id === channelId);
+    if (!channel) return;
+    const card = document.getElementById(`channel-card-${channelId}`);
+    if (!card) return;
+
+    const executeEnabled = channel.execute_enabled === 1;
+    const trackEnabled = channel.track_enabled === 1;
+    let modeClass = 'none', modeText = 'Inactive';
+    if (executeEnabled && trackEnabled) { modeClass = 'dual'; modeText = 'Dual Mode'; }
+    else if (executeEnabled) { modeClass = 'execute'; modeText = 'Execute'; }
+    else if (trackEnabled) { modeClass = 'track'; modeText = 'Track'; }
+
+    const badge = card.querySelector('.channel-mode-badge');
+    if (badge) { badge.className = `channel-mode-badge ${modeClass}`; badge.textContent = modeText; }
+
+    const summaryEl = card.querySelector('.card-summary-content');
+    if (summaryEl) summaryEl.innerHTML = buildCardSummaryInner(channel);
+
+    const userCount = channelUserCounts[channelId] || 0;
+    const userBadge = card.querySelector('.user-count-badge');
+    if (userBadge) userBadge.textContent = userCount > 0 ? userCount : 'All';
+}
+
+function buildCardSummaryInner(channel) {
+    const executeEnabled = channel.execute_enabled === 1;
+    const trackEnabled = channel.track_enabled === 1;
+    const exitMode = (channel.exit_strategy_mode || 'hybrid');
+    const exitLabel = exitMode.charAt(0).toUpperCase() + exitMode.slice(1);
+
+    let execInfo = executeEnabled
+        ? `<span style="color: #10B981; font-weight: 600;">ON</span>${channel.position_size_pct ? ' <span style="color: #8BA1C7;">(' + channel.position_size_pct + '%)</span>' : ''}`
+        : '<span style="color: #6B7A90;">OFF</span>';
+    let trackInfo = trackEnabled
+        ? `<span style="color: var(--mint); font-weight: 600;">ON</span>${channel.tracking_position_size_pct ? ' <span style="color: #8BA1C7;">(' + channel.tracking_position_size_pct + '%)</span>' : ''}`
+        : '<span style="color: #6B7A90;">OFF</span>';
+
+    let badges = `<span class="feature-badge">${exitLabel}</span>`;
+    if (channel.conditional_order_enabled) badges += '<span class="feature-badge active">Cond</span>';
+    if (channel.slippage_protection_enabled) badges += '<span class="feature-badge active">Slip</span>';
+    if (channel.channel_max_position_size) badges += `<span class="feature-badge">Max $${channel.channel_max_position_size.toLocaleString()}</span>`;
+    if (channel.ndx_to_qqq_enabled) badges += '<span class="feature-badge" style="color: #b388ff; border-color: rgba(179,136,255,0.2);">NDX→QQQ</span>';
+    const chaseEnabled = channel.entry_chase_enabled === 1 || channel.order_chase_enabled === 1;
+    if (chaseEnabled) badges += '<span class="feature-badge active">Chase</span>';
+
+    return `
+        <div style="display: flex; gap: 20px; margin-bottom: 8px; font-size: 12px;">
+            <div>Execute: ${execInfo}</div>
+            <div>Track: ${trackInfo}</div>
+        </div>
+        <div style="display: flex; gap: 5px; flex-wrap: wrap;">${badges}</div>
+    `;
+}
 
 async function loadChannels() {
     try {
@@ -1181,297 +1524,354 @@ function renderChannels() {
         }
         
         const market = channel.market || 'US';
-        const marketEmoji = market === 'IN' ? '🇮🇳' : market === 'CA' ? '🇨🇦' : '🇺🇸';
         const marketLabel = market === 'IN' ? 'India' : market === 'CA' ? 'Canada' : 'US';
         const platform = channel.platform || 'discord';
         const platformIcon = platform === 'telegram' ? '📱' : '💬';
+        const channelIdDisplay = channel.discord_channel_id || channel.telegram_chat_id || '';
         
         return `
-            <div class="channel-card ${isActive ? '' : 'inactive'}" style="background: linear-gradient(180deg, #141927 0%, #0F1319 100%); border: 1px solid rgba(139,161,199,0.15); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
-                <!-- Header -->
-                <div class="channel-card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(20,25,39,0.8); border-bottom: 1px solid rgba(139,161,199,0.1);">
+            <div class="channel-card ${isActive ? '' : 'inactive'}" id="channel-card-${channel.id}" style="background: linear-gradient(180deg, #141927 0%, #0F1319 100%); border: 1px solid rgba(139,161,199,0.15); box-shadow: 0 8px 32px rgba(0,0,0,0.4); padding: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: rgba(20,25,39,0.8); border-bottom: 1px solid rgba(139,161,199,0.1);">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span class="status-dot ${isActive ? '' : 'inactive'}" style="width: 6px; height: 6px;"></span>
-                        <span style="font-weight: 600; font-size: 0.85rem; color: #E4E8F0;">${channel.name}</span>
+                        <span class="status-dot ${isActive ? '' : 'inactive'}" style="width: 8px; height: 8px;"></span>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.9rem; color: #E4E8F0;">${channel.name}</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #6B7A90; margin-top: 2px;">${platformIcon} ${channelIdDisplay}</div>
+                        </div>
                     </div>
                     <div style="display: flex; gap: 6px; align-items: center;">
-                        <span style="font-size: 10px; padding: 2px 6px; background: rgba(100,120,150,0.25); border-radius: 3px; color: #8BA1C7;">${marketLabel}</span>
-                        <span class="channel-mode-badge ${modeClass}" style="font-size: 10px; padding: 2px 8px;">${modeText}</span>
+                        <span style="font-size: 10px; padding: 3px 8px; background: rgba(100,120,150,0.25); border-radius: 4px; color: #8BA1C7;">${marketLabel}</span>
+                        <span class="channel-mode-badge ${modeClass}" style="font-size: 10px; padding: 3px 10px;">${modeText}</span>
                     </div>
                 </div>
-                
-                <!-- Main Controls Grid -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(139,161,199,0.08);">
-                    <!-- Execute Panel -->
-                    <div style="background: #0F1319; padding: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: ${executeEnabled ? '#10F0B3' : '#6B7A90'};">Execute</span>
-                            <label class="toggle-switch" style="transform: scale(0.75);">
-                                <input type="checkbox" ${executeEnabled ? 'checked' : ''} onchange="toggleExecute(${channel.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                            <div>
-                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Size %</span>
-                                <input type="number" value="${channel.position_size_pct || ''}" placeholder="—" min="0.1" max="100" step="0.1"
-                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
-                                       onchange="updatePositionSize(${channel.id}, this.value, 'execution')">
-                            </div>
-                            <div>
-                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Qty</span>
-                                <input type="number" value="${channel.default_quantity || ''}" placeholder="—" min="1" max="1000" step="1"
-                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
-                                       onchange="updateDefaultQuantity(${channel.id}, this.value)">
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;" title="When enabled, uses your channel's Size % instead of the signal provider's suggested %">
-                            <label class="toggle-switch" style="transform: scale(0.6);">
-                                <input type="checkbox" ${channel.ignore_signal_position_size ? 'checked' : ''} onchange="updateIgnoreSignalPositionSize(${channel.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                            <span style="font-size: 9px; color: ${channel.ignore_signal_position_size ? '#10F0B3' : '#6B7A90'};">Force My Size %</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;" title="Live: uses current buying power at trade time. Start-of-Day: uses buying power snapshot captured at 9:30 AM ET, so position sizing stays consistent throughout the day regardless of P&L swings.">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Balance</span>
-                            <select style="padding: 2px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; cursor: pointer;"
-                                    onchange="updateSizingMode(${channel.id}, this.value)">
-                                <option value="live" ${(channel.sizing_mode || 'live') === 'live' ? 'selected' : ''}>Live</option>
-                                <option value="start_of_day" ${channel.sizing_mode === 'start_of_day' ? 'selected' : ''}>Start-of-Day</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <!-- Track Panel -->
-                    <div style="background: #0F1319; padding: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: ${trackEnabled ? '#10F0B3' : '#6B7A90'};">Track</span>
-                            <label class="toggle-switch" style="transform: scale(0.75);">
-                                <input type="checkbox" ${trackEnabled ? 'checked' : ''} onchange="toggleTrack(${channel.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                            <div>
-                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Size %</span>
-                                <input type="number" value="${channel.tracking_position_size_pct || ''}" placeholder="—" min="0.1" max="100" step="0.1"
-                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
-                                       onchange="updatePositionSize(${channel.id}, this.value, 'tracking')">
-                            </div>
-                            <div>
-                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Qty</span>
-                                <input type="number" value="${channel.tracking_default_quantity || ''}" placeholder="—" min="1" max="1000" step="1"
-                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
-                                       onchange="updateTrackingDefaultQuantity(${channel.id}, this.value)">
-                            </div>
-                        </div>
-                    </div>
+
+                <div class="card-summary-content" style="padding: 14px 16px;">
+                    ${buildCardSummaryInner(channel)}
                 </div>
-                
-                <!-- Max Position Size Row -->
-                <div style="background: rgba(139,161,199,0.04); padding: 8px 12px; border-top: 1px solid rgba(139,161,199,0.08);">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Max Position $</span>
-                        <input type="number" value="${channel.channel_max_position_size || ''}" placeholder="No limit" min="100" max="100000" step="100"
-                               style="width: 100px; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                               onchange="updateChannelMaxPositionSize(${channel.id}, this.value)">
-                        <span style="font-size: 9px; color: #6B7A90; opacity: 0.7;">Caps calculated position size</span>
-                    </div>
-                </div>
-                
-                <!-- Risk Controls Row -->
-                <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; background: rgba(139,161,199,0.08); border-top: 1px solid rgba(139,161,199,0.08);">
-                    <div style="background: #0F1319; padding: 8px 10px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Exit Mode</span>
-                        <select id="exit-strategy-mode-${channel.id}" style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                onchange="updateExitStrategy(${channel.id}, this.value)">
-                            <option value="signal" ${channel.exit_strategy_mode === 'signal' ? 'selected' : ''}>Signal</option>
-                            <option value="risk" ${channel.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk</option>
-                            <option value="hybrid" ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'selected' : ''}>Hybrid</option>
-                        </select>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px; display: flex; flex-direction: column; align-items: center;">
-                        <span style="font-size: 9px; color: ${channel.conditional_order_enabled ? '#10F0B3' : '#6B7A90'}; text-transform: uppercase; margin-bottom: 4px;">Cond</span>
-                        <label class="toggle-switch" style="transform: scale(0.7);">
-                            <input type="checkbox" ${channel.conditional_order_enabled ? 'checked' : ''} 
-                                   onchange="updateConditionalOrderEnabled(${channel.id}, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Timeout</span>
-                        <div style="display: flex; align-items: center; gap: 3px;">
-                            <input type="number" value="${channel.order_timeout_minutes || ''}" placeholder="∞" min="1" max="1440" step="1"
-                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                   onchange="updateOrderTimeout(${channel.id}, this.value)" title="Order timeout (all orders)">
-                            <span style="font-size: 9px; color: #6B7A90;">m</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 3px; margin-top: 4px;">
-                            <input type="number" value="${channel.conditional_order_timeout_minutes || ''}" placeholder="∞" min="1" max="1440" step="1"
-                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #b388ff;"
-                                   onchange="updateConditionalOrderTimeout(${channel.id}, this.value)" title="Conditional order timeout">
-                            <span style="font-size: 9px; color: #b388ff;">c</span>
-                        </div>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Slip</span>
-                            <label class="toggle-switch" style="transform: scale(0.6);">
-                                <input type="checkbox" ${channel.slippage_protection_enabled ? 'checked' : ''} 
-                                       onchange="updateSlippageProtection(${channel.id}, this.checked, null)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 3px;">
-                            <input type="number" id="slippage-max-${channel.id}" value="${channel.slippage_max_pct || ''}" placeholder="50" min="1" max="500" step="1"
-                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                   ${channel.slippage_protection_enabled ? '' : 'disabled'}
-                                   onchange="updateSlippageProtection(${channel.id}, null, this.value)">
-                            <span style="font-size: 9px; color: #6B7A90;">%</span>
-                        </div>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Slippage Wait: How long to wait for price to come back within threshold before cancelling (minutes). Blank = use global default (5 min). Only applies to conditional orders.">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">SlpWait</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 3px;">
-                            <input type="number" id="slippage-wait-${channel.id}" value="${channel.slippage_wait_minutes || ''}" placeholder="5" min="1" max="120" step="1"
-                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                   onchange="updateSlippageWait(${channel.id}, this.value)">
-                            <span style="font-size: 9px; color: #6B7A90;">m</span>
-                        </div>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Limit Cap: Maximum price above trigger for conditional orders (prevents chasing runaway prices)">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">LimCap</span>
-                            <label class="toggle-switch" style="transform: scale(0.6);">
-                                <input type="checkbox" ${channel.limit_cap_enabled ? 'checked' : ''} 
-                                       onchange="updateLimitCap(${channel.id}, this.checked, null)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 3px;">
-                            <input type="number" id="limit-cap-pct-${channel.id}" value="${channel.limit_cap_pct || ''}" placeholder="5" min="0.1" max="50" step="0.1"
-                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #b388ff;"
-                                   ${channel.limit_cap_enabled ? '' : 'disabled'}
-                                   onchange="updateLimitCap(${channel.id}, null, this.value)">
-                            <span style="font-size: 9px; color: #b388ff;">%</span>
-                        </div>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Breakout Reset Guard: When enabled, if price is already past the trigger when order is created, waits for a pullback before allowing trigger. Disable to trigger immediately if price is already past.">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">BrkReset</span>
-                            <label class="toggle-switch" style="transform: scale(0.6);">
-                                <input type="checkbox" ${(channel.breakout_reset_enabled === undefined || channel.breakout_reset_enabled) ? 'checked' : ''} 
-                                       onchange="updateBreakoutReset(${channel.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <p style="font-size: 8px; color: #6B7A90; margin: 0; line-height: 1.3;">Require pullback before trigger if price already past</p>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Trigger price offset for conditional orders (% or $ value)">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Trigger Offset</span>
-                            <select id="trigger-offset-mode-${channel.id}" 
-                                    style="width: 32px; padding: 1px 2px; font-size: 9px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #b388ff; cursor: pointer;"
-                                    onchange="updateTriggerOffsetMode(${channel.id}, this.value)">
-                                <option value="percent" ${(channel.trigger_offset_mode || 'percent') === 'percent' ? 'selected' : ''}>%</option>
-                                <option value="dollar" ${channel.trigger_offset_mode === 'dollar' ? 'selected' : ''}>$</option>
-                            </select>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 3px;">
-                            <input type="number" id="trigger-offset-val-${channel.id}"
-                                   value="${(channel.trigger_offset_mode === 'dollar' ? channel.trigger_offset_value : channel.trigger_offset_percent) || ''}" 
-                                   placeholder="0" min="-100" max="100" step="${(channel.trigger_offset_mode || 'percent') === 'dollar' ? '0.01' : '0.1'}"
-                                   style="width: 45px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                   onchange="updateTriggerOffset(${channel.id}, this.value)" title="Trigger offset (+/- for conditional order triggers)">
-                            <span id="trigger-offset-unit-${channel.id}" style="font-size: 9px; color: #6B7A90;">${(channel.trigger_offset_mode || 'percent') === 'dollar' ? '$' : '%'}</span>
-                        </div>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Chase unfilled orders with mid-price replacement">
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Order Chase</span>
-                            <select id="chase-mode-${channel.id}" 
-                                    style="width: 100%; padding: 3px 4px; font-size: 9px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                    onchange="updateChaseMode(${channel.id}, this.value)">
-                                <option value="off" ${channel.entry_chase_enabled === 0 && channel.order_chase_enabled === 0 ? 'selected' : ''}>OFF</option>
-                                <option value="entry" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled === 0 ? 'selected' : ''}>Entry Only</option>
-                                <option value="exit" ${(channel.entry_chase_enabled === 0 || channel.entry_chase_enabled === null) && (channel.order_chase_enabled === 1 || channel.order_chase_enabled === null) ? 'selected' : ''}>Exit Only</option>
-                                <option value="both" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled === 1 ? 'selected' : ''}>Both</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Convert NDX index options to equivalent QQQ options for brokers without NDX access">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 9px; color: ${channel.ndx_to_qqq_enabled ? '#b388ff' : '#6B7A90'}; text-transform: uppercase;">NDX→QQQ</span>
-                            <label class="toggle-switch" style="transform: scale(0.6);">
-                                <input type="checkbox" id="ndx-qqq-${channel.id}"
-                                       ${channel.ndx_to_qqq_enabled ? 'checked' : ''}
-                                       onchange="updateNdxToQqq(${channel.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 3px;">
-                            <span style="font-size: 8px; color: #6B7A90;">Δ</span>
-                            <input type="number" id="ndx-delta-${channel.id}" value="${channel.ndx_to_qqq_delta || 0.3}" placeholder="0.3" min="0.1" max="1.0" step="0.05"
-                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #b388ff;"
-                                   ${channel.ndx_to_qqq_enabled ? '' : 'disabled'}
-                                   onchange="updateNdxToQqqDelta(${channel.id}, this.value)" title="Target delta for QQQ option conversion">
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Order Type Controls Row -->
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(139,161,199,0.08); border-top: 1px solid rgba(139,161,199,0.08);">
-                    <div style="background: #0F1319; padding: 8px 10px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Entry Order</span>
-                        <select id="entry-order-type-${channel.id}"
-                                style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                onchange="updateOrderType(${channel.id}, 'entry', this.value)">
-                            <option value="limit" ${(channel.entry_order_mode || 'limit') === 'limit' ? 'selected' : ''}>Limit</option>
-                            <option value="market" ${channel.entry_order_mode === 'market' ? 'selected' : ''}>Market</option>
-                        </select>
-                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">BTO entries</span>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Trim Order</span>
-                        <select id="trim-order-type-${channel.id}"
-                                style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                onchange="updateOrderType(${channel.id}, 'trim', this.value)">
-                            <option value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'selected' : ''}>Market</option>
-                            <option value="limit" ${channel.trim_order_mode === 'limit' ? 'selected' : ''}>Limit</option>
-                        </select>
-                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">
-                            ${channel.trim_order_mode === 'limit' ? 
-                                (channel.trim_limit_offset_mode === 'percent' ? 
-                                    'Offset: ' + (channel.trim_limit_offset_pct || 2) + '%' : 
-                                    'Offset: $' + (channel.trim_limit_offset || 0.01)) 
-                                : 'Profit target exits'}
-                        </span>
-                    </div>
-                    <div style="background: #0F1319; padding: 8px 10px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">SL Order</span>
-                        <select id="sl-order-type-${channel.id}"
-                                style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                onchange="updateOrderType(${channel.id}, 'sl', this.value)">
-                            <option value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'selected' : ''}>Limit</option>
-                            <option value="market" ${channel.sl_order_mode === 'market' ? 'selected' : ''}>Market</option>
-                        </select>
-                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">Stop loss exits</span>
-                    </div>
-                </div>
-                
-                <!-- Footer -->
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(15,19,25,0.6); border-top: 1px solid rgba(139,161,199,0.08);">
-                    <button onclick="openUserModal(${channel.id}, '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(139,161,199,0.1); border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #8BA1C7; cursor: pointer;">
-                        Users <span style="background: rgba(16,240,179,0.15); color: #10F0B3; padding: 1px 5px; border-radius: 2px; margin-left: 4px; font-size: 9px;">${userCount > 0 ? userCount : 'All'}</span>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: rgba(15,19,25,0.6); border-top: 1px solid rgba(139,161,199,0.08); gap: 8px;">
+                    <button onclick="openUserModal(${channel.id}, '${channel.name.replace(/'/g, "\\'")}')" style="font-size: 11px; padding: 5px 12px; background: rgba(139,161,199,0.1); border: 1px solid rgba(139,161,199,0.2); border-radius: 6px; color: #8BA1C7; cursor: pointer; transition: all 0.2s;">
+                        👥 Users <span class="user-count-badge" style="background: rgba(16,240,179,0.15); color: #10F0B3; padding: 1px 6px; border-radius: 3px; margin-left: 4px; font-size: 9px; font-weight: 600;">${userCount > 0 ? userCount : 'All'}</span>
                     </button>
-                    <button onclick="openScannerModal('${channel.discord_channel_id}', '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); border-radius: 3px; color: #A78BFA; cursor: pointer;" title="Scan channel messages to discover signal formats">Scan Formats</button>
-                    <button onclick="deleteChannel(${channel.id})" style="font-size: 10px; padding: 4px 10px; background: rgba(255,82,82,0.1); border: 1px solid rgba(255,82,82,0.2); border-radius: 3px; color: #FF5252; cursor: pointer;">Delete</button>
+                    <button onclick="openScannerModal('${channelIdDisplay}', '${channel.name.replace(/'/g, "\\'")}')" style="font-size: 11px; padding: 5px 12px; background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.25); border-radius: 6px; color: #A78BFA; cursor: pointer; transition: all 0.2s;" title="Scan channel messages to discover signal formats">🔍 Scan</button>
+                    <button class="settings-gear-btn" onclick="openChannelSettings(${channel.id})">⚙ Settings</button>
+                    <button onclick="deleteChannel(${channel.id})" style="font-size: 11px; padding: 5px 12px; background: rgba(255,82,82,0.08); border: 1px solid rgba(255,82,82,0.2); border-radius: 6px; color: #FF5252; cursor: pointer; transition: all 0.2s;">🗑</button>
                 </div>
             </div>
         `;
     }).join('');
+}
+
+function openChannelSettings(channelId) {
+    const channel = allChannels.find(c => c.id === channelId);
+    if (!channel) return;
+
+    currentSettingsChannelId = channelId;
+    document.getElementById('settingsModalTitle').textContent = channel.name + ' Settings';
+
+    document.getElementById('settingsTabSizing').innerHTML = buildSizingTab(channel);
+    document.getElementById('settingsTabRisk').innerHTML = buildRiskControlsTab(channel);
+    document.getElementById('settingsTabOrders').innerHTML = buildOrderTypesTab(channel);
+    document.getElementById('settingsTabConditional').innerHTML = buildConditionalTab(channel);
+
+    switchSettingsTab('sizing');
+
+    const modal = document.getElementById('channelSettingsModal');
+    modal.classList.add('active');
+    setTimeout(() => modal.querySelector('.settings-modal-container').classList.add('open'), 10);
+}
+
+function closeChannelSettings() {
+    const modal = document.getElementById('channelSettingsModal');
+    const container = modal.querySelector('.settings-modal-container');
+    container.classList.remove('open');
+    setTimeout(() => {
+        modal.classList.remove('active');
+        currentSettingsChannelId = null;
+    }, 300);
+}
+
+function switchSettingsTab(tabName) {
+    document.querySelectorAll('.settings-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.settings-tab-content').forEach(c => {
+        c.classList.toggle('active', c.id === 'settingsTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+    });
+}
+
+function buildSizingTab(ch) {
+    return `
+        <div class="settings-row">
+            <div class="settings-section green">
+                <div class="settings-section-title">🚀 Execute</div>
+                <div class="settings-toggle-row">
+                    <span>Execute Trades</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" ${ch.execute_enabled === 1 ? 'checked' : ''} onchange="toggleExecute(${ch.id}, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row" style="margin-top: 10px;">
+                    <div class="settings-field">
+                        <label>Position Size %</label>
+                        <input type="number" value="${ch.position_size_pct || ''}" placeholder="Auto" min="0.1" max="100" step="0.1"
+                               onchange="updatePositionSize(${ch.id}, this.value, 'execution')">
+                    </div>
+                    <div class="settings-field">
+                        <label>Default Qty</label>
+                        <input type="number" value="${ch.default_quantity || ''}" placeholder="Auto" min="1" max="1000" step="1"
+                               onchange="updateDefaultQuantity(${ch.id}, this.value)">
+                    </div>
+                </div>
+                <div class="settings-toggle-row">
+                    <span>Force My Size %</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" ${ch.ignore_signal_position_size ? 'checked' : ''} onchange="updateIgnoreSignalPositionSize(${ch.id}, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="settings-helper">Override signal provider's suggested % with your channel size %</div>
+                <div class="settings-field" style="margin-top: 12px;">
+                    <label>Balance Mode</label>
+                    <select onchange="updateSizingMode(${ch.id}, this.value)">
+                        <option value="live" ${(ch.sizing_mode || 'live') === 'live' ? 'selected' : ''}>Live (Real-time)</option>
+                        <option value="start_of_day" ${ch.sizing_mode === 'start_of_day' ? 'selected' : ''}>Start-of-Day (9:30 AM)</option>
+                    </select>
+                    <div class="settings-helper">Live uses current buying power. Start-of-Day uses 9:30 AM snapshot.</div>
+                </div>
+            </div>
+            <div class="settings-section mint">
+                <div class="settings-section-title">📈 Track</div>
+                <div class="settings-toggle-row">
+                    <span>Track Signals</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" ${ch.track_enabled === 1 ? 'checked' : ''} onchange="toggleTrack(${ch.id}, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row" style="margin-top: 10px;">
+                    <div class="settings-field">
+                        <label>Position Size %</label>
+                        <input type="number" value="${ch.tracking_position_size_pct || ''}" placeholder="Auto" min="0.1" max="100" step="0.1"
+                               onchange="updatePositionSize(${ch.id}, this.value, 'tracking')">
+                    </div>
+                    <div class="settings-field">
+                        <label>Default Qty</label>
+                        <input type="number" value="${ch.tracking_default_quantity || ''}" placeholder="Auto" min="1" max="1000" step="1"
+                               onchange="updateTrackingDefaultQuantity(${ch.id}, this.value)">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="settings-section amber">
+            <div class="settings-section-title">💰 Position Limits</div>
+            <div class="settings-field" style="max-width: 280px;">
+                <label>Max Position $</label>
+                <input type="number" value="${ch.channel_max_position_size || ''}" placeholder="No limit" min="100" max="100000" step="100"
+                       onchange="updateChannelMaxPositionSize(${ch.id}, this.value)">
+                <div class="settings-helper">Dollar cap on calculated position size</div>
+            </div>
+        </div>
+    `;
+}
+
+function buildRiskControlsTab(ch) {
+    return `
+        <div class="settings-section violet">
+            <div class="settings-section-title">🎯 Exit Strategy</div>
+            <div class="settings-row">
+                <div class="settings-field">
+                    <label>Exit Mode</label>
+                    <select onchange="updateExitStrategy(${ch.id}, this.value)">
+                        <option value="signal" ${ch.exit_strategy_mode === 'signal' ? 'selected' : ''}>Signal (Follow Trader)</option>
+                        <option value="risk" ${ch.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk (Auto Targets/Stops)</option>
+                        <option value="hybrid" ${(ch.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'selected' : ''}>Hybrid (Both)</option>
+                    </select>
+                </div>
+                <div style="display: flex; align-items: flex-end;">
+                    <div class="settings-toggle-row" style="width: 100%;">
+                        <span>Signal Update Automation</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${ch.signal_update_automation ? 'checked' : ''} onchange="updateSignalUpdateAutomation(${ch.id}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-helper">Signal: follow trader exits. Risk: auto PT/SL. Hybrid: both active, first trigger wins.</div>
+        </div>
+        <div class="settings-section cyan">
+            <div class="settings-section-title">🛡 Slippage Protection</div>
+            <div class="settings-toggle-row">
+                <span>Enable Slippage Protection</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="modal-slip-toggle-${ch.id}" ${ch.slippage_protection_enabled ? 'checked' : ''} onchange="updateSlippageProtection(${ch.id}, this.checked, null)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="settings-row" style="margin-top: 10px;">
+                <div class="settings-field">
+                    <label>Max Slippage %</label>
+                    <input type="number" id="modal-slip-max-${ch.id}" value="${ch.slippage_max_pct || ''}" placeholder="50" min="1" max="500" step="1"
+                           ${ch.slippage_protection_enabled ? '' : 'disabled'} onchange="updateSlippageProtection(${ch.id}, null, this.value)">
+                </div>
+                <div class="settings-field">
+                    <label>Wait (minutes)</label>
+                    <input type="number" value="${ch.slippage_wait_minutes || ''}" placeholder="5 (default)" min="1" max="120" step="1"
+                           onchange="updateSlippageWait(${ch.id}, this.value)">
+                    <div class="settings-helper">How long to wait for price to return within threshold</div>
+                </div>
+            </div>
+        </div>
+        <div class="settings-section indigo">
+            <div class="settings-section-title">💲 Price Controls</div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-toggle-row">
+                        <span>Limit Cap</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="modal-limcap-toggle-${ch.id}" ${ch.limit_cap_enabled ? 'checked' : ''} onchange="updateLimitCap(${ch.id}, this.checked, null)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-field" style="margin-top: 8px;">
+                        <label>Cap %</label>
+                        <input type="number" id="modal-limcap-pct-${ch.id}" value="${ch.limit_cap_pct || ''}" placeholder="5" min="0.1" max="50" step="0.1"
+                               ${ch.limit_cap_enabled ? '' : 'disabled'} onchange="updateLimitCap(${ch.id}, null, this.value)">
+                        <div class="settings-helper">Max price above trigger for conditional orders</div>
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label>Order Chase</label>
+                    <select onchange="updateChaseMode(${ch.id}, this.value)">
+                        <option value="off" ${ch.entry_chase_enabled === 0 && ch.order_chase_enabled === 0 ? 'selected' : ''}>OFF</option>
+                        <option value="entry" ${ch.entry_chase_enabled === 1 && ch.order_chase_enabled === 0 ? 'selected' : ''}>Entry Only</option>
+                        <option value="exit" ${(ch.entry_chase_enabled === 0 || ch.entry_chase_enabled === null) && (ch.order_chase_enabled === 1 || ch.order_chase_enabled === null) ? 'selected' : ''}>Exit Only</option>
+                        <option value="both" ${ch.entry_chase_enabled === 1 && ch.order_chase_enabled === 1 ? 'selected' : ''}>Both</option>
+                    </select>
+                    <div class="settings-helper">Chase unfilled orders with mid-price replacement</div>
+                </div>
+            </div>
+        </div>
+        <div class="settings-section amber">
+            <div class="settings-section-title">🔄 Symbol Conversion</div>
+            <div class="settings-toggle-row">
+                <span>NDX → QQQ Conversion</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="modal-ndx-toggle-${ch.id}" ${ch.ndx_to_qqq_enabled ? 'checked' : ''} onchange="updateNdxToQqq(${ch.id}, this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="settings-field" style="max-width: 200px; margin-top: 8px;">
+                <label>Target Delta</label>
+                <input type="number" id="modal-ndx-delta-${ch.id}" value="${ch.ndx_to_qqq_delta || 0.3}" placeholder="0.3" min="0.1" max="1.0" step="0.05"
+                       ${ch.ndx_to_qqq_enabled ? '' : 'disabled'} onchange="updateNdxToQqqDelta(${ch.id}, this.value)">
+                <div class="settings-helper">Convert NDX index options to equivalent QQQ options</div>
+            </div>
+        </div>
+    `;
+}
+
+function buildOrderTypesTab(ch) {
+    return `
+        <div class="settings-row three-col">
+            <div class="settings-section green">
+                <div class="settings-section-title">📥 Entry Order</div>
+                <div class="settings-field">
+                    <label>Order Type</label>
+                    <select onchange="updateOrderType(${ch.id}, 'entry', this.value)">
+                        <option value="limit" ${(ch.entry_order_mode || 'limit') === 'limit' ? 'selected' : ''}>Limit</option>
+                        <option value="market" ${ch.entry_order_mode === 'market' ? 'selected' : ''}>Market</option>
+                    </select>
+                    <div class="settings-helper">BTO entry orders</div>
+                </div>
+            </div>
+            <div class="settings-section indigo">
+                <div class="settings-section-title">✂ Trim Order</div>
+                <div class="settings-field">
+                    <label>Order Type</label>
+                    <select onchange="updateOrderType(${ch.id}, 'trim', this.value)">
+                        <option value="market" ${(ch.trim_order_mode || 'market') === 'market' ? 'selected' : ''}>Market</option>
+                        <option value="limit" ${ch.trim_order_mode === 'limit' ? 'selected' : ''}>Limit</option>
+                    </select>
+                    <div class="settings-helper">Profit target exits</div>
+                </div>
+            </div>
+            <div class="settings-section red">
+                <div class="settings-section-title">🛑 Stop Loss Order</div>
+                <div class="settings-field">
+                    <label>Order Type</label>
+                    <select onchange="updateOrderType(${ch.id}, 'sl', this.value)">
+                        <option value="limit" ${(ch.sl_order_mode || 'limit') === 'limit' ? 'selected' : ''}>Limit</option>
+                        <option value="market" ${ch.sl_order_mode === 'market' ? 'selected' : ''}>Market</option>
+                    </select>
+                    <div class="settings-helper">Stop loss exits</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function buildConditionalTab(ch) {
+    return `
+        <div class="settings-section violet">
+            <div class="settings-section-title">⏱ Conditional Orders</div>
+            <div class="settings-toggle-row">
+                <span>Enable Conditional Orders</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" ${ch.conditional_order_enabled ? 'checked' : ''} onchange="updateConditionalOrderEnabled(${ch.id}, this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="settings-helper" style="margin-bottom: 12px;">ABOVE/BELOW price triggers create pending orders that execute when conditions are met</div>
+            <div class="settings-row">
+                <div class="settings-field">
+                    <label>Order Timeout (all orders)</label>
+                    <input type="number" value="${ch.order_timeout_minutes || ''}" placeholder="No limit" min="1" max="1440" step="1"
+                           onchange="updateOrderTimeout(${ch.id}, this.value)">
+                    <div class="settings-helper">Auto-cancel unfilled orders after X minutes</div>
+                </div>
+                <div class="settings-field">
+                    <label>Conditional Timeout</label>
+                    <input type="number" value="${ch.conditional_order_timeout_minutes || ''}" placeholder="No limit" min="1" max="1440" step="1"
+                           onchange="updateConditionalOrderTimeout(${ch.id}, this.value)">
+                    <div class="settings-helper">Separate timeout for conditional orders only</div>
+                </div>
+            </div>
+        </div>
+        <div class="settings-section amber">
+            <div class="settings-section-title">🔄 Breakout Reset Guard</div>
+            <div class="settings-toggle-row">
+                <span>Require Pullback Before Trigger</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" ${(ch.breakout_reset_enabled === undefined || ch.breakout_reset_enabled) ? 'checked' : ''} onchange="updateBreakoutReset(${ch.id}, this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="settings-helper">When price is already past the trigger at order creation, wait for a pullback before allowing trigger. Disable to trigger immediately.</div>
+        </div>
+        <div class="settings-section cyan">
+            <div class="settings-section-title">🎯 Trigger Offset</div>
+            <div class="settings-row">
+                <div class="settings-field">
+                    <label>Offset Mode</label>
+                    <select id="modal-trigger-offset-mode-${ch.id}" onchange="updateTriggerOffsetMode(${ch.id}, this.value)">
+                        <option value="percent" ${(ch.trigger_offset_mode || 'percent') === 'percent' ? 'selected' : ''}>Percent (%)</option>
+                        <option value="dollar" ${ch.trigger_offset_mode === 'dollar' ? 'selected' : ''}>Dollar ($)</option>
+                    </select>
+                </div>
+                <div class="settings-field">
+                    <label>Offset Value</label>
+                    <input type="number" id="modal-trigger-offset-val-${ch.id}"
+                           value="${(ch.trigger_offset_mode === 'dollar' ? ch.trigger_offset_value : ch.trigger_offset_percent) || ''}"
+                           placeholder="0" min="-100" max="100" step="${(ch.trigger_offset_mode || 'percent') === 'dollar' ? '0.01' : '0.1'}"
+                           onchange="updateTriggerOffset(${ch.id}, this.value)">
+                    <div class="settings-helper">Positive = further from current price. Negative = closer.</div>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 async function addChannel() {
@@ -1528,15 +1928,13 @@ async function toggleExecute(channelId, enabled) {
         });
         
         if (response.ok) {
-            await loadChannels();
+            updateLocalChannel(channelId, { execute_enabled: enabled ? 1 : 0 });
             showNotification(`Execute mode ${enabled ? 'enabled' : 'disabled'}`);
         } else {
             showNotification('Error updating channel', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1549,15 +1947,13 @@ async function toggleTrack(channelId, enabled) {
         });
         
         if (response.ok) {
-            await loadChannels();
+            updateLocalChannel(channelId, { track_enabled: enabled ? 1 : 0 });
             showNotification(`Track mode ${enabled ? 'enabled' : 'disabled'}`);
         } else {
             showNotification('Error updating channel', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1567,7 +1963,6 @@ async function updatePositionSize(channelId, value, sizeType = 'execution') {
         
         if (positionSizePct !== null && (positionSizePct < 0.1 || positionSizePct > 100)) {
             showNotification('Position size must be between 0.1% and 100%', 'error');
-            await loadChannels();
             return;
         }
         
@@ -1580,15 +1975,14 @@ async function updatePositionSize(channelId, value, sizeType = 'execution') {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { [fieldName]: positionSizePct });
             const displayValue = positionSizePct ? `${positionSizePct}%` : 'Auto';
             showNotification(`${sizeType === 'tracking' ? 'Track' : 'Execute'} position size set to ${displayValue}`);
         } else {
             showNotification('Error updating position size', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1601,16 +1995,14 @@ async function updateIgnoreSignalPositionSize(channelId, enabled) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { ignore_signal_position_size: enabled ? 1 : 0 });
             const status = enabled ? 'enabled' : 'disabled';
             showNotification(`Force My Size % ${status} - ${enabled ? 'Your channel size % will override signal provider' : 'Signal provider size % will be used'}`);
-            await loadChannels();
         } else {
             showNotification('Error updating position size preference', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1623,16 +2015,14 @@ async function updateSizingMode(channelId, mode) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { sizing_mode: mode });
             const label = mode === 'start_of_day' ? 'Start-of-Day (9:30 AM snapshot)' : 'Live (real-time)';
             showNotification(`Position sizing balance mode: ${label}`);
-            await loadChannels();
         } else {
             showNotification('Error updating sizing mode', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1642,7 +2032,6 @@ async function updateDefaultQuantity(channelId, value) {
         
         if (defaultQuantity !== null && (defaultQuantity < 1 || defaultQuantity > 1000)) {
             showNotification('Default quantity must be between 1 and 1000', 'error');
-            await loadChannels();
             return;
         }
         
@@ -1653,15 +2042,14 @@ async function updateDefaultQuantity(channelId, value) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { default_quantity: defaultQuantity });
             const displayValue = defaultQuantity ? `${defaultQuantity}` : 'Auto';
             showNotification(`Default quantity set to ${displayValue}`);
         } else {
             showNotification('Error updating default quantity', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1671,7 +2059,6 @@ async function updateTrackingDefaultQuantity(channelId, value) {
         
         if (trackingQuantity !== null && (trackingQuantity < 1 || trackingQuantity > 1000)) {
             showNotification('Tracking quantity must be between 1 and 1000', 'error');
-            await loadChannels();
             return;
         }
         
@@ -1682,15 +2069,14 @@ async function updateTrackingDefaultQuantity(channelId, value) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { tracking_default_quantity: trackingQuantity });
             const displayValue = trackingQuantity ? `${trackingQuantity}` : 'Auto';
             showNotification(`Tracking quantity set to ${displayValue}`);
         } else {
             showNotification('Error updating tracking quantity', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1700,7 +2086,6 @@ async function updateChannelMaxPositionSize(channelId, value) {
         
         if (maxPosSize !== null && (maxPosSize < 100 || maxPosSize > 100000)) {
             showNotification('Max position size must be between $100 and $100,000', 'error');
-            await loadChannels();
             return;
         }
         
@@ -1711,15 +2096,14 @@ async function updateChannelMaxPositionSize(channelId, value) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { channel_max_position_size: maxPosSize });
             const displayValue = maxPosSize ? `$${maxPosSize.toLocaleString()}` : 'No limit';
             showNotification(`Max position size set to ${displayValue}`);
         } else {
             showNotification('Error updating max position size', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1737,16 +2121,13 @@ async function updateExitStrategy(channelId, mode) {
                 'risk': 'Risk (Auto Targets/Stops)',
                 'hybrid': 'Hybrid (Both)'
             };
-            const ch = allChannels.find(c => c.id === channelId);
-            if (ch) ch.exit_strategy_mode = mode;
+            updateLocalChannel(channelId, { exit_strategy_mode: mode });
             showNotification(`Exit strategy set to ${modeLabels[mode] || mode}`);
         } else {
             showNotification('Error updating exit strategy', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1759,16 +2140,15 @@ async function updateSignalUpdateAutomation(channelId, enabled) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { signal_update_automation: enabled ? 1 : 0 });
             showNotification(enabled ? 
                 'Signal Update Automation enabled - broker orders will update when signals are edited' : 
                 'Signal Update Automation disabled');
         } else {
             showNotification('Error updating Signal Update Automation', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1781,17 +2161,15 @@ async function updateConditionalOrderEnabled(channelId, enabled) {
         });
         
         if (response.ok) {
-            await loadChannels();
+            updateLocalChannel(channelId, { conditional_order_enabled: enabled ? 1 : 0 });
             showNotification(enabled ? 
                 'Conditional Orders enabled - ABOVE/BELOW price triggers will create pending orders' : 
                 'Conditional Orders disabled');
         } else {
             showNotification('Error updating Conditional Order settings', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1805,6 +2183,7 @@ async function updateOrderTimeout(channelId, minutes) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { order_timeout_minutes: timeoutValue });
             if (timeoutValue) {
                 const hours = Math.floor(timeoutValue / 60);
                 const mins = timeoutValue % 60;
@@ -1815,11 +2194,9 @@ async function updateOrderTimeout(channelId, minutes) {
             }
         } else {
             showNotification('Error updating order timeout', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1829,7 +2206,7 @@ async function updateSlippageProtection(channelId, enabled, maxPct) {
         
         if (enabled !== null) {
             updates.slippage_protection_enabled = enabled ? 1 : 0;
-            const slippageInput = document.getElementById(`slippage-max-${channelId}`);
+            const slippageInput = document.getElementById(`modal-slip-max-${channelId}`);
             if (slippageInput) {
                 slippageInput.disabled = !enabled;
             }
@@ -1846,6 +2223,7 @@ async function updateSlippageProtection(channelId, enabled, maxPct) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, updates);
             if (enabled !== null) {
                 showNotification(enabled ? 'Slippage protection enabled' : 'Slippage protection disabled');
             } else if (maxPct !== null) {
@@ -1853,11 +2231,9 @@ async function updateSlippageProtection(channelId, enabled, maxPct) {
             }
         } else {
             showNotification('Error updating slippage protection', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1870,14 +2246,13 @@ async function updateSlippageWait(channelId, minutes) {
             body: JSON.stringify({ slippage_wait_minutes: waitVal })
         });
         if (response.ok) {
+            updateLocalChannel(channelId, { slippage_wait_minutes: waitVal });
             showNotification(waitVal ? `Slippage wait set to ${waitVal} min` : 'Slippage wait reset to global default');
         } else {
             showNotification('Error updating slippage wait', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1887,7 +2262,7 @@ async function updateLimitCap(channelId, enabled, capPct) {
         
         if (enabled !== null) {
             updates.limit_cap_enabled = enabled ? 1 : 0;
-            const capInput = document.getElementById(`limit-cap-pct-${channelId}`);
+            const capInput = document.getElementById(`modal-limcap-pct-${channelId}`);
             if (capInput) {
                 capInput.disabled = !enabled;
             }
@@ -1904,6 +2279,7 @@ async function updateLimitCap(channelId, enabled, capPct) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, updates);
             if (enabled !== null) {
                 showNotification(enabled ? 'Limit cap enabled (prevents chasing)' : 'Limit cap disabled');
             } else if (capPct !== null) {
@@ -1911,11 +2287,9 @@ async function updateLimitCap(channelId, enabled, capPct) {
             }
         } else {
             showNotification('Error updating limit cap', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1928,14 +2302,13 @@ async function updateBreakoutReset(channelId, enabled) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { breakout_reset_enabled: enabled ? 1 : 0 });
             showNotification(enabled ? 'Breakout reset guard enabled (requires pullback)' : 'Breakout reset guard disabled (triggers immediately)');
         } else {
             showNotification('Error updating breakout reset guard', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -1957,21 +2330,21 @@ async function updateOrderType(channelId, orderType, value) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, updates);
             const typeLabel = orderType === 'entry' ? 'Entry' : orderType === 'trim' ? 'Trim' : 'Stop Loss';
             showNotification(`${typeLabel} order type set to ${value}`);
         } else {
             showNotification('Error updating order type', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
 async function updateTriggerOffset(channelId, rawValue) {
     try {
-        const mode = document.getElementById(`trigger-offset-mode-${channelId}`).value;
+        const modeEl = document.getElementById(`modal-trigger-offset-mode-${channelId}`);
+        const mode = modeEl ? modeEl.value : 'percent';
         const val = rawValue ? parseFloat(rawValue) : 0;
         const payload = { trigger_offset_mode: mode };
         if (mode === 'dollar') {
@@ -1986,36 +2359,35 @@ async function updateTriggerOffset(channelId, rawValue) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, payload);
             if (val === 0) {
                 showNotification('Trigger offset cleared (using global)');
             } else {
-                const unit = mode === 'dollar' ? '$' : '%';
                 const sign = val > 0 ? '+' : '';
                 showNotification(`Trigger offset set to ${sign}${mode === 'dollar' ? '$' + val : val + '%'}`);
             }
         } else {
             showNotification('Error updating trigger offset', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
 async function updateTriggerOffsetMode(channelId, mode) {
     try {
-        const input = document.getElementById(`trigger-offset-val-${channelId}`);
-        const unitSpan = document.getElementById(`trigger-offset-unit-${channelId}`);
-        input.value = '';
-        input.step = mode === 'dollar' ? '0.01' : '0.1';
-        unitSpan.textContent = mode === 'dollar' ? '$' : '%';
+        const input = document.getElementById(`modal-trigger-offset-val-${channelId}`);
+        if (input) {
+            input.value = '';
+            input.step = mode === 'dollar' ? '0.01' : '0.1';
+        }
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ trigger_offset_mode: mode, trigger_offset_percent: 0, trigger_offset_value: 0 })
         });
         if (response.ok) {
+            updateLocalChannel(channelId, { trigger_offset_mode: mode, trigger_offset_percent: 0, trigger_offset_value: 0 });
             showNotification(`Trigger offset mode changed to ${mode === 'dollar' ? 'Dollar ($)' : 'Percent (%)'}`);
         }
     } catch (error) {
@@ -2032,14 +2404,13 @@ async function updateOrderChase(channelId, discordChannelId, enabled) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { order_chase_enabled: enabled ? 1 : 0 });
             showNotification(enabled ? 'Order chase enabled' : 'Order chase disabled');
         } else {
             showNotification('Error updating order chase', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -2082,14 +2453,13 @@ async function updateChaseMode(channelId, mode) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { entry_chase_enabled: entryChase, order_chase_enabled: exitChase });
             showNotification(modeLabel);
         } else {
             showNotification('Error updating chase mode', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -2102,17 +2472,15 @@ async function updateNdxToQqq(channelId, enabled) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { ndx_to_qqq_enabled: enabled ? 1 : 0 });
             showNotification(enabled ? 'NDX→QQQ conversion enabled' : 'NDX→QQQ conversion disabled');
-            // Enable/disable the delta input
-            const deltaInput = document.getElementById(`ndx-delta-${channelId}`);
+            const deltaInput = document.getElementById(`modal-ndx-delta-${channelId}`);
             if (deltaInput) deltaInput.disabled = !enabled;
         } else {
             showNotification('Error updating NDX→QQQ setting', 'error');
-            await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
     }
 }
 
@@ -2126,6 +2494,7 @@ async function updateNdxToQqqDelta(channelId, delta) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { ndx_to_qqq_delta: deltaValue });
             showNotification(`NDX→QQQ delta set to ${deltaValue}`);
         } else {
             showNotification('Error updating NDX→QQQ delta', 'error');
@@ -2145,6 +2514,7 @@ async function updateConditionalOrderTimeout(channelId, minutes) {
         });
         
         if (response.ok) {
+            updateLocalChannel(channelId, { conditional_order_timeout_minutes: timeoutValue });
             showNotification(timeoutValue ? `Conditional order timeout set to ${timeoutValue} minutes` : 'Conditional order timeout disabled');
         } else {
             showNotification('Error updating conditional order timeout', 'error');
@@ -2157,6 +2527,10 @@ async function updateConditionalOrderTimeout(channelId, minutes) {
 async function deleteChannel(channelId) {
     if (!confirm('Are you sure you want to delete this channel? This action cannot be undone.')) {
         return;
+    }
+    
+    if (currentSettingsChannelId === channelId) {
+        closeChannelSettings();
     }
     
     try {
@@ -2246,7 +2620,12 @@ async function addAllowedUser() {
             document.getElementById('newUserId').value = '';
             document.getElementById('newUsername').value = '';
             await loadAllowedUsers();
-            await loadChannels();
+            const usersResp = await fetch(`/api/channels/${currentChannelId}/allowed_users`);
+            if (usersResp.ok) {
+                const users = await usersResp.json();
+                channelUserCounts[currentChannelId] = users.length;
+                refreshCardSummary(currentChannelId);
+            }
             showNotification('User added successfully');
         } else {
             showNotification(result.error || 'Failed to add user', 'error');
@@ -2264,7 +2643,12 @@ async function removeAllowedUser(userId) {
         
         if (response.ok) {
             await loadAllowedUsers();
-            await loadChannels();
+            const usersResp = await fetch(`/api/channels/${currentChannelId}/allowed_users`);
+            if (usersResp.ok) {
+                const users = await usersResp.json();
+                channelUserCounts[currentChannelId] = users.length;
+                refreshCardSummary(currentChannelId);
+            }
             showNotification('User removed');
         } else {
             showNotification('Error removing user', 'error');
