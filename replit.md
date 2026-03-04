@@ -80,7 +80,8 @@ The web control panel is built with Flask, providing a responsive and interactiv
   - Webull `_get_current_option_quote`: normalized symbol for `get_option_quote(stock=...)` 
   - Webull `_build_option_hub_func`: normalized symbol for OCC key construction in slippage check
   - Webull prewarm cache: SPX entries also stored under SPXW alias key for instant cache hits
-  - Schwab `_build_option_symbol`: centralized alias normalization so ALL callers (place_option_order, get_option_quote, get_options_chain, bracket orders) get correct OCC symbols
+  - Schwab: NO alias needed — Schwab natively uses CBOE root symbols (SPXW, NDXP, etc.) in OCC format. Initial SPXW→SPX conversion was incorrect and reverted after live testing showed `SPX   260304C06885000` rejected by Schwab API.
+  - Alpaca: Does not support index options at all — clean rejection with helpful error message already in place
 - **Files**: `src/selfbot_webull.py`, `src/brokers/schwab_broker.py`
 
 ### Webhook Timeout Fix

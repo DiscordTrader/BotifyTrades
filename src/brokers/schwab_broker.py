@@ -946,12 +946,7 @@ class SchwabBroker(BrokerInterface):
             
             call_put = "C" if option_type.upper().startswith("C") else "P"
             
-            INDEX_ALIASES = {'SPXW': 'SPX', 'NDXP': 'NDX', 'VIXW': 'VIX', 'RUTW': 'RUT'}
-            broker_symbol = INDEX_ALIASES.get(symbol.upper(), symbol)
-            if broker_symbol != symbol:
-                print(f"[{self.name}] 🔄 Index option alias: {symbol} → {broker_symbol}")
-            
-            option_symbol = self._build_option_symbol(broker_symbol, expiry_formatted, strike, call_put)
+            option_symbol = self._build_option_symbol(symbol, expiry_formatted, strike, call_put)
             
             instruction = "BUY_TO_OPEN" if action.upper() == "BTO" else "SELL_TO_CLOSE"
             
@@ -1069,9 +1064,6 @@ class SchwabBroker(BrokerInterface):
         Example: AAPL  240119C00150000 = AAPL Jan 19 2024 $150 Call
         Note: Underlying symbol must be left-justified and space-padded to 6 characters
         """
-        INDEX_ALIASES = {'SPXW': 'SPX', 'NDXP': 'NDX', 'VIXW': 'VIX', 'RUTW': 'RUT'}
-        underlying = INDEX_ALIASES.get(underlying.upper(), underlying)
-        
         parts = expiry.split("-")
         if len(parts) == 3:
             year = parts[0][2:]
