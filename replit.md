@@ -108,3 +108,9 @@ Key changes:
 - **Direct exit thread**: `position_monitor.py` spawns a daemon thread per STC order as a safety net. If the event loop is blocked (e.g., by Robinhood's synchronous HTTP calls via robin_stocks), the thread executes independently.
 - **After-hours gate**: Risk engine suppresses exit orders outside trading hours. Options: regular hours only (9:30-4:00 ET). Stocks: regular + extended hours (4:00 AM - 8:00 PM ET). Logs `⏸️ AFTER HOURS` once per position, re-evaluates when market opens.
 - **SPX/SPXW alias normalization**: Applied across all matching layers — `position_monitor.py` (risk settings lookup, trade ID matching), `selfbot_webull.py` (STC position matching), `live_snapshot.py` (`_make_match_key` canonicalizes SPXW→SPX, NDXP→NDX), `broker_sync_service.py` (`_normalize_symbol` includes NDXP).
+
+## Signal Parser — Phoenix & JaCOB
+
+- **Phoenix** (`signal_format_registry.py`): Small-cap stock momentum signals. Entry patterns: "SYMBOL over PRICE SL X%", "in SYMBOL PRICE SL X%", "taking position SYMBOL PRICE". Exit patterns: "selling X% here SYMBOL", "leaving X%", "out of SYMBOL", "SL hit with SYMBOL", "SYMBOL SL hit". Handles typos (ocer/ober/iver). Role pings stripped by `parse()` before matching — patterns use `^\s*` anchors, not `<@&\d+>`.
+- **JaCOB** (`parser.py`): Structured stock signals with bracket order data. Format: "ENTERED LONG/SHORT: $SYMBOL / ENTRY: $PRICE / S.L: $PRICE / 1st Target: $PRICE". Supports position sizing ("X% OF ACCOUNT"). Returns `_bracket_order=True`, `_calculate_qty=True`.
+- **Learned patterns**: Reserved word filter in `_parse_learned_pattern_with_metadata` prevents "HERE", "MORE", "NOW" etc. from being captured as symbols.

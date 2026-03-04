@@ -472,47 +472,102 @@ class SignalFormatRegistry:
         # Priority 56-68 - after Bronze Swings, before learned patterns
         # =====================================================================
         
-        # Phoenix entry: <@&role> SYMBOL over PRICE + SL PRICE
+        # Phoenix entry: SYMBOL over PRICE + SL PRICE (role ping stripped by parse())
         self.register(
             name="phoenix_entry_over",
             description="Phoenix entry with 'over' price trigger and stop loss",
             priority=56,
-            pattern=r'<@&\d+>\s+\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr)\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)',
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)',
             parser=self._parse_phoenix_entry,
-            examples=["<@&role> PAVM over 21.50 SL 20", "<@&role> AMZE ocer 0.67 SL 0.62"],
+            examples=["PAVM over 21.50 SL 20", "AMZE ocer 0.67 SL 0.62"],
             flags=re.IGNORECASE | re.DOTALL
         )
         
-        # Phoenix entry: <@&role> SYMBOL over PRICE + SL X% (percentage stop loss)
+        # Phoenix entry: SYMBOL over PRICE + SL X% (percentage stop loss)
         self.register(
             name="phoenix_entry_over_pct_sl",
             description="Phoenix entry with 'over' price trigger and percentage stop loss",
             priority=57,
-            pattern=r'<@&\d+>\s+\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr)\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
             parser=self._parse_phoenix_entry_over_pct_sl,
-            examples=["<@&role> PHEG over 7.50 SL 10%", "<@&role> MOVE ober 30 SL 10%"],
+            examples=["PHEG over 7.50 SL 10%", "MOVE ober 30 SL 10%", "ARTV iver 4.60 SL 8%"],
             flags=re.IGNORECASE | re.DOTALL
         )
         
-        # Phoenix entry: <@&role> SYMBOL PRICE + SL X%
+        # Phoenix entry: SYMBOL over PRICE (no SL specified)
+        self.register(
+            name="phoenix_entry_over_no_sl",
+            description="Phoenix entry with 'over' price trigger, no stop loss",
+            priority=58,
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)',
+            parser=self._parse_phoenix_entry_no_sl,
+            examples=["ENVB over 12.80", "ENVB over 13"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Phoenix entry: taking position SYMBOL PRICE + SL X%
+        self.register(
+            name="phoenix_entry_taking",
+            description="Phoenix entry - taking position SYMBOL PRICE",
+            priority=58,
+            pattern=r'taking\s+(?:small\s+)?position[g]?\s+\$?([A-Z]{1,5})\s+(?:here\s+(?:avg\s+)?)?\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
+            parser=self._parse_phoenix_entry_over_pct_sl,
+            examples=["taking small position BBGI 7.85 SL 10%", "taking small positiong BTTC here avg 9.26 SL 10%"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Phoenix entry: taking position SYMBOL PRICE (no SL)
+        self.register(
+            name="phoenix_entry_taking_no_sl",
+            description="Phoenix entry - taking position SYMBOL PRICE (no SL)",
+            priority=58,
+            pattern=r'taking\s+(?:small\s+)?position[g]?\s+\$?([A-Z]{1,5})\s+(?:here\s+(?:avg\s+)?)?\$?([\d.]+)',
+            parser=self._parse_phoenix_entry_no_sl,
+            examples=["taking small position BBGI 7.85"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Phoenix entry: SYMBOL PRICE + SL X% (role ping stripped by parse())
         self.register(
             name="phoenix_entry_price",
             description="Phoenix entry with direct price and percentage stop loss",
-            priority=58,
-            pattern=r'<@&\d+>\s+\$?([A-Z]{1,5})\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
+            priority=59,
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
             parser=self._parse_phoenix_entry_pct_sl,
-            examples=["<@&role> GITS 2.50 SL 9%"],
+            examples=["GITS 2.50 SL 9%"],
             flags=re.IGNORECASE | re.DOTALL
         )
         
-        # Phoenix entry: in SYMBOL at PRICE
+        # Phoenix entry: SYMBOL PRICE + SL PRICE (price-based SL, no "over")
+        self.register(
+            name="phoenix_entry_price_sl",
+            description="Phoenix entry with direct price and price stop loss",
+            priority=60,
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)(?!%)',
+            parser=self._parse_phoenix_entry,
+            examples=["PETS 2.60 SL 2.40"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Phoenix entry: in SYMBOL PRICE + SL X% (e.g., "in MNTS 1.08 SL 10%")
+        self.register(
+            name="phoenix_entry_in_sl",
+            description="Phoenix entry - in SYMBOL PRICE SL",
+            priority=61,
+            pattern=r'^\s*(?:in\s+(?:on\s+)?)\$?([A-Z]{1,5})\s+(?:avg\s+)?\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
+            parser=self._parse_phoenix_entry_over_pct_sl,
+            examples=["in MNTS 1.08 SL 10%", "in AMCI avg 7.35 SL 9%"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Phoenix entry: in SYMBOL at/avg PRICE
         self.register(
             name="phoenix_entry_in_at",
             description="Phoenix entry - in SYMBOL at PRICE",
-            priority=59,
-            pattern=r'\bin\s+\$?([A-Z]{1,5})\s+at\s+\$?([\d.]+)',
+            priority=62,
+            pattern=r'\bin\s+\$?([A-Z]{1,5})\s+(?:at\s+|avg\s+)?\$?([\d.]+)',
             parser=self._parse_phoenix_entry_in_at,
-            examples=["in XHLD at 2.13", "in GITS at 5.60"],
+            examples=["in XHLD at 2.13", "in GITS at 5.60", "in MNTS 1.08", "in AMCI avg 7.35"],
             flags=re.IGNORECASE
         )
         
@@ -520,68 +575,90 @@ class SignalFormatRegistry:
         self.register(
             name="phoenix_trim_here",
             description="Phoenix partial exit - selling X% here",
-            priority=60,
-            pattern=r'selling\s+(\d+)%\s+here\s+\$?([A-Z]{1,5})',
+            priority=63,
+            pattern=r'selling\s+(\d+)%\s+here\s+\$?([A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_trim,
             examples=["selling 80% here PAVM", "selling 80% here IBRX"]
         )
         
-        # Phoenix trim: selling X% more SYMBOL
+        # Phoenix trim: selling X% more SYMBOL (skip "here" before symbol)
         self.register(
             name="phoenix_trim_more",
             description="Phoenix partial exit - selling X% more",
-            priority=61,
-            pattern=r'selling\s+(\d+)%\s+more\s+\$?([A-Z]{1,5})',
+            priority=64,
+            pattern=r'selling\s+(\d+)%\s+more\s+(?:here\s+)?\$?((?!HERE|MORE|NOW)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_trim,
-            examples=["selling 10% more GITS", "selling 10% more CRVS"]
+            examples=["selling 10% more GITS", "selling 10% more CRVS", "selling 10% more here ARTV"]
         )
         
-        # Phoenix trim: selling X% SYMBOL (simple format without here/more)
+        # Phoenix trim: selling X% SYMBOL (simple — SYMBOL must not be reserved word)
         self.register(
             name="phoenix_trim_simple",
             description="Phoenix partial exit - selling X% SYMBOL (simple format)",
-            priority=62,
-            pattern=r'selling\s+(\d+)%\s+\$?([A-Z]{1,5})(?:\s|$)',
+            priority=65,
+            pattern=r'selling\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF)[A-Z]{1,5})(?:\s|$)',
             parser=self._parse_phoenix_trim,
             examples=["selling 80% XHLD", "selling 10% GITS"]
         )
         
-        # Phoenix trim: leaving X% here SYMBOL
+        # Phoenix trim: leaving X% SYMBOL (must not capture reserved words)
         self.register(
             name="phoenix_leaving",
             description="Phoenix partial exit - leaving X% (meaning selling rest)",
-            priority=63,
-            pattern=r'leaving\s+(\d+)%\s+(?:here\s+)?\$?([A-Z]{1,5})',
+            priority=66,
+            pattern=r'leaving\s+(\d+)%\s+(?:here\s+)?(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?\$?((?!HERE|NOW|ON|MORE|THE|MY)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_leaving,
             examples=["leaving 10% here GITS", "leaving 20% PAVM"]
+        )
+        
+        # Phoenix trim: leaving X% (no symbol — needs position context)
+        self.register(
+            name="phoenix_leaving_no_sym",
+            description="Phoenix partial exit - leaving X% (no symbol)",
+            priority=66,
+            pattern=r'leaving\s+(\d+)%\s*(?:here|now)?(?:\s|$)',
+            parser=self._parse_phoenix_leaving_no_sym,
+            examples=["leaving 5% now", "leaving 5% here", "leaving 10%"]
         )
         
         # Phoenix trim: let the rest run (runner signal)
         self.register(
             name="phoenix_let_rest_run",
             description="Phoenix leave runner signal",
-            priority=64,
+            priority=67,
             pattern=r'let\s+(?:the\s+)?rest\s+run',
             parser=self._parse_phoenix_let_rest_run,
             examples=["let the rest run", "let rest run"]
         )
         
-        # Phoenix exit: hit SL
+        # Phoenix exit: SL hit with SYMBOL / SYMBOL SL hit
+        self.register(
+            name="phoenix_sl_hit_with",
+            description="Phoenix stop loss hit with symbol",
+            priority=68,
+            pattern=r'(?:(?:hit\s+(?:my\s+)?SL\s+with|SL\s+hit\s+(?:with)?)\s+\$?([A-Z]{1,5})|([A-Z]{1,5})\s+SL\s+hit)',
+            parser=self._parse_phoenix_sl_hit_with,
+            examples=["hit SL with MIGI", "SL hit with NIVF", "ENVB SL hit"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix exit: hit SL (no symbol — needs position context)
         self.register(
             name="phoenix_hit_sl",
             description="Phoenix stop loss hit (full exit)",
-            priority=65,
-            pattern=r'hit\s+SL',
+            priority=69,
+            pattern=r'hit\s+(?:my\s+)?SL(?!\s+with)',
             parser=self._parse_phoenix_hit_sl,
-            examples=["hit SL"]
+            examples=["hit SL", "hit my SL"],
+            flags=re.IGNORECASE
         )
         
         # Phoenix exit: out of SYMBOL (with optional reason)
         self.register(
             name="phoenix_out_of",
             description="Phoenix exit - out of SYMBOL",
-            priority=66,
-            pattern=r'out\s+of\s+\$?([A-Z]{1,5})',
+            priority=70,
+            pattern=r'out\s+of\s+\$?([A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_exit,
             examples=["out of PHGE", "out of PHGE with a loss"]
         )
@@ -590,7 +667,7 @@ class SignalFormatRegistry:
         self.register(
             name="phoenix_loss",
             description="Phoenix loss exit",
-            priority=67,
+            priority=71,
             pattern=r'got\s+a\s+loss\s+with\s+\$?([A-Z]{1,5})',
             parser=self._parse_phoenix_exit,
             examples=["got a loss with ADTX"]
@@ -1159,6 +1236,32 @@ class SignalFormatRegistry:
             "_phoenix_entry": True
         }
     
+    def _parse_phoenix_entry_no_sl(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix entry without SL: ENVB over 12.80"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "stop_loss": None,
+            "is_market_order": False,
+            "trigger_price": price,
+            "confidence": 0.9,
+            "_phoenix_entry": True
+        }
+    
     def _parse_phoenix_entry_in_at(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Phoenix entry: in XHLD at 2.13"""
         groups = match.groups()
@@ -1260,6 +1363,57 @@ class SignalFormatRegistry:
             "_phoenix_trim": True
         }
     
+    def _parse_phoenix_leaving_no_sym(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix leaving without symbol: leaving 5% now"""
+        groups = match.groups()
+        leaving_pct = float(groups[0]) if groups else None
+        sell_pct = 100 - leaving_pct if leaving_pct else None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": None,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": sell_pct,
+            "leaving_percentage": leaving_pct,
+            "confidence": 0.7,
+            "_phoenix_trim": True,
+            "_needs_position_context": True
+        }
+    
+    def _parse_phoenix_sl_hit_with(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix SL hit with symbol: hit SL with MIGI, ENVB SL hit"""
+        groups = match.groups()
+        symbol = (groups[0] or groups[1]).upper() if groups else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "stop_loss_hit": True,
+            "confidence": 1.0,
+            "_phoenix_exit": True
+        }
+    
     def _parse_phoenix_hit_sl(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Phoenix stop loss hit: hit SL (requires context for symbol)"""
         # This needs position context to determine symbol
@@ -1328,8 +1482,10 @@ class SignalFormatRegistry:
             g_stripped = g.strip()
             
             if g_stripped.isalpha() and len(g_stripped) <= 6:
-                if not symbol:
-                    symbol = g_stripped.upper()
+                upper_g = g_stripped.upper()
+                _RESERVED_WORDS = {'HERE', 'MORE', 'NOW', 'ON', 'THE', 'MY', 'OF', 'WITH', 'ALL', 'HALF', 'REST', 'SOME', 'AREA', 'HEREWI'}
+                if not symbol and upper_g not in _RESERVED_WORDS:
+                    symbol = upper_g
             elif _re.match(r'^(\d+(?:\.\d+)?)\s*([CcPp])$', g_stripped):
                 m = _re.match(r'^(\d+(?:\.\d+)?)\s*([CcPp])$', g_stripped)
                 strike = float(m.group(1))
