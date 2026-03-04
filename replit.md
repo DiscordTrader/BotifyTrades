@@ -106,3 +106,5 @@ Key changes:
 - **Parallel broker sync**: `broker_sync_service.py` runs all broker syncs in parallel (not sequential) with a 30s shared deadline. Each broker's `_fetch_account_info` has a 15s timeout.
 - **Stale closing flags**: `position_cache.py` clears `closing=True` flags on startup to prevent risk engine from skipping positions where previous exit orders failed.
 - **Direct exit thread**: `position_monitor.py` spawns a daemon thread per STC order as a safety net. If the event loop is blocked (e.g., by Robinhood's synchronous HTTP calls via robin_stocks), the thread executes independently.
+- **After-hours gate**: Risk engine suppresses exit orders outside trading hours. Options: regular hours only (9:30-4:00 ET). Stocks: regular + extended hours (4:00 AM - 8:00 PM ET). Logs `⏸️ AFTER HOURS` once per position, re-evaluates when market opens.
+- **SPX/SPXW alias normalization**: Applied across all matching layers — `position_monitor.py` (risk settings lookup, trade ID matching), `selfbot_webull.py` (STC position matching), `live_snapshot.py` (`_make_match_key` canonicalizes SPXW→SPX, NDXP→NDX), `broker_sync_service.py` (`_normalize_symbol` includes NDXP).

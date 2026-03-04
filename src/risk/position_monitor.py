@@ -1731,6 +1731,21 @@ class RiskManager:
         )
         
         if decision.should_exit:
+            from src.services.market_hours import is_regular_market_hours, is_extended_hours
+            if position.asset == 'option':
+                market_open = is_regular_market_hours()
+            else:
+                market_open = is_regular_market_hours() or is_extended_hours()
+            if not market_open:
+                if not hasattr(self, '_after_hours_logged'):
+                    self._after_hours_logged = set()
+                if pos_key not in self._after_hours_logged:
+                    self._after_hours_logged.add(pos_key)
+                    print(f"[RISK] ⏸️ AFTER HOURS — suppressing exit for {pos_key} "
+                          f"(reason: {decision.reason}). Will re-evaluate when market opens.")
+                return
+            if hasattr(self, '_after_hours_logged'):
+                self._after_hours_logged.discard(pos_key)
             await self._execute_exit(position, cache, decision, channel_settings)
     
     def _evaluate_exit_conditions(

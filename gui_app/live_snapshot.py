@@ -639,8 +639,15 @@ def _normalize_expiry(val):
         return f"{int(m.group(1)):02d}/{int(m.group(2)):02d}"
     return val
 
+_SYMBOL_CANONICAL = {
+    'SPXW': 'SPX', 'NDXP': 'NDX',
+}
+
+def _canonical_symbol(sym):
+    return _SYMBOL_CANONICAL.get(str(sym).upper(), str(sym).upper())
+
 def _make_match_key(broker, symbol, strike, expiry, call_put):
-    return f"{str(broker).upper()}|{symbol}|{_normalize_strike(strike)}|{_normalize_expiry(expiry)}|{(call_put or '').upper()[:1]}"
+    return f"{str(broker).upper()}|{_canonical_symbol(symbol)}|{_normalize_strike(strike)}|{_normalize_expiry(expiry)}|{(call_put or '').upper()[:1]}"
 
 
 def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_status: Dict[str, Dict] = None) -> List[Dict]:

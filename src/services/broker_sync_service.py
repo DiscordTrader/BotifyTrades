@@ -1418,9 +1418,9 @@ class BrokerSyncService:
         if not symbol:
             return symbol
         symbol_upper = symbol.upper()
-        if symbol_upper == 'SPXW':
+        if symbol_upper in ('SPXW',):
             return 'SPX'
-        if symbol_upper == 'NDXW':
+        if symbol_upper in ('NDXW', 'NDXP'):
             return 'NDX'
         return symbol_upper
 
