@@ -13538,14 +13538,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
                     
                     if account_info:
-                        buying_power = account_info.get('buying_power') or account_info.get('net_liquidation') or 0
-                        _original_print(f"[{broker_name}] [POSITION SIZE] Buying power: ${buying_power:,.2f}, Position size: {position_size_pct}%, Original qty: {original_qty}")
-                        if buying_power <= 0:
-                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Buying power is $0 - cannot calculate position size! Rejecting order.")
-                            return {'success': False, 'error': f'{broker_name} has $0 buying power - cannot calculate position size'}
-                        if buying_power > 0:
-                            # Calculate position size in dollars based on percentage
-                            position_dollars = (buying_power * position_size_pct) / 100
+                        buying_power = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
+                        options_buying_power = float(options_buying_power or 0)
+                        is_option_trade = signal['asset'] == 'option'
+                        if is_option_trade and options_buying_power > 0:
+                            sizing_base = options_buying_power
+                            sizing_label = "Options BP"
+                        else:
+                            sizing_base = buying_power
+                            sizing_label = "Buying Power"
+                        _original_print(f"[{broker_name}] [POSITION SIZE] {sizing_label}: ${sizing_base:,.2f} (Stock BP: ${buying_power:,.2f}, Options BP: ${options_buying_power:,.2f}), Size: {position_size_pct}%, Qty: {original_qty}")
+                        if sizing_base <= 0:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {sizing_label} is $0 - cannot calculate position size! Rejecting order.")
+                            return {'success': False, 'error': f'{broker_name} has $0 {sizing_label.lower()} - cannot calculate position size'}
+                        if sizing_base > 0:
+                            position_dollars = (sizing_base * position_size_pct) / 100
                             
                             # Apply channel-level max position size cap if set
                             channel_max_pos_size = signal.get('_channel_max_position_size')
