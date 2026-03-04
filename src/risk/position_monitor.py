@@ -287,13 +287,21 @@ class RiskDBAdapter:
         if not self._db:
             return None
         
+        SYMBOL_ALIASES = {
+            'SPX': ['SPXW', 'SPX'],
+            'SPXW': ['SPX', 'SPXW'],
+            'NDX': ['NDXP', 'NDX'],
+            'NDXP': ['NDX', 'NDXP'],
+        }
+        symbols_to_check = [symbol] + [s for s in SYMBOL_ALIASES.get(symbol, []) if s != symbol]
+        
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor()
             
+            sym_placeholders = ','.join(['?' for _ in symbols_to_check])
+            
             if asset_type == 'option':
-                # Normalize expiry to multiple formats for matching
-                # Database may have: "12/17", "1/21", "2025-12-17", "12/17/25", etc.
                 expiry_variants = [expiry] if expiry else []
                 if expiry:
                     if '-' in expiry and len(expiry) == 10:
@@ -323,7 +331,7 @@ class RiskDBAdapter:
                 row = None
                 for exp_try in expiry_variants:
                     if broker_name:
-                        cursor.execute('''
+                        cursor.execute(f'''
                             SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                                    c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
                                    c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
@@ -341,13 +349,13 @@ class RiskDBAdapter:
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
                                 OR t.channel_id = c.telegram_chat_id)
-                            WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
+                            WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
                             AND LOWER(t.broker) = LOWER(?)
                             AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                             ORDER BY t.id DESC LIMIT 1
-                        ''', (symbol, strike, exp_try, call_put, broker_name))
+                        ''', (*symbols_to_check, strike, exp_try, call_put, broker_name))
                     else:
-                        cursor.execute('''
+                        cursor.execute(f'''
                             SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                                    c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
                                    c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
@@ -365,10 +373,10 @@ class RiskDBAdapter:
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
                                 OR t.channel_id = c.telegram_chat_id)
-                            WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
+                            WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
                             AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                             ORDER BY t.id DESC LIMIT 1
-                        ''', (symbol, strike, exp_try, call_put))
+                        ''', (*symbols_to_check, strike, exp_try, call_put))
                     row = cursor.fetchone()
                     if row:
                         break
@@ -379,7 +387,7 @@ class RiskDBAdapter:
                 # For stocks, also filter by broker to get correct channel settings
                 # Include routing_mapping_id (index 23) for routed trade discrimination
                 if broker_name:
-                    cursor.execute('''
+                    cursor.execute(f'''
                         SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                                c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
                                c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
@@ -397,13 +405,13 @@ class RiskDBAdapter:
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
                             OR t.channel_id = c.telegram_chat_id)
-                        WHERE t.symbol = ? AND t.asset_type = 'stock'
+                        WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'stock'
                         AND LOWER(t.broker) = LOWER(?)
                         AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                         ORDER BY t.id DESC LIMIT 1
-                    ''', (symbol, broker_name))
+                    ''', (*symbols_to_check, broker_name))
                 else:
-                    cursor.execute('''
+                    cursor.execute(f'''
                         SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                                c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
                                c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
@@ -421,10 +429,10 @@ class RiskDBAdapter:
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
                             OR t.channel_id = c.telegram_chat_id)
-                        WHERE t.symbol = ? AND t.asset_type = 'stock'
+                        WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'stock'
                         AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                         ORDER BY t.id DESC LIMIT 1
-                    ''', (symbol,))
+                    ''', (*symbols_to_check,))
                 row = cursor.fetchone()
                 if not row:
                     return None
@@ -626,6 +634,14 @@ class RiskDBAdapter:
         broker = (broker or '').strip()
         symbol = (symbol or '').strip().upper()
         
+        SYMBOL_ALIASES = {
+            'SPX': ['SPXW', 'SPX'],
+            'SPXW': ['SPX', 'SPXW'],
+            'NDX': ['NDXP', 'NDX'],
+            'NDXP': ['NDX', 'NDXP'],
+        }
+        symbols_to_check = [symbol] + [s for s in SYMBOL_ALIASES.get(symbol, []) if s != symbol]
+        
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor()
@@ -686,54 +702,58 @@ class RiskDBAdapter:
                     seen = set()
                     expiry_variants = [x for x in expiry_variants if not (x in seen or seen.add(x))]
                 
-                # Normalize call_put
                 cp_normalized = call_put.upper()[0] if call_put else None
                 
-                # Try each expiry variant
-                for exp_try in expiry_variants:
-                    if cp_normalized:
-                        cursor.execute('''
-                            SELECT id FROM trades
-                            WHERE symbol = ? AND asset_type = 'option'
-                            AND strike = ? AND expiry = ? AND call_put = ?
-                            AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
-                            AND LOWER(broker) = LOWER(?)
-                            ORDER BY id DESC LIMIT 1
-                        ''', (symbol, strike, exp_try, cp_normalized, broker))
-                    else:
-                        cursor.execute('''
-                            SELECT id FROM trades
-                            WHERE symbol = ? AND asset_type = 'option'
-                            AND strike = ? AND expiry = ?
-                            AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
-                            AND LOWER(broker) = LOWER(?)
-                            ORDER BY id DESC LIMIT 1
-                        ''', (symbol, strike, exp_try, broker))
-                    
+                for sym_try in symbols_to_check:
+                    for exp_try in expiry_variants:
+                        if cp_normalized:
+                            cursor.execute('''
+                                SELECT id FROM trades
+                                WHERE symbol = ? AND asset_type = 'option'
+                                AND strike = ? AND expiry = ? AND call_put = ?
+                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND LOWER(broker) = LOWER(?)
+                                ORDER BY id DESC LIMIT 1
+                            ''', (sym_try, strike, exp_try, cp_normalized, broker))
+                        else:
+                            cursor.execute('''
+                                SELECT id FROM trades
+                                WHERE symbol = ? AND asset_type = 'option'
+                                AND strike = ? AND expiry = ?
+                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND LOWER(broker) = LOWER(?)
+                                ORDER BY id DESC LIMIT 1
+                            ''', (sym_try, strike, exp_try, broker))
+                        
+                        row = cursor.fetchone()
+                        if row:
+                            return row[0]
+                
+                for sym_try in symbols_to_check:
+                    cursor.execute('''
+                        SELECT id FROM trades
+                        WHERE symbol = ? AND asset_type = 'option'
+                        AND strike = ? AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                        AND LOWER(broker) = LOWER(?)
+                        ORDER BY id DESC LIMIT 1
+                    ''', (sym_try, strike, broker))
                     row = cursor.fetchone()
                     if row:
                         return row[0]
-                
-                # Fallback: match by strike only if no expiry match found
-                cursor.execute('''
-                    SELECT id FROM trades
-                    WHERE symbol = ? AND asset_type = 'option'
-                    AND strike = ? AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
-                    AND LOWER(broker) = LOWER(?)
-                    ORDER BY id DESC LIMIT 1
-                ''', (symbol, strike, broker))
-                row = cursor.fetchone()
-                return row[0] if row else None
+                return None
             else:
-                cursor.execute('''
-                    SELECT id FROM trades
-                    WHERE symbol = ? AND asset_type = 'stock'
-                    AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
-                    AND LOWER(broker) = LOWER(?)
-                    ORDER BY id DESC LIMIT 1
-                ''', (symbol, broker))
-                row = cursor.fetchone()
-                return row[0] if row else None
+                for sym_try in symbols_to_check:
+                    cursor.execute('''
+                        SELECT id FROM trades
+                        WHERE symbol = ? AND asset_type = 'stock'
+                        AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                        AND LOWER(broker) = LOWER(?)
+                        ORDER BY id DESC LIMIT 1
+                    ''', (sym_try, broker))
+                    row = cursor.fetchone()
+                    if row:
+                        return row[0]
+                return None
         except Exception as e:
             print(f"[RISK] Warning: Could not lookup trade_id: {e}")
             return None

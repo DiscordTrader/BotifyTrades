@@ -14181,6 +14181,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         norm_sig_expiry = _normalize_expiry(sig_expiry)
                         
+                        _STC_SYMBOL_ALIASES = {
+                            'SPX': {'SPX', 'SPXW'},
+                            'SPXW': {'SPX', 'SPXW'},
+                            'NDX': {'NDX', 'NDXP'},
+                            'NDXP': {'NDX', 'NDXP'},
+                        }
+                        sig_symbol_set = _STC_SYMBOL_ALIASES.get(sig_symbol, {sig_symbol})
+                        
                         matched_qty = 0
                         for p in pos_list:
                             if p.get('asset') != 'option':
@@ -14192,7 +14200,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             
                             expiry_match = (not norm_sig_expiry or not p_exp or norm_sig_expiry == p_exp)
                             
-                            if (p_sym == sig_symbol and 
+                            if (p_sym in sig_symbol_set and 
                                 abs(p_strike - sig_strike) < 0.01 and 
                                 p_dir == sig_opt and
                                 expiry_match):
