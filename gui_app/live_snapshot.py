@@ -683,7 +683,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
                 return 4
             matched_trade = min(all_matching, key=_trade_rank)
             trade_id = matched_trade.get('id')
-            pos['id'] = trade_id
+            pos['id'] = str(trade_id) if trade_id is not None else trade_id
             pos['source'] = 'database'
             pos['status'] = matched_trade.get('status', 'OPEN')
             pos['direction'] = matched_trade.get('direction', pos.get('direction', ''))
@@ -756,7 +756,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             unrealized = float(t.get('unrealized_pnl') or (cur_price - entry_price) * float(t.get('quantity') or 0))
 
             pos = _make_position(
-                pos_id=tid,
+                pos_id=str(tid) if tid is not None else tid,
                 symbol=t.get('symbol', ''),
                 asset_type=t.get('asset_type', 'stock'),
                 strike=t.get('strike'),
@@ -885,7 +885,7 @@ def _build_prices(positions: List[Dict]) -> Dict:
     for pos in positions:
         pid = pos.get('id')
         if pid is not None:
-            prices[pid] = {
+            prices[str(pid)] = {
                 'bid': pos.get('bid', 0),
                 'ask': pos.get('ask', 0),
                 'mid': pos.get('mid', 0),
