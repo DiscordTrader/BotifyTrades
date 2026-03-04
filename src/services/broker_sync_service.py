@@ -265,10 +265,19 @@ class BrokerSyncService:
         
         print(f"[SYNC] Syncing {len(brokers_to_sync)} broker(s): {[b[0] for b in brokers_to_sync]}")
         
-        # Sync each broker
         for broker_name, broker_instance in brokers_to_sync:
             try:
-                await self._sync_broker(broker_name, broker_instance)
+                await asyncio.wait_for(
+                    self._sync_broker(broker_name, broker_instance),
+                    timeout=30
+                )
+            except asyncio.TimeoutError:
+                print(f"[SYNC] ⚠️ {broker_name} sync timed out after 30s — skipping")
+                try:
+                    from gui_app.broker_health_monitor import check_broker_health
+                    check_broker_health(broker_name, False, f"Sync timed out after 30s")
+                except Exception:
+                    pass
             except Exception as e:
                 error_str = str(e)
                 is_transient = any(msg in error_str for msg in [

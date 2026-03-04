@@ -343,7 +343,7 @@ class RiskDBAdapter:
                                 OR t.channel_id = c.telegram_chat_id)
                             WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
                             AND LOWER(t.broker) = LOWER(?)
-                            AND t.status = 'OPEN' AND t.direction = 'BTO'
+                            AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                             ORDER BY t.id DESC LIMIT 1
                         ''', (symbol, strike, exp_try, call_put, broker_name))
                     else:
@@ -366,7 +366,7 @@ class RiskDBAdapter:
                                 OR t.channel_id = CAST(c.id AS TEXT)
                                 OR t.channel_id = c.telegram_chat_id)
                             WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
-                            AND t.status = 'OPEN' AND t.direction = 'BTO'
+                            AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                             ORDER BY t.id DESC LIMIT 1
                         ''', (symbol, strike, exp_try, call_put))
                     row = cursor.fetchone()
@@ -399,7 +399,7 @@ class RiskDBAdapter:
                             OR t.channel_id = c.telegram_chat_id)
                         WHERE t.symbol = ? AND t.asset_type = 'stock'
                         AND LOWER(t.broker) = LOWER(?)
-                        AND t.status = 'OPEN' AND t.direction = 'BTO'
+                        AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                         ORDER BY t.id DESC LIMIT 1
                     ''', (symbol, broker_name))
                 else:
@@ -422,7 +422,7 @@ class RiskDBAdapter:
                             OR t.channel_id = CAST(c.id AS TEXT)
                             OR t.channel_id = c.telegram_chat_id)
                         WHERE t.symbol = ? AND t.asset_type = 'stock'
-                        AND t.status = 'OPEN' AND t.direction = 'BTO'
+                        AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
                         ORDER BY t.id DESC LIMIT 1
                     ''', (symbol,))
                 row = cursor.fetchone()

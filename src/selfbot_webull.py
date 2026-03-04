@@ -14872,8 +14872,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         _original_print("[WORKER] 💤 Waiting for broker_ready event...", flush=True)
         await self.broker_ready.wait()
         _original_print("[WORKER] ✓ Broker ready, waiting for first sync...", flush=True)
-        await self.sync_ready.wait()
+        
+        try:
+            await asyncio.wait_for(self.sync_ready.wait(), timeout=45)
+        except asyncio.TimeoutError:
+            _original_print("[WORKER] ⚠️ First sync timed out after 45s — starting worker anyway (risk exits must not wait)", flush=True)
+            self.sync_ready.set()
+        
         _original_print("[WORKER] 🚀 Order processor started - broker synced and ready!", flush=True)
+        
+        if self.order_queue.qsize() > 0:
+            _original_print(f"[WORKER] 📬 {self.order_queue.qsize()} order(s) already queued — processing immediately", flush=True)
         
         while True:
             try:
