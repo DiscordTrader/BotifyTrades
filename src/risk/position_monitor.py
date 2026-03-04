@@ -1027,6 +1027,9 @@ class RiskManager:
         self._standby_mode = False
         self._last_status_log = 0
         
+        if not hasattr(self, '_heartbeat_counter'):
+            self._heartbeat_counter = 0
+        
         while self._running:
             try:
                 is_enabled = self._check_service_enabled()
@@ -1045,14 +1048,14 @@ class RiskManager:
                             if get_webull_data_hub().check_risk_eval_requested():
                                 print("[RISK] ⚡ Early wake: order event from Webull stream")
                                 break
-                        except ImportError:
+                        except Exception:
                             pass
                         try:
                             from src.services.schwab_data_hub import get_schwab_data_hub
                             if get_schwab_data_hub().check_risk_eval_requested():
                                 print("[RISK] ⚡ Early wake: order event from Schwab stream")
                                 break
-                        except ImportError:
+                        except Exception:
                             pass
                         await asyncio.sleep(min(0.5, interval - elapsed))
                         elapsed += 0.5
@@ -1063,7 +1066,16 @@ class RiskManager:
                     
                     await self._standby_cycle()
                     await asyncio.sleep(5)
+                
+                self._heartbeat_counter += 1
+                if self._heartbeat_counter >= 60:
+                    self._heartbeat_counter = 0
+                    cache_count = len(self.cache.get_all_risk_states()) if self.cache else 0
+                    print(f"[RISK] ♥ Heartbeat: loop alive, {cache_count} risk states cached, standby={self._standby_mode}")
                     
+            except asyncio.CancelledError:
+                print("[RISK] ⚠️ Monitoring task cancelled - exiting loop")
+                raise
             except Exception as e:
                 print(f"[RISK] Error in monitoring cycle: {e}")
                 import traceback
@@ -1150,7 +1162,14 @@ class RiskManager:
             else:
                 print(f"[RISK] Per-channel risk ACTIVE for {channel_count} channel(s)")
         
-        positions = await self._fetch_all_positions()
+        try:
+            positions = await self._fetch_all_positions()
+        except Exception as e:
+            print(f"[RISK] ⚠️ Error fetching positions: {e}")
+            import traceback
+            traceback.print_exc()
+            positions = []
+        
         if not positions:
             if not hasattr(self, '_empty_pos_logged') or not self._empty_pos_logged:
                 print("[RISK] No open positions found across brokers — monitoring idle")
@@ -1183,15 +1202,21 @@ class RiskManager:
             
             self._prev_position_keys = current_keys
             
-            webull_count = sum(1 for p in positions if p.broker == 'Webull')
-            alpaca_count = sum(1 for p in positions if 'ALPACA' in p.broker)
-            schwab_count = sum(1 for p in positions if 'SCHWAB' in p.broker.upper())
-            ibkr_count = sum(1 for p in positions if 'IBKR' in p.broker.upper())
-            tastytrade_count = sum(1 for p in positions if 'TASTYTRADE' in p.broker.upper())
-            robinhood_count = sum(1 for p in positions if 'ROBINHOOD' in p.broker.upper())
-            print(f"\n[RISK] Monitoring {len(positions)} open positions "
-                  f"(Webull: {webull_count}, Alpaca: {alpaca_count}, Schwab: {schwab_count}, "
-                  f"IBKR: {ibkr_count}, Tastytrade: {tastytrade_count}, Robinhood: {robinhood_count})...")
+            import time as _t
+            if not hasattr(self, '_last_monitoring_summary_ts'):
+                self._last_monitoring_summary_ts = 0
+            now = _t.time()
+            if new_keys or removed_keys or (now - self._last_monitoring_summary_ts > 30):
+                self._last_monitoring_summary_ts = now
+                webull_count = sum(1 for p in positions if p.broker == 'Webull')
+                alpaca_count = sum(1 for p in positions if 'ALPACA' in p.broker)
+                schwab_count = sum(1 for p in positions if 'SCHWAB' in p.broker.upper())
+                ibkr_count = sum(1 for p in positions if 'IBKR' in p.broker.upper())
+                tastytrade_count = sum(1 for p in positions if 'TASTYTRADE' in p.broker.upper())
+                robinhood_count = sum(1 for p in positions if 'ROBINHOOD' in p.broker.upper())
+                print(f"\n[RISK] Monitoring {len(positions)} open positions "
+                      f"(Webull: {webull_count}, Alpaca: {alpaca_count}, Schwab: {schwab_count}, "
+                      f"IBKR: {ibkr_count}, Tastytrade: {tastytrade_count}, Robinhood: {robinhood_count})...")
         
         broker_position_keys = set()
         
@@ -1328,21 +1353,34 @@ class RiskManager:
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Tastytrade positions: {e}")
         
-        if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
-            try:
-                if rate_manager:
-                    can_proceed, wait_time = rate_manager.can_make_request('robinhood')
-                    if not can_proceed:
-                        print(f"[RISK] Robinhood rate limit - skipping (wait {wait_time:.1f}s)")
+        if self.robinhood_broker:
+            rh_connected = getattr(self.robinhood_broker, 'connected', None)
+            rh_logged_in = getattr(self.robinhood_broker, '_logged_in', None)
+            rh_ready = rh_connected or rh_logged_in or (rh_connected is None and rh_logged_in is None)
+            if rh_ready:
+                try:
+                    if rate_manager:
+                        can_proceed, wait_time = rate_manager.can_make_request('robinhood')
+                        if not can_proceed:
+                            if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions:
+                                positions.extend(self._last_robinhood_positions)
+                        else:
+                            rate_manager.record_request('robinhood')
+                            robinhood_positions = await self._fetch_robinhood_positions()
+                            self._last_robinhood_positions = robinhood_positions
+                            self._robinhood_cache_ts = _time.time()
+                            positions.extend(robinhood_positions)
                     else:
-                        rate_manager.record_request('robinhood')
                         robinhood_positions = await self._fetch_robinhood_positions()
+                        self._last_robinhood_positions = robinhood_positions
+                        self._robinhood_cache_ts = _time.time()
                         positions.extend(robinhood_positions)
-                else:
-                    robinhood_positions = await self._fetch_robinhood_positions()
-                    positions.extend(robinhood_positions)
-            except Exception as e:
-                print(f"[RISK] Warning: Could not fetch Robinhood positions: {e}")
+                except Exception as e:
+                    print(f"[RISK] Warning: Could not fetch Robinhood positions: {e}")
+                    if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions:
+                        cache_age = _time.time() - getattr(self, '_robinhood_cache_ts', 0)
+                        if cache_age < 30:
+                            positions.extend(self._last_robinhood_positions)
         
         return positions
     
@@ -1606,26 +1644,27 @@ class RiskManager:
             if trade_id:
                 self.cache.set_trade_id(pos_key, trade_id)
             else:
-                # INSTANT AUTO-IMPORT: Create DB trade immediately for manual/untracked positions
-                # This is the fastest detection path (~1s) vs broker_sync (30s)
                 if not hasattr(self, '_auto_imported_keys'):
                     self._auto_imported_keys = set()
                 
                 if pos_key not in self._auto_imported_keys:
                     self._auto_imported_keys.add(pos_key)
                     
-                    new_trade_id = self.db_adapter.auto_import_manual_position(position)
-                    if new_trade_id:
-                        trade_id = new_trade_id
-                        self.cache.set_trade_id(pos_key, trade_id)
-                        print(f"[RISK] ⚡ INSTANT IMPORT: Manual position detected and imported in <1s: "
-                              f"{pos_key} → trade #{trade_id} "
-                              f"(broker={position.broker}, symbol={position.symbol}, "
-                              f"qty={position.quantity}, entry=${position.avg_cost}"
-                              f"{f', strike={position.strike}, expiry={position.expiry}' if position.asset == 'option' else ''}"
-                              f") — global risk settings NOW ACTIVE")
-                    else:
-                        print(f"[RISK] ⚠️ Auto-import failed for {pos_key} — monitoring with global risk settings (no state persistence)")
+                    try:
+                        new_trade_id = self.db_adapter.auto_import_manual_position(position)
+                        if new_trade_id:
+                            trade_id = new_trade_id
+                            self.cache.set_trade_id(pos_key, trade_id)
+                            print(f"[RISK] ⚡ INSTANT IMPORT: Manual position detected and imported in <1s: "
+                                  f"{pos_key} → trade #{trade_id} "
+                                  f"(broker={position.broker}, symbol={position.symbol}, "
+                                  f"qty={position.quantity}, entry=${position.avg_cost}"
+                                  f"{f', strike={position.strike}, expiry={position.expiry}' if position.asset == 'option' else ''}"
+                                  f") — global risk settings NOW ACTIVE")
+                        else:
+                            print(f"[RISK] ⚠️ Auto-import failed for {pos_key} — monitoring with global risk settings (no state persistence)")
+                    except Exception as e:
+                        print(f"[RISK] ⚠️ Auto-import error for {pos_key}: {e}")
         
         self.cache.update_highest_price(pos_key, position.current_price, trade_id=trade_id)
         
@@ -1650,9 +1689,9 @@ class RiskManager:
                       f"{channel_settings.profit_target_2_pct}%/{channel_settings.profit_target_3_pct}%, "
                       f"StopLoss={channel_settings.stop_loss_pct}%, ExitMode={channel_settings.exit_strategy_mode}")
         
-        # Skip position if global is disabled AND no channel settings - no risk management applies
         if not channel_settings and not risk_settings.enabled:
-            return  # Skip this position entirely
+            self._log_position_status(position, cache, channel_settings, pct_change)
+            return
         
         # Check exit_strategy_mode - if 'signal', skip automated risk evaluation
         # 'signal' mode = follow trader exit signals only, no automated exits

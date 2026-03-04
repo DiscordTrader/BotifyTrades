@@ -18713,15 +18713,22 @@ def register_routes(app):
                     # Show any broker that has an instance (means it's configured)
                     # Connected brokers show, disconnected brokers show with their error reason
                     
-                    # Get buying power from health monitor cache
                     buying_power = 0
                     balance = 0
                     if health_monitor and is_connected:
                         cached_info = health_monitor.get_cached_account_info(health_key)
                         if cached_info:
-                            # Extract buying power using health monitor's method
                             buying_power = health_monitor._extract_buying_power(health_key, cached_info, 'options')
                             balance = cached_info.get('portfolio_value', cached_info.get('balance', 0))
+                        else:
+                            try:
+                                from gui_app.database import get_broker_state
+                                db_state = get_broker_state(broker_name)
+                                if db_state:
+                                    buying_power = float(db_state.get('buying_power', 0) or 0)
+                                    balance = float(db_state.get('balance', 0) or 0)
+                            except Exception:
+                                pass
                     
                     disconnect_reason = health.get('reason')
                     if not is_connected and not disconnect_reason and broker_instance:
