@@ -135,29 +135,25 @@ class CandleAggregator:
         self._timeframe = timeframe_minutes
         self._extended_hours = extended_hours
         self._symbols: Dict[str, Dict[str, Any]] = {}
-        self._locks: Dict[str, threading.Lock] = {}
-        self._global_lock = threading.Lock()
         self._on_candle_callbacks: List[Callable] = []
         self._last_reset_date: Optional[str] = None
 
-    def _get_lock(self, symbol: str) -> threading.Lock:
-        with self._global_lock:
-            if symbol not in self._locks:
-                self._locks[symbol] = threading.Lock()
-            return self._locks[symbol]
+    def _make_empty_state(self) -> Dict[str, Any]:
+        return {
+            'current_candle': None,
+            'current_boundary': None,
+            'completed_candles': deque(maxlen=200),
+            'last_tick_time': None,
+            'stale': False,
+            'tick_count': 0
+        }
 
     def _get_symbol_state(self, symbol: str) -> Dict[str, Any]:
-        with self._global_lock:
-            if symbol not in self._symbols:
-                self._symbols[symbol] = {
-                    'current_candle': None,
-                    'current_boundary': None,
-                    'completed_candles': deque(maxlen=200),
-                    'last_tick_time': None,
-                    'stale': False,
-                    'tick_count': 0
-                }
-            return self._symbols[symbol]
+        state = self._symbols.get(symbol)
+        if state is None:
+            state = self._make_empty_state()
+            self._symbols[symbol] = state
+        return state
 
     def on_candle_complete(self, callback: Callable):
         self._on_candle_callbacks.append(callback)
@@ -171,48 +167,44 @@ class CandleAggregator:
 
         self._check_daily_reset(ts)
 
-        lock = self._get_lock(symbol)
-        with lock:
-            state = self._get_symbol_state(symbol)
-            state['last_tick_time'] = ts
-            state['stale'] = False
-            state['tick_count'] += 1
+        state = self._get_symbol_state(symbol)
+        state['last_tick_time'] = ts
+        state['stale'] = False
+        state['tick_count'] += 1
 
-            boundary = _get_candle_boundary(ts, self._timeframe)
+        boundary = _get_candle_boundary(ts, self._timeframe)
 
-            if state['current_boundary'] is not None and boundary > state['current_boundary']:
-                if state['current_candle'] is not None:
-                    self._finalize_candle(symbol, state)
+        if state['current_boundary'] is not None and boundary > state['current_boundary']:
+            if state['current_candle'] is not None:
+                self._finalize_candle(symbol, state)
 
-            if state['current_candle'] is None:
-                state['current_candle'] = Candle(
-                    open=price, high=price, low=price, close=price,
-                    timestamp=boundary, tick_count=1
-                )
-                state['current_boundary'] = boundary
-            else:
-                candle = state['current_candle']
-                candle.high = max(candle.high, price)
-                candle.low = min(candle.low, price)
-                candle.close = price
-                candle.tick_count += 1
+        if state['current_candle'] is None:
+            state['current_candle'] = Candle(
+                open=price, high=price, low=price, close=price,
+                timestamp=boundary, tick_count=1
+            )
+            state['current_boundary'] = boundary
+        else:
+            candle = state['current_candle']
+            candle.high = max(candle.high, price)
+            candle.low = min(candle.low, price)
+            candle.close = price
+            candle.tick_count += 1
 
     def process_historical_candles(self, symbol: str, candles: List[Dict[str, Any]]):
         symbol = symbol.upper()
-        lock = self._get_lock(symbol)
-        with lock:
-            state = self._get_symbol_state(symbol)
-            for c in candles:
-                candle = Candle(
-                    open=c['open'], high=c['high'], low=c['low'], close=c['close'],
-                    timestamp=c.get('timestamp', 0), tick_count=0, finalized=True
-                )
-                state['completed_candles'].append(candle)
-            for cb in self._on_candle_callbacks:
-                try:
-                    cb(symbol, list(state['completed_candles']))
-                except Exception as e:
-                    print(f"[EMA] Candle callback error for {symbol}: {e}")
+        state = self._get_symbol_state(symbol)
+        for c in candles:
+            candle = Candle(
+                open=c['open'], high=c['high'], low=c['low'], close=c['close'],
+                timestamp=c.get('timestamp', 0), tick_count=0, finalized=True
+            )
+            state['completed_candles'].append(candle)
+        for cb in self._on_candle_callbacks:
+            try:
+                cb(symbol, list(state['completed_candles']))
+            except Exception as e:
+                print(f"[EMA] Candle callback error for {symbol}: {e}")
 
     def _finalize_candle(self, symbol: str, state: Dict[str, Any]):
         candle = state['current_candle']
@@ -230,52 +222,36 @@ class CandleAggregator:
 
     def get_completed_candles(self, symbol: str) -> List[Candle]:
         symbol = symbol.upper()
-        lock = self._get_lock(symbol)
-        with lock:
-            state = self._get_symbol_state(symbol)
-            return list(state['completed_candles'])
+        state = self._symbols.get(symbol)
+        if state is None:
+            return []
+        return list(state['completed_candles'])
 
     def get_current_candle(self, symbol: str) -> Optional[Candle]:
         symbol = symbol.upper()
-        lock = self._get_lock(symbol)
-        with lock:
-            state = self._get_symbol_state(symbol)
-            return state['current_candle']
+        state = self._symbols.get(symbol)
+        if state is None:
+            return None
+        return state['current_candle']
 
     def is_stale(self, symbol: str) -> bool:
         symbol = symbol.upper()
-        lock = self._get_lock(symbol)
-        with lock:
-            state = self._get_symbol_state(symbol)
-            if state['last_tick_time'] is None:
-                return True
-            return (time.time() - state['last_tick_time']) > STALE_TICK_THRESHOLD_SECONDS
+        state = self._symbols.get(symbol)
+        if state is None:
+            return True
+        last_tick = state['last_tick_time']
+        if last_tick is None:
+            return True
+        return (time.time() - last_tick) > STALE_TICK_THRESHOLD_SECONDS
 
     def reset(self, symbol: Optional[str] = None):
         if symbol:
             symbol = symbol.upper()
-            lock = self._get_lock(symbol)
-            with lock:
-                if symbol in self._symbols:
-                    self._symbols[symbol] = {
-                        'current_candle': None,
-                        'current_boundary': None,
-                        'completed_candles': deque(maxlen=200),
-                        'last_tick_time': None,
-                        'stale': False,
-                        'tick_count': 0
-                    }
+            if symbol in self._symbols:
+                self._symbols[symbol] = self._make_empty_state()
         else:
-            with self._global_lock:
-                for sym in list(self._symbols.keys()):
-                    self._symbols[sym] = {
-                        'current_candle': None,
-                        'current_boundary': None,
-                        'completed_candles': deque(maxlen=200),
-                        'last_tick_time': None,
-                        'stale': False,
-                        'tick_count': 0
-                    }
+            for sym in list(self._symbols.keys()):
+                self._symbols[sym] = self._make_empty_state()
 
     def _check_daily_reset(self, timestamp: float):
         if _ET_TZ:
@@ -293,8 +269,7 @@ class CandleAggregator:
                 print(f"[EMA] Daily session reset at {dt.strftime('%H:%M:%S')}")
 
     def get_symbol_count(self) -> int:
-        with self._global_lock:
-            return len(self._symbols)
+        return len(self._symbols)
 
 
 class EMAEngine:
@@ -303,117 +278,102 @@ class EMAEngine:
         self._k = 2.0 / (period + 1)
         self._symbols: Dict[str, EMAState] = {}
         self._close_history: Dict[str, List[float]] = {}
-        self._locks: Dict[str, threading.Lock] = {}
-        self._global_lock = threading.Lock()
-
-    def _get_lock(self, symbol: str) -> threading.Lock:
-        with self._global_lock:
-            if symbol not in self._locks:
-                self._locks[symbol] = threading.Lock()
-            return self._locks[symbol]
 
     def process_candles(self, symbol: str, candles: List[Candle]):
         symbol = symbol.upper()
-        lock = self._get_lock(symbol)
-        with lock:
-            if symbol not in self._symbols:
-                self._symbols[symbol] = EMAState()
-            state = self._symbols[symbol]
+        state = self._symbols.get(symbol)
+        if state is None:
+            state = EMAState()
+            self._symbols[symbol] = state
 
-            if symbol not in self._close_history:
-                self._close_history[symbol] = []
-            history = self._close_history[symbol]
+        history = self._close_history.get(symbol)
+        if history is None:
+            history = []
+            self._close_history[symbol] = history
 
-            for candle in candles:
-                if not candle.finalized:
-                    continue
-                state.candles_count += 1
-                state.last_candle = candle
-                state.last_candle_time = candle.timestamp
-                history.append(candle.close)
+        for candle in candles:
+            if not candle.finalized:
+                continue
+            state.candles_count += 1
+            state.last_candle = candle
+            state.last_candle_time = candle.timestamp
+            history.append(candle.close)
 
-                if state.candles_count < self._period:
-                    pass
-                elif state.candles_count == self._period:
-                    sma = sum(history[-self._period:]) / self._period
-                    state.value = sma
-                    state.seeded = True
+            if state.candles_count < self._period:
+                pass
+            elif state.candles_count == self._period:
+                sma = sum(history[-self._period:]) / self._period
+                state.value = sma
+                state.seeded = True
+                if candle.close > state.value:
+                    state.cross_state = 'above'
+                elif candle.close < state.value:
+                    state.cross_state = 'below'
+                print(f"[EMA] {symbol}: EMA({self._period}) seeded at {state.value:.4f} (SMA of first {self._period} candles)")
+            else:
+                if state.value is not None:
+                    state.value = candle.close * self._k + state.value * (1 - self._k)
                     if candle.close > state.value:
                         state.cross_state = 'above'
                     elif candle.close < state.value:
                         state.cross_state = 'below'
-                    print(f"[EMA] {symbol}: EMA({self._period}) seeded at {state.value:.4f} (SMA of first {self._period} candles)")
-                else:
-                    if state.value is not None:
-                        state.value = candle.close * self._k + state.value * (1 - self._k)
-                        if candle.close > state.value:
-                            state.cross_state = 'above'
-                        elif candle.close < state.value:
-                            state.cross_state = 'below'
 
     def seed_from_candles(self, symbol: str, candles: List[Candle]):
         symbol = symbol.upper()
-        lock = self._get_lock(symbol)
-        with lock:
-            if symbol not in self._symbols:
-                self._symbols[symbol] = EMAState()
-            state = self._symbols[symbol]
-            state.candles_count = 0
-            state.value = None
-            state.seeded = False
-            state.cross_state = 'seeding'
-            self._close_history[symbol] = [c.close for c in candles]
+        new_state = EMAState()
+        new_state.candles_count = 0
+        new_state.value = None
+        new_state.seeded = False
+        new_state.cross_state = 'seeding'
+        self._close_history[symbol] = [c.close for c in candles]
 
-            for candle in candles:
-                state.candles_count += 1
-                state.last_candle = candle
-                state.last_candle_time = candle.timestamp
+        for candle in candles:
+            new_state.candles_count += 1
+            new_state.last_candle = candle
+            new_state.last_candle_time = candle.timestamp
 
-                if state.candles_count < self._period:
-                    continue
-                elif state.candles_count == self._period:
-                    closes = [c.close for c in candles[:self._period]]
-                    sma = sum(closes) / len(closes)
-                    state.value = sma
-                    state.seeded = True
-                else:
-                    if state.value is not None:
-                        state.value = candle.close * self._k + state.value * (1 - self._k)
+            if new_state.candles_count < self._period:
+                continue
+            elif new_state.candles_count == self._period:
+                closes = [c.close for c in candles[:self._period]]
+                sma = sum(closes) / len(closes)
+                new_state.value = sma
+                new_state.seeded = True
+            else:
+                if new_state.value is not None:
+                    new_state.value = candle.close * self._k + new_state.value * (1 - self._k)
 
-            if state.seeded and state.last_candle and state.value is not None:
-                if state.last_candle.close > state.value:
-                    state.cross_state = 'above'
-                elif state.last_candle.close < state.value:
-                    state.cross_state = 'below'
-                print(f"[EMA] {symbol}: Pre-seeded EMA({self._period}) = {state.value:.4f} from {len(candles)} historical candles, state={state.cross_state}")
+        if new_state.seeded and new_state.last_candle and new_state.value is not None:
+            if new_state.last_candle.close > new_state.value:
+                new_state.cross_state = 'above'
+            elif new_state.last_candle.close < new_state.value:
+                new_state.cross_state = 'below'
+            print(f"[EMA] {symbol}: Pre-seeded EMA({self._period}) = {new_state.value:.4f} from {len(candles)} historical candles, state={new_state.cross_state}")
+
+        self._symbols[symbol] = new_state
 
     def get_state(self, symbol: str) -> EMAState:
         symbol = symbol.upper()
-        lock = self._get_lock(symbol)
-        with lock:
-            if symbol not in self._symbols:
-                return EMAState()
-            s = self._symbols[symbol]
-            return EMAState(
-                value=s.value,
-                cross_state=s.cross_state,
-                candles_count=s.candles_count,
-                last_candle=s.last_candle,
-                last_candle_time=s.last_candle_time,
-                seeded=s.seeded
-            )
+        s = self._symbols.get(symbol)
+        if s is None:
+            return EMAState()
+        return EMAState(
+            value=s.value,
+            cross_state=s.cross_state,
+            candles_count=s.candles_count,
+            last_candle=s.last_candle,
+            last_candle_time=s.last_candle_time,
+            seeded=s.seeded
+        )
 
     def reset(self, symbol: Optional[str] = None):
         if symbol:
             symbol = symbol.upper()
-            lock = self._get_lock(symbol)
-            with lock:
-                self._symbols.pop(symbol, None)
-                self._close_history.pop(symbol, None)
+            self._symbols.pop(symbol, None)
+            self._close_history.pop(symbol, None)
         else:
-            with self._global_lock:
-                self._symbols.clear()
-                self._close_history.clear()
+            self._symbols = {}
+            self._close_history = {}
 
 
 class EMAExitEvaluator:
@@ -545,7 +505,7 @@ class CandlePreWarmService:
         self._yfinance_only_symbols: set = set()
         self._hubs: List[Any] = []
         self._running = False
-        self._lock = threading.Lock()
+        self._event_loop = None
         self._global_enabled = True
         self._last_tick_time: Dict[str, float] = {}
         self._poll_logged: set = set()
@@ -558,6 +518,12 @@ class CandlePreWarmService:
 
         self._running = True
         self._hubs = hubs or []
+
+        import asyncio
+        try:
+            self._event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._event_loop = None
 
         for hub in self._hubs:
             try:
@@ -595,20 +561,19 @@ class CandlePreWarmService:
     def subscribe_symbol(self, symbol: str, timeframe: int = 5, period: int = 5, yfinance_only: bool = False) -> bool:
         symbol = symbol.upper()
         ema_key = f"{symbol}_{timeframe}m_{period}"
-        with self._lock:
-            if symbol in self._tracked_symbols:
-                existing = self._tracked_symbols[symbol]
-                if existing['ema_key'] == ema_key:
-                    if yfinance_only:
-                        self._yfinance_only_symbols.add(symbol)
-                    return True
-                if ema_key in self._ema_engines:
-                    if yfinance_only:
-                        self._yfinance_only_symbols.add(symbol)
-                    return True
-            if len(self._tracked_symbols) >= MAX_TRACKED_SYMBOLS and symbol not in self._tracked_symbols:
-                print(f"[EMA] Cannot subscribe {symbol}: max {MAX_TRACKED_SYMBOLS} symbols reached")
-                return False
+        if symbol in self._tracked_symbols:
+            existing = self._tracked_symbols[symbol]
+            if existing['ema_key'] == ema_key:
+                if yfinance_only:
+                    self._yfinance_only_symbols.add(symbol)
+                return True
+            if ema_key in self._ema_engines:
+                if yfinance_only:
+                    self._yfinance_only_symbols.add(symbol)
+                return True
+        if len(self._tracked_symbols) >= MAX_TRACKED_SYMBOLS and symbol not in self._tracked_symbols:
+            print(f"[EMA] Cannot subscribe {symbol}: max {MAX_TRACKED_SYMBOLS} symbols reached")
+            return False
 
         self._ensure_tracking_multi(symbol, is_prewarm=False, timeframe=timeframe, period=period)
         self._dynamic_symbols.add(symbol)
@@ -624,77 +589,74 @@ class CandlePreWarmService:
         if symbol in PRE_WARM_SYMBOLS:
             return
 
-        with self._lock:
-            self._tracked_symbols.pop(symbol, None)
-            self._aggregators.pop(symbol, None)
-            self._ema_engines.pop(symbol, None)
-            self._dynamic_symbols.discard(symbol)
-            self._yfinance_only_symbols.discard(symbol)
+        self._tracked_symbols.pop(symbol, None)
+        self._aggregators.pop(symbol, None)
+        self._ema_engines.pop(symbol, None)
+        self._dynamic_symbols.discard(symbol)
+        self._yfinance_only_symbols.discard(symbol)
         print(f"[EMA] Unsubscribed dynamic symbol {symbol}")
 
     def get_ema_state(self, symbol: str, timeframe: int = 5, period: int = 5) -> EMAState:
         symbol = symbol.upper()
         key = f"{symbol}_{timeframe}m_{period}"
 
-        with self._lock:
-            engine = self._ema_engines.get(key)
-            if engine:
-                state = engine.get_state(symbol)
-                agg_key = f"{symbol}_{timeframe}m"
-                agg = self._aggregators.get(agg_key)
-                if agg and agg.is_stale(symbol):
-                    state.cross_state = 'frozen'
-                return state
+        engine = self._ema_engines.get(key)
+        if engine:
+            state = engine.get_state(symbol)
+            agg_key = f"{symbol}_{timeframe}m"
+            agg = self._aggregators.get(agg_key)
+            if agg and agg.is_stale(symbol):
+                state.cross_state = 'frozen'
+            return state
 
         return EMAState()
 
     def is_tracking(self, symbol: str) -> bool:
         symbol = symbol.upper()
-        with self._lock:
-            return symbol in self._tracked_symbols
+        return symbol in self._tracked_symbols
 
     def get_tracked_symbols(self) -> List[str]:
-        with self._lock:
-            return list(self._tracked_symbols.keys())
+        return list(self._tracked_symbols.keys())
 
     def get_status(self) -> Dict[str, Any]:
-        with self._lock:
-            status = {
-                'running': self._running,
-                'global_enabled': self._global_enabled,
-                'total_symbols': len(self._tracked_symbols),
-                'prewarm_symbols': [s for s in PRE_WARM_SYMBOLS if s in self._tracked_symbols],
-                'dynamic_symbols': list(self._dynamic_symbols),
-                'hubs_connected': len(self._hubs),
-                'symbols': {},
-                'engines': {}
-            }
-            for sym, info in self._tracked_symbols.items():
-                key = f"{sym}_{info['timeframe']}m_{info['period']}"
-                engine = self._ema_engines.get(key)
-                if engine:
-                    ema_state = engine.get_state(sym)
-                    status['symbols'][sym] = {
-                        'timeframe': info['timeframe'],
-                        'period': info['period'],
-                        'ema_value': ema_state.value,
-                        'cross_state': ema_state.cross_state,
-                        'candles_count': ema_state.candles_count,
-                        'seeded': ema_state.seeded,
-                        'is_prewarm': info.get('is_prewarm', False)
-                    }
-            for ema_key, engine in self._ema_engines.items():
-                parts = ema_key.rsplit('_', 2)
-                if len(parts) >= 3:
-                    sym = parts[0]
-                    ema_state = engine.get_state(sym)
-                    status['engines'][ema_key] = {
-                        'ema_value': ema_state.value,
-                        'cross_state': ema_state.cross_state,
-                        'candles_count': ema_state.candles_count,
-                        'seeded': ema_state.seeded
-                    }
-            return status
+        tracked = dict(self._tracked_symbols)
+        engines = dict(self._ema_engines)
+        status = {
+            'running': self._running,
+            'global_enabled': self._global_enabled,
+            'total_symbols': len(tracked),
+            'prewarm_symbols': [s for s in PRE_WARM_SYMBOLS if s in tracked],
+            'dynamic_symbols': list(self._dynamic_symbols),
+            'hubs_connected': len(self._hubs),
+            'symbols': {},
+            'engines': {}
+        }
+        for sym, info in tracked.items():
+            key = f"{sym}_{info['timeframe']}m_{info['period']}"
+            engine = engines.get(key)
+            if engine:
+                ema_state = engine.get_state(sym)
+                status['symbols'][sym] = {
+                    'timeframe': info['timeframe'],
+                    'period': info['period'],
+                    'ema_value': ema_state.value,
+                    'cross_state': ema_state.cross_state,
+                    'candles_count': ema_state.candles_count,
+                    'seeded': ema_state.seeded,
+                    'is_prewarm': info.get('is_prewarm', False)
+                }
+        for ema_key, engine in engines.items():
+            parts = ema_key.rsplit('_', 2)
+            if len(parts) >= 3:
+                sym = parts[0]
+                ema_state = engine.get_state(sym)
+                status['engines'][ema_key] = {
+                    'ema_value': ema_state.value,
+                    'cross_state': ema_state.cross_state,
+                    'candles_count': ema_state.candles_count,
+                    'seeded': ema_state.seeded
+                }
+        return status
 
     def _ensure_tracking(self, symbol: str, is_prewarm: bool = False,
                          timeframe: int = 5, period: int = 5):
@@ -702,41 +664,40 @@ class CandlePreWarmService:
         agg_key = f"{symbol}_{timeframe}m"
         ema_key = f"{symbol}_{timeframe}m_{period}"
 
-        with self._lock:
-            if symbol in self._tracked_symbols:
-                existing = self._tracked_symbols[symbol]
-                if agg_key not in existing.get('agg_keys', [existing.get('agg_key', '')]):
-                    pass
-                else:
-                    return
-
-            if symbol not in self._tracked_symbols:
-                self._tracked_symbols[symbol] = {
-                    'timeframe': timeframe,
-                    'period': period,
-                    'is_prewarm': is_prewarm,
-                    'agg_key': agg_key,
-                    'ema_key': ema_key,
-                    'agg_keys': [agg_key]
-                }
+        if symbol in self._tracked_symbols:
+            existing = self._tracked_symbols[symbol]
+            if agg_key not in existing.get('agg_keys', [existing.get('agg_key', '')]):
+                pass
             else:
-                existing = self._tracked_symbols[symbol]
-                if 'agg_keys' not in existing:
-                    existing['agg_keys'] = [existing.get('agg_key', '')]
-                if agg_key not in existing['agg_keys']:
-                    existing['agg_keys'].append(agg_key)
+                return
 
-            if agg_key not in self._aggregators:
-                agg = CandleAggregator(timeframe_minutes=timeframe)
-                self._aggregators[agg_key] = agg
+        if symbol not in self._tracked_symbols:
+            self._tracked_symbols[symbol] = {
+                'timeframe': timeframe,
+                'period': period,
+                'is_prewarm': is_prewarm,
+                'agg_key': agg_key,
+                'ema_key': ema_key,
+                'agg_keys': [agg_key]
+            }
+        else:
+            existing = self._tracked_symbols[symbol]
+            if 'agg_keys' not in existing:
+                existing['agg_keys'] = [existing.get('agg_key', '')]
+            if agg_key not in existing['agg_keys']:
+                existing['agg_keys'].append(agg_key)
 
-            if ema_key not in self._ema_engines:
-                engine = EMAEngine(period=period)
-                self._ema_engines[ema_key] = engine
+        if agg_key not in self._aggregators:
+            agg = CandleAggregator(timeframe_minutes=timeframe)
+            self._aggregators[agg_key] = agg
 
-            agg = self._aggregators[agg_key]
-            engine = self._ema_engines[ema_key]
-            agg.on_candle_complete(lambda sym, candles, e=engine: e.process_candles(sym, candles))
+        if ema_key not in self._ema_engines:
+            engine = EMAEngine(period=period)
+            self._ema_engines[ema_key] = engine
+
+        agg = self._aggregators[agg_key]
+        engine = self._ema_engines[ema_key]
+        agg.on_candle_complete(lambda sym, candles, e=engine: e.process_candles(sym, candles))
 
     def _ensure_tracking_multi(self, symbol: str, is_prewarm: bool = False,
                                timeframe: int = 5, period: int = 5):
@@ -752,8 +713,7 @@ class CandlePreWarmService:
         if symbol in self._yfinance_only_symbols:
             return
 
-        with self._lock:
-            info = self._tracked_symbols.get(symbol)
+        info = self._tracked_symbols.get(symbol)
         if not info:
             return
 
@@ -935,6 +895,25 @@ class CandlePreWarmService:
                 except Exception as e:
                     print(f"[EMA] Hub subscription note for {symbol}: {e}")
 
+    def _process_poll_tick(self, symbol: str, price: float):
+        if symbol not in self._poll_logged:
+            use_yf_only = symbol in self._yfinance_only_symbols
+            reason = "yfinance-only/underlying" if use_yf_only else "no streaming ticks"
+            print(f"[EMA] REST poll active for {symbol} ({reason}, price=${price:.2f})")
+            self._poll_logged.add(symbol)
+        self._last_tick_time[symbol] = time.time()
+        info = self._tracked_symbols.get(symbol)
+        if info:
+            agg_keys = info.get('agg_keys', [info.get('agg_key', '')])
+            for agg_key in agg_keys:
+                agg = self._aggregators.get(agg_key)
+                if agg:
+                    old_count = len(agg._get_symbol_state(symbol)['completed_candles'])
+                    agg.process_tick(symbol, price)
+                    new_count = len(agg._get_symbol_state(symbol)['completed_candles'])
+                    if new_count > old_count:
+                        print(f"[EMA] ✓ Candle #{new_count} completed for {symbol} via {agg_key} (price=${price:.2f})")
+
     def _poll_loop(self):
         POLL_INTERVAL = 5
         TICK_STALE_THRESHOLD = 15
@@ -948,15 +927,15 @@ class CandlePreWarmService:
                     continue
 
                 now = time.time()
-                with self._lock:
-                    symbols_to_poll = []
-                    for symbol, info in self._tracked_symbols.items():
-                        if symbol in self._yfinance_only_symbols:
+                tracked = dict(self._tracked_symbols)
+                symbols_to_poll = []
+                for symbol, info in tracked.items():
+                    if symbol in self._yfinance_only_symbols:
+                        symbols_to_poll.append(symbol)
+                    else:
+                        last_tick = self._last_tick_time.get(symbol, 0)
+                        if now - last_tick > TICK_STALE_THRESHOLD:
                             symbols_to_poll.append(symbol)
-                        else:
-                            last_tick = self._last_tick_time.get(symbol, 0)
-                            if now - last_tick > TICK_STALE_THRESHOLD:
-                                symbols_to_poll.append(symbol)
 
                 if not symbols_to_poll:
                     continue
@@ -965,26 +944,11 @@ class CandlePreWarmService:
                     use_yf_only = symbol in self._yfinance_only_symbols
                     price = self._poll_quote_rest(symbol, skip_hub=use_yf_only)
                     if price and price > 0:
-                        if symbol not in self._poll_logged:
-                            reason = "yfinance-only/underlying" if use_yf_only else "no streaming ticks"
-                            print(f"[EMA] REST poll active for {symbol} ({reason}, price=${price:.2f})")
-                            self._poll_logged.add(symbol)
-                        self._last_tick_time[symbol] = time.time()
-                        with self._lock:
-                            info = self._tracked_symbols.get(symbol)
-                        if info:
-                            agg_keys = info.get('agg_keys', [info.get('agg_key', '')])
-                            for agg_key in agg_keys:
-                                agg = self._aggregators.get(agg_key)
-                                if agg:
-                                    lock = agg._get_lock(symbol)
-                                    with lock:
-                                        old_count = len(agg._get_symbol_state(symbol)['completed_candles'])
-                                    agg.process_tick(symbol, price)
-                                    with lock:
-                                        new_count = len(agg._get_symbol_state(symbol)['completed_candles'])
-                                    if new_count > old_count:
-                                        print(f"[EMA] ✓ Candle #{new_count} completed for {symbol} via {agg_key} (price=${price:.2f})")
+                        loop = self._event_loop
+                        if loop is not None and loop.is_running():
+                            loop.call_soon_threadsafe(self._process_poll_tick, symbol, price)
+                        else:
+                            self._process_poll_tick(symbol, price)
 
             except Exception as e:
                 print(f"[EMA] Poll loop error: {e}")
@@ -1029,16 +993,16 @@ class CandlePreWarmService:
         return None
 
     def daily_reset(self):
-        with self._lock:
-            for sym, info in self._tracked_symbols.items():
-                agg_key = info['agg_key']
-                ema_key = info['ema_key']
-                agg = self._aggregators.get(agg_key)
-                if agg:
-                    agg.reset(sym)
-                engine = self._ema_engines.get(ema_key)
-                if engine:
-                    engine.reset(sym)
+        tracked = dict(self._tracked_symbols)
+        for sym, info in tracked.items():
+            agg_key = info['agg_key']
+            ema_key = info['ema_key']
+            agg = self._aggregators.get(agg_key)
+            if agg:
+                agg.reset(sym)
+            engine = self._ema_engines.get(ema_key)
+            if engine:
+                engine.reset(sym)
         print("[EMA] Daily reset complete - all candles and EMA states cleared")
 
         for symbol in PRE_WARM_SYMBOLS:

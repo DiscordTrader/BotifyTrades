@@ -562,15 +562,11 @@ class SignalRoutingEngine:
         
         acquired = False
         try:
-            try:
-                await asyncio.wait_for(lock.acquire(), timeout=0.1)
-                acquired = True
-            except asyncio.TimeoutError:
+            if not lock.acquire(blocking=False):
                 print(f"[ROUTING_ENGINE] ⏭️ Exit already in progress for {position.option_key}")
                 return False
+            acquired = True
             
-            # ===== POSITION STATE GATE (RISK FLOW) =====
-            # Fresh check after acquiring lock to handle race with signal exits
             if position.id is None:
                 print(f"[ROUTING_ENGINE] ⏭️ Position has no ID: {position.option_key}")
                 return False
@@ -583,9 +579,7 @@ class SignalRoutingEngine:
                 print(f"[ROUTING_ENGINE] ⏭️ Position already closed by signal exit: {position.option_key} - skipping risk exit")
                 return False
             
-            # Use fresh position data for exit calculation
             position = fresh_position
-            # ===== END POSITION STATE GATE =====
             
             exit_qty = self.calculate_exit_quantity(position, exit_reason, config)
             if exit_qty <= 0:
@@ -831,7 +825,13 @@ class SignalRoutingEngine:
                         sys.stderr.flush()
                     
                     if exit_reason:
-                        await self._handle_risk_exit(position, config, exit_reason, pnl_pct)
+                        try:
+                            await asyncio.wait_for(
+                                self._handle_risk_exit(position, config, exit_reason, pnl_pct),
+                                timeout=15.0
+                            )
+                        except asyncio.TimeoutError:
+                            print(f"[ROUTING_ENGINE] ⚠️ Risk exit timed out for {position.option_key}")
                 
                 await self.process_webhook_retry_queue()
                 
@@ -980,12 +980,10 @@ class SignalRoutingEngine:
         
         acquired = False
         try:
-            try:
-                await asyncio.wait_for(lock.acquire(), timeout=0.1)
-                acquired = True
-            except asyncio.TimeoutError:
+            if not lock.acquire(blocking=False):
                 print(f"[ROUTING_ENGINE] ⏭️ Exit already in progress for {position.option_key}")
                 return False
+            acquired = True
             
             # ===== POSITION STATE GATE =====
             # Fresh check after acquiring lock to handle race conditions
@@ -1127,7 +1125,8 @@ class SignalRoutingEngine:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=10)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
     
     async def post_bto_signal(

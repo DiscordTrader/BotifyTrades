@@ -251,11 +251,14 @@ class SchwabBroker(BrokerInterface):
                 'redirect_uri': self.redirect_uri
             }
             
-            def _sync_exchange(h, d, url):
-                with httpx.Client(timeout=15.0) as c:
-                    return c.post(url, headers=h, data=d)
+            async def _async_exchange(h, d, url):
+                async with httpx.AsyncClient(timeout=15.0) as c:
+                    return await c.post(url, headers=h, data=d)
             
-            response = await asyncio.to_thread(_sync_exchange, headers, data, self.TOKEN_URL)
+            response = await asyncio.wait_for(
+                _async_exchange(headers, data, self.TOKEN_URL),
+                timeout=20.0
+            )
             
             if response.status_code == 200:
                 token_data = response.json()
@@ -307,11 +310,14 @@ class SchwabBroker(BrokerInterface):
                 'client_id': self.client_id
             }
             
-            def _sync_token_post(h, d, token_url):
-                with httpx.Client(timeout=15.0) as c:
-                    return c.post(token_url, headers=h, data=d)
+            async def _async_token_post(h, d, token_url):
+                async with httpx.AsyncClient(timeout=15.0) as c:
+                    return await c.post(token_url, headers=h, data=d)
             
-            response = await asyncio.to_thread(_sync_token_post, headers, data, self.TOKEN_URL)
+            response = await asyncio.wait_for(
+                _async_token_post(headers, data, self.TOKEN_URL),
+                timeout=20.0
+            )
             
             if response.status_code == 200:
                 token_data = response.json()
@@ -330,7 +336,10 @@ class SchwabBroker(BrokerInterface):
                 retry_after = int(response.headers.get('Retry-After', '30'))
                 print(f"[{self.name}] Token refresh rate limited, waiting {retry_after}s...")
                 await asyncio.sleep(retry_after)
-                response = await asyncio.to_thread(_sync_token_post, headers, data, self.TOKEN_URL)
+                response = await asyncio.wait_for(
+                    _async_token_post(headers, data, self.TOKEN_URL),
+                    timeout=20.0
+                )
                 if response.status_code == 200:
                     token_data = response.json()
                     self.access_token = token_data.get('access_token')
@@ -392,11 +401,14 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            def _sync_verify(url, h):
-                with httpx.Client(timeout=15.0) as c:
-                    return c.get(url, headers=h)
+            async def _async_verify(url, h):
+                async with httpx.AsyncClient(timeout=15.0) as c:
+                    return await c.get(url, headers=h)
             
-            response = await asyncio.to_thread(_sync_verify, f"{self.BASE_URL}/accounts/accountNumbers", headers)
+            response = await asyncio.wait_for(
+                _async_verify(f"{self.BASE_URL}/accounts/accountNumbers", headers),
+                timeout=20.0
+            )
             
             if response.status_code == 200:
                 accounts = response.json()
@@ -480,6 +492,7 @@ class SchwabBroker(BrokerInterface):
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
         """Make HTTP request with rate limit, budget tracking, and token refresh handling"""
         import httpx
+        short_url = url.split('/')[-1] if '/' in url else url
         if not is_exit_order and not is_entry_order:
             if self._should_block_non_order():
                 print(f"[{self.name}] ⚠️ API budget critical ({self._get_api_usage()}/{self._API_BUDGET_LIMIT}/min) - blocking non-order call")
@@ -494,12 +507,12 @@ class SchwabBroker(BrokerInterface):
         if 'Accept' not in headers:
             headers['Accept'] = 'application/json'
 
-        def _sync_request(m, u, h, kw):
-            with httpx.Client(timeout=15.0) as c:
-                return c.request(m, u, headers=h, **kw)
+        async def _async_request(m, u, h, kw):
+            async with httpx.AsyncClient(timeout=15.0) as c:
+                return await c.request(m, u, headers=h, **kw)
 
         response = await asyncio.wait_for(
-            asyncio.to_thread(_sync_request, method, url, headers, kwargs),
+            _async_request(method, url, headers, kwargs),
             timeout=20.0
         )
 
@@ -521,7 +534,7 @@ class SchwabBroker(BrokerInterface):
             await self._ensure_valid_token()
             headers['Authorization'] = f'Bearer {self.access_token}'
             response = await asyncio.wait_for(
-                asyncio.to_thread(_sync_request, method, url, headers, kwargs),
+                _async_request(method, url, headers, kwargs),
                 timeout=20.0
             )
             
@@ -537,7 +550,7 @@ class SchwabBroker(BrokerInterface):
             if refreshed:
                 headers['Authorization'] = f'Bearer {self.access_token}'
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(_sync_request, method, url, headers, kwargs),
+                    _async_request(method, url, headers, kwargs),
                     timeout=20.0
                 )
         
@@ -1222,15 +1235,18 @@ class SchwabBroker(BrokerInterface):
                         y = f"20{y}"
                     expiry = f"{y}-{int(m):02d}-{int(d):02d}"
             
-            def _sync_quote_and_chain(h, sym, exp):
-                with httpx.Client(timeout=15.0) as c:
-                    qr = c.get("https://api.schwabapi.com/marketdata/v1/quotes", headers=h, params={'symbols': sym})
-                    cr = c.get("https://api.schwabapi.com/marketdata/v1/chains", headers=h, params={
+            async def _async_quote_and_chain(h, sym, exp):
+                async with httpx.AsyncClient(timeout=15.0) as c:
+                    qr = await c.get("https://api.schwabapi.com/marketdata/v1/quotes", headers=h, params={'symbols': sym})
+                    cr = await c.get("https://api.schwabapi.com/marketdata/v1/chains", headers=h, params={
                         'symbol': sym, 'contractType': 'ALL', 'fromDate': exp, 'toDate': exp, 'includeUnderlyingQuote': 'true'
                     })
                     return qr, cr
             
-            quote_response, response = await asyncio.to_thread(_sync_quote_and_chain, headers, symbol, expiry)
+            quote_response, response = await asyncio.wait_for(
+                _async_quote_and_chain(headers, symbol, expiry),
+                timeout=20.0
+            )
             
             stock_price = None
             if not isinstance(quote_response, Exception) and quote_response.status_code == 200:
@@ -2272,14 +2288,16 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
 
-            def _sync_order_status(url, h):
-                with httpx.Client(timeout=25.0) as c:
-                    return c.get(url, headers=h)
+            async def _async_order_status(url, h):
+                async with httpx.AsyncClient(timeout=25.0) as c:
+                    return await c.get(url, headers=h)
             
-            response = await asyncio.to_thread(
-                _sync_order_status,
-                f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
-                headers
+            response = await asyncio.wait_for(
+                _async_order_status(
+                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
+                    headers
+                ),
+                timeout=30.0
             )
 
             if response.status_code == 200:

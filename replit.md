@@ -61,6 +61,23 @@ The web control panel is built with Flask, providing a responsive and interactiv
 - **paho-mqtt**: For Webull MQTT.
 - **Chart.js**: Frontend data visualization.
 
+## Critical Bug Fixes (March 2026)
+
+### SCHWAB Sync Hang Fix
+- **Root cause**: `asyncio.to_thread(httpx.Client)` pattern — blocked OS threads cannot be cancelled by `asyncio.wait_for`
+- **Fix**: All Schwab HTTP calls now use `httpx.AsyncClient` (natively async, properly cancellable)
+- **Files**: `src/brokers/schwab_broker.py`
+
+### Routing Engine Hang Fix (ExitArbiter Lock Leak)
+- **Root cause**: `ExitArbiter` returns `threading.Lock`, but code used `asyncio.wait_for(lock.acquire(), timeout=0.1)`. Since `lock.acquire()` is synchronous (returns `True` immediately), `asyncio.wait_for(True)` raises `TypeError`, preventing `acquired = True` from being set, so the `finally` block never released the lock. On next loop iteration, `lock.acquire()` blocked the event loop forever.
+- **Fix**: Replaced `asyncio.wait_for(lock.acquire(), timeout=0.1)` with `lock.acquire(blocking=False)` — instant non-blocking acquire compatible with `threading.Lock`
+- **Files**: `src/services/signal_routing_engine.py` (two locations: `_handle_risk_exit` and `handle_signal_exit`)
+
+### Webhook Timeout Fix
+- **Root cause**: `aiohttp.ClientSession` in routing engine had no timeout (default 300s), halting the routing engine whenever a webhook endpoint was slow
+- **Fix**: `aiohttp.ClientSession` now created with `ClientTimeout(total=10)`; `_handle_risk_exit` wrapped with `asyncio.wait_for(timeout=15.0)`
+- **Files**: `src/services/signal_routing_engine.py`
+
 ## Risk Engine Direct Exit Architecture
 
 The risk engine now has a dual-path exit execution system to ensure stop-loss orders ALWAYS execute, even when the event loop is blocked:
