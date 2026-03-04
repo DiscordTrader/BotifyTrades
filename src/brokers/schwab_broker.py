@@ -9,7 +9,6 @@ import json
 import asyncio
 import logging
 import time
-import threading
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
@@ -51,7 +50,7 @@ class SchwabBroker(BrokerInterface):
         self.redirect_uri = config.get('redirect_uri', 'https://127.0.0.1')
         self.token_file = config.get('token_file', 'schwab_token.json')
         
-        self._api_rate_lock = threading.Lock()
+        self._api_rate_lock = None
         self._last_api_call = 0
         self._min_api_interval = 1.0
         self._last_valid_positions = []
@@ -59,7 +58,6 @@ class SchwabBroker(BrokerInterface):
         self._position_cache_ttl = 60
         
         self._global_429_until = 0
-        self._global_429_lock = threading.Lock()
         self._consecutive_429s = 0
         self._last_successful_call = 0
 
@@ -67,7 +65,6 @@ class SchwabBroker(BrokerInterface):
         self._data_hub = None
         self._api_calls_this_minute = 0
         self._api_calls_minute_start = 0
-        self._api_budget_lock = threading.Lock()
         self._API_BUDGET_LIMIT = 120
         self._API_BUDGET_THROTTLE = 96
         self._API_BUDGET_CRITICAL = 108
@@ -156,20 +153,18 @@ class SchwabBroker(BrokerInterface):
         return None
 
     def _track_api_call(self) -> bool:
-        with self._api_budget_lock:
-            now = time.time()
-            if now - self._api_calls_minute_start >= 60:
-                self._api_calls_this_minute = 0
-                self._api_calls_minute_start = now
-            self._api_calls_this_minute += 1
-            return self._api_calls_this_minute <= self._API_BUDGET_LIMIT
+        now = time.time()
+        if now - self._api_calls_minute_start >= 60:
+            self._api_calls_this_minute = 0
+            self._api_calls_minute_start = now
+        self._api_calls_this_minute += 1
+        return self._api_calls_this_minute <= self._API_BUDGET_LIMIT
 
     def _get_api_usage(self) -> int:
-        with self._api_budget_lock:
-            now = time.time()
-            if now - self._api_calls_minute_start >= 60:
-                return 0
-            return self._api_calls_this_minute
+        now = time.time()
+        if now - self._api_calls_minute_start >= 60:
+            return 0
+        return self._api_calls_this_minute
 
     def _should_throttle_non_critical(self) -> bool:
         usage = self._get_api_usage()
@@ -485,6 +480,10 @@ class SchwabBroker(BrokerInterface):
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
         """Make HTTP request with rate limit, budget tracking, and token refresh handling"""
         import httpx
+        import time as _mr_time
+
+        short_url = url.split('/')[-1] if '/' in url else url
+        _t0 = _mr_time.time()
 
         if not is_exit_order and not is_entry_order:
             if self._should_block_non_order():
@@ -492,7 +491,10 @@ class SchwabBroker(BrokerInterface):
                 return type('BudgetBlockedResponse', (), {'status_code': 503, 'text': 'Budget exceeded', 'json': lambda: {}, 'headers': {}, '_budget_blocked': True})()
 
         self._track_api_call()
+        _tag = f"{method} {short_url}"
+        print(f"[{self.name}] _mr: {_tag} pre-rate ({_mr_time.time()-_t0:.3f}s)", flush=True)
         await self._async_rate_limit(is_exit_order=is_exit_order, is_entry_order=is_entry_order)
+        print(f"[{self.name}] _mr: {_tag} post-rate ({_mr_time.time()-_t0:.3f}s)", flush=True)
 
         headers = kwargs.pop('headers', {})
         if 'Authorization' not in headers:
@@ -500,8 +502,17 @@ class SchwabBroker(BrokerInterface):
         if 'Accept' not in headers:
             headers['Accept'] = 'application/json'
 
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            response = await client.request(method, url, headers=headers, **kwargs)
+        def _sync_request(m, u, h, kw):
+            with httpx.Client(timeout=15.0) as c:
+                return c.request(m, u, headers=h, **kw)
+
+        print(f"[{self.name}] _mr: {_tag} pre-to_thread ({_mr_time.time()-_t0:.3f}s)", flush=True)
+        response = await asyncio.wait_for(
+            asyncio.to_thread(_sync_request, method, url, headers, kwargs),
+            timeout=20.0
+        )
+        print(f"[{self.name}] _mr: {_tag} post-to_thread ({_mr_time.time()-_t0:.3f}s) status={response.status_code}", flush=True)
+        print(f"[{self.name}] _mr: {_tag} returning", flush=True)
 
         if response.status_code == 429:
             retry_after = int(response.headers.get('Retry-After', '60'))
@@ -520,7 +531,10 @@ class SchwabBroker(BrokerInterface):
             
             await self._ensure_valid_token()
             headers['Authorization'] = f'Bearer {self.access_token}'
-            response = await asyncio.to_thread(_sync_request, method, url, headers, kwargs)
+            response = await asyncio.wait_for(
+                asyncio.to_thread(_sync_request, method, url, headers, kwargs),
+                timeout=20.0
+            )
             
             if response.status_code == 429:
                 self._register_429(retry_after)
@@ -533,7 +547,10 @@ class SchwabBroker(BrokerInterface):
                 refreshed = await self._refresh_access_token()
             if refreshed:
                 headers['Authorization'] = f'Bearer {self.access_token}'
-                response = await asyncio.to_thread(_sync_request, method, url, headers, kwargs)
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(_sync_request, method, url, headers, kwargs),
+                    timeout=20.0
+                )
         
         elif response.status_code in [200, 201, 202]:
             self._register_success()
@@ -678,33 +695,29 @@ class SchwabBroker(BrokerInterface):
     
     def _register_429(self, retry_after: int = 60):
         """Register a 429 error - sets global backoff for ALL Schwab API calls"""
-        with self._global_429_lock:
-            self._consecutive_429s += 1
-            backoff = min(retry_after * (1 + 0.5 * (self._consecutive_429s - 1)), 180)
-            self._global_429_until = time.time() + backoff
-            print(f"[{self.name}] ⚠️ GLOBAL 429 BACKOFF: {backoff:.0f}s (consecutive: {self._consecutive_429s})")
+        self._consecutive_429s += 1
+        backoff = min(retry_after * (1 + 0.5 * (self._consecutive_429s - 1)), 180)
+        self._global_429_until = time.time() + backoff
+        print(f"[{self.name}] ⚠️ GLOBAL 429 BACKOFF: {backoff:.0f}s (consecutive: {self._consecutive_429s})")
     
     def _register_success(self):
         """Register a successful API call - resets 429 counter"""
-        with self._global_429_lock:
-            self._consecutive_429s = 0
-            self._last_successful_call = time.time()
+        self._consecutive_429s = 0
+        self._last_successful_call = time.time()
     
     def _is_in_429_backoff(self) -> float:
         """Check if we're in global 429 backoff. Returns seconds remaining, 0 if clear."""
-        with self._global_429_lock:
-            remaining = self._global_429_until - time.time()
-            return max(0, remaining)
+        remaining = self._global_429_until - time.time()
+        return max(0, remaining)
     
     def _rate_limit(self):
-        """Enforce minimum interval between Schwab API calls to prevent 429 errors"""
-        with self._api_rate_lock:
-            now = time.time()
-            elapsed = now - self._last_api_call
-            if elapsed < self._min_api_interval:
-                self._last_api_call = now + self._min_api_interval
-            else:
-                self._last_api_call = now
+        """Enforce minimum interval between Schwab API calls to prevent 429 errors (sync version)"""
+        now = time.time()
+        elapsed = now - self._last_api_call
+        if elapsed < self._min_api_interval:
+            self._last_api_call = now + self._min_api_interval
+        else:
+            self._last_api_call = now
     
     async def _async_rate_limit(self, is_exit_order: bool = False, is_entry_order: bool = False):
         """Non-blocking rate limit for async contexts with global 429 awareness"""
@@ -722,10 +735,9 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] Rate limited (global 429 backoff), waiting {backoff_remaining:.0f}s...")
                 await asyncio.sleep(backoff_remaining)
         
-        with self._api_rate_lock:
-            now = time.time()
-            wait_time = self._min_api_interval - (now - self._last_api_call)
-            self._last_api_call = max(now, self._last_api_call + self._min_api_interval)
+        now = time.time()
+        wait_time = self._min_api_interval - (now - self._last_api_call)
+        self._last_api_call = max(now, self._last_api_call + self._min_api_interval)
         if wait_time > 0:
             await asyncio.sleep(wait_time)
     
@@ -1427,9 +1439,11 @@ class SchwabBroker(BrokerInterface):
     async def get_pending_orders(self) -> List[Dict[str, Any]]:
         """Get open/pending orders"""
         try:
+            print(f"[{self.name}] gpo: START", flush=True)
             if self._should_skip_non_critical():
                 return getattr(self, '_last_pending_orders', [])
             
+            print(f"[{self.name}] gpo: pre-token", flush=True)
             if not await self._ensure_valid_token():
                 return []
             
@@ -1442,6 +1456,7 @@ class SchwabBroker(BrokerInterface):
             to_date = datetime.now()
             from_date = to_date - timedelta(days=7)
             
+            print(f"[{self.name}] gpo: pre-request", flush=True)
             response = await self._make_request(
                 'GET',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
@@ -1451,9 +1466,12 @@ class SchwabBroker(BrokerInterface):
                     'status': 'WORKING'
                 }
             )
+            print(f"[{self.name}] gpo: post-request status={response.status_code}", flush=True)
             
             if response.status_code == 200:
+                print(f"[{self.name}] gpo: pre-json", flush=True)
                 orders = response.json()
+                print(f"[{self.name}] gpo: post-json ({len(orders)} orders)", flush=True)
                 result = []
                 
                 for order in orders:
@@ -1475,11 +1493,14 @@ class SchwabBroker(BrokerInterface):
                         'entered_time': order.get('enteredTime', '')
                     })
                 
+                print(f"[{self.name}] gpo: returning {len(result)} orders", flush=True)
                 self._last_pending_orders = list(result)
                 return result
                     
         except Exception as e:
             print(f"[{self.name}] Error getting pending orders: {e}")
+            import traceback
+            traceback.print_exc()
         
         return getattr(self, '_last_pending_orders', [])
     

@@ -310,27 +310,27 @@ class BrokerSyncService:
         """Sync trades for a specific broker"""
         print(f"[SYNC] Syncing {broker_name}...")
         
-        # Step 1: Fetch broker positions and orders
+        print(f"[SYNC] {broker_name}: step1 fetch_and_normalize", flush=True)
         normalized_data = await self._fetch_and_normalize(broker_name, broker_instance)
         
         if not normalized_data:
             print(f"[SYNC] No data from {broker_name}")
             return
         
-        # Step 2: Reconcile with database trades
+        print(f"[SYNC] {broker_name}: step2 reconcile_trades", flush=True)
         await self._reconcile_trades(broker_name, normalized_data)
         
-        # Step 3: Sync filled orders to database (runs every 5 sync cycles = ~2.5 min)
         if not hasattr(self, '_fill_sync_counter'):
             self._fill_sync_counter = {}
         self._fill_sync_counter[broker_name] = self._fill_sync_counter.get(broker_name, 0) + 1
         
         if self._fill_sync_counter[broker_name] >= 5:
+            print(f"[SYNC] {broker_name}: step3 sync_filled_orders", flush=True)
             await self._sync_filled_orders(broker_name, broker_instance)
             self._fill_sync_counter[broker_name] = 0
         
-        # Reconcile pending risk orders every sync cycle (not just every 5th)
         if hasattr(self, '_risk_manager') and self._risk_manager:
+            print(f"[SYNC] {broker_name}: step4 reconcile_risk_orders", flush=True)
             await self.reconcile_risk_orders(self._risk_manager)
         
         print(f"[SYNC] ✓ {broker_name} sync complete")
@@ -463,7 +463,9 @@ class BrokerSyncService:
             
             elif broker_name == 'SCHWAB':
                 if hasattr(broker_instance, 'get_positions_detailed'):
+                    print(f"[SYNC] SCHWAB: fn-positions-start", flush=True)
                     positions = await broker_instance.get_positions_detailed() or []
+                    print(f"[SYNC] SCHWAB: fn-positions-done ({len(positions)})", flush=True)
                     
                     for pos in positions:
                         result['positions'].append({
@@ -483,22 +485,31 @@ class BrokerSyncService:
                         if hasattr(broker_instance, '_data_hub') and broker_instance._data_hub:
                             broker_instance._data_hub.update_positions(positions, source="sync")
                         if positions and hasattr(broker_instance, 'subscribe_position_symbols'):
+                            print(f"[SYNC] SCHWAB: fn-subscribe-start", flush=True)
                             await broker_instance.subscribe_position_symbols(positions)
+                            print(f"[SYNC] SCHWAB: fn-subscribe-done", flush=True)
                     except Exception:
                         pass
                 
-                # Get pending orders from Schwab
                 if hasattr(broker_instance, 'get_pending_orders'):
-                    orders = await broker_instance.get_pending_orders() or []
-                    for order in orders:
-                        result['pending_orders'].append({
-                            'broker_order_id': order.get('order_id'),
-                            'symbol': order.get('symbol'),
-                            'quantity': order.get('quantity'),
-                            'limit_price': order.get('limit_price'),
-                            'order_type': order.get('action'),  # BUY/SELL
-                            'status': order.get('status')
-                        })
+                    try:
+                        print(f"[SYNC] SCHWAB: fn-orders-start", flush=True)
+                        orders = await asyncio.wait_for(
+                            broker_instance.get_pending_orders(),
+                            timeout=15.0
+                        ) or []
+                        print(f"[SYNC] SCHWAB: fn-orders-done ({len(orders)})", flush=True)
+                        for order in orders:
+                            result['pending_orders'].append({
+                                'broker_order_id': order.get('order_id'),
+                                'symbol': order.get('symbol'),
+                                'quantity': order.get('quantity'),
+                                'limit_price': order.get('limit_price'),
+                                'order_type': order.get('action'),
+                                'status': order.get('status')
+                            })
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        print(f"[SYNC] SCHWAB get_pending_orders timed out - skipping orders", flush=True)
             
             elif broker_name.startswith('IBKR'):
                 # IBKR - Interactive Brokers via ib_insync (requires TWS/Gateway)
