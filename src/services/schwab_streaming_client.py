@@ -88,43 +88,45 @@ class SchwabStreamingClient:
                 print("[SCHWAB_STREAM] ❌ Cannot get streamer info - not authenticated")
                 return False
 
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(
-                    f"{self._broker.BASE_URL}/userPreference",
-                    headers={
-                        'Authorization': f'Bearer {self._broker.access_token}',
-                        'Accept': 'application/json'
-                    }
-                )
+            import asyncio as _aio
+            def _sync_streamer_info(url, h):
+                with httpx.Client(timeout=15.0) as c:
+                    return c.get(url, headers=h)
+            
+            response = await _aio.to_thread(
+                _sync_streamer_info,
+                f"{self._broker.BASE_URL}/userPreference",
+                {'Authorization': f'Bearer {self._broker.access_token}', 'Accept': 'application/json'}
+            )
 
-                if response.status_code != 200:
-                    print(f"[SCHWAB_STREAM] ❌ userPreference failed: {response.status_code}")
-                    return False
+            if response.status_code != 200:
+                print(f"[SCHWAB_STREAM] ❌ userPreference failed: {response.status_code}")
+                return False
 
-                data = response.json()
-                streamer_info = data.get('streamerInfo', [{}])
-                if isinstance(streamer_info, list) and len(streamer_info) > 0:
-                    self._streamer_info = streamer_info[0]
-                elif isinstance(streamer_info, dict):
-                    self._streamer_info = streamer_info
-                else:
-                    print("[SCHWAB_STREAM] ❌ No streamerInfo in userPreference response")
-                    return False
+            data = response.json()
+            streamer_info = data.get('streamerInfo', [{}])
+            if isinstance(streamer_info, list) and len(streamer_info) > 0:
+                self._streamer_info = streamer_info[0]
+            elif isinstance(streamer_info, dict):
+                self._streamer_info = streamer_info
+            else:
+                print("[SCHWAB_STREAM] ❌ No streamerInfo in userPreference response")
+                return False
 
-                accounts = data.get('accounts', [])
-                if accounts:
-                    self._account_id = accounts[0].get('accountNumber') or accounts[0].get('accountId')
+            accounts = data.get('accounts', [])
+            if accounts:
+                self._account_id = accounts[0].get('accountNumber') or accounts[0].get('accountId')
 
-                self._app_id = self._streamer_info.get('schwabClientCustomerId', '') or self._streamer_info.get('appId', '')
+            self._app_id = self._streamer_info.get('schwabClientCustomerId', '') or self._streamer_info.get('appId', '')
 
-                socket_url = self._streamer_info.get('streamerSocketUrl', '')
-                if not socket_url:
-                    print("[SCHWAB_STREAM] ❌ No streamerSocketUrl found")
-                    return False
+            socket_url = self._streamer_info.get('streamerSocketUrl', '')
+            if not socket_url:
+                print("[SCHWAB_STREAM] ❌ No streamerSocketUrl found")
+                return False
 
-                si_keys = list(self._streamer_info.keys())
-                print(f"[SCHWAB_STREAM] ✓ Streamer info obtained (socket: {socket_url[:50]}...) keys={si_keys}")
-                return True
+            si_keys = list(self._streamer_info.keys())
+            print(f"[SCHWAB_STREAM] ✓ Streamer info obtained (socket: {socket_url[:50]}...) keys={si_keys}")
+            return True
 
         except Exception as e:
             print(f"[SCHWAB_STREAM] ❌ Error fetching streamer info: {e}")

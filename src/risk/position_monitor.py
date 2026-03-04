@@ -981,6 +981,10 @@ class RiskManager:
         self.cache = PositionCache()
         self._running = False
         self._permanent_failure_keys = self._load_permanent_failures()
+        
+        import threading as _threading
+        self._exit_executed_lock = _threading.Lock()
+        self._exit_executed_keys = set()
     
     _PERMANENT_FAILURES_FILE = Path.cwd() / '.permanent_failures.json'
     
@@ -2309,12 +2313,111 @@ class RiskManager:
                 print(f"[RISK] 📊 Market order mode - using current price ${position.current_price:.2f}")
             
             await self.order_queue.put(stc_signal)
-            print(f"[RISK] STC order queued for {pos_key} via {position.broker}: {stc_signal}")
+            print(f"[RISK] STC order queued for {pos_key} via {position.broker} (queue_id={id(self.order_queue)}, qsize={self.order_queue.qsize()}): {stc_signal}")
+            
+            stc_signal['_exit_marker_key'] = pos_key
+            
+            import threading
+            def _thread_exit_executor():
+                import time as _t
+                _t.sleep(10)
+                try:
+                    with self._exit_executed_lock:
+                        if pos_key in self._exit_executed_keys:
+                            print(f"[RISK] [DIRECT-EXIT] {pos_key} already executed by worker — skipping")
+                            return
+                    if not self.cache.is_closing(pos_key):
+                        print(f"[RISK] [DIRECT-EXIT] {pos_key} no longer closing — worker handled it")
+                        return
+                    with self._exit_executed_lock:
+                        if pos_key in self._exit_executed_keys:
+                            return
+                        self._exit_executed_keys.add(pos_key)
+                    print(f"[RISK] [DIRECT-EXIT] ⚡ Worker hasn't handled {pos_key} after 10s — executing directly")
+                    loop = asyncio.new_event_loop()
+                    try:
+                        loop.run_until_complete(self._direct_execute_exit(stc_signal, pos_key))
+                    finally:
+                        loop.close()
+                except Exception as ex:
+                    print(f"[RISK] [DIRECT-EXIT] ✗ Thread execution failed for {pos_key}: {ex}")
+                    import traceback
+                    traceback.print_exc()
+            
+            _exit_thread = threading.Thread(target=_thread_exit_executor, daemon=True, name=f"risk-exit-{pos_key}")
+            _exit_thread.start()
             
         except Exception as e:
             self.cache.reset_closing(pos_key)
             print(f"[RISK] ✗ Failed to queue STC order for {pos_key}: {e}")
     
+    async def _direct_execute_exit(self, stc_signal: dict, pos_key: str):
+        broker_name = stc_signal.get('broker', '')
+        broker_upper = broker_name.upper()
+        asset_type = stc_signal.get('asset', 'option')
+        
+        broker_instance = None
+        if 'ROBINHOOD' in broker_upper:
+            broker_instance = self.robinhood_broker
+        elif 'SCHWAB' in broker_upper:
+            broker_instance = self.schwab_broker
+        elif 'ALPACA' in broker_upper:
+            broker_instance = self.alpaca_broker
+        elif 'WEBULL' in broker_upper and 'PAPER' not in broker_upper:
+            broker_instance = getattr(self, 'webull_broker', None) or (self.bot.webull if hasattr(self, 'bot') and self.bot else None)
+        elif 'WEBULL_PAPER' in broker_upper:
+            broker_instance = getattr(self, 'webull_paper_broker', None) or (getattr(self.bot, 'webull_paper', None) if hasattr(self, 'bot') and self.bot else None)
+        
+        if not broker_instance:
+            print(f"[RISK] [DIRECT-EXIT] ✗ No broker instance for {broker_name}")
+            return
+        
+        try:
+            if asset_type == 'option':
+                result = await broker_instance.place_option_order(
+                    symbol=stc_signal['symbol'],
+                    strike=stc_signal.get('strike'),
+                    expiry=stc_signal.get('expiry'),
+                    option_type=stc_signal.get('opt_type'),
+                    action='STC',
+                    quantity=stc_signal['qty'],
+                    price=stc_signal['price'],
+                    option_id=stc_signal.get('option_id'),
+                    _risk_management_order=True,
+                )
+            else:
+                result = await broker_instance.sell_stock(
+                    symbol=stc_signal['symbol'],
+                    quantity=stc_signal['qty'],
+                    price=stc_signal['price'],
+                )
+            
+            order_id = None
+            if isinstance(result, dict):
+                order_id = result.get('order_id') or result.get('orderId') or result.get('id')
+            elif result:
+                order_id = str(result)
+            
+            if order_id:
+                print(f"[RISK] [DIRECT-EXIT] ✓ {pos_key} exit order placed: {order_id}")
+                try:
+                    from src.database.trade_db import record_trade_execution
+                    record_trade_execution(
+                        signal=stc_signal,
+                        broker_name=broker_name,
+                        order_id=str(order_id),
+                        status='FILLED',
+                        execution_type='risk_direct_exit'
+                    )
+                except Exception:
+                    pass
+            else:
+                print(f"[RISK] [DIRECT-EXIT] ⚠️ {pos_key} result: {result}")
+        except Exception as e:
+            print(f"[RISK] [DIRECT-EXIT] ✗ {pos_key} execution failed: {e}")
+            import traceback
+            traceback.print_exc()
+
     def _get_streaming_bid_ask(self, position: PositionSnapshot) -> Dict[str, float]:
         """Get real-time bid/ask from streaming hubs for accurate exit pricing.
         

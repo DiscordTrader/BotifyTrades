@@ -7,6 +7,7 @@ WARNING: No paper trading - all trades are LIVE
 import sys
 import os
 import asyncio
+import threading
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -45,6 +46,11 @@ class RobinhoodBroker(BrokerInterface):
         self.name = "ROBINHOOD"
         self.paper_trade = False  # Robinhood has NO paper trading
         self._logged_in = False
+        self._api_lock = threading.Lock()
+        self._positions_cache = []
+        self._positions_cache_time = 0
+        self._positions_cache_ttl = 15
+        self._option_instrument_cache = {}
         
         if not ROBIN_STOCKS_AVAILABLE:
             print(f"[{self.name}] WARNING: robin-stocks library not installed")
@@ -163,10 +169,12 @@ class RobinhoodBroker(BrokerInterface):
         
         try:
             def get_profile():
-                return rh.profiles.load_account_profile()
+                with self._api_lock:
+                    return rh.profiles.load_account_profile()
             
             def get_portfolio():
-                return rh.profiles.load_portfolio_profile()
+                with self._api_lock:
+                    return rh.profiles.load_portfolio_profile()
             
             account = await asyncio.to_thread(get_profile)
             portfolio = await asyncio.to_thread(get_portfolio)
@@ -245,6 +253,15 @@ class RobinhoodBroker(BrokerInterface):
         if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
             return []
         
+        import time as _time
+        if self._positions_cache and (_time.time() - self._positions_cache_time) < self._positions_cache_ttl:
+            return list(self._positions_cache)
+        
+        if not self._api_lock.acquire(timeout=10):
+            if self._positions_cache:
+                return list(self._positions_cache)
+            return []
+        
         try:
             holdings = rh.account.build_holdings()
             positions = []
@@ -279,32 +296,37 @@ class RobinhoodBroker(BrokerInterface):
                     qty = float(pos.get('quantity', 0))
                     
                     avg_price = raw_avg_float / 100.0
-                    print(f"[ROBINHOOD] Option position: {pos.get('chain_symbol')} - raw avg_price={raw_avg_float}, per-contract premium=${avg_price:.4f}")
                     
-                    # Get option instrument details (strike, expiry, type)
                     option_url = pos.get('option', '')
                     option_id = pos.get('option_id') or option_url
                     strike_price = None
                     expiration_date = None
                     option_type = None
                     
-                    # Extract option ID from URL if needed
                     if isinstance(option_id, str) and '/' in option_id:
                         option_id = option_id.rstrip('/').split('/')[-1]
                     
-                    # Fetch option instrument details for strike/expiry/type
-                    if option_id:
+                    if option_id and option_id in self._option_instrument_cache:
+                        cached = self._option_instrument_cache[option_id]
+                        strike_price = cached.get('strike_price')
+                        expiration_date = cached.get('expiration_date')
+                        option_type = cached.get('type')
+                    elif option_id:
                         try:
                             option_info = rh.options.get_option_instrument_data_by_id(option_id)
                             if option_info:
                                 strike_price = option_info.get('strike_price')
                                 expiration_date = option_info.get('expiration_date')
-                                option_type = option_info.get('type')  # 'call' or 'put'
+                                option_type = option_info.get('type')
+                                self._option_instrument_cache[option_id] = {
+                                    'strike_price': strike_price,
+                                    'expiration_date': expiration_date,
+                                    'type': option_type
+                                }
                         except Exception as e:
                             print(f"[ROBINHOOD] Could not fetch option instrument details: {e}")
                     
-                    # Fetch current mark price for P&L calculation
-                    current_price = avg_price  # Fallback to avg_price
+                    current_price = avg_price
                     try:
                         if option_id:
                             market_data = rh.options.get_option_market_data_by_id(option_id)
@@ -314,13 +336,8 @@ class RobinhoodBroker(BrokerInterface):
                     except Exception as e:
                         print(f"[ROBINHOOD] Could not fetch mark price for option: {e}")
                     
-                    # Calculate P&L with 100x multiplier for options
                     unrealized_pnl = (current_price - avg_price) * qty * 100 if current_price and avg_price else 0
-                    
-                    # Map option_type to call_put (C/P format)
                     call_put = 'C' if option_type == 'call' else 'P' if option_type == 'put' else None
-                    
-                    # Normalize strike to float
                     strike_float = float(strike_price) if strike_price else None
                     
                     positions.append({
@@ -336,17 +353,21 @@ class RobinhoodBroker(BrokerInterface):
                         'option_type': option_type or '',
                         'strike_price': strike_price or '',
                         'expiration_date': expiration_date or '',
-                        # Sync service expects these field names:
                         'strike': strike_float,
                         'expiry': expiration_date or '',
                         'call_put': call_put
                     })
             
+            import time as _time
+            self._positions_cache = list(positions)
+            self._positions_cache_time = _time.time()
             return positions
             
         except Exception as e:
             print(f"[{self.name}] Error getting all positions: {e}")
-            return []
+            return self._positions_cache if self._positions_cache else []
+        finally:
+            self._api_lock.release()
     
     def get_orders(self, status: str = 'open') -> list:
         """Get orders by status for sync service (synchronous)"""
@@ -382,6 +403,9 @@ class RobinhoodBroker(BrokerInterface):
         - broker_order_id, symbol, quantity, limit_price, order_type, status
         """
         if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return []
+        
+        if not self._api_lock.acquire(timeout=10):
             return []
         
         try:
@@ -439,6 +463,8 @@ class RobinhoodBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error getting pending orders: {e}")
             return []
+        finally:
+            self._api_lock.release()
     
     def get_options_expiration_dates(self, symbol: str) -> list:
         """Get available option expiration dates for a symbol.

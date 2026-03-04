@@ -371,13 +371,21 @@ def _fetch_alpaca(bot) -> List[Dict]:
         return []
 
 
+_rh_cache = {'positions': [], 'ts': 0}
+
 def _fetch_robinhood(bot) -> List[Dict]:
     try:
         if not hasattr(bot, 'robinhood_broker') or bot.robinhood_broker is None:
             return []
 
         rh_broker = bot.robinhood_broker
-        raw = rh_broker.get_all_positions()
+        if time.time() - _rh_cache['ts'] < 15 and _rh_cache['positions']:
+            raw = _rh_cache['positions']
+        else:
+            raw = rh_broker.get_all_positions()
+            if raw:
+                _rh_cache['positions'] = raw
+                _rh_cache['ts'] = time.time()
         if not raw:
             return []
 
@@ -436,19 +444,25 @@ def _fetch_schwab(bot) -> List[Dict]:
         try:
             from src.services.schwab_data_hub import get_schwab_data_hub
             hub = get_schwab_data_hub()
-            if hub.is_streaming() and hub.get_positions_age(detailed=True) < 30:
-                cached = hub.get_positions(detailed=True)
-                if cached is not None:
-                    raw = list(cached)
+            cached = hub.get_positions(detailed=True)
+            if cached is not None:
+                raw = list(cached)
         except Exception:
             pass
 
         if raw is None:
-            future = asyncio.run_coroutine_threadsafe(
-                schwab_broker.get_positions_detailed(),
-                bot.loop
-            )
-            raw = future.result(timeout=10) or []
+            if hasattr(schwab_broker, '_last_valid_positions') and schwab_broker._last_valid_positions:
+                raw = list(schwab_broker._last_valid_positions)
+
+        if raw is None:
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    schwab_broker.get_positions_detailed(),
+                    bot.loop
+                )
+                raw = future.result(timeout=8) or []
+            except Exception:
+                raw = []
 
         positions = []
         for pos in raw:

@@ -60,3 +60,16 @@ The web control panel is built with Flask, providing a responsive and interactiv
 - **PySide6**: For setup wizard GUI.
 - **paho-mqtt**: For Webull MQTT.
 - **Chart.js**: Frontend data visualization.
+
+## Risk Engine Direct Exit Architecture
+
+The risk engine now has a dual-path exit execution system to ensure stop-loss orders ALWAYS execute, even when the event loop is blocked:
+
+1. **Primary path**: STC signal queued to `order_queue` → Worker picks up immediately (bypasses sync_ready gate for `_risk_management_order` signals)
+2. **Backup path**: A daemon thread waits 8 seconds, then checks if the worker handled the order. If not (queue still has items AND position still marked closing), the thread creates its own event loop and calls the broker's sell function directly.
+
+Key changes:
+- **Worker sync bypass**: Worker starts processing immediately after `broker_ready`. Risk orders (`_risk_management_order=True`) execute without waiting for `sync_ready`. Regular BTO signals are held until first sync completes.
+- **Parallel broker sync**: `broker_sync_service.py` runs all broker syncs in parallel (not sequential) with a 30s shared deadline. Each broker's `_fetch_account_info` has a 15s timeout.
+- **Stale closing flags**: `position_cache.py` clears `closing=True` flags on startup to prevent risk engine from skipping positions where previous exit orders failed.
+- **Direct exit thread**: `position_monitor.py` spawns a daemon thread per STC order as a safety net. If the event loop is blocked (e.g., by Robinhood's synchronous HTTP calls via robin_stocks), the thread executes independently.

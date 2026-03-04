@@ -14871,23 +14871,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         """Process orders from queue with pre-trade analysis"""
         _original_print("[WORKER] 💤 Waiting for broker_ready event...", flush=True)
         await self.broker_ready.wait()
-        _original_print("[WORKER] ✓ Broker ready, waiting for first sync...", flush=True)
+        _original_print("[WORKER] 🚀 Order processor started — processing risk exits immediately, regular orders after sync", flush=True)
         
-        try:
-            await asyncio.wait_for(self.sync_ready.wait(), timeout=45)
-        except asyncio.TimeoutError:
-            _original_print("[WORKER] ⚠️ First sync timed out after 45s — starting worker anyway (risk exits must not wait)", flush=True)
-            self.sync_ready.set()
-        
-        _original_print("[WORKER] 🚀 Order processor started - broker synced and ready!", flush=True)
-        
-        if self.order_queue.qsize() > 0:
-            _original_print(f"[WORKER] 📬 {self.order_queue.qsize()} order(s) already queued — processing immediately", flush=True)
-        
+        _heartbeat_count = 0
         while True:
             try:
-                _original_print(f"[WORKER] ⏳ Waiting for signal from queue... (size={self.order_queue.qsize()})", flush=True)
-                signal = await self.order_queue.get()
+                _heartbeat_count += 1
+                if _heartbeat_count % 150 == 1:
+                    _original_print(f"[WORKER] ♥ Heartbeat #{_heartbeat_count} | queue={self.order_queue.qsize()} | sync={self.sync_ready.is_set()}", flush=True)
+                try:
+                    signal = await asyncio.wait_for(self.order_queue.get(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    continue
+                
+                is_risk_order = signal.get('_risk_management_order', False)
+                if not self.sync_ready.is_set() and not is_risk_order:
+                    _original_print(f"[WORKER] ⏸️ Holding {signal.get('action')} {signal.get('symbol')} until first sync completes...", flush=True)
+                    await self.order_queue.put(signal)
+                    await asyncio.sleep(2)
+                    continue
+                
+                if is_risk_order and not self.sync_ready.is_set():
+                    _original_print(f"[WORKER] ⚡ Processing risk exit {signal.get('symbol')} IMMEDIATELY (bypassing sync gate)", flush=True)
+                
+                if is_risk_order and signal.get('_exit_marker_key'):
+                    _marker_key = signal['_exit_marker_key']
+                    try:
+                        _rm = getattr(self, '_risk_manager', None) or getattr(self, 'risk_manager', None)
+                        if _rm and hasattr(_rm, '_exit_executed_lock'):
+                            with _rm._exit_executed_lock:
+                                if _marker_key in _rm._exit_executed_keys:
+                                    _original_print(f"[WORKER] ⚠️ {_marker_key} already executed by backup thread — skipping", flush=True)
+                                    continue
+                                _rm._exit_executed_keys.add(_marker_key)
+                    except Exception:
+                        pass
+                
                 _original_print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}", flush=True)
                 
                 # Handle NOTIFICATION signals (not orders - just messages)

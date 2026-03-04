@@ -256,22 +256,25 @@ class SchwabBroker(BrokerInterface):
                 'redirect_uri': self.redirect_uri
             }
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(self.TOKEN_URL, headers=headers, data=data)
-                
-                if response.status_code == 200:
-                    token_data = response.json()
-                    self.access_token = token_data.get('access_token')
-                    self.refresh_token = token_data.get('refresh_token')
-                    expires_in = token_data.get('expires_in', 1800)
-                    self.token_expiry = (datetime.now().timestamp() + expires_in)
-                    self._save_tokens()
-                    print(f"[{self.name}] ✓ Tokens obtained successfully")
-                    return True
-                else:
-                    print(f"[{self.name}] ❌ Token exchange failed: {response.status_code}")
-                    print(f"[{self.name}] Response: {response.text}")
-                    return False
+            def _sync_exchange(h, d, url):
+                with httpx.Client(timeout=15.0) as c:
+                    return c.post(url, headers=h, data=d)
+            
+            response = await asyncio.to_thread(_sync_exchange, headers, data, self.TOKEN_URL)
+            
+            if response.status_code == 200:
+                token_data = response.json()
+                self.access_token = token_data.get('access_token')
+                self.refresh_token = token_data.get('refresh_token')
+                expires_in = token_data.get('expires_in', 1800)
+                self.token_expiry = (datetime.now().timestamp() + expires_in)
+                self._save_tokens()
+                print(f"[{self.name}] ✓ Tokens obtained successfully")
+                return True
+            else:
+                print(f"[{self.name}] ❌ Token exchange failed: {response.status_code}")
+                print(f"[{self.name}] Response: {response.text}")
+                return False
                     
         except Exception as e:
             print(f"[{self.name}] ❌ Error exchanging code: {e}")
@@ -309,9 +312,30 @@ class SchwabBroker(BrokerInterface):
                 'client_id': self.client_id
             }
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(self.TOKEN_URL, headers=headers, data=data)
-                
+            def _sync_token_post(h, d, token_url):
+                with httpx.Client(timeout=15.0) as c:
+                    return c.post(token_url, headers=h, data=d)
+            
+            response = await asyncio.to_thread(_sync_token_post, headers, data, self.TOKEN_URL)
+            
+            if response.status_code == 200:
+                token_data = response.json()
+                self.access_token = token_data.get('access_token')
+                if token_data.get('refresh_token'):
+                    self.refresh_token = token_data.get('refresh_token')
+                expires_in = token_data.get('expires_in', 1800)
+                self.token_expiry = (datetime.now().timestamp() + expires_in)
+                self._save_tokens()
+                self._token_refresh_failures = 0
+                self._token_refresh_backoff_until = 0
+                self._token_auth_dead = False
+                print(f"[{self.name}] ✓ Access token refreshed (expires in {expires_in}s)")
+                return True
+            elif response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', '30'))
+                print(f"[{self.name}] Token refresh rate limited, waiting {retry_after}s...")
+                await asyncio.sleep(retry_after)
+                response = await asyncio.to_thread(_sync_token_post, headers, data, self.TOKEN_URL)
                 if response.status_code == 200:
                     token_data = response.json()
                     self.access_token = token_data.get('access_token')
@@ -322,47 +346,29 @@ class SchwabBroker(BrokerInterface):
                     self._save_tokens()
                     self._token_refresh_failures = 0
                     self._token_refresh_backoff_until = 0
-                    self._token_auth_dead = False
-                    print(f"[{self.name}] ✓ Access token refreshed (expires in {expires_in}s)")
+                    print(f"[{self.name}] ✓ Access token refreshed after rate limit wait")
                     return True
-                elif response.status_code == 429:
-                    retry_after = int(response.headers.get('Retry-After', '30'))
-                    print(f"[{self.name}] Token refresh rate limited, waiting {retry_after}s...")
-                    await asyncio.sleep(retry_after)
-                    response = await client.post(self.TOKEN_URL, headers=headers, data=data)
-                    if response.status_code == 200:
-                        token_data = response.json()
-                        self.access_token = token_data.get('access_token')
-                        if token_data.get('refresh_token'):
-                            self.refresh_token = token_data.get('refresh_token')
-                        expires_in = token_data.get('expires_in', 1800)
-                        self.token_expiry = (datetime.now().timestamp() + expires_in)
-                        self._save_tokens()
-                        self._token_refresh_failures = 0
-                        self._token_refresh_backoff_until = 0
-                        print(f"[{self.name}] ✓ Access token refreshed after rate limit wait")
-                        return True
-                    self._apply_token_backoff()
-                    print(f"[{self.name}] ❌ Token refresh failed after rate limit: {response.status_code}")
-                    return False
-                elif response.status_code == 400:
-                    error_text = response.text
-                    if 'invalid_grant' in error_text:
-                        self._token_auth_dead = True
-                        self.connected = False
-                        print(f"[{self.name}] ❌ Refresh token expired or revoked. Re-authentication required. (Token refresh suspended until re-auth)")
-                    else:
-                        self._apply_token_backoff()
-                        if self._token_refresh_failures <= 3:
-                            print(f"[{self.name}] ❌ Token refresh failed: {response.status_code} - {error_text}")
-                        else:
-                            backoff_remaining = int(self._token_refresh_backoff_until - datetime.now().timestamp())
-                            print(f"[{self.name}] ❌ Token refresh still failing (attempt {self._token_refresh_failures}). Next retry in {backoff_remaining}s. Re-authenticate via Settings.")
-                    return False
+                self._apply_token_backoff()
+                print(f"[{self.name}] ❌ Token refresh failed after rate limit: {response.status_code}")
+                return False
+            elif response.status_code == 400:
+                error_text = response.text
+                if 'invalid_grant' in error_text:
+                    self._token_auth_dead = True
+                    self.connected = False
+                    print(f"[{self.name}] ❌ Refresh token expired or revoked. Re-authentication required. (Token refresh suspended until re-auth)")
                 else:
                     self._apply_token_backoff()
-                    print(f"[{self.name}] ❌ Token refresh failed: {response.status_code}")
-                    return False
+                    if self._token_refresh_failures <= 3:
+                        print(f"[{self.name}] ❌ Token refresh failed: {response.status_code} - {error_text}")
+                    else:
+                        backoff_remaining = int(self._token_refresh_backoff_until - datetime.now().timestamp())
+                        print(f"[{self.name}] ❌ Token refresh still failing (attempt {self._token_refresh_failures}). Next retry in {backoff_remaining}s. Re-authenticate via Settings.")
+                return False
+            else:
+                self._apply_token_backoff()
+                print(f"[{self.name}] ❌ Token refresh failed: {response.status_code}")
+                return False
                     
         except Exception as e:
             self._apply_token_backoff()
@@ -391,25 +397,25 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.BASE_URL}/accounts/accountNumbers",
-                    headers=headers
-                )
-                
-                if response.status_code == 200:
-                    accounts = response.json()
-                    if accounts:
-                        self.account_hash = accounts[0].get('hashValue')
-                        self.account_number = accounts[0].get('accountNumber')
-                        print(f"[{self.name}] Account: {self.account_number}")
-                        return True
-                elif response.status_code == 401:
-                    print(f"[{self.name}] Token expired, needs refresh")
-                    return False
-                else:
-                    print(f"[{self.name}] Verification failed: {response.status_code}")
-                    return False
+            def _sync_verify(url, h):
+                with httpx.Client(timeout=15.0) as c:
+                    return c.get(url, headers=h)
+            
+            response = await asyncio.to_thread(_sync_verify, f"{self.BASE_URL}/accounts/accountNumbers", headers)
+            
+            if response.status_code == 200:
+                accounts = response.json()
+                if accounts:
+                    self.account_hash = accounts[0].get('hashValue')
+                    self.account_number = accounts[0].get('accountNumber')
+                    print(f"[{self.name}] Account: {self.account_number}")
+                    return True
+            elif response.status_code == 401:
+                print(f"[{self.name}] Token expired, needs refresh")
+                return False
+            else:
+                print(f"[{self.name}] Verification failed: {response.status_code}")
+                return False
                     
         except Exception as e:
             print(f"[{self.name}] ❌ Verification error: {e}")
@@ -479,14 +485,17 @@ class SchwabBroker(BrokerInterface):
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
         """Make HTTP request with rate limit, budget tracking, and token refresh handling"""
         import httpx
+        import time as _t
 
         if not is_exit_order and not is_entry_order:
             if self._should_block_non_order():
                 print(f"[{self.name}] ⚠️ API budget critical ({self._get_api_usage()}/{self._API_BUDGET_LIMIT}/min) - blocking non-order call")
                 return type('BudgetBlockedResponse', (), {'status_code': 503, 'text': 'Budget exceeded', 'json': lambda: {}, 'headers': {}, '_budget_blocked': True})()
 
+        _req_t0 = _t.time()
         self._track_api_call()
         await self._async_rate_limit(is_exit_order=is_exit_order, is_entry_order=is_entry_order)
+        _after_rate = _t.time() - _req_t0
 
         headers = kwargs.pop('headers', {})
         if 'Authorization' not in headers:
@@ -494,45 +503,55 @@ class SchwabBroker(BrokerInterface):
         if 'Accept' not in headers:
             headers['Accept'] = 'application/json'
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.request(method, url, headers=headers, **kwargs)
+        short_url = url.split('/')[-1] if '/' in url else url
+        if _after_rate > 0.5:
+            print(f"[{self.name}] _make_request {method} {short_url}: rate_limit took {_after_rate:.1f}s", flush=True)
 
-            if response.status_code == 429:
-                retry_after = int(response.headers.get('Retry-After', '60'))
-                self._register_429(retry_after)
-                
-                if is_exit_order:
-                    wait = min(retry_after, 10)
-                    print(f"[{self.name}] 🔴 EXIT ORDER 429 - short wait {wait}s then retry")
-                    await asyncio.sleep(wait)
-                elif is_entry_order:
-                    wait = min(retry_after, 15)
-                    print(f"[{self.name}] ⏳ BUY ORDER 429 - waiting {wait}s then retry")
-                    await asyncio.sleep(wait)
-                else:
-                    await asyncio.sleep(retry_after)
-                
-                await self._ensure_valid_token()
-                headers['Authorization'] = f'Bearer {self.access_token}'
-                response = await client.request(method, url, headers=headers, **kwargs)
-                
-                if response.status_code == 429:
-                    self._register_429(retry_after)
-                    return response
-                else:
-                    self._register_success()
+        def _sync_request(m, u, h, kw):
+            with httpx.Client(timeout=25.0) as c:
+                return c.request(m, u, headers=h, **kw)
 
-            elif response.status_code == 401:
-                async with self._token_refresh_lock:
-                    refreshed = await self._refresh_access_token()
-                if refreshed:
-                    headers['Authorization'] = f'Bearer {self.access_token}'
-                    response = await client.request(method, url, headers=headers, **kwargs)
+        response = await asyncio.to_thread(_sync_request, method, url, headers, kwargs)
+        _total = _t.time() - _req_t0
+        if _total > 2.0:
+            print(f"[{self.name}] _make_request {method} {short_url}: total={_total:.1f}s (rate={_after_rate:.1f}s, http={_total-_after_rate:.1f}s)", flush=True)
+
+        if response.status_code == 429:
+            retry_after = int(response.headers.get('Retry-After', '60'))
+            self._register_429(retry_after)
             
-            elif response.status_code in [200, 201, 202]:
+            if is_exit_order:
+                wait = min(retry_after, 10)
+                print(f"[{self.name}] EXIT ORDER 429 - short wait {wait}s then retry")
+                await asyncio.sleep(wait)
+            elif is_entry_order:
+                wait = min(retry_after, 15)
+                print(f"[{self.name}] BUY ORDER 429 - waiting {wait}s then retry")
+                await asyncio.sleep(wait)
+            else:
+                await asyncio.sleep(min(retry_after, 30))
+            
+            await self._ensure_valid_token()
+            headers['Authorization'] = f'Bearer {self.access_token}'
+            response = await asyncio.to_thread(_sync_request, method, url, headers, kwargs)
+            
+            if response.status_code == 429:
+                self._register_429(retry_after)
+                return response
+            else:
                 self._register_success()
 
-            return response
+        elif response.status_code == 401:
+            async with self._token_refresh_lock:
+                refreshed = await self._refresh_access_token()
+            if refreshed:
+                headers['Authorization'] = f'Bearer {self.access_token}'
+                response = await asyncio.to_thread(_sync_request, method, url, headers, kwargs)
+        
+        elif response.status_code in [200, 201, 202]:
+            self._register_success()
+
+        return response
     
     def _get_session_type(self) -> str:
         """Get order session type based on extended hours setting.
@@ -1215,105 +1234,91 @@ class SchwabBroker(BrokerInterface):
                         y = f"20{y}"
                     expiry = f"{y}-{int(m):02d}-{int(d):02d}"
             
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                import asyncio as _aio
-                quote_task = client.get(
-                    f"https://api.schwabapi.com/marketdata/v1/quotes",
-                    headers=headers,
-                    params={'symbols': symbol}
-                )
-                chain_task = client.get(
-                    f"https://api.schwabapi.com/marketdata/v1/chains",
-                    headers=headers,
-                    params={
-                        'symbol': symbol,
-                        'contractType': 'ALL',
-                        'fromDate': expiry,
-                        'toDate': expiry,
-                        'includeUnderlyingQuote': 'true'
-                    }
-                )
-                quote_response, response = await _aio.gather(quote_task, chain_task, return_exceptions=True)
+            def _sync_quote_and_chain(h, sym, exp):
+                with httpx.Client(timeout=15.0) as c:
+                    qr = c.get("https://api.schwabapi.com/marketdata/v1/quotes", headers=h, params={'symbols': sym})
+                    cr = c.get("https://api.schwabapi.com/marketdata/v1/chains", headers=h, params={
+                        'symbol': sym, 'contractType': 'ALL', 'fromDate': exp, 'toDate': exp, 'includeUnderlyingQuote': 'true'
+                    })
+                    return qr, cr
+            
+            quote_response, response = await asyncio.to_thread(_sync_quote_and_chain, headers, symbol, expiry)
+            
+            stock_price = None
+            if not isinstance(quote_response, Exception) and quote_response.status_code == 200:
+                try:
+                    quote_data = quote_response.json()
+                    if symbol in quote_data:
+                        stock_price = float(quote_data[symbol].get('quote', {}).get('lastPrice', 0) or 0)
+                except:
+                    pass
+            
+            if isinstance(response, Exception):
+                raise response
+            
+            if response.status_code == 200:
+                data = response.json()
                 
-                stock_price = None
-                if not isinstance(quote_response, Exception) and quote_response.status_code == 200:
-                    try:
-                        quote_data = quote_response.json()
-                        if symbol in quote_data:
-                            stock_price = float(quote_data[symbol].get('quote', {}).get('lastPrice', 0) or 0)
-                    except:
-                        pass
+                if not stock_price and data.get('underlyingPrice'):
+                    stock_price = float(data.get('underlyingPrice', 0))
                 
-                if isinstance(response, Exception):
-                    raise response
+                calls = []
+                puts = []
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    # Get stock price from underlying quote if not fetched
-                    if not stock_price and data.get('underlyingPrice'):
-                        stock_price = float(data.get('underlyingPrice', 0))
-                    
-                    calls = []
-                    puts = []
-                    
-                    # Parse call options
-                    call_exp_map = data.get('callExpDateMap', {})
-                    for exp_date, strikes in call_exp_map.items():
-                        for strike_str, options in strikes.items():
-                            for opt in options:
-                                strike_val = float(opt.get('strikePrice', 0))
-                                occ = self._build_option_symbol(symbol, expiry, strike_val, 'C')
-                                calls.append({
-                                    'strike': strike_val,
-                                    'bid': float(opt.get('bid', 0) or 0),
-                                    'ask': float(opt.get('ask', 0) or 0),
-                                    'last': float(opt.get('last', 0) or 0),
-                                    'volume': int(opt.get('totalVolume', 0) or 0),
-                                    'open_interest': int(opt.get('openInterest', 0) or 0),
-                                    'iv': float(opt.get('volatility', 0) or 0),
-                                    'delta': float(opt.get('delta', 0) or 0),
-                                    'gamma': float(opt.get('gamma', 0) or 0),
-                                    'theta': float(opt.get('theta', 0) or 0),
-                                    'vega': float(opt.get('vega', 0) or 0),
-                                    'option_id': occ,
-                                })
-                    
-                    # Parse put options
-                    put_exp_map = data.get('putExpDateMap', {})
-                    for exp_date, strikes in put_exp_map.items():
-                        for strike_str, options in strikes.items():
-                            for opt in options:
-                                strike_val = float(opt.get('strikePrice', 0))
-                                occ = self._build_option_symbol(symbol, expiry, strike_val, 'P')
-                                puts.append({
-                                    'strike': strike_val,
-                                    'bid': float(opt.get('bid', 0) or 0),
-                                    'ask': float(opt.get('ask', 0) or 0),
-                                    'last': float(opt.get('last', 0) or 0),
-                                    'volume': int(opt.get('totalVolume', 0) or 0),
-                                    'open_interest': int(opt.get('openInterest', 0) or 0),
-                                    'iv': float(opt.get('volatility', 0) or 0),
-                                    'delta': float(opt.get('delta', 0) or 0),
-                                    'gamma': float(opt.get('gamma', 0) or 0),
-                                    'theta': float(opt.get('theta', 0) or 0),
-                                    'vega': float(opt.get('vega', 0) or 0),
-                                    'option_id': occ,
-                                })
-                    
-                    # Sort by strike
-                    calls.sort(key=lambda x: x['strike'])
-                    puts.sort(key=lambda x: x['strike'])
-                    
-                    return {
-                        'calls': calls,
-                        'puts': puts,
-                        'stock_price': stock_price,
-                        'data_source': 'Schwab'
-                    }
-                else:
-                    print(f"[{self.name}] Option chain error: {response.status_code} - {response.text}")
-                    return {'calls': [], 'puts': [], 'stock_price': stock_price, 'data_source': f'Error: {response.status_code}'}
+                call_exp_map = data.get('callExpDateMap', {})
+                for exp_date, strikes in call_exp_map.items():
+                    for strike_str, options in strikes.items():
+                        for opt in options:
+                            strike_val = float(opt.get('strikePrice', 0))
+                            occ = self._build_option_symbol(symbol, expiry, strike_val, 'C')
+                            calls.append({
+                                'strike': strike_val,
+                                'bid': float(opt.get('bid', 0) or 0),
+                                'ask': float(opt.get('ask', 0) or 0),
+                                'last': float(opt.get('last', 0) or 0),
+                                'volume': int(opt.get('totalVolume', 0) or 0),
+                                'open_interest': int(opt.get('openInterest', 0) or 0),
+                                'iv': float(opt.get('volatility', 0) or 0),
+                                'delta': float(opt.get('delta', 0) or 0),
+                                'gamma': float(opt.get('gamma', 0) or 0),
+                                'theta': float(opt.get('theta', 0) or 0),
+                                'vega': float(opt.get('vega', 0) or 0),
+                                'option_id': occ,
+                            })
+                
+                put_exp_map = data.get('putExpDateMap', {})
+                for exp_date, strikes in put_exp_map.items():
+                    for strike_str, options in strikes.items():
+                        for opt in options:
+                            strike_val = float(opt.get('strikePrice', 0))
+                            occ = self._build_option_symbol(symbol, expiry, strike_val, 'P')
+                            puts.append({
+                                'strike': strike_val,
+                                'bid': float(opt.get('bid', 0) or 0),
+                                'ask': float(opt.get('ask', 0) or 0),
+                                'last': float(opt.get('last', 0) or 0),
+                                'volume': int(opt.get('totalVolume', 0) or 0),
+                                'open_interest': int(opt.get('openInterest', 0) or 0),
+                                'iv': float(opt.get('volatility', 0) or 0),
+                                'delta': float(opt.get('delta', 0) or 0),
+                                'gamma': float(opt.get('gamma', 0) or 0),
+                                'theta': float(opt.get('theta', 0) or 0),
+                                'vega': float(opt.get('vega', 0) or 0),
+                                'option_id': occ,
+                            })
+                
+                calls.sort(key=lambda x: x['strike'])
+                puts.sort(key=lambda x: x['strike'])
+                
+                return {
+                    'calls': calls,
+                    'puts': puts,
+                    'stock_price': stock_price,
+                    'data_source': 'Schwab'
+                }
+            else:
+                print(f"[{self.name}] Option chain error: {response.status_code} - {response.text}")
+                return {'calls': [], 'puts': [], 'stock_price': stock_price, 'data_source': f'Error: {response.status_code}'}
                     
         except Exception as e:
             print(f"[{self.name}] Error getting option chain: {e}")
@@ -1322,6 +1327,9 @@ class SchwabBroker(BrokerInterface):
     async def get_positions_detailed(self) -> List[Dict[str, Any]]:
         """Get detailed positions for sync service"""
         try:
+            import time as _gpd_t
+            _gpd_t0 = _gpd_t.time()
+            print(f"[{self.name}] get_positions_detailed: START", flush=True)
             if self._should_skip_non_critical():
                 if self._data_hub:
                     cached = self._data_hub.get_positions(detailed=True)
@@ -1330,6 +1338,7 @@ class SchwabBroker(BrokerInterface):
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     return list(self._last_valid_positions)
             
+            print(f"[{self.name}] get_positions_detailed: checking token ({_gpd_t.time()-_gpd_t0:.2f}s)", flush=True)
             if not await self._ensure_valid_token():
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     print(f"[{self.name}] Token refresh pending - returning {len(self._last_valid_positions)} cached positions")
@@ -1340,6 +1349,7 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] No account_hash - cannot fetch positions")
                 return []
             
+            print(f"[{self.name}] get_positions_detailed: calling API ({_gpd_t.time()-_gpd_t0:.2f}s)", flush=True)
             response = await self._make_request(
                 'GET',
                 f"{self.BASE_URL}/accounts/{self.account_hash}",
@@ -2276,59 +2286,63 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
-                    headers=headers
-                )
+            def _sync_order_status(url, h):
+                with httpx.Client(timeout=25.0) as c:
+                    return c.get(url, headers=h)
+            
+            response = await asyncio.to_thread(
+                _sync_order_status,
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
+                headers
+            )
 
-                if response.status_code == 200:
-                    order = response.json()
+            if response.status_code == 200:
+                order = response.json()
 
-                    status_map = {
-                        'WORKING': 'pending',
-                        'FILLED': 'filled',
-                        'CANCELED': 'cancelled',
-                        'REJECTED': 'rejected',
-                        'EXPIRED': 'expired',
-                        'PENDING_ACTIVATION': 'pending',
-                        'QUEUED': 'pending',
-                        'ACCEPTED': 'pending'
-                    }
+                status_map = {
+                    'WORKING': 'pending',
+                    'FILLED': 'filled',
+                    'CANCELED': 'cancelled',
+                    'REJECTED': 'rejected',
+                    'EXPIRED': 'expired',
+                    'PENDING_ACTIVATION': 'pending',
+                    'QUEUED': 'pending',
+                    'ACCEPTED': 'pending'
+                }
 
-                    schwab_status = order.get('status', 'UNKNOWN')
-                    mapped_status = status_map.get(schwab_status, schwab_status.lower())
+                schwab_status = order.get('status', 'UNKNOWN')
+                mapped_status = status_map.get(schwab_status, schwab_status.lower())
 
-                    filled_quantity = int(order.get('filledQuantity', 0))
-                    total_quantity = int(order.get('quantity', 0))
-                    remaining_quantity = total_quantity - filled_quantity
+                filled_quantity = int(order.get('filledQuantity', 0))
+                total_quantity = int(order.get('quantity', 0))
+                remaining_quantity = total_quantity - filled_quantity
 
-                    avg_price = 0.0
-                    total_cost = 0.0
-                    total_filled = 0
-                    activities = order.get('orderActivityCollection', [])
-                    for activity in activities:
-                        if activity.get('activityType') == 'EXECUTION':
-                            for exec_leg in activity.get('executionLegs', []):
-                                leg_qty = int(exec_leg.get('quantity', 0))
-                                leg_price = float(exec_leg.get('price', 0))
-                                total_filled += leg_qty
-                                total_cost += leg_qty * leg_price
-                    if total_filled > 0:
-                        avg_price = total_cost / total_filled
-                    elif filled_quantity > 0:
-                        avg_price = float(order.get('price', 0))
+                avg_price = 0.0
+                total_cost = 0.0
+                total_filled = 0
+                activities = order.get('orderActivityCollection', [])
+                for activity in activities:
+                    if activity.get('activityType') == 'EXECUTION':
+                        for exec_leg in activity.get('executionLegs', []):
+                            leg_qty = int(exec_leg.get('quantity', 0))
+                            leg_price = float(exec_leg.get('price', 0))
+                            total_filled += leg_qty
+                            total_cost += leg_qty * leg_price
+                if total_filled > 0:
+                    avg_price = total_cost / total_filled
+                elif filled_quantity > 0:
+                    avg_price = float(order.get('price', 0))
 
-                    return {
-                        'status': mapped_status,
-                        'filled_quantity': filled_quantity,
-                        'remaining_quantity': remaining_quantity,
-                        'average_price': avg_price
-                    }
+                return {
+                    'status': mapped_status,
+                    'filled_quantity': filled_quantity,
+                    'remaining_quantity': remaining_quantity,
+                    'average_price': avg_price
+                }
 
-                else:
-                    print(f"[{self.name}] Error getting order status: {response.status_code}")
-                    return None
+            else:
+                print(f"[{self.name}] Error getting order status: {response.status_code}")
+                return None
 
         except Exception as e:
             print(f"[{self.name}] Exception getting order status: {e}")

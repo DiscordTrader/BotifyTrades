@@ -267,17 +267,23 @@ class BrokerSyncService:
         
         for broker_name, broker_instance in brokers_to_sync:
             try:
-                await asyncio.wait_for(
-                    self._sync_broker(broker_name, broker_instance),
-                    timeout=30
-                )
-            except asyncio.TimeoutError:
-                print(f"[SYNC] ⚠️ {broker_name} sync timed out after 30s — skipping")
-                try:
-                    from gui_app.broker_health_monitor import check_broker_health
-                    check_broker_health(broker_name, False, f"Sync timed out after 30s")
-                except Exception:
-                    pass
+                import time as _sync_time
+                t0 = _sync_time.time()
+                sync_task = asyncio.create_task(self._sync_broker(broker_name, broker_instance))
+                for _tick in range(25):
+                    await asyncio.sleep(1)
+                    if _tick == 0:
+                        print(f"[SYNC] {broker_name} tick check: task.done={sync_task.done()}, task.cancelled={sync_task.cancelled()}", flush=True)
+                    if sync_task.done():
+                        break
+                elapsed = _sync_time.time() - t0
+                if not sync_task.done():
+                    sync_task.cancel()
+                    print(f"[SYNC] ⚠️ {broker_name} sync timed out after {elapsed:.0f}s — skipping", flush=True)
+                    continue
+                print(f"[SYNC] {broker_name} completed in {elapsed:.1f}s", flush=True)
+                if not sync_task.cancelled() and sync_task.exception():
+                    raise sync_task.exception()
             except Exception as e:
                 error_str = str(e)
                 is_transient = any(msg in error_str for msg in [
@@ -286,19 +292,11 @@ class BrokerSyncService:
                     "Session is closed",
                 ])
                 if is_transient:
-                    print(f"[SYNC] ⏳ Transient error syncing {broker_name} (skipping health report): {e}")
+                    print(f"[SYNC] ⏳ Transient error syncing {broker_name}: {e}")
                 else:
                     print(f"[SYNC] Error syncing {broker_name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    
-                    try:
-                        from gui_app.broker_health_monitor import check_broker_health
-                        check_broker_health(broker_name, False, error_str)
-                    except Exception:
-                        pass
         
-        print("[SYNC] ✓ Sync cycle complete", flush=True)
+        print(f"[SYNC] ✓ Sync cycle complete ({len(brokers_to_sync)} brokers)", flush=True)
         
         # Fire first sync callback (signals sync_ready event to worker)
         if not self._first_sync_done and self._first_sync_callback:
@@ -346,11 +344,21 @@ class BrokerSyncService:
         
         print(f"[SYNC] ✓ {broker_name} sync complete")
         
+        asyncio.ensure_future(self._update_health_async(broker_name, broker_instance))
+    
+    async def _update_health_async(self, broker_name, broker_instance):
         try:
             from src.services.broker_health_monitor import get_health_monitor
             health_monitor = get_health_monitor()
-            account_info = await self._fetch_account_info(broker_name, broker_instance)
+            account_info = await asyncio.wait_for(
+                self._fetch_account_info(broker_name, broker_instance),
+                timeout=15
+            )
             health_monitor.update_broker_status(broker_name, True, account_info=account_info)
+        except asyncio.TimeoutError:
+            print(f"[SYNC] ⚠️ {broker_name} account info fetch timed out after 15s")
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             print(f"[SYNC] Health monitor update failed: {e}")
     
