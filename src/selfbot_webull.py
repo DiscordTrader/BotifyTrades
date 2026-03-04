@@ -2121,6 +2121,14 @@ class WebullBroker:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._prewarm_option_cache, wb)
 
+        try:
+            from src.services.sod_balance_cache import get_sod_cache
+            sod = get_sod_cache()
+            if not sod._captured_date:
+                await sod.capture_all_brokers(self)
+        except Exception as sod_err:
+            print(f"[SOD] ⚠️ Initial SOD capture failed: {sod_err}")
+
         # Then refresh every day at 9:30 AM EST (14:30 UTC)
         while True:
             try:
@@ -12101,6 +12109,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     opt['_channel_max_position_size'] = float(channel_max_position_size)
                     print(f"[POSITION SIZE] ✓ Channel max position size: ${channel_max_position_size}")
                 
+                channel_sizing_mode = channel_info.get('sizing_mode', 'live') if channel_info else 'live'
+                if channel_sizing_mode == 'start_of_day':
+                    opt['_sizing_mode'] = 'start_of_day'
+                
                 if channel_default_qty:
                     signal_qty_val = opt.get('qty')
                     channel_qty_val = int(channel_default_qty)
@@ -13118,6 +13130,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if stk.get('stop_loss_price') or stk.get('profit_target_price'):
                     print(f"[BRACKET ORDER] ✓ Including SL=${stk.get('stop_loss_price')} Target=${stk.get('profit_target_price')}")
                 
+                stk_sizing_mode = channel_info.get('sizing_mode', 'live') if channel_info else 'live'
+                if stk_sizing_mode == 'start_of_day':
+                    stk['_sizing_mode'] = 'start_of_day'
+                
                 # Add EXECUTION position size percentage for dynamic qty calculation
                 # Priority: Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
                 exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
@@ -13517,32 +13533,49 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if position_size_pct and signal['action'] == 'BTO':
                 # Get broker's portfolio value/buying power
                 try:
-                    # Handle both WebullBroker wrapper and legacy webull object
                     account_info = None
                     options_buying_power = None
+                    sod_used = False
+                    sizing_mode = signal.get('_sizing_mode', 'live')
                     
-                    _original_print(f"[{broker_name}] [DEBUG] Checking position sizing - has get_account_info: {hasattr(broker_instance, 'get_account_info')}")
+                    if sizing_mode == 'start_of_day':
+                        try:
+                            from src.services.sod_balance_cache import get_sod_cache
+                            sod = get_sod_cache()
+                            sod_snapshot = sod.get_snapshot(broker_name)
+                            if sod_snapshot:
+                                account_info = {
+                                    'buying_power': sod_snapshot['buying_power'],
+                                    'options_buying_power': sod_snapshot['options_buying_power']
+                                }
+                                options_buying_power = sod_snapshot['options_buying_power']
+                                sod_used = True
+                                _original_print(f"[{broker_name}] [POSITION SIZE] Using START-OF-DAY balance (captured {sod_snapshot['captured_at']})")
+                            else:
+                                _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ SOD snapshot not available for {broker_name} — falling back to live balance")
+                        except Exception as sod_err:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ SOD cache error: {sod_err} — falling back to live balance")
                     
-                    if hasattr(broker_instance, 'get_account_info'):
-                        account_info = await broker_instance.get_account_info()
-                        _original_print(f"[{broker_name}] [DEBUG] get_account_info returned: {account_info}")
-                        # For Alpaca, also get options-specific buying power
-                        if account_info:
-                            options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
-                    elif hasattr(broker_instance, 'wb') and broker_instance.wb:
-                        # Legacy webull object
-                        import asyncio
-                        raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
-                        if raw_account:
-                            account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
-                            options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
-                    elif hasattr(broker_instance, 'get_account'):
-                        # Direct webull object
-                        import asyncio
-                        raw_account = await asyncio.to_thread(broker_instance.get_account)
-                        if raw_account:
-                            account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
-                            options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                    if not sod_used:
+                        _original_print(f"[{broker_name}] [DEBUG] Checking position sizing - has get_account_info: {hasattr(broker_instance, 'get_account_info')}")
+                        
+                        if hasattr(broker_instance, 'get_account_info'):
+                            account_info = await broker_instance.get_account_info()
+                            _original_print(f"[{broker_name}] [DEBUG] get_account_info returned: {account_info}")
+                            if account_info:
+                                options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
+                        elif hasattr(broker_instance, 'wb') and broker_instance.wb:
+                            import asyncio
+                            raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
+                            if raw_account:
+                                account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
+                                options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                        elif hasattr(broker_instance, 'get_account'):
+                            import asyncio
+                            raw_account = await asyncio.to_thread(broker_instance.get_account)
+                            if raw_account:
+                                account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
+                                options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
                     
                     if account_info:
                         buying_power = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
@@ -13550,10 +13583,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         is_option_trade = signal['asset'] == 'option'
                         if is_option_trade and options_buying_power > 0:
                             sizing_base = options_buying_power
-                            sizing_label = "Options BP"
+                            sizing_label = "Options BP (SOD)" if sod_used else "Options BP"
                         else:
                             sizing_base = buying_power
-                            sizing_label = "Buying Power"
+                            sizing_label = "Buying Power (SOD)" if sod_used else "Buying Power"
                         _original_print(f"[{broker_name}] [POSITION SIZE] {sizing_label}: ${sizing_base:,.2f} (Stock BP: ${buying_power:,.2f}, Options BP: ${options_buying_power:,.2f}), Size: {position_size_pct}%, Qty: {original_qty}")
                         if sizing_base <= 0:
                             _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {sizing_label} is $0 - cannot calculate position size! Rejecting order.")

@@ -88,6 +88,10 @@ class SODBalanceCache:
             b = bot_instance.ibkr_broker
             if hasattr(b, 'name') and hasattr(b, 'get_account_info'):
                 brokers_to_capture.append(b)
+        if hasattr(bot_instance, 'questrade_broker') and bot_instance.questrade_broker:
+            b = bot_instance.questrade_broker
+            if hasattr(b, 'name') and hasattr(b, 'get_account_info'):
+                brokers_to_capture.append(b)
 
         if not brokers_to_capture:
             print("[SOD] ⚠️ No brokers available for SOD capture")

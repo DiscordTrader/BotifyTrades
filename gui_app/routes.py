@@ -17089,6 +17089,34 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
     
+    # ============ START-OF-DAY BALANCE CACHE ============
+    
+    @app.route('/api/sod-balance', methods=['GET'])
+    @login_required
+    def api_get_sod_balance():
+        try:
+            from src.services.sod_balance_cache import get_sod_cache
+            sod = get_sod_cache()
+            snapshots = sod.get_all_snapshots()
+            return jsonify({
+                'success': True,
+                'captured_date': sod._captured_date,
+                'brokers': snapshots
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/sod-balance/capture', methods=['POST'])
+    @login_required
+    def api_capture_sod_balance():
+        try:
+            return jsonify({
+                'success': False,
+                'error': 'SOD capture must be triggered from bot process (runs at 9:30 AM ET automatically)'
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
     # ============ QA VALIDATION SYSTEM ============
     
     @app.route('/api/qa/pytest', methods=['POST'])

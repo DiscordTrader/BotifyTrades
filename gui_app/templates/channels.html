@@ -1232,6 +1232,14 @@ function renderChannels() {
                             </label>
                             <span style="font-size: 9px; color: ${channel.ignore_signal_position_size ? '#10F0B3' : '#6B7A90'};">Force My Size %</span>
                         </div>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;" title="Live: uses current buying power at trade time. Start-of-Day: uses buying power snapshot captured at 9:30 AM ET, so position sizing stays consistent throughout the day regardless of P&L swings.">
+                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Balance</span>
+                            <select style="padding: 2px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; cursor: pointer;"
+                                    onchange="updateSizingMode(${channel.id}, this.value)">
+                                <option value="live" ${(channel.sizing_mode || 'live') === 'live' ? 'selected' : ''}>Live</option>
+                                <option value="start_of_day" ${channel.sizing_mode === 'start_of_day' ? 'selected' : ''}>Start-of-Day</option>
+                            </select>
+                        </div>
                     </div>
                     
                     <!-- Track Panel -->
@@ -1598,6 +1606,28 @@ async function updateIgnoreSignalPositionSize(channelId, enabled) {
             await loadChannels();
         } else {
             showNotification('Error updating position size preference', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateSizingMode(channelId, mode) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sizing_mode: mode })
+        });
+        
+        if (response.ok) {
+            const label = mode === 'start_of_day' ? 'Start-of-Day (9:30 AM snapshot)' : 'Live (real-time)';
+            showNotification(`Position sizing balance mode: ${label}`);
+            await loadChannels();
+        } else {
+            showNotification('Error updating sizing mode', 'error');
             await loadChannels();
         }
     } catch (error) {
