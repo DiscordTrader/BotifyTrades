@@ -485,17 +485,14 @@ class SchwabBroker(BrokerInterface):
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
         """Make HTTP request with rate limit, budget tracking, and token refresh handling"""
         import httpx
-        import time as _t
 
         if not is_exit_order and not is_entry_order:
             if self._should_block_non_order():
                 print(f"[{self.name}] ⚠️ API budget critical ({self._get_api_usage()}/{self._API_BUDGET_LIMIT}/min) - blocking non-order call")
                 return type('BudgetBlockedResponse', (), {'status_code': 503, 'text': 'Budget exceeded', 'json': lambda: {}, 'headers': {}, '_budget_blocked': True})()
 
-        _req_t0 = _t.time()
         self._track_api_call()
         await self._async_rate_limit(is_exit_order=is_exit_order, is_entry_order=is_entry_order)
-        _after_rate = _t.time() - _req_t0
 
         headers = kwargs.pop('headers', {})
         if 'Authorization' not in headers:
@@ -503,18 +500,8 @@ class SchwabBroker(BrokerInterface):
         if 'Accept' not in headers:
             headers['Accept'] = 'application/json'
 
-        short_url = url.split('/')[-1] if '/' in url else url
-        if _after_rate > 0.5:
-            print(f"[{self.name}] _make_request {method} {short_url}: rate_limit took {_after_rate:.1f}s", flush=True)
-
-        def _sync_request(m, u, h, kw):
-            with httpx.Client(timeout=25.0) as c:
-                return c.request(m, u, headers=h, **kw)
-
-        response = await asyncio.to_thread(_sync_request, method, url, headers, kwargs)
-        _total = _t.time() - _req_t0
-        if _total > 2.0:
-            print(f"[{self.name}] _make_request {method} {short_url}: total={_total:.1f}s (rate={_after_rate:.1f}s, http={_total-_after_rate:.1f}s)", flush=True)
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            response = await client.request(method, url, headers=headers, **kwargs)
 
         if response.status_code == 429:
             retry_after = int(response.headers.get('Retry-After', '60'))
@@ -1327,9 +1314,6 @@ class SchwabBroker(BrokerInterface):
     async def get_positions_detailed(self) -> List[Dict[str, Any]]:
         """Get detailed positions for sync service"""
         try:
-            import time as _gpd_t
-            _gpd_t0 = _gpd_t.time()
-            print(f"[{self.name}] get_positions_detailed: START", flush=True)
             if self._should_skip_non_critical():
                 if self._data_hub:
                     cached = self._data_hub.get_positions(detailed=True)
@@ -1338,7 +1322,6 @@ class SchwabBroker(BrokerInterface):
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     return list(self._last_valid_positions)
             
-            print(f"[{self.name}] get_positions_detailed: checking token ({_gpd_t.time()-_gpd_t0:.2f}s)", flush=True)
             if not await self._ensure_valid_token():
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     print(f"[{self.name}] Token refresh pending - returning {len(self._last_valid_positions)} cached positions")
@@ -1349,7 +1332,6 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] No account_hash - cannot fetch positions")
                 return []
             
-            print(f"[{self.name}] get_positions_detailed: calling API ({_gpd_t.time()-_gpd_t0:.2f}s)", flush=True)
             response = await self._make_request(
                 'GET',
                 f"{self.BASE_URL}/accounts/{self.account_hash}",

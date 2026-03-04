@@ -263,7 +263,14 @@ class RobinhoodBroker(BrokerInterface):
             return []
         
         try:
-            holdings = rh.account.build_holdings()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(rh.account.build_holdings)
+                try:
+                    holdings = fut.result(timeout=20)
+                except concurrent.futures.TimeoutError:
+                    print(f"[{self.name}] build_holdings() timed out after 20s — using cache", flush=True)
+                    return list(self._positions_cache) if self._positions_cache else []
             positions = []
             
             if holdings:
@@ -288,7 +295,13 @@ class RobinhoodBroker(BrokerInterface):
                         'asset_type': 'stock'
                     })
             
-            option_positions = rh.options.get_open_option_positions()
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                    fut = ex.submit(rh.options.get_open_option_positions)
+                    option_positions = fut.result(timeout=15)
+            except concurrent.futures.TimeoutError:
+                print(f"[{self.name}] get_open_option_positions() timed out after 15s", flush=True)
+                option_positions = None
             if option_positions:
                 for pos in option_positions:
                     raw_avg_price = pos.get('average_price')

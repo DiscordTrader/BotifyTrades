@@ -267,23 +267,14 @@ class BrokerSyncService:
         
         for broker_name, broker_instance in brokers_to_sync:
             try:
-                import time as _sync_time
-                t0 = _sync_time.time()
-                sync_task = asyncio.create_task(self._sync_broker(broker_name, broker_instance))
-                for _tick in range(25):
-                    await asyncio.sleep(1)
-                    if _tick == 0:
-                        print(f"[SYNC] {broker_name} tick check: task.done={sync_task.done()}, task.cancelled={sync_task.cancelled()}", flush=True)
-                    if sync_task.done():
-                        break
-                elapsed = _sync_time.time() - t0
-                if not sync_task.done():
-                    sync_task.cancel()
-                    print(f"[SYNC] ⚠️ {broker_name} sync timed out after {elapsed:.0f}s — skipping", flush=True)
-                    continue
-                print(f"[SYNC] {broker_name} completed in {elapsed:.1f}s", flush=True)
-                if not sync_task.cancelled() and sync_task.exception():
-                    raise sync_task.exception()
+                await asyncio.wait_for(
+                    self._sync_broker(broker_name, broker_instance),
+                    timeout=25.0
+                )
+            except asyncio.TimeoutError:
+                print(f"[SYNC] ⚠️ {broker_name} sync timed out after 25s — skipping", flush=True)
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
                 error_str = str(e)
                 is_transient = any(msg in error_str for msg in [
