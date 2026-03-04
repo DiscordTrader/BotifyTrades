@@ -661,6 +661,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added entry_chase_enabled column for per-channel entry order chasing")
     
+    # Migrate: Add per-channel sizing mode (live vs start_of_day)
+    try:
+        cursor.execute('SELECT sizing_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN sizing_mode TEXT DEFAULT 'live'")
+        conn.commit()
+        print("[DATABASE] ✓ Added sizing_mode column (live/start_of_day) for per-channel position sizing base")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -2650,7 +2658,7 @@ def update_channel(channel_id: int, **kwargs):
                    'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled', 'entry_chase_enabled',
-                   'ticker_filter_mode', 'ticker_filter_list']:
+                   'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))

@@ -2134,6 +2134,13 @@ class WebullBroker:
                 print("[PREWARM] 🔄 Daily refresh — re-warming option ID cache for new expirations...")
                 current_loop = asyncio.get_running_loop()
                 await current_loop.run_in_executor(None, self._prewarm_option_cache, self._client)
+                try:
+                    from src.services.sod_balance_cache import get_sod_cache
+                    sod = get_sod_cache()
+                    sod.clear()
+                    await sod.capture_all_brokers(self)
+                except Exception as sod_err:
+                    print(f"[SOD] ⚠️ Failed to capture start-of-day balances: {sod_err}")
             except asyncio.CancelledError:
                 break
             except Exception as e:
