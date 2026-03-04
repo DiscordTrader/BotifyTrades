@@ -24,6 +24,7 @@ from enum import Enum
 class SignalSource(Enum):
     EMBED_SPY_SNIPER = "spy_sniper"
     EMBED_SIR_GOLDMAN = "sir_goldman"
+    EMBED_HENGY = "hengy_alerts"
     REGISTRY_JAKE = "jake"
     REGISTRY_SLEM = "slem"
     REGISTRY_STACK = "stack"
@@ -291,6 +292,28 @@ class SignalParsingPipeline:
                         )
                 except Exception as e:
                     print(f"[PIPELINE] Spy-Sniper parse error: {e}")
+            
+            # Hengy Alerts detection (breakout watchlist signals)
+            if 'TRADE' in title.upper() and ('IDEA' in title.upper() or 'UPDATE' in title.upper()):
+                try:
+                    from src.signals.hengy_parser import is_hengy_embed, parse_hengy_embed
+                    if is_hengy_embed(title, description):
+                        parsed_list = parse_hengy_embed(title, description)
+                        if parsed_list:
+                            first = parsed_list[0]
+                            return ParsedSignal(
+                                action='BTO',
+                                asset='stock',
+                                symbol=first['symbol'],
+                                price=first.get('trigger_price'),
+                                confidence=1.0,
+                                source=SignalSource.EMBED_HENGY,
+                                message_id=message_id,
+                                channel_id=channel_id,
+                                raw_text=first.get('_original_message', '')
+                            )
+                except Exception as e:
+                    print(f"[PIPELINE] Hengy parse error: {e}")
         
         return None
     
