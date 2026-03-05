@@ -1246,10 +1246,17 @@ class BrokerSyncService:
                     
                     cancel_reason = 'order_cancelled_or_rejected'
                     order_id_str = trade.get('order_id', '') or ''
-                    if order_id_str and hasattr(broker_instance, 'wb'):
+                    _broker_inst = None
+                    _bn_upper = broker_name.upper()
+                    if _bn_upper in ('WEBULL', 'WEBULL_PAPER'):
+                        if _bn_upper == 'WEBULL_PAPER':
+                            _broker_inst = getattr(self.broker_manager, 'webull_paper_broker', None) or getattr(self.broker_manager, 'webull_broker', None)
+                        else:
+                            _broker_inst = getattr(self.broker_manager, 'webull_broker', None) or getattr(self.broker_manager, 'webull_paper_broker', None)
+                    if order_id_str and _broker_inst and hasattr(_broker_inst, 'wb'):
                         try:
                             all_orders_raw = await asyncio.to_thread(
-                                broker_instance.wb.get_history_orders, count=20
+                                _broker_inst.wb.get_history_orders, count=20
                             )
                             for raw_order in (all_orders_raw or []):
                                 if str(raw_order.get('orderId', '')) == order_id_str:

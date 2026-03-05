@@ -1058,6 +1058,13 @@ class SchwabBroker(BrokerInterface):
                 action=action
             )
     
+    _INDEX_OPTION_MAP = {
+        'SPX': 'SPXW',
+        'NDX': 'NDXP',
+        'RUT': 'RUTW',
+        'DJX': 'DJXW',
+    }
+
     def _build_option_symbol(self, underlying: str, expiry: str, strike: float, call_put: str) -> str:
         """Build OCC option symbol format
         Format: SYMBOL (6 chars, left-padded) + YYMMDD + C/P + strike*1000 (8 digits)
@@ -1072,7 +1079,10 @@ class SchwabBroker(BrokerInterface):
         else:
             return f"{underlying}_INVALID_EXPIRY"
         
-        underlying_padded = underlying.upper().ljust(6)
+        mapped = self._INDEX_OPTION_MAP.get(underlying.upper(), underlying)
+        if mapped != underlying:
+            print(f"[{self.name}] Index symbol mapped: {underlying} → {mapped}")
+        underlying_padded = mapped.upper().ljust(6)
         
         strike_int = int(strike * 1000)
         strike_str = f"{strike_int:08d}"
