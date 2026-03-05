@@ -2365,8 +2365,135 @@ document.getElementById('save-schwab').addEventListener('click', async () => {
     }
 });
 
-document.getElementById('connect-schwab').addEventListener('click', () => {
-    window.open('/schwab/login', '_blank', 'noopener,noreferrer');
+let _schwabOAuthPopup = null;
+let _schwabOAuthPollInterval = null;
+
+document.getElementById('connect-schwab').addEventListener('click', async () => {
+    const connectBtn = document.getElementById('connect-schwab');
+    const msg = document.getElementById('save-message');
+    connectBtn.disabled = true;
+    connectBtn.textContent = '⏳ Connecting...';
+
+    try {
+        const response = await fetch('/schwab/auth-url');
+        const data = await response.json();
+
+        if (!data.success) {
+            msg.textContent = '❌ ' + (data.error || 'Failed to start OAuth');
+            msg.className = 'message error';
+            setTimeout(() => msg.textContent = '', 5000);
+            connectBtn.disabled = false;
+            connectBtn.textContent = '🔗 Connect with Schwab';
+            return;
+        }
+
+        _schwabOAuthPopup = window.open(
+            data.auth_url,
+            'schwab_oauth',
+            'width=600,height=700,scrollbars=yes,resizable=yes'
+        );
+
+        if (!_schwabOAuthPopup || _schwabOAuthPopup.closed) {
+            msg.textContent = '⚠️ Popup blocked! Please allow popups for this site, or use Manual Code Entry below.';
+            msg.className = 'message error';
+            setTimeout(() => msg.textContent = '', 8000);
+            connectBtn.disabled = false;
+            connectBtn.textContent = '🔗 Connect with Schwab';
+            return;
+        }
+
+        msg.textContent = '⏳ Waiting for Schwab authorization...';
+        msg.className = 'message';
+        msg.style.color = '#00d4ff';
+
+        let pollCount = 0;
+        const maxPolls = 60;
+        if (_schwabOAuthPollInterval) clearInterval(_schwabOAuthPollInterval);
+        _schwabOAuthPollInterval = setInterval(async () => {
+            pollCount++;
+            if (_schwabOAuthPopup && _schwabOAuthPopup.closed) {
+                clearInterval(_schwabOAuthPollInterval);
+                _schwabOAuthPollInterval = null;
+                setTimeout(async () => {
+                    try {
+                        const statusResp = await fetch('/schwab/oauth-status');
+                        const statusData = await statusResp.json();
+                        if (statusData.completed && statusData.success) {
+                            msg.textContent = '✅ Successfully connected to Schwab!';
+                            msg.className = 'message success';
+                            msg.style.color = '';
+                        }
+                    } catch(e) {}
+                    loadSchwabStatus();
+                    connectBtn.disabled = false;
+                    connectBtn.textContent = '🔗 Connect with Schwab';
+                    setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 5000);
+                }, 1000);
+                return;
+            }
+            if (pollCount >= maxPolls) {
+                clearInterval(_schwabOAuthPollInterval);
+                _schwabOAuthPollInterval = null;
+                msg.textContent = '⚠️ OAuth timed out. Please try again.';
+                msg.className = 'message error';
+                msg.style.color = '';
+                connectBtn.disabled = false;
+                connectBtn.textContent = '🔗 Connect with Schwab';
+                setTimeout(() => msg.textContent = '', 5000);
+            }
+        }, 5000);
+
+    } catch (error) {
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 5000);
+        connectBtn.disabled = false;
+        connectBtn.textContent = '🔗 Connect with Schwab';
+    }
+});
+
+window.addEventListener('message', function(event) {
+    var allowedOrigins = [
+        'http://localhost:5000', 'http://127.0.0.1:5000',
+        'https://127.0.0.1:8182', 'http://localhost:3000',
+        'http://127.0.0.1:3000'
+    ];
+    if (allowedOrigins.indexOf(event.origin) === -1 && event.origin !== window.location.origin) {
+        return;
+    }
+    if (!event.data || event.data.type !== 'schwab-oauth-callback') {
+        return;
+    }
+
+    var msg = document.getElementById('save-message');
+    var connectBtn = document.getElementById('connect-schwab');
+
+    if (_schwabOAuthPollInterval) {
+        clearInterval(_schwabOAuthPollInterval);
+        _schwabOAuthPollInterval = null;
+    }
+
+    if (event.data.status === 'success') {
+        if (msg) {
+            msg.textContent = '✅ ' + (event.data.message || 'Connected to Schwab!');
+            msg.className = 'message success';
+            msg.style.color = '';
+            setTimeout(() => msg.textContent = '', 5000);
+        }
+        setTimeout(loadSchwabStatus, 2000);
+    } else {
+        if (msg) {
+            msg.textContent = '❌ ' + (event.data.message || 'Connection failed');
+            msg.className = 'message error';
+            msg.style.color = '';
+            setTimeout(() => msg.textContent = '', 8000);
+        }
+    }
+
+    if (connectBtn) {
+        connectBtn.disabled = false;
+        connectBtn.textContent = '🔗 Connect with Schwab';
+    }
 });
 
 document.getElementById('disconnect-schwab').addEventListener('click', async () => {

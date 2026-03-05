@@ -8,11 +8,15 @@ import json
 import asyncio
 import threading
 import time
+import secrets
 from datetime import datetime
-from flask import Blueprint, redirect, request, url_for, flash, jsonify
+from flask import Blueprint, redirect, request, url_for, flash, jsonify, session
 from . import database as db
 
 schwab_auth = Blueprint("schwab_auth", __name__)
+
+_oauth_state_store = {}
+_oauth_state_lock = threading.Lock()
 
 SCHWAB_TOKEN_FILE = "schwab_token.json"
 TOKEN_REFRESH_MARGIN_SECONDS = 300  # Refresh 5 minutes before expiry
@@ -362,212 +366,149 @@ def is_schwab_authenticated():
     return False
 
 
-@schwab_auth.route("/schwab/login")
-def schwab_login():
-    """Initiate Schwab OAuth login flow with automatic callback handling."""
+def _generate_oauth_state(pkce_verifier=None, redirect_uri=None):
+    """Generate and store a cryptographic state token for CSRF protection."""
+    state = secrets.token_urlsafe(32)
+    with _oauth_state_lock:
+        _oauth_state_store[state] = {
+            'created': time.time(),
+            'pkce_verifier': pkce_verifier,
+            'redirect_uri': redirect_uri,
+            'used': False
+        }
+        for old_state in list(_oauth_state_store.keys()):
+            if time.time() - _oauth_state_store[old_state]['created'] > 600:
+                del _oauth_state_store[old_state]
+    return state
+
+
+def _validate_oauth_state(state):
+    """Validate and consume a state token. Returns stored data or None."""
+    if not state:
+        return None
+    with _oauth_state_lock:
+        data = _oauth_state_store.get(state)
+        if not data:
+            return None
+        if data['used']:
+            return None
+        if time.time() - data['created'] > 600:
+            del _oauth_state_store[state]
+            return None
+        data['used'] = True
+        return data
+
+
+@schwab_auth.route("/schwab/auth-url")
+def schwab_auth_url():
+    """Return the Schwab OAuth authorization URL for popup-based flow."""
     if not is_schwab_configured():
-        flash("Schwab is not configured. Please add Client ID and Secret in Settings.", "error")
-        return redirect(url_for('settings'))
-    
+        return jsonify({'success': False, 'error': 'Schwab is not configured. Please add Client ID and Secret first.'})
+
     try:
         import urllib.parse
-        import webbrowser
-        
+
         creds = get_schwab_credentials()
         if not creds:
-            flash("Schwab credentials not found", "error")
-            return redirect(url_for('settings'))
-        
-        # Determine if we're running locally (can use automatic callback)
+            return jsonify({'success': False, 'error': 'Schwab credentials not found'})
+
         is_local = not os.environ.get("REPLIT_DEV_DOMAIN")
-        
+        pkce_verifier = None
+        redirect_uri = get_default_redirect_uri()
+
         if is_local:
-            # Use automatic OAuth callback server with PKCE
             try:
                 from .schwab_oauth_server import get_oauth_server, start_oauth_flow
-                
-                # Get local callback URI
+
                 redirect_uri = get_local_callback_uri()
-                
-                # Start OAuth flow with PKCE
+
                 auth_url, oauth_server = start_oauth_flow(
                     client_id=creds['client_id'],
                     redirect_uri=redirect_uri,
                     use_pkce=True
                 )
-                
+
                 if oauth_server:
-                    # Store PKCE verifier in session for token exchange
-                    from flask import session
-                    session['schwab_pkce_verifier'] = oauth_server.get_pkce_verifier()
+                    pkce_verifier = oauth_server.get_pkce_verifier()
+                    state = _generate_oauth_state(pkce_verifier=pkce_verifier, redirect_uri=redirect_uri)
+
+                    session['schwab_pkce_verifier'] = pkce_verifier
                     session['schwab_redirect_uri'] = redirect_uri
-                    
-                    print(f"[SCHWAB AUTH] Starting automatic OAuth flow with PKCE")
-                    print(f"[SCHWAB AUTH] Callback server on: {oauth_server.callback_url}")
-                    
-                    # Open browser to Schwab auth
-                    webbrowser.open(auth_url)
-                    
-                    # Return a waiting page that will poll for completion
-                    return _render_oauth_waiting_page(oauth_server.callback_url)
+                    session['schwab_oauth_state_token'] = state
+
+                    if '&state=' not in auth_url and 'state=' not in auth_url:
+                        auth_url += f"&state={state}"
+
+                    print(f"[SCHWAB AUTH] Auth URL generated with state={state[:12]}... PKCE=yes")
+                    return jsonify({'success': True, 'auth_url': auth_url, 'state': state})
                 else:
-                    print("[SCHWAB AUTH] Callback server failed, using manual flow")
-                    
+                    print("[SCHWAB AUTH] Callback server failed to start")
             except ImportError as e:
                 print(f"[SCHWAB AUTH] OAuth server module not available: {e}")
-        
-        # Fallback: Standard redirect (for Replit or when callback server fails)
-        # Always use the dynamically generated redirect URI for Replit
-        redirect_uri = get_default_redirect_uri()
-        
+
+        state = _generate_oauth_state(redirect_uri=redirect_uri)
+        session['schwab_oauth_state_token'] = state
+
         params = {
             'response_type': 'code',
             'client_id': creds['client_id'],
             'redirect_uri': redirect_uri,
-            'scope': 'readonly'
+            'scope': 'readonly',
+            'state': state
         }
-        
+
         auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?{urllib.parse.urlencode(params)}"
-        
-        print(f"[SCHWAB AUTH] ========== INITIATING OAUTH ==========")
+
+        print(f"[SCHWAB AUTH] ========== AUTH URL GENERATED ==========")
         print(f"[SCHWAB AUTH] Client ID: {creds['client_id'][:8]}...")
         print(f"[SCHWAB AUTH] Redirect URI: {redirect_uri}")
-        print(f"[SCHWAB AUTH] Auth URL: {auth_url[:100]}...")
-        
+        print(f"[SCHWAB AUTH] State: {state[:12]}...")
+
+        return jsonify({'success': True, 'auth_url': auth_url, 'state': state})
+
+    except Exception as e:
+        print(f"[SCHWAB AUTH] Error generating auth URL: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@schwab_auth.route("/schwab/login")
+def schwab_login():
+    """Legacy login route — redirects to Schwab auth for non-popup flows."""
+    if not is_schwab_configured():
+        flash("Schwab is not configured. Please add Client ID and Secret in Settings.", "error")
+        return redirect(url_for('settings'))
+
+    try:
+        import urllib.parse
+
+        creds = get_schwab_credentials()
+        if not creds:
+            flash("Schwab credentials not found", "error")
+            return redirect(url_for('settings'))
+
+        redirect_uri = get_default_redirect_uri()
+        state = _generate_oauth_state(redirect_uri=redirect_uri)
+        session['schwab_oauth_state_token'] = state
+
+        params = {
+            'response_type': 'code',
+            'client_id': creds['client_id'],
+            'redirect_uri': redirect_uri,
+            'scope': 'readonly',
+            'state': state
+        }
+
+        auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?{urllib.parse.urlencode(params)}"
         return redirect(auth_url)
-        
+
     except Exception as e:
         print(f"[SCHWAB AUTH] Error initiating login: {e}")
         import traceback
         traceback.print_exc()
         flash(f"Failed to connect to Schwab: {str(e)}", "error")
         return redirect(url_for('settings'))
-
-
-def _render_oauth_waiting_page(callback_url: str) -> str:
-    """Render a page that waits for OAuth completion."""
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Schwab Authorization</title>
-        <style>
-            body {{ 
-                font-family: Arial, sans-serif; 
-                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
-                color: #e0e0e0; 
-                display: flex; 
-                justify-content: center; 
-                align-items: center; 
-                height: 100vh; 
-                margin: 0; 
-            }}
-            .container {{ 
-                text-align: center; 
-                padding: 40px 60px; 
-                background: rgba(22, 33, 62, 0.9); 
-                border-radius: 16px; 
-                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-                border: 1px solid rgba(0, 255, 163, 0.2);
-            }}
-            h1 {{ 
-                color: #00ffa3; 
-                margin-bottom: 20px; 
-            }}
-            .spinner {{ 
-                border: 4px solid rgba(0, 255, 163, 0.1);
-                border-top: 4px solid #00ffa3;
-                border-radius: 50%;
-                width: 50px;
-                height: 50px;
-                animation: spin 1s linear infinite;
-                margin: 30px auto;
-            }}
-            @keyframes spin {{
-                0% {{ transform: rotate(0deg); }}
-                100% {{ transform: rotate(360deg); }}
-            }}
-            .info {{ 
-                color: #a0a0a0; 
-                margin: 20px 0; 
-                line-height: 1.6;
-            }}
-            .callback-url {{
-                font-size: 12px;
-                color: #666;
-                word-break: break-all;
-                background: rgba(0,0,0,0.3);
-                padding: 10px;
-                border-radius: 4px;
-                margin-top: 20px;
-            }}
-            .manual-link {{
-                margin-top: 30px;
-                padding-top: 20px;
-                border-top: 1px solid rgba(255,255,255,0.1);
-            }}
-            .manual-link a {{
-                color: #00bcd4;
-                text-decoration: none;
-            }}
-            .manual-link a:hover {{
-                text-decoration: underline;
-            }}
-        </style>
-        <script>
-            let pollCount = 0;
-            const maxPolls = 60;  // 5 minutes max
-            
-            function checkStatus() {{
-                pollCount++;
-                if (pollCount > maxPolls) {{
-                    document.getElementById('status').innerHTML = 
-                        '<span style="color: #ff5555;">Timeout. Please try again or use manual code entry.</span>';
-                    return;
-                }}
-                
-                fetch('/schwab/oauth-status')
-                    .then(r => r.json())
-                    .then(data => {{
-                        if (data.completed) {{
-                            if (data.success) {{
-                                document.getElementById('status').innerHTML = 
-                                    '<span style="color: #00ffa3;">Connected! Redirecting...</span>';
-                                window.location.href = '/settings';
-                            }} else {{
-                                document.getElementById('status').innerHTML = 
-                                    '<span style="color: #ff5555;">Error: ' + data.error + '</span>';
-                            }}
-                        }} else {{
-                            setTimeout(checkStatus, 5000);  // Poll every 5 seconds
-                        }}
-                    }})
-                    .catch(() => setTimeout(checkStatus, 5000));
-            }}
-            
-            setTimeout(checkStatus, 3000);  // Start checking after 3 seconds
-        </script>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Authorizing with Schwab</h1>
-            <div class="spinner"></div>
-            <p class="info">
-                A browser window has opened for Schwab login.<br>
-                Please complete the authorization there.
-            </p>
-            <p id="status" class="info">Waiting for authorization...</p>
-            <div class="callback-url">
-                Callback URL: {callback_url}
-            </div>
-            <div class="manual-link">
-                <p>If the browser didn't open, <a href="/schwab/manual-entry">click here for manual code entry</a></p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    return html
 
 
 def _get_session_oauth_state():
@@ -592,50 +533,43 @@ def _set_session_oauth_state(state: dict):
 @schwab_auth.route("/schwab/oauth-status")
 def schwab_oauth_status():
     """Poll endpoint for checking OAuth flow completion status (session-scoped)."""
-    from flask import session
-    
-    # Get session-scoped state
     flow_state = _get_session_oauth_state()
-    
-    # Check if callback server received a code
+
     try:
         from .schwab_oauth_server import get_oauth_server, OAuthCallbackHandler
-        
+
         server = get_oauth_server()
-        
-        # Verify this is our session's OAuth flow using the stored verifier
+
         session_verifier = session.get('schwab_pkce_verifier')
-        
+
         if OAuthCallbackHandler.callback_received.is_set():
             if OAuthCallbackHandler.auth_code and not flow_state['completed'] and session_verifier:
-                # Callback received, exchange for tokens
                 flow_state['in_progress'] = True
                 _set_session_oauth_state(flow_state)
-                
+
                 creds = get_schwab_credentials()
                 if creds:
-                    # Get redirect_uri from session - MUST match what was used in authorize
                     redirect_uri = session.get('schwab_redirect_uri', get_local_callback_uri())
-                    
+
                     success = exchange_code_for_tokens(
                         code=OAuthCallbackHandler.auth_code,
                         creds=creds,
                         pkce_verifier=session_verifier,
                         redirect_uri_override=redirect_uri
                     )
-                    
+
                     flow_state['completed'] = True
                     flow_state['success'] = success
                     flow_state['in_progress'] = False
-                    
+
                     if success:
                         db.update_broker_connection_status('SCHWAB', True)
+                        _hot_connect_schwab_broker(creds)
                     else:
                         flow_state['error'] = get_last_exchange_error() or 'Token exchange failed'
-                    
+
                     _set_session_oauth_state(flow_state)
-                    
-                    # Cleanup - clear server state for next attempt
+
                     server.stop()
                     OAuthCallbackHandler.callback_received.clear()
                     OAuthCallbackHandler.auth_code = None
@@ -646,16 +580,16 @@ def schwab_oauth_status():
                     flow_state['success'] = False
                     flow_state['error'] = 'Credentials not found'
                     _set_session_oauth_state(flow_state)
-                    
+
             elif OAuthCallbackHandler.error:
                 flow_state['completed'] = True
                 flow_state['success'] = False
                 flow_state['error'] = OAuthCallbackHandler.error
                 _set_session_oauth_state(flow_state)
                 server.stop()
-        
+
         return jsonify(flow_state)
-        
+
     except ImportError:
         return jsonify({'completed': False, 'error': 'OAuth server not available'})
 
@@ -695,55 +629,113 @@ def schwab_callback():
         print(f"[SCHWAB CALLBACK] ========== CALLBACK RECEIVED ==========")
         print(f"[SCHWAB CALLBACK] Full URL: {request.url}")
         print(f"[SCHWAB CALLBACK] Args: {dict(request.args)}")
-        
+
         code = request.args.get('code')
+        state = request.args.get('state')
         error = request.args.get('error')
         error_description = request.args.get('error_description', '')
-        
+
         if error:
             print(f"[SCHWAB CALLBACK] Error from Schwab: {error} - {error_description}")
-            flash(f"Schwab authorization failed: {error} - {error_description}", "error")
-            return redirect(url_for('settings'))
-        
+            return _render_callback_result_page(False, f"Authorization failed: {error} - {error_description}")
+
         if not code:
             print(f"[SCHWAB CALLBACK] No authorization code in request")
-            flash("No authorization code received from Schwab", "error")
-            return redirect(url_for('settings'))
-        
+            return _render_callback_result_page(False, "No authorization code received from Schwab")
+
+        if not state:
+            print(f"[SCHWAB CALLBACK] Missing state parameter - rejecting for CSRF protection")
+            return _render_callback_result_page(False, "Missing state parameter. Please try connecting again.")
+
+        state_data = _validate_oauth_state(state)
+        if not state_data:
+            print(f"[SCHWAB CALLBACK] Invalid or expired state parameter")
+            return _render_callback_result_page(False, "Invalid or expired session. Please try connecting again.")
+
         print(f"[SCHWAB CALLBACK] Got authorization code (first 20 chars): {code[:20]}...")
-        
+
         creds = get_schwab_credentials()
         if not creds:
             print(f"[SCHWAB CALLBACK] No credentials found in database!")
-            flash("Schwab credentials not found. Please save your Client ID and Secret first.", "error")
-            return redirect(url_for('settings'))
-        
-        print(f"[SCHWAB CALLBACK] Found credentials, client_id: {creds.get('client_id', '')[:8]}...")
-        
-        # IMPORTANT: Use the same redirect_uri that was sent in the authorization request
-        redirect_uri = get_default_redirect_uri()
+            return _render_callback_result_page(False, "Schwab credentials not found. Please save your Client ID and Secret first.")
+
+        redirect_uri = (state_data or {}).get('redirect_uri') or get_default_redirect_uri()
+        pkce_verifier = (state_data or {}).get('pkce_verifier')
         print(f"[SCHWAB CALLBACK] Using redirect_uri: {redirect_uri}")
-        
-        success = exchange_code_for_tokens(code, creds, redirect_uri_override=redirect_uri)
-        
+
+        success = exchange_code_for_tokens(code, creds, pkce_verifier=pkce_verifier, redirect_uri_override=redirect_uri)
+
         if success:
             print(f"[SCHWAB CALLBACK] ✓ Token exchange successful!")
-            flash("Successfully connected to Schwab!", "success")
             db.update_broker_connection_status('SCHWAB', True)
             _hot_connect_schwab_broker(creds)
+            return _render_callback_result_page(True, "Successfully connected to Schwab!")
         else:
             last_error = get_last_exchange_error()
             print(f"[SCHWAB CALLBACK] ✗ Token exchange failed: {last_error}")
-            flash(f"Failed to exchange authorization code: {last_error or 'Unknown error'}", "error")
-        
-        return redirect(url_for('settings'))
-        
+            return _render_callback_result_page(False, f"Token exchange failed: {last_error or 'Unknown error'}")
+
     except Exception as e:
         print(f"[SCHWAB AUTH] Callback error: {e}")
         import traceback
         traceback.print_exc()
-        flash(f"Authentication failed: {str(e)}", "error")
-        return redirect(url_for('settings'))
+        return _render_callback_result_page(False, f"Authentication failed: {str(e)}")
+
+
+def _render_callback_result_page(success: bool, message: str) -> str:
+    """Render a minimal callback page that notifies opener via postMessage and auto-closes."""
+    status = 'success' if success else 'error'
+    icon = '&#10004;' if success else '&#10008;'
+    color = '#00ffa3' if success else '#ff5555'
+    title = 'Schwab Connected!' if success else 'Connection Failed'
+    safe_message = message.replace("'", "\\'")
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{title}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: {color};
+               display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
+        .container {{ text-align: center; padding: 40px; background: #16213e; border-radius: 12px;
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 420px; }}
+        h1 {{ margin-bottom: 16px; font-size: 24px; }}
+        p {{ color: #a0a0a0; margin-bottom: 20px; font-size: 14px; }}
+        .close-msg {{ font-size: 12px; color: #666; }}
+    </style>
+    <script>
+        (function() {{
+            var result = {{ status: '{status}', message: '{safe_message}' }};
+            var origins = [
+                'http://localhost:5000', 'http://127.0.0.1:5000',
+                'http://localhost:3000', 'http://127.0.0.1:3000'
+            ];
+            if (window.opener) {{
+                for (var i = 0; i < origins.length; i++) {{
+                    try {{ window.opener.postMessage({{ type: 'schwab-oauth-callback', ...result }}, origins[i]); }} catch(e) {{}}
+                }}
+                if (window.location.hostname) {{
+                    try {{ window.opener.postMessage({{ type: 'schwab-oauth-callback', ...result }}, window.location.origin); }} catch(e) {{}}
+                }}
+            }}
+            setTimeout(function() {{
+                try {{ window.close(); }} catch(e) {{}}
+            }}, 2000);
+            setTimeout(function() {{
+                document.getElementById('close-msg').innerHTML =
+                    'If this window did not close automatically, you can close it now.';
+            }}, 3000);
+        }})();
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>{icon} {title}</h1>
+        <p>{message}</p>
+        <p id="close-msg" class="close-msg">This window will close automatically...</p>
+    </div>
+</body>
+</html>"""
+    return html
 
 
 _last_exchange_error = None

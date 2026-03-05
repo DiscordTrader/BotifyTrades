@@ -239,28 +239,48 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
     
     def _send_success_response(self):
-        """Send HTML response for successful OAuth."""
-        html = f"""
+        """Send HTML response that notifies opener via postMessage and auto-closes."""
+        html = """
         <!DOCTYPE html>
         <html>
         <head>
             <title>Schwab Connected</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #00ffa3; 
-                       display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
-                .container {{ text-align: center; padding: 40px; background: #16213e; border-radius: 12px; 
-                             box-shadow: 0 4px 20px rgba(0,255,163,0.2); }}
-                h1 {{ margin-bottom: 20px; }}
-                p {{ color: #a0a0a0; margin-bottom: 30px; }}
-                .redirect {{ font-size: 14px; color: #666; }}
+                body { font-family: Arial, sans-serif; background: #1a1a2e; color: #00ffa3;
+                       display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                .container { text-align: center; padding: 40px; background: #16213e; border-radius: 12px;
+                             box-shadow: 0 4px 20px rgba(0,255,163,0.2); max-width: 420px; }
+                h1 { margin-bottom: 16px; font-size: 24px; }
+                p { color: #a0a0a0; margin-bottom: 20px; font-size: 14px; }
+                .close-msg { font-size: 12px; color: #666; }
             </style>
-            <meta http-equiv="refresh" content="3;url={self.success_redirect}" />
+            <script>
+                (function() {
+                    var result = { type: 'schwab-oauth-callback', status: 'success', message: 'Authorization successful! Exchanging tokens...' };
+                    var origins = [
+                        'http://localhost:5000', 'http://127.0.0.1:5000',
+                        'http://localhost:3000', 'http://127.0.0.1:3000'
+                    ];
+                    if (window.opener) {
+                        for (var i = 0; i < origins.length; i++) {
+                            try { window.opener.postMessage(result, origins[i]); } catch(e) {}
+                        }
+                    }
+                    setTimeout(function() {
+                        try { window.close(); } catch(e) {}
+                    }, 2000);
+                    setTimeout(function() {
+                        var el = document.getElementById('close-msg');
+                        if (el) el.innerHTML = 'If this window did not close automatically, you can close it now.';
+                    }, 3000);
+                })();
+            </script>
         </head>
         <body>
             <div class="container">
                 <h1>&#10004; Schwab Connected!</h1>
                 <p>Authorization successful. Exchanging tokens...</p>
-                <p class="redirect">Redirecting to BotifyTrades in 3 seconds...</p>
+                <p id="close-msg" class="close-msg">This window will close automatically...</p>
             </div>
         </body>
         </html>
@@ -269,29 +289,52 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'text/html')
         self.end_headers()
         self.wfile.write(html.encode())
-    
+
     def _send_error_response(self, error: str):
-        """Send HTML response for OAuth error."""
+        """Send HTML error response that notifies opener via postMessage and auto-closes."""
+        safe_error = error.replace("'", "\\'").replace('"', '&quot;')
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <title>Schwab Auth Error</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #ff5555; 
+                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #ff5555;
                        display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
-                .container {{ text-align: center; padding: 40px; background: #16213e; border-radius: 12px; }}
-                h1 {{ margin-bottom: 20px; }}
+                .container {{ text-align: center; padding: 40px; background: #16213e; border-radius: 12px;
+                             max-width: 420px; }}
+                h1 {{ margin-bottom: 16px; font-size: 24px; }}
                 p {{ color: #a0a0a0; }}
-                .error {{ color: #ff5555; margin: 20px 0; }}
+                .error {{ color: #ff5555; margin: 16px 0; }}
+                .close-msg {{ font-size: 12px; color: #666; margin-top: 20px; }}
             </style>
-            <meta http-equiv="refresh" content="5;url={self.success_redirect}" />
+            <script>
+                (function() {{
+                    var result = {{ type: 'schwab-oauth-callback', status: 'error', message: '{safe_error}' }};
+                    var origins = [
+                        'http://localhost:5000', 'http://127.0.0.1:5000',
+                        'http://localhost:3000', 'http://127.0.0.1:3000'
+                    ];
+                    if (window.opener) {{
+                        for (var i = 0; i < origins.length; i++) {{
+                            try {{ window.opener.postMessage(result, origins[i]); }} catch(e) {{}}
+                        }}
+                    }}
+                    setTimeout(function() {{
+                        try {{ window.close(); }} catch(e) {{}}
+                    }}, 4000);
+                    setTimeout(function() {{
+                        var el = document.getElementById('close-msg');
+                        if (el) el.innerHTML = 'If this window did not close automatically, you can close it now.';
+                    }}, 5000);
+                }})();
+            </script>
         </head>
         <body>
             <div class="container">
                 <h1>&#10008; Authentication Failed</h1>
                 <p class="error">{error}</p>
-                <p>Redirecting to BotifyTrades settings...</p>
+                <p id="close-msg" class="close-msg">This window will close automatically...</p>
             </div>
         </body>
         </html>

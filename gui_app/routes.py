@@ -878,7 +878,7 @@ def register_routes(app):
         if request.path.startswith('/public'):
             return None
         # Allow public pages (setup wizard, login, forgot password, reset password, signup, google auth)
-        public_routes = ['/login', '/setup', '/forgot-password', '/local-reset', '/architecture', '/signup', '/user/login', '/google_login', '/consent']
+        public_routes = ['/login', '/setup', '/forgot-password', '/local-reset', '/architecture', '/signup', '/user/login', '/google_login', '/consent', '/schwab/callback', '/api/schwab/callback']
         if any(request.path == route or request.path.startswith(route + '/') for route in public_routes):
             return None
         if request.path.startswith('/reset-password'):
