@@ -1234,12 +1234,33 @@ class BrokerSyncService:
                         print(f"[SYNC] Trade #{trade_id} ({symbol}) already CLOSED (likely user-cancelled), skipping")
                         continue
                     
-                    print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in pending orders: PENDING → CLOSED (cancelled)")
+                    cancel_reason = 'order_cancelled_or_rejected'
+                    order_id_str = trade.get('order_id', '') or ''
+                    if order_id_str and hasattr(broker_instance, 'wb'):
+                        try:
+                            all_orders_raw = await asyncio.to_thread(
+                                broker_instance.wb.get_history_orders, count=20
+                            )
+                            for raw_order in (all_orders_raw or []):
+                                if str(raw_order.get('orderId', '')) == order_id_str:
+                                    raw_status = raw_order.get('status', '')
+                                    raw_msg = raw_order.get('statusStr', '') or raw_order.get('msg', '') or ''
+                                    cancel_reason_detail = raw_order.get('cancelReason', '') or raw_order.get('rejectReason', '') or ''
+                                    print(f"[SYNC] 🔍 Order #{order_id_str} history: status={raw_status}, statusStr={raw_msg}, reason={cancel_reason_detail}")
+                                    if cancel_reason_detail:
+                                        cancel_reason = f"broker_rejected: {cancel_reason_detail}"
+                                    elif raw_msg:
+                                        cancel_reason = f"broker_rejected: {raw_msg}"
+                                    break
+                        except Exception as hist_err:
+                            print(f"[SYNC] ⚠️ Could not query order history for rejection reason: {hist_err}")
+                    
+                    print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in pending orders: PENDING → CLOSED (cancelled) reason={cancel_reason}")
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
                         closed_at=datetime.now().isoformat(),
-                        close_reason='order_cancelled_or_rejected'
+                        close_reason=cancel_reason
                     )
                     
                     # Send cancellation notification (not failure - order was cancelled, not rejected)

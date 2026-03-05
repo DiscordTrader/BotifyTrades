@@ -12688,6 +12688,69 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             # Apply ticker filter BEFORE execution (BTO only - exits always pass)
             action_val = opt.get('action', 'BTO').upper()
             print(f"[DEBUG TICKER] Pre-check: execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, action={action_val}", flush=True)
+            
+            if execute_enabled and action_val == 'STC':
+                try:
+                    from gui_app.database import get_open_trades_by_channel
+                    stc_symbol = opt.get('symbol', '').upper()
+                    stc_strike = float(opt.get('strike', 0))
+                    stc_opt = opt.get('opt_type', '').upper()[:1]
+                    stc_expiry = opt.get('expiry', '')
+                    
+                    def _norm_exp_precheck(exp_str):
+                        if not exp_str:
+                            return ''
+                        exp_str = str(exp_str).strip()
+                        if len(exp_str) == 10 and '-' in exp_str:
+                            return exp_str
+                        if '/' in exp_str:
+                            parts = exp_str.split('/')
+                            if len(parts) == 2:
+                                from datetime import datetime as dt
+                                m, d = parts
+                                return f"{dt.now().year}-{int(m):02d}-{int(d):02d}"
+                            elif len(parts) == 3:
+                                m, d, y = parts
+                                if len(y) == 2:
+                                    y = f"20{y}"
+                                return f"{y}-{int(m):02d}-{int(d):02d}"
+                        return exp_str
+                    
+                    norm_stc_expiry = _norm_exp_precheck(stc_expiry)
+                    
+                    _STC_PRE_ALIASES = {
+                        'SPX': {'SPX', 'SPXW'},
+                        'SPXW': {'SPX', 'SPXW'},
+                        'NDX': {'NDX', 'NDXP'},
+                        'NDXP': {'NDX', 'NDXP'},
+                    }
+                    stc_sym_set = _STC_PRE_ALIASES.get(stc_symbol, {stc_symbol})
+                    
+                    open_trades = get_open_trades_by_channel(str(message.channel.id))
+                    has_matching_trade = False
+                    for t in (open_trades or []):
+                        t_sym = (t.get('symbol') or '').upper()
+                        t_strike = float(t.get('strike') or 0)
+                        t_opt = (t.get('call_put') or '').upper()[:1]
+                        t_status = (t.get('status') or '').upper()
+                        t_expiry = _norm_exp_precheck(t.get('expiry') or '')
+                        expiry_ok = (not norm_stc_expiry or not t_expiry or norm_stc_expiry == t_expiry)
+                        if (t_sym in stc_sym_set and 
+                            abs(t_strike - stc_strike) < 0.01 and 
+                            t_opt == stc_opt and
+                            t_status in ('OPEN', 'PENDING') and
+                            expiry_ok):
+                            has_matching_trade = True
+                            break
+                    
+                    if not has_matching_trade:
+                        print(f"[STC PRE-CHECK] ⏭️ No open/pending trade for {stc_symbol} ${stc_strike}{stc_opt} {stc_expiry} — skipping STC", flush=True)
+                        return
+                    else:
+                        print(f"[STC PRE-CHECK] ✓ Found matching trade for {stc_symbol} ${stc_strike}{stc_opt} {stc_expiry}", flush=True)
+                except Exception as stc_pre_err:
+                    print(f"[STC PRE-CHECK] ⚠️ Check failed (proceeding anyway): {stc_pre_err}", flush=True)
+            
             if execute_enabled and channel_info and action_val == 'BTO':
                 try:
                     from src.signals.validator import check_ticker_filter

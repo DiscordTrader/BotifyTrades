@@ -3750,6 +3750,19 @@ def sync_positions_with_broker(broker_name: str, active_position_keys: set, user
     }
 
 
+def get_open_trades_by_channel(channel_id: str) -> list:
+    """Get all OPEN or PENDING trades for a specific channel"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, symbol, strike, expiry, call_put, asset_type, executed_price, 
+               quantity, direction, status, broker, order_id
+        FROM trades
+        WHERE channel_id = ? AND status IN ('OPEN', 'PENDING')
+    ''', [channel_id])
+    return [dict(row) for row in cursor.fetchall()]
+
+
 def get_open_trades_for_broker(broker_name: str, user_id: int = None) -> list:
     """Get all OPEN trades for a specific broker"""
     conn = get_connection()
