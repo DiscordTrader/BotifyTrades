@@ -29,7 +29,7 @@ The web control panel is built with Flask, providing a responsive and interactiv
 - **WebSocket Streaming**: Utilizes Webull MQTT and a 5-tier optimized Schwab WebSocket system for real-time quotes and orders. These centralized, thread-safe data hubs provide sub-100ms pricing for conditional orders and quick trade options chains, with automatic REST fallback.
 - **Broker Sync Service**: A regular service to reconcile database state with actual broker states, detecting order fills/cancellations, position changes, and account updates.
 - **Notification System**: Provides Discord webhook notifications for various trading events and desktop browser notifications.
-- **Security & Authentication**: Implements admin account management with password hashing, email recovery, session-based authentication, rate limiting, and encrypted broker credentials.
+- **Security & Authentication**: Implements admin account management with password hashing, email recovery, session-based authentication, rate limiting, and encrypted broker credentials. Schwab OAuth uses CSRF state tokens (single-use, 10-min TTL), PKCE, and postMessage-based popup flow with auto-close. Local flow uses a standalone HTTPS callback server on port 8182 that captures the auth code, then the settings page polls `/schwab/oauth-status` to trigger the token exchange.
 - **Database Architecture**: Uses SQLite with WAL mode for concurrent read/write operations, storing critical trading data and encrypted credentials.
 - **AI Analysis**: Integrates OpenAI GPT for pre-trade and post-trade analysis, an AI chat assistant, and AI command toggles.
 

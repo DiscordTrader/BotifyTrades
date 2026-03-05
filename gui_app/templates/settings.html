@@ -2414,21 +2414,43 @@ document.getElementById('connect-schwab').addEventListener('click', async () => 
             if (_schwabOAuthPopup && _schwabOAuthPopup.closed) {
                 clearInterval(_schwabOAuthPollInterval);
                 _schwabOAuthPollInterval = null;
-                setTimeout(async () => {
+                msg.textContent = '⏳ Popup closed. Exchanging tokens...';
+                msg.style.color = '#00d4ff';
+                var closeAttempts = 0;
+                var closeMaxAttempts = 15;
+                var closeExchangeInterval = setInterval(async function() {
+                    closeAttempts++;
                     try {
-                        const statusResp = await fetch('/schwab/oauth-status');
-                        const statusData = await statusResp.json();
-                        if (statusData.completed && statusData.success) {
-                            msg.textContent = '✅ Successfully connected to Schwab!';
-                            msg.className = 'message success';
-                            msg.style.color = '';
+                        var resp = await fetch('/schwab/oauth-status');
+                        var data = await resp.json();
+                        if (data.completed) {
+                            clearInterval(closeExchangeInterval);
+                            if (data.success) {
+                                msg.textContent = '✅ Successfully connected to Schwab!';
+                                msg.className = 'message success';
+                                msg.style.color = '';
+                            } else {
+                                msg.textContent = '❌ ' + (data.error || 'Token exchange failed');
+                                msg.className = 'message error';
+                                msg.style.color = '';
+                            }
+                            setTimeout(loadSchwabStatus, 1000);
+                            connectBtn.disabled = false;
+                            connectBtn.textContent = '🔗 Connect with Schwab';
+                            setTimeout(function() { msg.textContent = ''; msg.style.color = ''; }, 5000);
                         }
                     } catch(e) {}
-                    loadSchwabStatus();
-                    connectBtn.disabled = false;
-                    connectBtn.textContent = '🔗 Connect with Schwab';
-                    setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 5000);
-                }, 1000);
+                    if (closeAttempts >= closeMaxAttempts) {
+                        clearInterval(closeExchangeInterval);
+                        msg.textContent = '⚠️ Token exchange timed out. Try reconnecting.';
+                        msg.className = 'message error';
+                        msg.style.color = '';
+                        connectBtn.disabled = false;
+                        connectBtn.textContent = '🔗 Connect with Schwab';
+                        loadSchwabStatus();
+                        setTimeout(function() { msg.textContent = ''; msg.style.color = ''; }, 8000);
+                    }
+                }, 2000);
                 return;
             }
             if (pollCount >= maxPolls) {
@@ -2475,12 +2497,51 @@ window.addEventListener('message', function(event) {
 
     if (event.data.status === 'success') {
         if (msg) {
-            msg.textContent = '✅ ' + (event.data.message || 'Connected to Schwab!');
-            msg.className = 'message success';
-            msg.style.color = '';
-            setTimeout(() => msg.textContent = '', 5000);
+            msg.textContent = '⏳ Authorization received, exchanging tokens...';
+            msg.className = 'message';
+            msg.style.color = '#00d4ff';
         }
-        setTimeout(loadSchwabStatus, 2000);
+        var exchangeAttempts = 0;
+        var maxExchangeAttempts = 12;
+        var exchangeInterval = setInterval(async function() {
+            exchangeAttempts++;
+            try {
+                var resp = await fetch('/schwab/oauth-status');
+                var data = await resp.json();
+                if (data.completed) {
+                    clearInterval(exchangeInterval);
+                    if (data.success) {
+                        if (msg) {
+                            msg.textContent = '✅ Successfully connected to Schwab!';
+                            msg.className = 'message success';
+                            msg.style.color = '';
+                            setTimeout(function() { msg.textContent = ''; }, 5000);
+                        }
+                    } else {
+                        if (msg) {
+                            msg.textContent = '❌ ' + (data.error || 'Token exchange failed');
+                            msg.className = 'message error';
+                            msg.style.color = '';
+                            setTimeout(function() { msg.textContent = ''; }, 8000);
+                        }
+                    }
+                    setTimeout(loadSchwabStatus, 1000);
+                    if (connectBtn) { connectBtn.disabled = false; connectBtn.textContent = '🔗 Connect with Schwab'; }
+                }
+            } catch(e) {}
+            if (exchangeAttempts >= maxExchangeAttempts) {
+                clearInterval(exchangeInterval);
+                if (msg) {
+                    msg.textContent = '⚠️ Token exchange timed out. Please try again.';
+                    msg.className = 'message error';
+                    msg.style.color = '';
+                    setTimeout(function() { msg.textContent = ''; }, 8000);
+                }
+                if (connectBtn) { connectBtn.disabled = false; connectBtn.textContent = '🔗 Connect with Schwab'; }
+                loadSchwabStatus();
+            }
+        }, 2000);
+        return;
     } else {
         if (msg) {
             msg.textContent = '❌ ' + (event.data.message || 'Connection failed');
