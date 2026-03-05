@@ -15199,11 +15199,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # Pre-trade analysis for BTO orders - NON-BLOCKING (runs in background)
                 # Orders execute IMMEDIATELY - analysis logs results after the fact
+                _SWING_SKIP_SYMBOLS = {'SPX', 'SPXW', 'NDX', 'NDXP', 'XSP', 'VIX', 'RUT', 'DJX', 'OEX', 'XEO'}
                 if signal['action'] == 'BTO' and ENABLE_SWING_ANALYSIS and self.swing_analyzer:
                     symbol = signal['symbol']
                     
-                    # Only block if auto_reject is enabled (need to check before executing)
-                    if SWING_AUTO_REJECT:
+                    if symbol.upper() in _SWING_SKIP_SYMBOLS:
+                        _original_print(f"[PRE-TRADE] ⚡ Skipping swing analysis for {symbol} (index option, not on yfinance)")
+                    elif SWING_AUTO_REJECT:
                         _original_print(f"\n[PRE-TRADE] Analyzing {symbol} (blocking - auto_reject enabled)...")
                         try:
                             def analyze():
@@ -15433,9 +15435,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _original_print(f"[MULTI-BROKER] ⚡ Parallel execution complete")
                     
                     # Handle multi-broker responses
-                    # Check success flag OR if orderId has a truthy value (not just key existence)
-                    successes = [r for r in responses if r.get('success') or r.get('orderId')]
-                    failures = [r for r in responses if not (r.get('success') or r.get('orderId'))]
+                    # Only treat as success if: success=True, OR orderId present without explicit failure
+                    # This prevents treating {orderId: X, success: False} as a success
+                    def _is_broker_success(r):
+                        if r.get('success') == True:
+                            return True
+                        if r.get('orderId') and r.get('success') is not False:
+                            return True
+                        return False
+                    successes = [r for r in responses if _is_broker_success(r)]
+                    failures = [r for r in responses if not _is_broker_success(r)]
                     
                     _original_print(f"[MULTI-BROKER] Results: {len(successes)} succeeded, {len(failures)} failed")
                     
@@ -16982,7 +16991,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     msg_id_str = str(signal.get('message_id', ''))
                                     
                                     for broker_resp in multi_broker_results:
-                                        if broker_resp.get('success') or broker_resp.get('orderId'):
+                                        if broker_resp.get('success') == True or (broker_resp.get('orderId') and broker_resp.get('success') is not False):
                                             # Use executed_qty from broker response (position-sized), fallback to signal qty
                                             executed_qty = broker_resp.get('executed_qty', signal['qty'])
                                             broker_name_upper = broker_resp.get('broker', 'UNKNOWN').upper()
@@ -17028,6 +17037,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'conditional_order_id': signal.get('_conditional_order_id'),
                                                 'routing_mapping_id': routing_mapping_id
                                             }
+                                            _original_print(f"[DATABASE] Saving trade: broker={broker_name_upper} order_id={broker_resp.get('orderId')} (from broker_resp, not shared)")
                                             trade_id = db.add_trade(trade_data)
                                             _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                                             

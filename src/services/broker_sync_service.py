@@ -458,6 +458,9 @@ class BrokerSyncService:
                             })
             
             elif broker_name == 'SCHWAB':
+                if hasattr(broker_instance, 'account_hash') and not broker_instance.account_hash:
+                    print(f"[SYNC] ⚠️ SCHWAB missing account_hash — marking data as unreliable")
+                    result['_fetch_error'] = True
                 if hasattr(broker_instance, 'get_positions_detailed'):
                     positions = await broker_instance.get_positions_detailed() or []
                     
@@ -791,7 +794,7 @@ class BrokerSyncService:
             except Exception:
                 pass
             
-            return {'positions': [], 'pending_orders': []}
+            return {'positions': [], 'pending_orders': [], '_fetch_error': True}
     
     async def _fetch_account_info(self, broker_name: str, broker_instance) -> Dict[str, Any]:
         """Fetch account info for health monitor cache (buying power, balance, etc)."""
@@ -995,6 +998,14 @@ class BrokerSyncService:
         
         pending_by_order_id = {o['broker_order_id']: o for o in normalized_data.get('pending_orders', []) if o.get('broker_order_id')}
         pending_by_symbol = {o['symbol']: o for o in normalized_data.get('pending_orders', [])}
+        
+        has_pending_trades = any(t['status'] == 'PENDING' for t in active_trades)
+        broker_returned_empty = not positions_by_key and not pending_by_order_id and not pending_by_symbol
+        if has_pending_trades and broker_returned_empty:
+            fetch_error = normalized_data.get('_fetch_error', False)
+            if fetch_error:
+                print(f"[SYNC] ⚠️ {broker_name} returned empty data with fetch error — skipping PENDING trade cancellation to avoid false cancels")
+                active_trades = [t for t in active_trades if t['status'] != 'PENDING']
         
         for trade in active_trades:
             symbol = trade['symbol']
