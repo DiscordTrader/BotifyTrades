@@ -32,7 +32,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Security & Authentication**: Implements admin account management, password hashing, email recovery, session-based authentication, rate limiting, and encrypted broker credentials. Schwab OAuth uses CSRF state tokens, PKCE, and a postMessage-based popup flow.
 - **Database Architecture**: Uses SQLite with WAL mode for concurrent read/write operations, storing critical trading data and encrypted credentials.
 - **AI Analysis**: Integrates OpenAI GPT for pre-trade and post-trade analysis, an AI chat assistant, and AI command toggles.
-- **Risk Engine Direct Exit Architecture**: Dual-path exit execution system ensuring stop-loss orders execute even when the event loop is blocked, using a primary queue-based path and a backup daemon thread for direct broker calls.
+- **Risk Engine Direct Exit Architecture**: Dual-path exit execution system ensuring stop-loss orders execute even when the event loop is blocked, using a primary queue-based path and a backup daemon thread for direct broker calls. Exit retry mechanism clears `_exit_executed_keys` on failure so subsequent retries are not blocked by stale dedupe state.
 - **Streaming Hub-First Architecture**: All price-fetching services prioritize WebullDataHub and SchwabDataHub before making REST API calls to reduce latency and errors.
 
 **System Design Choices:**

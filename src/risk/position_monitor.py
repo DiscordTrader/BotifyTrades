@@ -2347,10 +2347,10 @@ class RiskManager:
                 # For stocks, we could set to None for true market order but keeping price is safer
                 print(f"[RISK] 📊 Market order mode - using current price ${position.current_price:.2f}")
             
+            stc_signal['_exit_marker_key'] = pos_key
+            
             await self.order_queue.put(stc_signal)
             print(f"[RISK] STC order queued for {pos_key} via {position.broker} (queue_id={id(self.order_queue)}, qsize={self.order_queue.qsize()}): {stc_signal}")
-            
-            stc_signal['_exit_marker_key'] = pos_key
             
             import threading
             def _thread_exit_executor():

@@ -16752,6 +16752,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 # Use fast emergency retry for stop loss exits
                                 is_stop_loss = signal.get('risk_trigger') == 'stop_loss'
                                 cache.record_exit_failure(signal['_position_key'], error_msg, is_stop_loss=is_stop_loss)
+                                
+                                if hasattr(risk_manager_instance, '_exit_executed_keys') and hasattr(risk_manager_instance, '_exit_executed_lock'):
+                                    with risk_manager_instance._exit_executed_lock:
+                                        risk_manager_instance._exit_executed_keys.discard(signal['_position_key'])
+                                    _original_print(f"[RISK-RETRY] ✓ Cleared exit-executed lock for {signal['_position_key']} — retry enabled", flush=True)
                                 retry_state = cache.get_retry_state(signal['_position_key'])
                                 
                                 if retry_state.get('permanent_failure'):
