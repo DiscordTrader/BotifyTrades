@@ -1079,48 +1079,92 @@ class WebullBroker(BrokerInterface):
             enforce = self._resolve_option_enforce(expiry)
             
             is_stc = action.upper() in ('STC', 'SELL_TO_CLOSE')
-            use_market = price is None
+            use_aggressive_limit = False
+            sell_buffers = [0.01, 0.02, 0.03, 0.05]
             
-            if is_stc and not use_market and is_risk_order:
-                print(f"[{self.name}] ⚡ Risk STC: overriding limit ${price} → MARKET ORDER for fast fill")
-                use_market = True
-            elif is_stc and not use_market:
+            def _get_option_quote():
                 try:
                     qd = self.wb.get_option_quote(stock=symbol, optionId=option_id)
                     if qd:
                         bid_list = qd.get('bidList', [])
-                        current_bid = float(bid_list[0].get('price', 0)) if bid_list else float(qd.get('bidPrice', 0) or 0)
-                        if current_bid > 0:
-                            aggressive_price = max(0.01, round(current_bid * 0.90, 2))
-                            if price > current_bid * 1.5:
-                                print(f"[{self.name}] ⚡ STC price ${price} >> current bid ${current_bid:.2f} — using aggressive limit ${aggressive_price:.2f} for fast fill")
-                                price = aggressive_price
-                            else:
-                                print(f"[{self.name}] STC price ${price} near bid ${current_bid:.2f} — keeping limit")
+                        ask_list = qd.get('askList', [])
+                        bid = float(bid_list[0].get('price', 0)) if bid_list else float(qd.get('bidPrice', 0) or 0)
+                        ask = float(ask_list[0].get('price', 0)) if ask_list else float(qd.get('askPrice', 0) or 0)
+                        last = float(qd.get('close', 0) or qd.get('lastPrice', 0) or 0)
+                        return {'bid': bid if bid > 0 else 0, 'ask': ask if ask > 0 else 0, 'last': last if last > 0 else 0}
                 except Exception as e:
-                    print(f"[{self.name}] STC bid check failed ({e}), using original price ${price}")
+                    print(f"[{self.name}] Option quote failed ({e})")
+                return None
+            
+            def _get_bid_price():
+                q = _get_option_quote()
+                if q:
+                    return q['bid'] or q['last'] or None
+                return None
+            
+            def _get_ask_price():
+                q = _get_option_quote()
+                if q:
+                    return q['ask'] or q['last'] or None
+                return None
+            
+            if is_stc and is_risk_order:
+                current_bid = await asyncio.to_thread(_get_bid_price)
+                if current_bid and current_bid > 0:
+                    price = max(0.01, round(current_bid * (1 - sell_buffers[0]), 2))
+                    print(f"[{self.name}] ⚡ Risk STC: bid=${current_bid:.2f} → aggressive limit ${price:.2f} (-{sell_buffers[0]*100:.0f}% buffer) for fast fill")
+                    use_aggressive_limit = True
+                elif _fallback_price and _fallback_price > 0:
+                    price = max(0.01, round(_fallback_price * 0.80, 2))
+                    print(f"[{self.name}] ⚡ Risk STC: no bid, fallback ${_fallback_price:.2f} → aggressive limit ${price:.2f} (20% below)")
+                    use_aggressive_limit = True
+                elif price and price > 0:
+                    price = max(0.01, round(price * 0.85, 2))
+                    print(f"[{self.name}] ⚡ Risk STC: no bid/fallback, using signal price -15% → ${price:.2f}")
+                else:
+                    price = 0.01
+                    print(f"[{self.name}] ⚡ Risk STC: no price available, using $0.01 floor")
+            elif is_stc and price is not None and price > 0:
+                current_bid = await asyncio.to_thread(_get_bid_price)
+                if current_bid and current_bid > 0:
+                    aggressive_price = max(0.01, round(current_bid * 0.90, 2))
+                    if price > current_bid * 1.5:
+                        print(f"[{self.name}] ⚡ STC price ${price} >> current bid ${current_bid:.2f} — using aggressive limit ${aggressive_price:.2f} for fast fill")
+                        price = aggressive_price
+                    else:
+                        print(f"[{self.name}] STC price ${price} near bid ${current_bid:.2f} — keeping limit")
+            elif price is None:
+                if is_stc:
+                    current_bid = await asyncio.to_thread(_get_bid_price)
+                    if current_bid and current_bid > 0:
+                        price = max(0.01, round(current_bid * (1 - sell_buffers[0]), 2))
+                        print(f"[{self.name}] ⚡ Market STC: bid=${current_bid:.2f} → aggressive limit ${price:.2f}")
+                        use_aggressive_limit = True
+                    elif _fallback_price and _fallback_price > 0:
+                        price = max(0.01, round(_fallback_price * 0.80, 2))
+                        print(f"[{self.name}] ⚡ Market STC: no bid, fallback → ${price:.2f}")
+                    else:
+                        price = 0.01
+                        print(f"[{self.name}] ⚡ Market STC: no price data, using $0.01 floor")
+                else:
+                    current_ask = await asyncio.to_thread(_get_ask_price)
+                    if current_ask and current_ask > 0:
+                        price = round(current_ask * (1 + sell_buffers[0]), 2)
+                        print(f"[{self.name}] ⚡ Market BTO: ask=${current_ask:.2f} → aggressive limit ${price:.2f} (+{sell_buffers[0]*100:.0f}% buffer)")
+                    elif _fallback_price and _fallback_price > 0:
+                        price = round(_fallback_price * 1.03, 2)
+                        print(f"[{self.name}] ⚡ Market BTO: no quote, fallback → ${price:.2f}")
             
             def execute_order():
-                if use_market:
-                    return self.wb.place_order_option(
-                        optionId=option_id,
-                        lmtPrice=0.0,
-                        stpPrice=None,
-                        action=side,
-                        orderType='MKT',
-                        enforce=enforce,
-                        quant=quantity
-                    )
-                else:
-                    return self.wb.place_order_option(
-                        optionId=option_id,
-                        lmtPrice=price,
-                        stpPrice=None,
-                        action=side,
-                        orderType='LMT',
-                        enforce=enforce,
-                        quant=quantity
-                    )
+                return self.wb.place_order_option(
+                    optionId=option_id,
+                    lmtPrice=price if price else 0.01,
+                    stpPrice=None,
+                    action=side,
+                    orderType='LMT',
+                    enforce=enforce,
+                    quant=quantity
+                )
             
             TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
             MAX_TRANSIENT_RETRIES = 1 if _skip_internal_retry else 3
@@ -1162,6 +1206,26 @@ class WebullBroker(BrokerInterface):
                     if is_transient:
                         print(f"[{self.name}] [Attempt {attempt}] ❌ Transient error persisted after {MAX_TRANSIENT_RETRIES} attempts: {response.get('msg', 'Unknown')}")
                     break
+            
+            if use_aggressive_limit and is_stc and response and response.get('msg'):
+                print(f"[{self.name}] ⚡ Aggressive STC failed ({response.get('msg', 'Unknown')}), retrying with wider buffers...")
+                for buf_idx, buf in enumerate(sell_buffers[1:], start=2):
+                    fresh_bid = await asyncio.to_thread(_get_bid_price)
+                    if fresh_bid and fresh_bid > 0:
+                        price = max(0.01, round(fresh_bid * (1 - buf), 2))
+                    else:
+                        price = max(0.01, round(price * (1 - 0.02), 2))
+                    print(f"[{self.name}] ⚡ STC retry #{buf_idx}: refreshed bid=${fresh_bid or 'N/A'} → limit ${price:.2f} (-{buf*100:.0f}% buffer)")
+                    def retry_order(p=price):
+                        return self.wb.place_order_option(
+                            optionId=option_id, lmtPrice=p, stpPrice=None,
+                            action=side, orderType='LMT', enforce=enforce, quant=quantity
+                        )
+                    await asyncio.sleep(1)
+                    response = await asyncio.to_thread(retry_order)
+                    if response and not response.get('msg'):
+                        print(f"[{self.name}] ⚡ STC retry #{buf_idx} accepted at ${price:.2f}")
+                        break
             
             if response and not response.get('msg'):
                 try:
