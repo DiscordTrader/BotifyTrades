@@ -3408,17 +3408,27 @@ class WebullBroker:
                     print(f"[WEBULL] Could not get option quote: {e}", flush=True)
                     return None, None
             
+            _fallback_price = kwargs.get('_signal_price_fallback')
+            
             if is_market_mode:
                 initial_buffer = market_buy_buffers[0] if side == 'BUY' else market_sell_buffers[0]
                 print(f"[WEBULL] ⚡ MARKET ORDER mode - aggressive limit with {initial_buffer*100:.0f}% initial buffer...", flush=True)
                 effective_price, _raw_price = _get_market_price(wb, broker_sym, option_id, side, initial_buffer)
                 
                 if not effective_price or effective_price <= 0:
-                    return {
-                        'success': False,
-                        'msg': 'Webull options require a limit price. Could not determine market price.',
-                        'error': 'NO_PRICE'
-                    }
+                    if _fallback_price and _fallback_price > 0:
+                        if side == 'SELL':
+                            effective_price = max(0.01, round(_fallback_price * (1 - 0.03), 2))
+                        else:
+                            effective_price = round(_fallback_price * (1 + 0.03), 2)
+                        _raw_price = _fallback_price
+                        print(f"[WEBULL] ⚡ Quote unavailable — using signal fallback price ${_fallback_price:.2f} → limit ${effective_price:.2f} (3% buffer)", flush=True)
+                    else:
+                        return {
+                            'success': False,
+                            'msg': 'Webull options require a limit price. Could not determine market price.',
+                            'error': 'NO_PRICE'
+                        }
             
             if side == 'BUY':
                 try:
@@ -14379,9 +14389,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 use_market_order = signal.get('_use_market_order', False)
                 is_webull_broker = 'WEBULL' in broker_upper
                 if use_market_order:
+                    _signal_price_fallback = signal.get('price')
                     order_price = None
-                    _original_print(f"[{broker_name}] ⚡ MARKET ORDER for option {signal.get('action', 'BTO')} — price=None triggers real-time quote + aggressive limit")
+                    _original_print(f"[{broker_name}] ⚡ MARKET ORDER for option {signal.get('action', 'BTO')} — price=None triggers real-time quote + aggressive limit (fallback=${_signal_price_fallback})")
                 else:
+                    _signal_price_fallback = None
                     # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
                     # The limit_price acts as a ceiling - order fills at market or better, up to limit
                     order_price = signal.get('price')
@@ -14516,6 +14528,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _option_kwargs['_trigger_price'] = signal.get('_trigger_price')
                         _option_kwargs['_qot_price'] = signal.get('_qot_price')
                         _option_kwargs['_is_market_order'] = signal.get('is_market_order', False)
+                        if _signal_price_fallback:
+                            _option_kwargs['_signal_price_fallback'] = _signal_price_fallback
                         if _skip_retry:
                             _option_kwargs['_skip_internal_retry'] = True
                     result = await broker_instance.place_option_order(**_option_kwargs)
@@ -16457,9 +16471,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'strike': signal['strike'],
                                 'opt_type': signal['opt_type'],
                                 'expiry_mmdd': signal['expiry'],
-                                'limit_price': None if use_market_order else signal.get('price'),  # None for market orders
+                                'limit_price': None if use_market_order else signal.get('price'),
                                 '_risk_management_order': signal.get('_risk_management_order', False),
                             }
+                            if use_market_order and signal.get('price'):
+                                order_kwargs['_signal_price_fallback'] = signal.get('price')
                             
                             # For India brokers, determine lots to use
                             if broker_name_used in ('Upstox', 'DhanQ', 'Zerodha'):
