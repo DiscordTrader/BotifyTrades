@@ -46,7 +46,7 @@ class SODBalanceCache:
         self._captured_date = None
         self._lock = threading.Lock()
 
-    def capture_snapshot(self, broker_name, buying_power, options_buying_power):
+    def capture_snapshot(self, broker_name, buying_power, options_buying_power, portfolio_value=None):
         try:
             from zoneinfo import ZoneInfo
         except ImportError:
@@ -54,14 +54,16 @@ class SODBalanceCache:
         now_et = datetime.now(ZoneInfo('America/New_York'))
         today_str = now_et.strftime('%Y-%m-%d')
         normalized = _normalize_broker_name(broker_name)
+        pv = float(portfolio_value or 0)
         with self._lock:
             self._cache[normalized] = {
                 'buying_power': float(buying_power or 0),
                 'options_buying_power': float(options_buying_power or 0),
+                'portfolio_value': pv,
                 'captured_at': now_et.isoformat(),
             }
             self._captured_date = today_str
-        print(f"[SOD] ✓ Captured {normalized}: Stock BP=${buying_power:,.2f}, Options BP=${options_buying_power:,.2f}")
+        print(f"[SOD] ✓ Captured {normalized}: Stock BP=${buying_power:,.2f}, Options BP=${options_buying_power:,.2f}, Portfolio=${pv:,.2f}")
 
     def get_snapshot(self, broker_name):
         try:
@@ -114,7 +116,8 @@ class SODBalanceCache:
                 if account_info:
                     bp = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
                     opts_bp = float(account_info.get('options_buying_power') or bp)
-                    self.capture_snapshot(broker.name, bp, opts_bp)
+                    pv = float(account_info.get('net_liquidation') or account_info.get('portfolio_value') or account_info.get('total_equity') or bp)
+                    self.capture_snapshot(broker.name, bp, opts_bp, portfolio_value=pv)
                 else:
                     print(f"[SOD] ⚠️ {broker.name}: get_account_info returned empty")
             except asyncio.TimeoutError:

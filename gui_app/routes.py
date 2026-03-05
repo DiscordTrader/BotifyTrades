@@ -8011,6 +8011,16 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
     
     # Global Risk Settings (OMS/RMS)
+    @app.route('/api/daily-pnl-status', methods=['GET'])
+    def api_daily_pnl_status():
+        try:
+            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+            service = get_daily_pnl_service()
+            return jsonify(service.get_all_states())
+        except Exception as e:
+            print(f"[API] Error fetching daily P&L status: {e}")
+            return jsonify({'enabled': False, 'limits': {}, 'brokers': []})
+
     @app.route('/api/settings/global-risk', methods=['GET'])
     def api_get_global_risk_settings():
         """Get global risk management settings for OMS/RMS"""

@@ -23,6 +23,9 @@
     </div>
 </div>
 
+<!-- Daily P&L Limit Banners -->
+<div id="daily-pnl-banners" style="display: none; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;"></div>
+
 <!-- Stats Grid -->
 <div class="stats-grid">
     <div class="stat-card">
@@ -3415,5 +3418,140 @@ async function streamingQuotePoll() {
     } catch (e) {
     }
 }
+
+let _pnlDismissed = {};
+
+async function pollDailyPnlStatus() {
+    try {
+        const resp = await fetch('/api/daily-pnl-status');
+        const data = await resp.json();
+        const container = document.getElementById('daily-pnl-banners');
+        if (!container) return;
+
+        if (!data.enabled || !data.brokers || data.brokers.length === 0) {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            return;
+        }
+
+        const banners = [];
+        const limits = data.limits || {};
+        
+        for (const b of data.brokers) {
+            const key = b.broker_name;
+            if (_pnlDismissed[key] && !b.locked) {
+                delete _pnlDismissed[key];
+            }
+            if (_pnlDismissed[key]) continue;
+
+            const pnl = b.daily_pnl || 0;
+            const pnlPct = b.daily_pnl_pct || 0;
+            const pnlSign = pnl >= 0 ? '+' : '';
+            const pnlStr = pnlSign + '$' + Math.abs(pnl).toFixed(2);
+            const pctStr = pnlSign + pnlPct.toFixed(1) + '%';
+            
+            if (b.locked) {
+                const isProfit = b.lock_type === 'profit';
+                const gradient = isProfit 
+                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.06))'
+                    : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.06))';
+                const border = isProfit ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+                const shadow = isProfit ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+                const titleColor = isProfit ? '#10b981' : '#ef4444';
+                const msgColor = isProfit ? '#6ee7b7' : '#fca5a5';
+                const icon = isProfit ? '✅' : '⛔';
+                const title = isProfit 
+                    ? key + ' — Daily Profit Target Reached'
+                    : key + ' — Daily Loss Limit Reached';
+                const msg = isProfit
+                    ? 'Trading paused — gains locked in (' + pnlStr + ' / ' + pctStr + ')'
+                    : 'Trading paused until next session (' + pnlStr + ' / ' + pctStr + ')';
+                const limitInfo = isProfit
+                    ? (limits.profit_dollar > 0 ? ' | Target: $' + limits.profit_dollar.toFixed(0) : '') + (limits.profit_pct > 0 ? ' / ' + limits.profit_pct.toFixed(1) + '%' : '')
+                    : (limits.loss_dollar > 0 ? ' | Limit: $' + limits.loss_dollar.toFixed(0) : '') + (limits.loss_pct > 0 ? ' / ' + limits.loss_pct.toFixed(1) + '%' : '');
+                
+                banners.push(`
+                    <div style="padding: 14px 18px; background: ${gradient}; border: 1px solid ${border}; 
+                        border-radius: 12px; box-shadow: 0 4px 12px ${shadow}; animation: pnlBannerSlide 0.4s ease-out;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 1.4rem;">${icon}</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: ${titleColor}; font-size: 0.95rem; margin-bottom: 3px; letter-spacing: 0.3px;">
+                                    ${title}
+                                </div>
+                                <div style="color: ${msgColor}; font-size: 0.825rem;">
+                                    ${msg}${limitInfo}
+                                </div>
+                            </div>
+                            <div style="text-align: right; min-width: 90px;">
+                                <div style="font-size: 1.1rem; font-weight: 700; color: ${titleColor}; font-family: 'JetBrains Mono', monospace;">
+                                    ${pnlStr}
+                                </div>
+                                <div style="font-size: 0.75rem; color: ${msgColor}; opacity: 0.8;">
+                                    ${pctStr}
+                                </div>
+                            </div>
+                            <button onclick="_pnlDismissed['${key}']=true; pollDailyPnlStatus();" 
+                                style="background: none; border: none; color: ${titleColor}; cursor: pointer; font-size: 1.2rem; padding: 4px; opacity: 0.6;"
+                                title="Dismiss (will re-appear if still locked)">×</button>
+                        </div>
+                    </div>
+                `);
+            } else if (b.warning && b.warning !== 'none') {
+                const isWarnProfit = b.warning === 'profit';
+                const warnTitle = isWarnProfit 
+                    ? key + ' — Approaching Profit Target'
+                    : key + ' — Approaching Loss Limit';
+                const warnMsg = isWarnProfit
+                    ? 'P&L: ' + pnlStr + ' / ' + pctStr + ' — nearing profit target'
+                    : 'P&L: ' + pnlStr + ' / ' + pctStr + ' — nearing loss limit';
+                    
+                banners.push(`
+                    <div style="padding: 12px 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.05)); 
+                        border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.2rem;">⚠️</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #f59e0b; font-size: 0.875rem; margin-bottom: 2px;">
+                                    ${warnTitle}
+                                </div>
+                                <div style="color: #fcd34d; font-size: 0.8rem; opacity: 0.85;">
+                                    ${warnMsg}
+                                </div>
+                            </div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: #f59e0b; font-family: 'JetBrains Mono', monospace;">
+                                ${pnlStr}
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+        }
+        
+        if (banners.length > 0) {
+            container.innerHTML = banners.join('');
+            container.style.display = 'flex';
+        } else {
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+    } catch (e) {
+    }
+}
+
+if (!document.getElementById('pnl-banner-keyframes')) {
+    const style = document.createElement('style');
+    style.id = 'pnl-banner-keyframes';
+    style.textContent = `
+        @keyframes pnlBannerSlide {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+pollDailyPnlStatus();
+setInterval(pollDailyPnlStatus, 30000);
 </script>
 {% endblock %}

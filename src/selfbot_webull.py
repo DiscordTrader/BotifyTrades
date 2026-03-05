@@ -13834,6 +13834,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
         try:
+            action = signal.get('action', '').upper()
+            if action == 'BTO':
+                try:
+                    from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                    pnl_service = get_daily_pnl_service()
+                    pnl_check = pnl_service.check_broker_locked(broker_name)
+                    if pnl_check.get('locked'):
+                        lock_type = pnl_check.get('lock_type', 'unknown')
+                        pnl = pnl_check.get('daily_pnl', 0)
+                        pnl_pct = pnl_check.get('daily_pnl_pct', 0)
+                        _original_print(f"[DAILY P&L] ⛔ {broker_name} LOCKED ({lock_type}) — BTO blocked | Daily P&L: ${pnl:+,.2f} ({pnl_pct:+.1f}%)")
+                        return {
+                            'success': False,
+                            'message': f'Daily P&L {lock_type} limit reached — BTO blocked',
+                            'broker': broker_name,
+                            '_daily_pnl_blocked': True
+                        }
+                except ImportError:
+                    pass
+                except Exception as pnl_err:
+                    _original_print(f"[{broker_name}] [DAILY P&L] Check error (continuing): {pnl_err}")
+
             # Order Resilience Layer: Pre-flight circuit breaker check
             _resilience_ctx = None
             try:

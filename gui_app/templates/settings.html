@@ -1581,6 +1581,62 @@ input:checked + .slider:before {
                 <input type="number" id="global-max-positions" value="10" min="1" max="100" step="1">
                 <p class="help-text">Maximum number of simultaneous open positions allowed</p>
             </div>
+
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06);">
+                <h5 style="color: #f59e0b; margin-bottom: 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    📊 Daily P&L Limits (Per-Broker)
+                </h5>
+                <p class="help-text" style="margin-bottom: 14px;">
+                    Automatically pause new entries (BTO) when a broker's daily P&L exceeds these limits. STC exits always pass. Enforced per-broker using start-of-day equity snapshots. Resets at market open.
+                </p>
+                
+                <div class="form-group">
+                    <div class="toggle-row">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="daily-pnl-limit-enabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span>Enable Daily P&L Limits</span>
+                    </div>
+                    <p class="help-text">When enabled, BTO orders are blocked on any broker that hits a daily loss or profit limit</p>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>Max Daily Loss ($)</label>
+                        <input type="number" id="daily-loss-limit-dollar" value="0" min="0" step="50" placeholder="0 = No $ limit">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>Max Daily Loss (%)</label>
+                        <input type="number" id="daily-loss-limit-pct" value="0" min="0" max="100" step="0.5" placeholder="0 = No % limit">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>Max Daily Profit ($)</label>
+                        <input type="number" id="daily-profit-limit-dollar" value="0" min="0" step="50" placeholder="0 = No $ target">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>Max Daily Profit (%)</label>
+                        <input type="number" id="daily-profit-limit-pct" value="0" min="0" max="100" step="0.5" placeholder="0 = No % target">
+                    </div>
+                </div>
+                <p class="help-text" style="margin-top: 2px;">Dollar and percentage limits work together — whichever is hit first triggers the lock. Set to 0 to disable that limit type.</p>
+                
+                <div class="form-group" style="margin-top: 10px;">
+                    <label>Warning Threshold (%)</label>
+                    <input type="number" id="daily-pnl-warning-pct" value="80" min="0" max="100" step="5" placeholder="80">
+                    <p class="help-text">Show a warning banner when P&L reaches this percentage of the limit (0 = no warning)</p>
+                </div>
+                
+                <div class="form-group">
+                    <label>Daily Reset Time</label>
+                    <select id="daily-pnl-reset-time" style="width: 100%;">
+                        <option value="09:30">Market Open (9:30 AM ET)</option>
+                        <option value="00:00">Midnight (12:00 AM ET)</option>
+                        <option value="04:00">Pre-Market (4:00 AM ET)</option>
+                    </select>
+                    <p class="help-text">When daily P&L tracking resets for a new trading day</p>
+                </div>
+            </div>
             
             <div class="form-group">
                 <label>Risk Check Interval (seconds)</label>
@@ -3237,6 +3293,13 @@ async function loadConditionalOrdersSettings() {
             document.getElementById('global-daily-loss-limit').value = riskSettings.global_daily_loss_limit || 0;
             document.getElementById('global-max-positions').value = riskSettings.global_max_positions || 10;
             document.getElementById('global-risk-check-interval').value = riskSettings.risk_check_interval_seconds || 2;
+            document.getElementById('daily-pnl-limit-enabled').checked = riskSettings.daily_pnl_limit_enabled === true || riskSettings.daily_pnl_limit_enabled === 1;
+            document.getElementById('daily-loss-limit-dollar').value = riskSettings.daily_loss_limit_dollar || 0;
+            document.getElementById('daily-loss-limit-pct').value = riskSettings.daily_loss_limit_pct || 0;
+            document.getElementById('daily-profit-limit-dollar').value = riskSettings.daily_profit_limit || 0;
+            document.getElementById('daily-profit-limit-pct').value = riskSettings.daily_profit_limit_pct || 0;
+            document.getElementById('daily-pnl-warning-pct').value = riskSettings.daily_pnl_warning_pct || 80;
+            document.getElementById('daily-pnl-reset-time').value = riskSettings.daily_pnl_reset_time || '09:30';
             console.log('[Global Risk] UI updated');
         }
     } catch (error) {
@@ -3263,7 +3326,14 @@ document.getElementById('save-conditional-orders').addEventListener('click', asy
         enable_circuit_breaker: document.getElementById('global-circuit-breaker').checked,
         global_daily_loss_limit: parseFloat(document.getElementById('global-daily-loss-limit').value) || 0,
         global_max_positions: parseInt(document.getElementById('global-max-positions').value) || 10,
-        risk_check_interval_seconds: parseFloat(document.getElementById('global-risk-check-interval').value) || 2
+        risk_check_interval_seconds: parseFloat(document.getElementById('global-risk-check-interval').value) || 2,
+        daily_pnl_limit_enabled: document.getElementById('daily-pnl-limit-enabled').checked,
+        daily_loss_limit_dollar: parseFloat(document.getElementById('daily-loss-limit-dollar').value) || 0,
+        daily_loss_limit_pct: parseFloat(document.getElementById('daily-loss-limit-pct').value) || 0,
+        daily_profit_limit: parseFloat(document.getElementById('daily-profit-limit-dollar').value) || 0,
+        daily_profit_limit_pct: parseFloat(document.getElementById('daily-profit-limit-pct').value) || 0,
+        daily_pnl_warning_pct: parseFloat(document.getElementById('daily-pnl-warning-pct').value) || 80,
+        daily_pnl_reset_time: document.getElementById('daily-pnl-reset-time').value || '09:30'
     };
     
     const inlineStatus = document.getElementById('conditional-orders-save-status');

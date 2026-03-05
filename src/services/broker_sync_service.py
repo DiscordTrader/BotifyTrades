@@ -342,6 +342,16 @@ class BrokerSyncService:
                 timeout=15
             )
             health_monitor.update_broker_status(broker_name, True, account_info=account_info)
+
+            try:
+                from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                pnl_service = get_daily_pnl_service()
+                pnl_service.check_and_reset_if_new_day()
+                pv = float(account_info.get('portfolio_value', 0) or 0)
+                if pv > 0:
+                    pnl_service.update_broker_pnl(broker_name, pv)
+            except Exception as pnl_err:
+                print(f"[SYNC] Daily P&L update error for {broker_name}: {pnl_err}")
         except asyncio.TimeoutError:
             print(f"[SYNC] ⚠️ {broker_name} account info fetch timed out after 15s")
         except asyncio.CancelledError:

@@ -1288,6 +1288,13 @@ def init_db():
             order_timeout_minutes INTEGER DEFAULT 5,
             risk_check_interval_seconds REAL DEFAULT 2,
             acknowledged_v2_features INTEGER DEFAULT 0,
+            daily_pnl_limit_enabled INTEGER DEFAULT 0,
+            daily_profit_limit REAL DEFAULT 0,
+            daily_profit_limit_pct REAL DEFAULT 0,
+            daily_loss_limit_dollar REAL DEFAULT 0,
+            daily_loss_limit_pct REAL DEFAULT 0,
+            daily_pnl_warning_pct REAL DEFAULT 80,
+            daily_pnl_reset_time TEXT DEFAULT '09:30',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -1301,6 +1308,36 @@ def init_db():
     except sqlite3.OperationalError:
         cursor.execute('ALTER TABLE global_risk_settings ADD COLUMN risk_check_interval_seconds REAL DEFAULT 2')
         conn.commit()
+
+    _daily_pnl_columns = {
+        'daily_pnl_limit_enabled': 'INTEGER DEFAULT 0',
+        'daily_profit_limit': 'REAL DEFAULT 0',
+        'daily_profit_limit_pct': 'REAL DEFAULT 0',
+        'daily_loss_limit_dollar': 'REAL DEFAULT 0',
+        'daily_loss_limit_pct': 'REAL DEFAULT 0',
+        'daily_pnl_warning_pct': 'REAL DEFAULT 80',
+        'daily_pnl_reset_time': "TEXT DEFAULT '09:30'",
+    }
+    for col_name, col_type in _daily_pnl_columns.items():
+        try:
+            cursor.execute(f'SELECT {col_name} FROM global_risk_settings LIMIT 1')
+        except sqlite3.OperationalError:
+            cursor.execute(f'ALTER TABLE global_risk_settings ADD COLUMN {col_name} {col_type}')
+            conn.commit()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS daily_pnl_state (
+            broker_name TEXT PRIMARY KEY,
+            lock_type TEXT DEFAULT 'none',
+            locked_at TIMESTAMP,
+            sod_equity REAL DEFAULT 0,
+            current_equity REAL DEFAULT 0,
+            daily_pnl REAL DEFAULT 0,
+            daily_pnl_pct REAL DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            trading_date TEXT
+        )
+    ''')
     
     # Risk events audit log - Immutable record of all risk decisions
     cursor.execute('''
@@ -10531,7 +10568,14 @@ def get_global_risk_settings() -> Dict:
             'global_daily_loss_limit': 0,
             'global_max_positions': 10,
             'order_timeout_minutes': 5,
-            'risk_check_interval_seconds': 2
+            'risk_check_interval_seconds': 2,
+            'daily_pnl_limit_enabled': 0,
+            'daily_profit_limit': 0,
+            'daily_profit_limit_pct': 0,
+            'daily_loss_limit_dollar': 0,
+            'daily_loss_limit_pct': 0,
+            'daily_pnl_warning_pct': 80,
+            'daily_pnl_reset_time': '09:30',
         }
     except Exception as e:
         print(f"[OMS] Error getting global risk settings: {e}")
@@ -10548,7 +10592,11 @@ def update_global_risk_settings(updates: Dict) -> bool:
         'enable_circuit_breaker', 'enable_trailing_execution',
         'global_daily_loss_limit', 'global_max_positions',
         'order_timeout_minutes', 'risk_check_interval_seconds',
-        'acknowledged_v2_features'
+        'acknowledged_v2_features',
+        'daily_pnl_limit_enabled', 'daily_profit_limit',
+        'daily_profit_limit_pct', 'daily_loss_limit_dollar',
+        'daily_loss_limit_pct', 'daily_pnl_warning_pct',
+        'daily_pnl_reset_time',
     ]
     
     try:
@@ -10581,6 +10629,75 @@ def update_global_risk_settings(updates: Dict) -> bool:
         return True
     except Exception as e:
         print(f"[OMS] Error updating global risk settings: {e}")
+        return False
+
+
+def get_daily_pnl_state(broker_name: str) -> Dict:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('SELECT * FROM daily_pnl_state WHERE broker_name = ?', (broker_name.upper(),))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    except Exception as e:
+        print(f"[DAILY P&L] Error getting state for {broker_name}: {e}")
+        return None
+
+
+def get_all_daily_pnl_states() -> list:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('SELECT * FROM daily_pnl_state ORDER BY broker_name')
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[DAILY P&L] Error getting all states: {e}")
+        return []
+
+
+def update_daily_pnl_state(broker_name: str, lock_type: str = 'none',
+                           sod_equity: float = 0, current_equity: float = 0,
+                           daily_pnl: float = 0, daily_pnl_pct: float = 0,
+                           trading_date: str = None, locked_at: str = None) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT INTO daily_pnl_state (broker_name, lock_type, locked_at, sod_equity,
+                current_equity, daily_pnl, daily_pnl_pct, last_updated, trading_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+            ON CONFLICT(broker_name) DO UPDATE SET
+                lock_type = excluded.lock_type,
+                locked_at = CASE WHEN excluded.lock_type != 'none' AND daily_pnl_state.lock_type = 'none'
+                    THEN excluded.locked_at ELSE daily_pnl_state.locked_at END,
+                sod_equity = excluded.sod_equity,
+                current_equity = excluded.current_equity,
+                daily_pnl = excluded.daily_pnl,
+                daily_pnl_pct = excluded.daily_pnl_pct,
+                last_updated = CURRENT_TIMESTAMP,
+                trading_date = excluded.trading_date
+        ''', (broker_name.upper(), lock_type, locked_at, sod_equity,
+              current_equity, daily_pnl, daily_pnl_pct, trading_date))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DAILY P&L] Error updating state for {broker_name}: {e}")
+        return False
+
+
+def reset_daily_pnl_states() -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('DELETE FROM daily_pnl_state')
+        conn.commit()
+        print("[DAILY P&L] All broker P&L states reset for new trading day")
+        return True
+    except Exception as e:
+        print(f"[DAILY P&L] Error resetting states: {e}")
         return False
 
 

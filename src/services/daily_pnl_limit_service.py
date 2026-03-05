@@ -1,0 +1,340 @@
+import threading
+from datetime import datetime
+
+_instance = None
+_instance_lock = threading.Lock()
+
+
+def get_daily_pnl_service():
+    global _instance
+    if _instance is None:
+        with _instance_lock:
+            if _instance is None:
+                _instance = DailyPnLLimitService()
+    return _instance
+
+
+_BROKER_NAME_MAP = {
+    'webull': 'WEBULL', 'webull_live': 'WEBULL', 'webull_paper': 'WEBULL_PAPER',
+    'alpaca': 'ALPACA', 'alpaca_paper': 'ALPACA',
+    'schwab': 'SCHWAB', 'schwab_live': 'SCHWAB',
+    'tastytrade': 'TASTYTRADE', 'tastytrade_live': 'TASTYTRADE', 'tastytrade_paper': 'TASTYTRADE',
+    'robinhood': 'ROBINHOOD',
+    'ibkr': 'IBKR', 'ibkr_live': 'IBKR', 'ibkr_paper': 'IBKR',
+    'questrade': 'QUESTRADE',
+}
+
+
+def _normalize(name):
+    if not name:
+        return name
+    return _BROKER_NAME_MAP.get(name.lower().strip(), name.upper())
+
+
+class DailyPnLLimitService:
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._states = {}
+        self._warned = set()
+        self._last_reset_date = None
+        self._load_from_db()
+
+    def _load_from_db(self):
+        try:
+            from gui_app.database import get_all_daily_pnl_states
+            rows = get_all_daily_pnl_states()
+            with self._lock:
+                for r in rows:
+                    self._states[r['broker_name']] = {
+                        'lock_type': r.get('lock_type', 'none'),
+                        'locked_at': r.get('locked_at'),
+                        'sod_equity': float(r.get('sod_equity', 0)),
+                        'current_equity': float(r.get('current_equity', 0)),
+                        'daily_pnl': float(r.get('daily_pnl', 0)),
+                        'daily_pnl_pct': float(r.get('daily_pnl_pct', 0)),
+                        'trading_date': r.get('trading_date'),
+                    }
+        except Exception as e:
+            print(f"[DAILY P&L] Error loading from DB: {e}")
+
+    def _get_settings(self):
+        try:
+            from gui_app.database import get_global_risk_settings
+            return get_global_risk_settings()
+        except Exception:
+            return {}
+
+    def _today_str(self):
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo('America/New_York')).strftime('%Y-%m-%d')
+
+    def _now_iso(self):
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo('America/New_York')).isoformat()
+
+    def update_broker_pnl(self, broker_name, current_portfolio_value):
+        normalized = _normalize(broker_name)
+        settings = self._get_settings()
+        if not settings.get('daily_pnl_limit_enabled'):
+            return
+
+        from src.services.sod_balance_cache import get_sod_cache
+        sod_cache = get_sod_cache()
+        snapshot = sod_cache.get_snapshot(normalized)
+        if not snapshot:
+            return
+
+        sod_equity = snapshot.get('portfolio_value', 0)
+        if sod_equity <= 0:
+            return
+
+        current_val = float(current_portfolio_value or 0)
+        if current_val <= 0:
+            return
+
+        daily_pnl = current_val - sod_equity
+        daily_pnl_pct = (daily_pnl / sod_equity) * 100.0
+        today = self._today_str()
+
+        with self._lock:
+            state = self._states.get(normalized, {})
+            existing_lock = state.get('lock_type', 'none')
+
+            if existing_lock != 'none' and state.get('trading_date') == today:
+                state['current_equity'] = current_val
+                state['daily_pnl'] = daily_pnl
+                state['daily_pnl_pct'] = daily_pnl_pct
+                self._states[normalized] = state
+                self._persist_state(normalized, state)
+                return
+
+            new_lock = 'none'
+            lock_reason = ''
+
+            loss_limit_dollar = float(settings.get('daily_loss_limit_dollar', 0) or settings.get('global_daily_loss_limit', 0))
+            loss_limit_pct = float(settings.get('daily_loss_limit_pct', 0))
+            profit_limit_dollar = float(settings.get('daily_profit_limit', 0))
+            profit_limit_pct = float(settings.get('daily_profit_limit_pct', 0))
+            warning_pct = float(settings.get('daily_pnl_warning_pct', 80))
+
+            if daily_pnl < 0:
+                if loss_limit_dollar > 0 and abs(daily_pnl) >= loss_limit_dollar:
+                    new_lock = 'loss'
+                    lock_reason = f'Loss ${abs(daily_pnl):,.2f} >= limit ${loss_limit_dollar:,.2f}'
+                elif loss_limit_pct > 0 and abs(daily_pnl_pct) >= loss_limit_pct:
+                    new_lock = 'loss'
+                    lock_reason = f'Loss {abs(daily_pnl_pct):.1f}% >= limit {loss_limit_pct:.1f}%'
+            elif daily_pnl > 0:
+                if profit_limit_dollar > 0 and daily_pnl >= profit_limit_dollar:
+                    new_lock = 'profit'
+                    lock_reason = f'Profit ${daily_pnl:,.2f} >= target ${profit_limit_dollar:,.2f}'
+                elif profit_limit_pct > 0 and daily_pnl_pct >= profit_limit_pct:
+                    new_lock = 'profit'
+                    lock_reason = f'Profit {daily_pnl_pct:.1f}% >= target {profit_limit_pct:.1f}%'
+
+            now_iso = self._now_iso()
+            state = {
+                'lock_type': new_lock,
+                'locked_at': now_iso if new_lock != 'none' else None,
+                'sod_equity': sod_equity,
+                'current_equity': current_val,
+                'daily_pnl': daily_pnl,
+                'daily_pnl_pct': daily_pnl_pct,
+                'trading_date': today,
+            }
+            self._states[normalized] = state
+            state_copy = dict(state)
+
+        self._persist_state(normalized, state_copy)
+
+        if new_lock != 'none':
+            print(f"[DAILY P&L] ⛔ {normalized} LOCKED ({new_lock}) — {lock_reason} | P&L: ${daily_pnl:+,.2f} ({daily_pnl_pct:+.1f}%)")
+            self._log_lock_event(normalized, new_lock, lock_reason, state)
+        else:
+            self._check_warning(normalized, daily_pnl, daily_pnl_pct, settings, warning_pct)
+
+    def _check_warning(self, broker_name, daily_pnl, daily_pnl_pct, settings, warning_pct):
+        if warning_pct <= 0 or warning_pct >= 100:
+            return
+        warn_key = f"{broker_name}_{self._today_str()}"
+        if warn_key in self._warned:
+            return
+
+        loss_limit_dollar = float(settings.get('daily_loss_limit_dollar', 0) or settings.get('global_daily_loss_limit', 0))
+        loss_limit_pct = float(settings.get('daily_loss_limit_pct', 0))
+        profit_limit_dollar = float(settings.get('daily_profit_limit', 0))
+        profit_limit_pct = float(settings.get('daily_profit_limit_pct', 0))
+        threshold_ratio = warning_pct / 100.0
+
+        warned = False
+        if daily_pnl < 0:
+            if loss_limit_dollar > 0 and abs(daily_pnl) >= loss_limit_dollar * threshold_ratio:
+                print(f"[DAILY P&L] ⚠️ {broker_name} WARNING: Loss ${abs(daily_pnl):,.2f} approaching limit ${loss_limit_dollar:,.2f} ({warning_pct:.0f}% threshold)")
+                warned = True
+            elif loss_limit_pct > 0 and abs(daily_pnl_pct) >= loss_limit_pct * threshold_ratio:
+                print(f"[DAILY P&L] ⚠️ {broker_name} WARNING: Loss {abs(daily_pnl_pct):.1f}% approaching limit {loss_limit_pct:.1f}% ({warning_pct:.0f}% threshold)")
+                warned = True
+        elif daily_pnl > 0:
+            if profit_limit_dollar > 0 and daily_pnl >= profit_limit_dollar * threshold_ratio:
+                print(f"[DAILY P&L] ⚠️ {broker_name} WARNING: Profit ${daily_pnl:,.2f} approaching target ${profit_limit_dollar:,.2f} ({warning_pct:.0f}% threshold)")
+                warned = True
+            elif profit_limit_pct > 0 and daily_pnl_pct >= profit_limit_pct * threshold_ratio:
+                print(f"[DAILY P&L] ⚠️ {broker_name} WARNING: Profit {daily_pnl_pct:.1f}% approaching target {profit_limit_pct:.1f}% ({warning_pct:.0f}% threshold)")
+                warned = True
+        if warned:
+            self._warned.add(warn_key)
+
+    def _persist_state(self, broker_name, state):
+        try:
+            from gui_app.database import update_daily_pnl_state
+            update_daily_pnl_state(
+                broker_name=broker_name,
+                lock_type=state.get('lock_type', 'none'),
+                sod_equity=state.get('sod_equity', 0),
+                current_equity=state.get('current_equity', 0),
+                daily_pnl=state.get('daily_pnl', 0),
+                daily_pnl_pct=state.get('daily_pnl_pct', 0),
+                trading_date=state.get('trading_date'),
+                locked_at=state.get('locked_at'),
+            )
+        except Exception as e:
+            print(f"[DAILY P&L] Error persisting state for {broker_name}: {e}")
+
+    def _log_lock_event(self, broker_name, lock_type, reason, state):
+        try:
+            from gui_app.database import log_risk_event
+            log_risk_event(
+                event_type=f'DAILY_PNL_{lock_type.upper()}_LOCK',
+                source='daily_pnl_limit_service',
+                details={
+                    'broker': broker_name,
+                    'lock_type': lock_type,
+                    'reason': reason,
+                    'daily_pnl': state.get('daily_pnl', 0),
+                    'daily_pnl_pct': state.get('daily_pnl_pct', 0),
+                    'sod_equity': state.get('sod_equity', 0),
+                    'current_equity': state.get('current_equity', 0),
+                }
+            )
+        except Exception as e:
+            print(f"[DAILY P&L] Error logging lock event: {e}")
+
+    def check_broker_locked(self, broker_name) -> dict:
+        normalized = _normalize(broker_name)
+        settings = self._get_settings()
+        if not settings.get('daily_pnl_limit_enabled'):
+            return {'locked': False, 'lock_type': None, 'daily_pnl': 0, 'daily_pnl_pct': 0, 'sod_equity': 0, 'current_equity': 0}
+
+        today = self._today_str()
+        with self._lock:
+            state = self._states.get(normalized, {})
+
+        if state.get('trading_date') != today:
+            return {'locked': False, 'lock_type': None, 'daily_pnl': 0, 'daily_pnl_pct': 0, 'sod_equity': 0, 'current_equity': 0}
+
+        lock_type = state.get('lock_type', 'none')
+        return {
+            'locked': lock_type != 'none',
+            'lock_type': lock_type if lock_type != 'none' else None,
+            'daily_pnl': state.get('daily_pnl', 0),
+            'daily_pnl_pct': state.get('daily_pnl_pct', 0),
+            'sod_equity': state.get('sod_equity', 0),
+            'current_equity': state.get('current_equity', 0),
+        }
+
+    def get_all_states(self) -> list:
+        settings = self._get_settings()
+        enabled = bool(settings.get('daily_pnl_limit_enabled'))
+        today = self._today_str()
+        result = []
+        with self._lock:
+            for broker_name, state in self._states.items():
+                if state.get('trading_date') == today:
+                    lock_type = state.get('lock_type', 'none')
+                    result.append({
+                        'broker_name': broker_name,
+                        'locked': lock_type != 'none',
+                        'lock_type': lock_type if lock_type != 'none' else None,
+                        'locked_at': state.get('locked_at'),
+                        'daily_pnl': state.get('daily_pnl', 0),
+                        'daily_pnl_pct': state.get('daily_pnl_pct', 0),
+                        'sod_equity': state.get('sod_equity', 0),
+                        'current_equity': state.get('current_equity', 0),
+                    })
+
+        loss_limit = float(settings.get('daily_loss_limit_dollar', 0) or settings.get('global_daily_loss_limit', 0))
+        loss_limit_pct = float(settings.get('daily_loss_limit_pct', 0))
+        profit_limit = float(settings.get('daily_profit_limit', 0))
+        profit_limit_pct = float(settings.get('daily_profit_limit_pct', 0))
+        warning_pct = float(settings.get('daily_pnl_warning_pct', 80))
+
+        for item in result:
+            pnl = item['daily_pnl']
+            pnl_pct = item['daily_pnl_pct']
+            warning = 'none'
+            if not item['locked']:
+                threshold_ratio = warning_pct / 100.0 if warning_pct > 0 else 0
+                if pnl < 0 and threshold_ratio > 0:
+                    if (loss_limit > 0 and abs(pnl) >= loss_limit * threshold_ratio) or \
+                       (loss_limit_pct > 0 and abs(pnl_pct) >= loss_limit_pct * threshold_ratio):
+                        warning = 'loss'
+                elif pnl > 0 and threshold_ratio > 0:
+                    if (profit_limit > 0 and pnl >= profit_limit * threshold_ratio) or \
+                       (profit_limit_pct > 0 and pnl_pct >= profit_limit_pct * threshold_ratio):
+                        warning = 'profit'
+            item['warning'] = warning
+
+        return {
+            'enabled': enabled,
+            'limits': {
+                'loss_dollar': loss_limit,
+                'loss_pct': loss_limit_pct,
+                'profit_dollar': profit_limit,
+                'profit_pct': profit_limit_pct,
+                'warning_pct': warning_pct,
+            },
+            'brokers': result,
+        }
+
+    def reset_all(self):
+        with self._lock:
+            self._states.clear()
+            self._warned.clear()
+        try:
+            from gui_app.database import reset_daily_pnl_states
+            reset_daily_pnl_states()
+        except Exception as e:
+            print(f"[DAILY P&L] Error resetting DB states: {e}")
+        print("[DAILY P&L] All locks cleared — new trading day")
+
+    def check_and_reset_if_new_day(self):
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        now_et = datetime.now(ZoneInfo('America/New_York'))
+        today = now_et.strftime('%Y-%m-%d')
+        settings = self._get_settings()
+        reset_time_str = settings.get('daily_pnl_reset_time', '09:30')
+        try:
+            parts = reset_time_str.split(':')
+            reset_hour = int(parts[0])
+            reset_minute = int(parts[1]) if len(parts) > 1 else 0
+        except (ValueError, IndexError):
+            reset_hour, reset_minute = 9, 30
+
+        reset_key = f"{today}_{reset_hour}:{reset_minute:02d}"
+        if self._last_reset_date == reset_key:
+            return
+
+        if now_et.hour > reset_hour or (now_et.hour == reset_hour and now_et.minute >= reset_minute):
+            if self._last_reset_date is not None and self._last_reset_date != reset_key:
+                self.reset_all()
+            self._last_reset_date = reset_key

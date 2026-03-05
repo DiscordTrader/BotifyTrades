@@ -798,6 +798,19 @@ class UnfilledOrderChaser:
     async def _chase_entry_order(self, order: TrackedEntryOrder):
         """Chase a stale entry order - cancel and replace with ask price for better fill"""
         try:
+            try:
+                from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                pnl_service = get_daily_pnl_service()
+                pnl_check = pnl_service.check_broker_locked(order.broker_id)
+                if pnl_check.get('locked'):
+                    print(f"[ORDER_CHASER] ⛔ {order.broker_id} daily P&L locked ({pnl_check.get('lock_type')}) — skipping BTO chase for {order.symbol}")
+                    order.status = OrderChaseStatus.PENDING
+                    return
+            except ImportError:
+                pass
+            except Exception:
+                pass
+
             broker = self._get_broker(order.broker_id)
             if not broker:
                 print(f"[ORDER_CHASER] ❌ Broker {order.broker_id} not available for entry chase")
