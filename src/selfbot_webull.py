@@ -1769,7 +1769,7 @@ else:
 
 # Swing Trading Analyzer - Pre-trade technical analysis
 print("[CONFIG] Loading Swing Trading Analyzer settings...")
-ENABLE_SWING_ANALYSIS = cfg.getboolean('swing_analysis', 'enable_swing_analysis', fallback=True)
+ENABLE_SWING_ANALYSIS = cfg.getboolean('swing_analysis', 'enable_swing_analysis', fallback=False)
 SWING_MIN_CONFIDENCE = cfg.getint('swing_analysis', 'min_confidence_score', fallback=60)
 SWING_ANALYSIS_TIMEFRAME = cfg.get('swing_analysis', 'analysis_timeframe', fallback='1d').strip()
 SWING_AUTO_REJECT = cfg.getboolean('swing_analysis', 'auto_reject_low_confidence', fallback=False)
