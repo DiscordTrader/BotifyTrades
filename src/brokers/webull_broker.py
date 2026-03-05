@@ -130,15 +130,6 @@ class WebullBroker(BrokerInterface):
         return getattr(self, '_tokens_valid', True) and self.connected
     
     def _get_extended_hours_enabled(self) -> bool:
-        """Check if extended hours trading is enabled for Webull.
-        
-        Webull outsideRegularTradingHour parameter allows orders to execute during:
-        - Pre-market: 4:00 AM - 9:30 AM ET
-        - After-hours: 4:00 PM - 8:00 PM ET
-        
-        Returns:
-            True if extended hours is enabled
-        """
         try:
             from gui_app.database import get_broker_extended_hours
             enabled = get_broker_extended_hours('webull')
@@ -150,6 +141,34 @@ class WebullBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error checking extended hours setting: {e}")
             return False
+
+    def _resolve_option_enforce(self, expiry: str) -> str:
+        from datetime import datetime, date
+        try:
+            today = date.today()
+            exp_date = None
+            if expiry and '/' in expiry:
+                parts = expiry.split('/')
+                if len(parts) == 2:
+                    m, d = int(parts[0]), int(parts[1])
+                    exp_date = date(today.year, m, d)
+                    if exp_date < today:
+                        exp_date = date(today.year + 1, m, d)
+                elif len(parts) == 3:
+                    m, d, y = int(parts[0]), int(parts[1]), int(parts[2])
+                    if y < 100:
+                        y += 2000
+                    exp_date = date(y, m, d)
+            elif expiry and '-' in expiry:
+                exp_date = date.fromisoformat(expiry[:10])
+
+            if exp_date and exp_date <= today:
+                print(f"[{self.name}] 0DTE/same-day option detected (exp={exp_date}) — using enforce=DAY (Webull cancels GTC on 0DTE)")
+                return 'DAY'
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Could not parse expiry '{expiry}' for enforce check: {e}")
+
+        return 'DAY'
     
     async def _refresh_trade_token(self) -> bool:
         """Refresh the Webull trade token when it expires.
@@ -1046,7 +1065,6 @@ class WebullBroker(BrokerInterface):
             side = 'BUY' if action == 'BTO' else 'SELL'
             opt_type = 'call' if option_type.lower() in ['c', 'call'] else 'put'
             
-            # CRITICAL: optionId is required by Webull API
             if not option_id:
                 return OrderResult(
                     success=False,
@@ -1055,36 +1073,28 @@ class WebullBroker(BrokerInterface):
                     action=action
                 )
             
-            # NOTE: Webull options API may not fully support outsideRegularTradingHour
-            # Options are primarily traded during regular hours, but we include the flag for limit orders
-            extended_hours_enabled = self._get_extended_hours_enabled()
+            enforce = self._resolve_option_enforce(expiry)
             
             def execute_order():
                 if price is None:
-                    # Market order - extended hours not reliably supported
-                    if extended_hours_enabled:
-                        print(f"[{self.name}] ⚠️ Extended hours disabled for MARKET option orders (limited support)")
                     return self.wb.place_order_option(
                         optionId=option_id,
                         lmtPrice=0.0,
                         stpPrice=None,
                         action=side,
                         orderType='MKT',
-                        enforce='GTC',
+                        enforce=enforce,
                         quant=quantity
-                        # outsideRegularTradingHour NOT set for market orders
                     )
                 else:
-                    # Limit order - may support extended hours for liquid options
                     return self.wb.place_order_option(
                         optionId=option_id,
                         lmtPrice=price,
                         stpPrice=None,
                         action=side,
                         orderType='LMT',
-                        enforce='GTC',
-                        quant=quantity,
-                        outsideRegularTradingHour=extended_hours_enabled
+                        enforce=enforce,
+                        quant=quantity
                     )
             
             TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
@@ -1093,7 +1103,7 @@ class WebullBroker(BrokerInterface):
             
             response = None
             for attempt in range(1, MAX_TRANSIENT_RETRIES + 1):
-                print(f"[{self.name}] [Attempt {attempt}] Placing order: {side} {quantity} {symbol} ${strike}{option_type} @ ${price}")
+                print(f"[{self.name}] [Attempt {attempt}] Placing order: {side} {quantity} {symbol} ${strike}{option_type} @ ${price} (enforce={enforce})")
                 response = await asyncio.to_thread(execute_order)
                 
                 if response and response.get('code') == 'trade.token.expire':
