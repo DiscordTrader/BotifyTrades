@@ -543,7 +543,7 @@ def schwab_oauth_status():
         session_verifier = session.get('schwab_pkce_verifier')
 
         if OAuthCallbackHandler.callback_received.is_set():
-            if OAuthCallbackHandler.auth_code and not flow_state['completed'] and session_verifier:
+            if OAuthCallbackHandler.auth_code and not flow_state['completed']:
                 flow_state['in_progress'] = True
                 _set_session_oauth_state(flow_state)
 

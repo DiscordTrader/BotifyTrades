@@ -17,6 +17,7 @@ import socket
 import secrets
 import hashlib
 import base64
+import ipaddress
 import threading
 import tempfile
 from typing import Optional, Tuple, Callable
@@ -190,9 +191,6 @@ class SelfSignedCertificate:
             print("[CERT] Cleaned up temporary certificate files")
 
 
-import ipaddress  # Move to top after initial try block
-
-
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
     """HTTP request handler for OAuth callbacks."""
     
@@ -265,6 +263,9 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
                         for (var i = 0; i < origins.length; i++) {
                             try { window.opener.postMessage(result, origins[i]); } catch(e) {}
                         }
+                        if (window.location.hostname) {
+                            try { window.opener.postMessage(result, window.location.origin); } catch(e) {}
+                        }
                     }
                     setTimeout(function() {
                         try { window.close(); } catch(e) {}
@@ -318,6 +319,9 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
                     if (window.opener) {{
                         for (var i = 0; i < origins.length; i++) {{
                             try {{ window.opener.postMessage(result, origins[i]); }} catch(e) {{}}
+                        }}
+                        if (window.location.hostname) {{
+                            try {{ window.opener.postMessage(result, window.location.origin); }} catch(e) {{}}
                         }}
                     }}
                     setTimeout(function() {{
