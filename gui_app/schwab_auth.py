@@ -543,7 +543,11 @@ def schwab_oauth_status():
         session_verifier = session.get('schwab_pkce_verifier')
 
         if OAuthCallbackHandler.callback_received.is_set():
-            if OAuthCallbackHandler.auth_code and not flow_state['completed']:
+            captured_code = OAuthCallbackHandler.auth_code
+            OAuthCallbackHandler.auth_code = None
+            OAuthCallbackHandler.callback_received.clear()
+
+            if captured_code and not flow_state['completed']:
                 flow_state['in_progress'] = True
                 _set_session_oauth_state(flow_state)
 
@@ -552,7 +556,7 @@ def schwab_oauth_status():
                     redirect_uri = session.get('schwab_redirect_uri', get_local_callback_uri())
 
                     success = exchange_code_for_tokens(
-                        code=OAuthCallbackHandler.auth_code,
+                        code=captured_code,
                         creds=creds,
                         pkce_verifier=session_verifier,
                         redirect_uri_override=redirect_uri
@@ -571,8 +575,6 @@ def schwab_oauth_status():
                     _set_session_oauth_state(flow_state)
 
                     server.stop()
-                    OAuthCallbackHandler.callback_received.clear()
-                    OAuthCallbackHandler.auth_code = None
                     session.pop('schwab_pkce_verifier', None)
                     session.pop('schwab_redirect_uri', None)
                 else:
@@ -910,6 +912,12 @@ def _hot_connect_schwab_broker(creds: dict):
             mode = "PAPER" if creds.get('dry_run', False) else "LIVE"
             print(f"[SCHWAB HOT-CONNECT] ✓ Broker connected ({mode}) - ready for trading")
             
+            if hasattr(_bot_instance, 'sync_service') and _bot_instance.sync_service:
+                bm = getattr(_bot_instance.sync_service, 'broker_manager', None)
+                if bm and hasattr(bm, 'schwab_broker'):
+                    bm.schwab_broker = schwab_broker
+                    print("[SCHWAB HOT-CONNECT] ✓ BrokerManager reference updated - sync service will include Schwab")
+
             try:
                 from gui_app.broker_credentials_service import set_broker_status
                 set_broker_status('schwab', True, 'connected')
