@@ -458,6 +458,40 @@ class QuoteAggregator:
             return cached
         
         try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            webull_hub = get_webull_data_hub()
+            if webull_hub.is_streaming():
+                try:
+                    from gui_app.database import get_db
+                    db_conn = get_db()
+                    cursor = db_conn.execute(
+                        "SELECT option_id FROM trades WHERE symbol=? AND strike=? AND call_put=? AND status='OPEN' LIMIT 1",
+                        (symbol, strike, opt_type)
+                    )
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        hub_data = webull_hub.get_quote_detailed(str(row[0]))
+                        if hub_data and (hub_data.get('last', 0) > 0 or hub_data.get('bid', 0) > 0):
+                            bid = hub_data.get('bid', 0)
+                            ask = hub_data.get('ask', 0)
+                            last = hub_data.get('last', 0)
+                            mid = (bid + ask) / 2 if bid > 0 and ask > 0 else last
+                            result = OptionQuoteResult(
+                                success=True,
+                                bid=bid,
+                                ask=ask,
+                                last=last,
+                                mid=mid,
+                                broker='webull_hub'
+                            )
+                            self.price_cache.set(cache_key, result)
+                            return result
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
             from src.services.schwab_data_hub import get_schwab_data_hub
             schwab_hub = get_schwab_data_hub()
             if schwab_hub.is_streaming():

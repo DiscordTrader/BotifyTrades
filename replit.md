@@ -109,6 +109,22 @@ Key changes:
 - **After-hours gate**: Risk engine suppresses exit orders outside trading hours. Options: regular hours only (9:30-4:00 ET). Stocks: regular + extended hours (4:00 AM - 8:00 PM ET). Logs `⏸️ AFTER HOURS` once per position, re-evaluates when market opens.
 - **SPX/SPXW alias normalization**: Applied across all matching layers — `position_monitor.py` (risk settings lookup, trade ID matching), `selfbot_webull.py` (STC position matching), `live_snapshot.py` (`_make_match_key` canonicalizes SPXW→SPX, NDXP→NDX), `broker_sync_service.py` (`_normalize_symbol` includes NDXP).
 
+## Streaming Hub-First Architecture
+
+All price-fetching services use a **hub-first** approach: check WebullDataHub and SchwabDataHub before making any REST API call. This eliminates unnecessary REST calls and reduces "system busy" errors.
+
+**Services upgraded to hub-first:**
+- **Order Chaser** (`unfilled_order_chaser.py`): `_get_mid_price()` and `_get_entry_chase_price()` check Webull/Schwab hubs first. Exit orders use **bid price** for instant fills. Entry orders use **ask price** for instant fills.
+- **Signal Verification** (`signal_verification.py`): `_get_webull_option_quote()` and `get_stock_market_data()` check hubs before REST. New methods: `_check_streaming_hubs_option()`, `_check_streaming_hubs_stock()`.
+- **Quote Aggregator** (`quote_aggregator.py`): `get_option_quote()` now checks Webull hub for options (was Schwab-only).
+- **Webull Broker** (`webull_broker.py`): `get_account_info()`, `get_positions_detailed()`, `get_pending_orders()` use `_retry_on_busy()` helper — auto-retries on "system busy" errors (2 attempts, 2s delay).
+
+**Exit order pricing strategy:**
+- Risk engine exits (SL/trailing/giveback): **bid price** → fills instantly
+- Profit target exits: **mid price** (narrow spread) or **bid** (wide spread)
+- Order chaser STC replacements: **bid price** → fills instantly
+- Order chaser BTO replacements: **ask price** → fills instantly
+
 ## Signal Parser — Phoenix & JaCOB
 
 - **Phoenix** (`signal_format_registry.py`): Small-cap stock momentum signals. Entry patterns: "SYMBOL over PRICE SL X%", "in SYMBOL PRICE SL X%", "taking position SYMBOL PRICE". Exit patterns: "selling X% here SYMBOL", "leaving X%", "out of SYMBOL", "SL hit with SYMBOL", "SYMBOL SL hit". Handles typos (ocer/ober/iver). Role pings stripped by `parse()` before matching — patterns use `^\s*` anchors, not `<@&\d+>`.

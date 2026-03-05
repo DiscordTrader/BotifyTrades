@@ -501,11 +501,11 @@ class UnfilledOrderChaser:
             
             mid_price = await self._get_mid_price(broker, order)
             if not mid_price:
-                print(f"[ORDER_CHASER] ⚠️ Could not get mid-price for {order.symbol}")
+                print(f"[ORDER_CHASER] ⚠️ Could not get exit price for {order.symbol}")
                 order.status = OrderChaseStatus.PENDING
                 return
             
-            print(f"[ORDER_CHASER]   Mid Price: ${mid_price:.2f}")
+            print(f"[ORDER_CHASER]   Exit Price (bid): ${mid_price:.2f}")
             
             cancel_result = await broker.cancel_order(order.order_id)
             if not cancel_result.get('success'):
@@ -561,13 +561,98 @@ class UnfilledOrderChaser:
             traceback.print_exc()
             order.status = OrderChaseStatus.PENDING
     
+    def _check_streaming_hubs_option(self, symbol: str, strike: float, expiry: str, call_put: str) -> Optional[dict]:
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                try:
+                    from gui_app.database import get_db
+                    db = get_db()
+                    cursor = db.execute(
+                        "SELECT option_id FROM trades WHERE symbol=? AND strike=? AND call_put=? AND status='OPEN' LIMIT 1",
+                        (symbol, strike, call_put)
+                    )
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        data = hub.get_quote_detailed(str(row[0]))
+                        if data and (data.get('bid', 0) > 0 or data.get('ask', 0) > 0):
+                            print(f"[ORDER_CHASER] ⚡ Got option quote from Webull hub (ticker_id={row[0]})")
+                            return data
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            if schwab_hub.is_streaming() and expiry and strike:
+                iso_expiry = expiry
+                if '/' in expiry:
+                    parts = expiry.split('/')
+                    if len(parts) == 3:
+                        iso_expiry = f"20{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                    elif len(parts) == 2:
+                        from datetime import datetime as dt
+                        iso_expiry = f"{dt.now().year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                if '-' in iso_expiry:
+                    opt_type = (call_put or 'C').upper()
+                    if opt_type == 'CALL': opt_type = 'C'
+                    elif opt_type == 'PUT': opt_type = 'P'
+                    from src.brokers.schwab_broker import SchwabBroker
+                    occ = SchwabBroker._build_option_symbol(None, symbol, iso_expiry, strike, opt_type)
+                    data = schwab_hub.get_quote_detailed(occ)
+                    if data and (data.get('bid', 0) > 0 or data.get('ask', 0) > 0):
+                        print(f"[ORDER_CHASER] ⚡ Got option quote from Schwab hub (OCC={occ})")
+                        return data
+        except Exception:
+            pass
+        return None
+
+    def _check_streaming_hubs_stock(self, symbol: str) -> Optional[dict]:
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(symbol)
+                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                    print(f"[ORDER_CHASER] ⚡ Got stock quote from Webull hub")
+                    return data
+        except Exception:
+            pass
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(symbol)
+                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                    print(f"[ORDER_CHASER] ⚡ Got stock quote from Schwab hub")
+                    return data
+        except Exception:
+            pass
+        return None
+
     async def _get_mid_price(self, broker, order: TrackedExitOrder) -> Optional[float]:
-        """Get mid-price between bid and ask for the asset"""
+        """Get exit price for STC orders — uses BID for fast fills.
+        
+        Exit orders are sells: hitting the bid fills instantly.
+        Streaming hubs are checked first (zero API cost), then REST fallback.
+        """
         try:
             if order.asset_type == 'option':
                 if not (order.strike and order.expiry and order.call_put):
-                    print(f"[ORDER_CHASER] ⚠️ Exit option order missing fields: strike={order.strike}, expiry={order.expiry}, call_put={order.call_put} — cannot get option mid-price")
+                    print(f"[ORDER_CHASER] ⚠️ Exit option order missing fields: strike={order.strike}, expiry={order.expiry}, call_put={order.call_put} — cannot get option price")
                     return None
+                hub_data = self._check_streaming_hubs_option(order.symbol, order.strike, order.expiry, order.call_put)
+                if hub_data:
+                    bid = float(hub_data.get('bid', 0) or 0)
+                    ask = float(hub_data.get('ask', 0) or 0)
+                    last = float(hub_data.get('last', 0) or 0)
+                    if bid > 0:
+                        print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}, last ${last:.2f}) — fills instantly")
+                        return bid
+                    elif last > 0:
+                        return last
                 if hasattr(broker, 'get_option_quote'):
                     method = broker.get_option_quote
                     result = method(
@@ -580,16 +665,27 @@ class UnfilledOrderChaser:
                         quote = await result
                     else:
                         quote = result
-                    if quote and quote.get('mid'):
-                        return quote['mid']
-                    elif quote:
+                    if quote:
                         bid = quote.get('bid', 0)
                         ask = quote.get('ask', 0)
-                        if bid and ask:
-                            return round((bid + ask) / 2, 2)
-                        return quote.get('last')
+                        if bid and bid > 0:
+                            print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}) via REST — fills instantly")
+                            return bid
+                        last = quote.get('last')
+                        if last and last > 0:
+                            return last
                 return None
             else:
+                hub_data = self._check_streaming_hubs_stock(order.symbol)
+                if hub_data:
+                    bid = float(hub_data.get('bid', 0) or 0)
+                    last = float(hub_data.get('last', 0) or 0)
+                    if bid > 0:
+                        print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} — fills instantly")
+                        return bid
+                    elif last > 0:
+                        return last
+
                 if hasattr(broker, 'get_quote_with_bid_ask'):
                     method = broker.get_quote_with_bid_ask
                     result = method(order.symbol)
@@ -597,8 +693,11 @@ class UnfilledOrderChaser:
                         quote = await result
                     else:
                         quote = result
-                    if quote and quote.get('mid'):
-                        return quote['mid']
+                    if quote:
+                        bid = quote.get('bid', 0)
+                        if bid and bid > 0:
+                            return bid
+                        return quote.get('last') or quote.get('mid')
                 
                 if hasattr(broker, 'get_quote'):
                     method = broker.get_quote
@@ -611,7 +710,7 @@ class UnfilledOrderChaser:
             
             return None
         except Exception as e:
-            print(f"[ORDER_CHASER] Error getting mid-price: {e}")
+            print(f"[ORDER_CHASER] Error getting exit price: {e}")
             return None
     
     async def _place_replacement_order(
@@ -800,12 +899,29 @@ class UnfilledOrderChaser:
             order.status = OrderChaseStatus.PENDING
     
     async def _get_entry_chase_price(self, broker, order: TrackedEntryOrder) -> Optional[float]:
-        """Get chase price for entry orders - use mid-price or ask for better fills"""
+        """Get chase price for entry orders — uses ASK for fast fills.
+        
+        Entry orders are buys: hitting the ask fills instantly.
+        Streaming hubs checked first (zero API cost), then REST fallback.
+        """
         try:
             if order.asset_type == 'option':
                 if not (order.strike and order.expiry and order.call_put):
                     print(f"[ORDER_CHASER] ⚠️ Option order missing fields: strike={order.strike}, expiry={order.expiry}, call_put={order.call_put} — cannot get option chase price")
                     return None
+                hub_data = self._check_streaming_hubs_option(order.symbol, order.strike, order.expiry, order.call_put)
+                if hub_data:
+                    bid = float(hub_data.get('bid', 0) or 0)
+                    ask = float(hub_data.get('ask', 0) or 0)
+                    last = float(hub_data.get('last', 0) or 0)
+                    if bid > 0 and ask > 0:
+                        mid = round((bid + ask) / 2, 2)
+                        print(f"[ORDER_CHASER]   Hub: Bid ${bid:.2f} | Ask ${ask:.2f} | Mid ${mid:.2f}")
+                        return ask
+                    elif ask > 0:
+                        return ask
+                    elif last > 0:
+                        return last
                 if hasattr(broker, 'get_option_quote'):
                     method = broker.get_option_quote
                     result = method(
@@ -822,14 +938,22 @@ class UnfilledOrderChaser:
                         bid = quote.get('bid', 0)
                         ask = quote.get('ask', 0)
                         if bid and ask:
-                            mid = round((bid + ask) / 2, 2)
-                            print(f"[ORDER_CHASER]   Bid: ${bid:.2f} | Ask: ${ask:.2f} | Mid: ${mid:.2f}")
-                            return mid
+                            print(f"[ORDER_CHASER]   REST: Bid ${bid:.2f} | Ask ${ask:.2f}")
+                            return ask
                         if ask:
                             return ask
                         return quote.get('last')
                 return None
             else:
+                hub_data = self._check_streaming_hubs_stock(order.symbol)
+                if hub_data:
+                    ask = float(hub_data.get('ask', 0) or 0)
+                    last = float(hub_data.get('last', 0) or 0)
+                    if ask > 0:
+                        return ask
+                    elif last > 0:
+                        return last
+
                 if hasattr(broker, 'get_quote_with_bid_ask'):
                     method = broker.get_quote_with_bid_ask
                     result = method(order.symbol)
@@ -838,11 +962,8 @@ class UnfilledOrderChaser:
                     else:
                         quote = result
                     if quote:
-                        bid = quote.get('bid', 0)
                         ask = quote.get('ask', 0)
-                        if bid and ask:
-                            return round((bid + ask) / 2, 2)
-                        if ask:
+                        if ask and ask > 0:
                             return ask
                 
                 if hasattr(broker, 'get_quote'):

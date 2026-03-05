@@ -272,10 +272,24 @@ class WebullBroker(BrokerInterface):
             del self._option_id_cache[cache_key]
         return None
     
+    async def _retry_on_busy(self, func, label: str, max_retries: int = 2, delay: float = 2.0):
+        """Retry a Webull API call if it returns a 'system busy' error."""
+        for attempt in range(1, max_retries + 1):
+            result = await asyncio.to_thread(func)
+            if isinstance(result, dict):
+                msg = str(result.get('msg', '')).lower()
+                code = str(result.get('code', ''))
+                if ('busy' in msg or 'system' in msg) and attempt < max_retries:
+                    print(f"[{self.name}] ⚠️ {label} system busy (attempt {attempt}/{max_retries}) — retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+            return result
+        return result
+
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information"""
         try:
-            account_response = await asyncio.to_thread(self.wb.get_account)
+            account_response = await self._retry_on_busy(self.wb.get_account, 'get_account')
             
             # DEBUG: Print raw response structure first
             print(f"[{self.name}] Raw account response type: {type(account_response)}")
@@ -429,7 +443,7 @@ class WebullBroker(BrokerInterface):
     async def get_positions_detailed(self) -> list:
         """Get detailed positions with full information"""
         try:
-            positions_raw = await asyncio.to_thread(self.wb.get_positions)
+            positions_raw = await self._retry_on_busy(self.wb.get_positions, 'get_positions')
             positions = []
             
             for pos in positions_raw:
@@ -519,7 +533,7 @@ class WebullBroker(BrokerInterface):
             List of order dicts with keys: orderId, symbol, quantity, limit_price, action, status
         """
         try:
-            orders_raw = await asyncio.to_thread(self.wb.get_current_orders)
+            orders_raw = await self._retry_on_busy(self.wb.get_current_orders, 'get_pending_orders')
             orders = []
             
             if not orders_raw:

@@ -109,9 +109,118 @@ class SignalVerificationService:
         if conn and not getattr(conn, '_is_shared', False):
             conn.close()
     
+    def _check_streaming_hubs_option(self, ticker: str, strike: float, expiry: str, 
+                                      direction: str) -> Optional[Dict]:
+        """Check streaming hubs for option quote before REST calls (zero API cost)."""
+        opt_char = 'C' if direction.lower() == 'call' else 'P'
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                try:
+                    from gui_app.database import get_db
+                    db_conn = get_db()
+                    cursor = db_conn.execute(
+                        "SELECT option_id FROM trades WHERE symbol=? AND strike=? AND call_put=? AND status='OPEN' LIMIT 1",
+                        (ticker, strike, opt_char)
+                    )
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        data = hub.get_quote_detailed(str(row[0]))
+                        if data and (data.get('bid', 0) > 0 or data.get('ask', 0) > 0 or data.get('last', 0) > 0):
+                            print(f"[VERIFY] ⚡ Got option quote from Webull streaming hub (zero API cost)")
+                            self.data_source = 'webull_streaming'
+                            return {
+                                'bid': float(data.get('bid', 0) or 0),
+                                'ask': float(data.get('ask', 0) or 0),
+                                'last': float(data.get('last', 0) or 0),
+                                'volume': int(data.get('volume', 0) or 0),
+                                'strike': strike,
+                                'timestamp': datetime.now().isoformat(),
+                                'source': 'webull_streaming'
+                            }
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            if schwab_hub.is_streaming():
+                iso_exp = expiry
+                if '/' in expiry:
+                    try:
+                        exp_date = datetime.strptime(expiry, "%m/%d/%Y")
+                        iso_exp = exp_date.strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
+                if '-' in iso_exp:
+                    from src.brokers.schwab_broker import SchwabBroker
+                    occ = SchwabBroker._build_option_symbol(None, ticker, iso_exp, strike, opt_char)
+                    data = schwab_hub.get_quote_detailed(occ)
+                    if data and (data.get('bid', 0) > 0 or data.get('ask', 0) > 0 or data.get('last', 0) > 0):
+                        print(f"[VERIFY] ⚡ Got option quote from Schwab streaming hub (zero API cost)")
+                        self.data_source = 'schwab_streaming'
+                        return {
+                            'bid': float(data.get('bid', 0) or 0),
+                            'ask': float(data.get('ask', 0) or 0),
+                            'last': float(data.get('last', 0) or 0),
+                            'volume': int(data.get('volume', 0) or 0),
+                            'strike': strike,
+                            'timestamp': datetime.now().isoformat(),
+                            'source': 'schwab_streaming'
+                        }
+        except Exception:
+            pass
+        return None
+
+    def _check_streaming_hubs_stock(self, ticker: str) -> Optional[Dict]:
+        """Check streaming hubs for stock quote before REST calls (zero API cost)."""
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(ticker)
+                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                    print(f"[VERIFY] ⚡ Got stock quote from Webull streaming hub (zero API cost)")
+                    self.data_source = 'webull_streaming'
+                    return {
+                        'bid': float(data.get('bid', 0) or 0),
+                        'ask': float(data.get('ask', 0) or 0),
+                        'last': float(data.get('last', 0) or 0),
+                        'volume': int(data.get('volume', 0) or 0),
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'webull_streaming'
+                    }
+        except Exception:
+            pass
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(ticker)
+                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                    print(f"[VERIFY] ⚡ Got stock quote from Schwab streaming hub (zero API cost)")
+                    self.data_source = 'schwab_streaming'
+                    return {
+                        'bid': float(data.get('bid', 0) or 0),
+                        'ask': float(data.get('ask', 0) or 0),
+                        'last': float(data.get('last', 0) or 0),
+                        'volume': int(data.get('volume', 0) or 0),
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'schwab_streaming'
+                    }
+        except Exception:
+            pass
+        return None
+
     def _get_webull_option_quote(self, ticker: str, strike: float, expiry: str, 
                                   direction: str) -> Optional[Dict]:
-        """Get real-time option quote from Webull"""
+        """Get real-time option quote — streaming hubs first, then Webull REST fallback"""
+        hub_result = self._check_streaming_hubs_option(ticker, strike, expiry, direction)
+        if hub_result:
+            return hub_result
+
         global _webull_client
         if not _webull_client:
             return None
@@ -689,9 +798,14 @@ class SignalVerificationService:
         return None
     
     def get_stock_market_data(self, ticker: str, preferred_broker: str = 'auto') -> Optional[Dict]:
-        """Fetch stock quote - uses preferred broker or auto-selects"""
+        """Fetch stock quote — streaming hubs first, then preferred broker"""
         global _webull_client, _alpaca_broker, _schwab_broker, _ibkr_broker, _robinhood_broker
         
+        if preferred_broker != 'yfinance':
+            hub_result = self._check_streaming_hubs_stock(ticker)
+            if hub_result:
+                return hub_result
+
         if preferred_broker == 'yfinance':
             pass
         elif preferred_broker == 'schwab':
