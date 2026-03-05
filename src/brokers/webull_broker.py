@@ -1058,12 +1058,15 @@ class WebullBroker(BrokerInterface):
         quantity: int,
         price: Optional[float] = None,
         option_id: Optional[str] = None,
-        _skip_internal_retry: bool = False
+        _skip_internal_retry: bool = False,
+        **kwargs
     ) -> OrderResult:
         """Place an options order"""
         try:
             side = 'BUY' if action == 'BTO' else 'SELL'
             opt_type = 'call' if option_type.lower() in ['c', 'call'] else 'put'
+            is_risk_order = kwargs.get('_risk_management_order', False)
+            _fallback_price = kwargs.get('_signal_price_fallback')
             
             if not option_id:
                 return OrderResult(
@@ -1075,8 +1078,30 @@ class WebullBroker(BrokerInterface):
             
             enforce = self._resolve_option_enforce(expiry)
             
+            is_stc = action.upper() in ('STC', 'SELL_TO_CLOSE')
+            use_market = price is None
+            
+            if is_stc and not use_market and is_risk_order:
+                print(f"[{self.name}] ⚡ Risk STC: overriding limit ${price} → MARKET ORDER for fast fill")
+                use_market = True
+            elif is_stc and not use_market:
+                try:
+                    qd = self.wb.get_option_quote(stock=symbol, optionId=option_id)
+                    if qd:
+                        bid_list = qd.get('bidList', [])
+                        current_bid = float(bid_list[0].get('price', 0)) if bid_list else float(qd.get('bidPrice', 0) or 0)
+                        if current_bid > 0:
+                            aggressive_price = max(0.01, round(current_bid * 0.90, 2))
+                            if price > current_bid * 1.5:
+                                print(f"[{self.name}] ⚡ STC price ${price} >> current bid ${current_bid:.2f} — using aggressive limit ${aggressive_price:.2f} for fast fill")
+                                price = aggressive_price
+                            else:
+                                print(f"[{self.name}] STC price ${price} near bid ${current_bid:.2f} — keeping limit")
+                except Exception as e:
+                    print(f"[{self.name}] STC bid check failed ({e}), using original price ${price}")
+            
             def execute_order():
-                if price is None:
+                if use_market:
                     return self.wb.place_order_option(
                         optionId=option_id,
                         lmtPrice=0.0,
