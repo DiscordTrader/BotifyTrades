@@ -389,7 +389,10 @@ class SchwabOAuthCallbackServer:
             True if server started successfully
         """
         if self._running:
-            print("[OAUTH SERVER] Already running")
+            OAuthCallbackHandler.callback_received.clear()
+            OAuthCallbackHandler.auth_code = None
+            OAuthCallbackHandler.error = None
+            print("[OAUTH SERVER] Already running, reset callback state for new flow")
             return True
         
         try:

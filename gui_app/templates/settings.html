@@ -2371,10 +2371,22 @@ let _schwabOAuthPollInterval = null;
 document.getElementById('connect-schwab').addEventListener('click', async () => {
     const connectBtn = document.getElementById('connect-schwab');
     const msg = document.getElementById('save-message');
+
+    if (_schwabOAuthPollInterval) {
+        clearInterval(_schwabOAuthPollInterval);
+        _schwabOAuthPollInterval = null;
+    }
+    if (_schwabOAuthPopup && !_schwabOAuthPopup.closed) {
+        try { _schwabOAuthPopup.close(); } catch(e) {}
+    }
+    _schwabOAuthPopup = null;
+
     connectBtn.disabled = true;
     connectBtn.textContent = '⏳ Connecting...';
 
     try {
+        await fetch('/schwab/oauth-reset', { method: 'POST' }).catch(function() {});
+
         const response = await fetch('/schwab/auth-url');
         const data = await response.json();
 
