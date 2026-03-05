@@ -14581,7 +14581,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     except Exception as notify_err:
                         _original_print(f"[NOTIFY] Warning: Could not send order placed notification: {notify_err}", flush=True)
-                
+
+                    if action == 'BTO':
+                        try:
+                            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                            import threading
+                            def _post_bto_pnl_check(bn=broker_name, bi=broker_instance):
+                                try:
+                                    import asyncio as _aio
+                                    pnl_svc = get_daily_pnl_service()
+                                    ai = None
+                                    if hasattr(bi, 'get_account_info'):
+                                        loop = _aio.new_event_loop()
+                                        try:
+                                            coro = bi.get_account_info()
+                                            if _aio.iscoroutine(coro):
+                                                ai = loop.run_until_complete(coro)
+                                            else:
+                                                ai = coro
+                                        finally:
+                                            loop.close()
+                                    if ai:
+                                        pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
+                                        if pv > 0:
+                                            _original_print(f"[DAILY_PNL] Post-BTO refresh for {bn} (equity=${pv:,.2f})")
+                                            pnl_svc.update_broker_pnl(bn, pv)
+                                except Exception as ex:
+                                    _original_print(f"[DAILY_PNL] Post-BTO refresh error: {ex}")
+                            threading.Thread(target=_post_bto_pnl_check, daemon=True).start()
+                        except ImportError:
+                            pass
+
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
                     resp = {
@@ -14749,7 +14779,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     except Exception as notify_err:
                         _original_print(f"[NOTIFY] Warning: Could not send stock order placed notification: {notify_err}", flush=True)
-            
+
+                    if action == 'BTO':
+                        try:
+                            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                            import threading
+                            def _post_stock_bto_pnl(bn=broker_name, bi=broker_instance):
+                                try:
+                                    import asyncio as _aio
+                                    pnl_svc = get_daily_pnl_service()
+                                    ai = None
+                                    if hasattr(bi, 'get_account_info'):
+                                        loop = _aio.new_event_loop()
+                                        try:
+                                            coro = bi.get_account_info()
+                                            if _aio.iscoroutine(coro):
+                                                ai = loop.run_until_complete(coro)
+                                            else:
+                                                ai = coro
+                                        finally:
+                                            loop.close()
+                                    if ai:
+                                        pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
+                                        if pv > 0:
+                                            _original_print(f"[DAILY_PNL] Post-BTO refresh for {bn} (equity=${pv:,.2f})")
+                                            pnl_svc.update_broker_pnl(bn, pv)
+                                except Exception as ex:
+                                    _original_print(f"[DAILY_PNL] Post-BTO refresh error: {ex}")
+                            threading.Thread(target=_post_stock_bto_pnl, daemon=True).start()
+                        except ImportError:
+                            pass
+
             # Save pending order metadata for execution tracking
             if resp.get('success') or resp.get('orderId'):
                 order_id = resp.get('orderId') or resp.get('order_id')

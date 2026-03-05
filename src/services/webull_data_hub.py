@@ -276,11 +276,14 @@ class WebullDataHub:
         with self._orders_lock:
             self._orders_time = 0
 
+    def invalidate_account(self):
+        with self._account_lock:
+            self._account_time = 0
+
     def invalidate_all(self):
         self.invalidate_positions()
         self.invalidate_orders()
-        with self._account_lock:
-            self._account_time = 0
+        self.invalidate_account()
 
     def get_stats(self) -> Dict[str, Any]:
         with self._quotes_lock:

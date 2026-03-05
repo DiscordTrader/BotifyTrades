@@ -121,6 +121,38 @@ class WebullStreamingClient:
                     'raw': data
                 })
 
+                if order_status == 'Filled':
+                    self._hub.invalidate_account()
+                    try:
+                        from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                        broker_name = getattr(self._broker, 'name', 'WEBULL')
+                        broker_ref = self._broker
+                        def _pnl_refresh(bn=broker_name, bi=broker_ref):
+                            try:
+                                import asyncio as _aio
+                                pnl_svc = get_daily_pnl_service()
+                                ai = None
+                                if hasattr(bi, 'get_account_info'):
+                                    loop = _aio.new_event_loop()
+                                    try:
+                                        coro = bi.get_account_info()
+                                        if _aio.iscoroutine(coro):
+                                            ai = loop.run_until_complete(coro)
+                                        else:
+                                            ai = coro
+                                    finally:
+                                        loop.close()
+                                if ai:
+                                    pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
+                                    if pv > 0:
+                                        print(f"[DAILY_PNL] Real-time fill detected for {bn} — refreshing P&L (equity=${pv:,.2f})")
+                                        pnl_svc.update_broker_pnl(bn, pv)
+                            except Exception as ex:
+                                print(f"[DAILY_PNL] Real-time P&L refresh error: {ex}")
+                        threading.Thread(target=_pnl_refresh, daemon=True).start()
+                    except ImportError:
+                        pass
+
         except Exception as e:
             print(f"[WEBULL_STREAM] Error processing order message: {e}")
 
