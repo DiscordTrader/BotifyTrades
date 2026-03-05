@@ -950,19 +950,80 @@ class SchwabBroker(BrokerInterface):
             
             instruction = "BUY_TO_OPEN" if action.upper() == "BTO" else "SELL_TO_CLOSE"
             
+            _fallback_price = kwargs.get('_signal_price_fallback')
+            is_stc = action.upper() in ('STC', 'SELL_TO_CLOSE')
+            
             if not price:
                 print(f"[{self.name}] ⚠️ Options require LIMIT orders on Schwab - no price provided, attempting mid-price lookup")
                 try:
                     quote = await self.get_option_quote(symbol, strike, expiry_formatted, option_type)
                     if quote and quote.get('bid') and quote.get('ask'):
                         mid_price = round((quote['bid'] + quote['ask']) / 2, 2)
-                        price = mid_price
-                        print(f"[{self.name}] ✓ Using mid-price ${mid_price:.2f} (bid: ${quote['bid']:.2f}, ask: ${quote['ask']:.2f})")
+                        bid_price = quote['bid']
+                        
+                        if _fallback_price and _fallback_price > 0 and mid_price > _fallback_price * 5:
+                            print(f"[{self.name}] ⚠️ SANITY CHECK FAILED: mid-price ${mid_price:.2f} is >5x fallback ${_fallback_price:.4f} — stale hub data?")
+                            print(f"[{self.name}] Bypassing hub, fetching fresh REST quote...")
+                            fresh_quote = None
+                            try:
+                                if await self._ensure_valid_token():
+                                    option_sym_fresh = self._build_option_symbol(symbol, expiry_formatted, strike, call_put)
+                                    resp = await self._make_request(
+                                        'GET',
+                                        f"https://api.schwabapi.com/marketdata/v1/quotes",
+                                        params={'symbols': option_sym_fresh}
+                                    )
+                                    if resp.status_code == 200:
+                                        data = resp.json()
+                                        if option_sym_fresh in data:
+                                            q = data[option_sym_fresh].get('quote', {})
+                                            fresh_bid = float(q.get('bidPrice', 0) or 0)
+                                            fresh_ask = float(q.get('askPrice', 0) or 0)
+                                            if fresh_bid > 0 or fresh_ask > 0:
+                                                fresh_quote = {'bid': fresh_bid, 'ask': fresh_ask}
+                                                print(f"[{self.name}] ✓ Fresh REST quote: bid=${fresh_bid:.2f}, ask=${fresh_ask:.2f}")
+                                            else:
+                                                print(f"[{self.name}] ⚠️ REST quote returned zero bid/ask")
+                            except Exception as rest_err:
+                                print(f"[{self.name}] ⚠️ Fresh REST quote failed: {rest_err}")
+                            
+                            if fresh_quote and fresh_quote['bid'] > 0:
+                                if is_stc:
+                                    price = max(0.01, round(fresh_quote['bid'] * 0.90, 2))
+                                    print(f"[{self.name}] ✓ STC aggressive price: bid ${fresh_quote['bid']:.2f} × 0.90 = ${price:.2f}")
+                                else:
+                                    price = round((fresh_quote['bid'] + fresh_quote['ask']) / 2, 2)
+                                    print(f"[{self.name}] ✓ Using fresh mid-price ${price:.2f}")
+                            elif _fallback_price:
+                                if is_stc:
+                                    price = max(0.01, round(_fallback_price * 0.80, 2))
+                                    print(f"[{self.name}] ✓ STC using fallback: ${_fallback_price:.4f} × 0.80 = ${price:.2f}")
+                                else:
+                                    price = round(_fallback_price * 1.03, 2)
+                                    print(f"[{self.name}] ✓ BTO using fallback: ${_fallback_price:.4f} × 1.03 = ${price:.2f}")
+                        elif is_stc:
+                            price = max(0.01, round(bid_price * 0.90, 2))
+                            print(f"[{self.name}] ✓ STC aggressive limit: bid ${bid_price:.2f} × 0.90 = ${price:.2f} (mid was ${mid_price:.2f})")
+                        else:
+                            price = mid_price
+                            print(f"[{self.name}] ✓ Using mid-price ${mid_price:.2f} (bid: ${quote['bid']:.2f}, ask: ${quote['ask']:.2f})")
                     elif quote and quote.get('last'):
                         price = quote['last']
                         print(f"[{self.name}] ✓ Using last price ${price:.2f}")
+                    elif _fallback_price and _fallback_price > 0:
+                        if is_stc:
+                            price = max(0.01, round(_fallback_price * 0.80, 2))
+                        else:
+                            price = round(_fallback_price * 1.03, 2)
+                        print(f"[{self.name}] ✓ No quote available, using fallback-based price ${price:.2f}")
                 except Exception as quote_err:
                     print(f"[{self.name}] ⚠️ Quote lookup failed: {quote_err}")
+                    if _fallback_price and _fallback_price > 0:
+                        if is_stc:
+                            price = max(0.01, round(_fallback_price * 0.80, 2))
+                        else:
+                            price = round(_fallback_price * 1.03, 2)
+                        print(f"[{self.name}] ✓ Using fallback price after error: ${price:.2f}")
             
             order_type = "LIMIT" if price else "MARKET"
             

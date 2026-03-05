@@ -14520,6 +14520,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _option_kwargs['_trigger_price'] = signal.get('_trigger_price')
                         _option_kwargs['_risk_management_order'] = signal.get('_risk_management_order', False)
                         _option_kwargs['_conditional_expires_at'] = signal.get('_conditional_expires_at')
+                    if _signal_price_fallback and _accepts_kwargs:
+                        _option_kwargs['_signal_price_fallback'] = _signal_price_fallback
                     if 'WEBULL' in broker_upper:
                         _option_kwargs['option_id'] = signal.get('option_id')
                         _option_kwargs['_risk_management_order'] = signal.get('_risk_management_order', False)
