@@ -6665,7 +6665,7 @@ class SelfClient(discord.Client):
             
             # Add signal metadata
             signal['channel_id'] = channel_id
-            signal['received_at'] = datetime.now()
+            signal['received_at'] = arrived_at or datetime.now()
             
             # Get signal ID from database (last inserted)
             conn = self.db.get_connection() if hasattr(self.db, 'get_connection') else None
@@ -9136,6 +9136,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
     async def on_message(self, message: discord.Message):
         """Overridden to add gateway-level message event diagnostics."""
+        message_arrived_at = datetime.now()
         import time as _time_mod
         self._last_message_time = _time_mod.time()
         is_configured = message.channel.id in CHANNEL_IDS
@@ -9145,7 +9146,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if not self._gateway_diag_printed:
             self._gateway_diag_printed = True
             _original_print(f"[Discord GATEWAY] ✓ First on_message event! Channel: {message.channel.id} Author: {message.author.name}", flush=True)
-        await self._process_message(message)
+        await self._process_message(message, arrived_at=message_arrived_at)
 
     async def on_ready(self):
         global _discord_ready_event  # Declare at function start for early signaling
@@ -10221,7 +10222,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             import traceback
             traceback.print_exc()
 
-    async def _process_message(self, message: discord.Message):
+    async def _process_message(self, message: discord.Message, arrived_at=None):
         # Generate trace ID for complete signal lifecycle tracking
         trace_id = f"T{message.id % 100000:05d}"  # Short trace ID based on message ID
         
