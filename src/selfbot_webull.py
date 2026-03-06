@@ -2005,21 +2005,16 @@ class WebullBroker:
         A 10s timeout prevents hanging if the Webull API doesn't respond.
         """
         import time as _pf_time
-        print(f"[PREFETCH] ENTERED _prefetch_option_id for {signal.get('symbol')}", flush=True)
         try:
             if signal.get('asset') != 'option':
-                print(f"[PREFETCH] Early return: asset={signal.get('asset')} != option", flush=True)
                 return
             if signal.get('action', '').upper() not in ('BTO', 'STC', 'BTC'):
-                print(f"[PREFETCH] Early return: action={signal.get('action')} not in BTO/STC/BTC", flush=True)
                 return
             symbol = signal.get('symbol')
             strike = signal.get('strike')
             opt_type = signal.get('opt_type')
             expiry = signal.get('expiry')
-            print(f"[PREFETCH] Fields: symbol={symbol}, strike={strike}, opt_type={opt_type}, expiry={expiry}", flush=True)
             if not all([symbol, strike, opt_type, expiry]):
-                print(f"[PREFETCH] Early return: missing field(s)", flush=True)
                 return
 
             if symbol.upper() in self._PREFETCH_SKIP_SYMBOLS:
@@ -8977,8 +8972,12 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                 signal['_use_market_order'] = True
                                 print(f"[ALERT PARSER] ✓ Market order enabled for BTO (channel entry_order_mode=market)")
                             
-                            if signal.get('asset') == 'option' and not signal.get('option_id'):
-                                await self._prefetch_option_id(signal)
+                            _alert_sym = (signal.get('symbol') or '').upper()
+                            if signal.get('asset') == 'option' and not signal.get('option_id') and _alert_sym not in self._PREFETCH_SKIP_SYMBOLS:
+                                try:
+                                    await asyncio.wait_for(self._prefetch_option_id(signal), timeout=10.0)
+                                except (asyncio.TimeoutError, Exception):
+                                    pass
                             import time as _tmod
                             signal['_parsed_at'] = _tmod.monotonic()
                             signal['_queued_at'] = _tmod.monotonic()
@@ -13501,27 +13500,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[QUEUE] ⛔ Signal SKIPPED - already rejected (see Dashboard)")
                     return
                 
-                print(f"[DEBUG] STEP-1: NDX reject check passed", flush=True)
-                
                 _pre_q_sync = getattr(self, '_sync_service', None)
                 if _pre_q_sync:
                     _pre_q_sync.pause_for_order()
                 
-                print(f"[DEBUG] STEP-2: Sync paused, about to prefetch. asset={opt.get('asset')}, option_id={opt.get('option_id')}", flush=True)
-                
-                if opt.get('asset') == 'option' and not opt.get('option_id'):
-                    print(f"[DEBUG] STEP-3: Calling _prefetch_option_id for {opt.get('symbol')}", flush=True)
-                    await self._prefetch_option_id(opt)
-                    print(f"[DEBUG] STEP-3b: _prefetch_option_id returned", flush=True)
-                else:
-                    print(f"[DEBUG] STEP-3: Skipping prefetch (asset={opt.get('asset')}, option_id={opt.get('option_id')})", flush=True)
+                _skip_syms = self._PREFETCH_SKIP_SYMBOLS
+                _sym_upper = (opt.get('symbol') or '').upper()
+                if opt.get('asset') == 'option' and not opt.get('option_id') and _sym_upper not in _skip_syms:
+                    try:
+                        await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
+                    except asyncio.TimeoutError:
+                        import sys as _sys
+                        _sys.stderr.write(f"[PREFETCH] ⚠️ Timed out for {_sym_upper} — proceeding without cache\n")
+                        _sys.stderr.flush()
+                    except Exception as _pf_err:
+                        import sys as _sys
+                        _sys.stderr.write(f"[PREFETCH] Error (non-fatal): {_pf_err}\n")
+                        _sys.stderr.flush()
+                elif _sym_upper in _skip_syms:
+                    import sys as _sys
+                    _sys.stderr.write(f"[PREFETCH] ⚡ Skipping Webull lookup for {_sym_upper} (index option)\n")
+                    _sys.stderr.flush()
 
                 import time as _tmod
                 opt['_parsed_at'] = _tmod.monotonic()
                 opt['_queued_at'] = _tmod.monotonic()
-                print(f"[DEBUG] STEP-4: About to queue.put, queue exists={self.order_queue is not None}", flush=True)
                 await self.order_queue.put(opt)
-                print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
                 print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
             
             # Paper trading - only queue separately if execute_enabled is False
@@ -13722,8 +13726,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt['channel_id'] = str(message.channel.id)
                                 opt['message_id'] = str(message.id)
                                 opt['author'] = author_name
-                            if opt.get('asset') == 'option' and not opt.get('option_id'):
-                                await self._prefetch_option_id(opt)
+                            _te_sym = (opt.get('symbol') or '').upper()
+                            if opt.get('asset') == 'option' and not opt.get('option_id') and _te_sym not in self._PREFETCH_SKIP_SYMBOLS:
+                                try:
+                                    await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
+                                except (asyncio.TimeoutError, Exception):
+                                    pass
                             import time as _tmod
                             opt['_parsed_at'] = _tmod.monotonic()
                             opt['_queued_at'] = _tmod.monotonic()
