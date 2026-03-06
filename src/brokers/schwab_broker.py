@@ -187,6 +187,7 @@ class SchwabBroker(BrokerInterface):
                     self.refresh_token = token_manager.get_refresh_token()
                     if token_manager._token_data:
                         self.token_expiry = token_manager._token_data.get('token_expiry')
+                    token_manager.start_auto_refresh()
                     print(f"[{self.name}] Tokens loaded via token manager (auto-refresh enabled)")
                     return True
             except (ImportError, Exception) as e:
@@ -207,7 +208,7 @@ class SchwabBroker(BrokerInterface):
         return False
     
     def _save_tokens(self):
-        """Save tokens to file"""
+        """Save tokens to file and sync with token manager"""
         try:
             data = {
                 'access_token': self.access_token,
@@ -216,6 +217,13 @@ class SchwabBroker(BrokerInterface):
             }
             with open(self.token_file, 'w') as f:
                 json.dump(data, f)
+            try:
+                from gui_app.schwab_auth import get_token_manager
+                tm = get_token_manager()
+                expires_in = int(self.token_expiry - datetime.now().timestamp()) if self.token_expiry else 1800
+                tm.save_tokens(self.access_token, self.refresh_token, max(expires_in, 60))
+            except Exception:
+                pass
             print(f"[{self.name}] Tokens saved to {self.token_file}")
         except Exception as e:
             print(f"[{self.name}] Error saving tokens: {e}")
