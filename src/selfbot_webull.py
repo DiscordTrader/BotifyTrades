@@ -13505,29 +13505,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if _pre_q_sync:
                     _pre_q_sync.pause_for_order()
                 
-                _original_print(f"[FLOW] B: Sync paused, checking prefetch skip", flush=True)
-                
-                _skip_syms = self._PREFETCH_SKIP_SYMBOLS
-                _sym_upper = (opt.get('symbol') or '').upper()
-                if opt.get('asset') == 'option' and not opt.get('option_id') and _sym_upper not in _skip_syms:
-                    _original_print(f"[FLOW] C1: Prefetching {_sym_upper}", flush=True)
-                    try:
-                        await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
-                    except asyncio.TimeoutError:
-                        _original_print(f"[PREFETCH] ⚠️ Timed out for {_sym_upper} — proceeding without cache", flush=True)
-                    except Exception as _pf_err:
-                        _original_print(f"[PREFETCH] Error (non-fatal): {_pf_err}", flush=True)
-                elif _sym_upper in _skip_syms:
-                    _original_print(f"[FLOW] C2: Skipping prefetch for {_sym_upper} (index option)", flush=True)
-                else:
-                    _original_print(f"[FLOW] C3: No prefetch needed (asset={opt.get('asset')})", flush=True)
-
-                _original_print(f"[FLOW] D: About to queue.put", flush=True)
-                import time as _tmod
-                opt['_parsed_at'] = _tmod.monotonic()
-                opt['_queued_at'] = _tmod.monotonic()
-                await self.order_queue.put(opt)
-                _original_print(f"[QUEUE] ✅ Signal queued for LIVE execution: {opt.get('action')} {opt.get('symbol')}", flush=True)
+                try:
+                    _sym_upper = (opt.get('symbol') or '').upper()
+                    _skip_syms = getattr(self.__class__, '_PREFETCH_SKIP_SYMBOLS', set())
+                    if opt.get('asset') == 'option' and not opt.get('option_id') and _sym_upper not in _skip_syms:
+                        try:
+                            await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
+                        except (asyncio.TimeoutError, Exception) as _pf_err:
+                            _original_print(f"[PREFETCH] ⚠️ {_sym_upper}: {_pf_err}", flush=True)
+                    
+                    import time as _tmod
+                    opt['_parsed_at'] = _tmod.monotonic()
+                    opt['_queued_at'] = _tmod.monotonic()
+                    await self.order_queue.put(opt)
+                    _original_print(f"[QUEUE] ✅ Signal queued: {opt.get('action')} {opt.get('symbol')}", flush=True)
+                except Exception as _q_err:
+                    _original_print(f"[QUEUE] ❌ FAILED to queue {opt.get('symbol')}: {_q_err}", flush=True)
+                    import traceback as _tb
+                    _tb.print_exc()
             
             # Paper trading - only queue separately if execute_enabled is False
             # If execute_enabled is True, multi-broker execution already handles paper brokers via enabled_brokers
