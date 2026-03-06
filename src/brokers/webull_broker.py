@@ -95,8 +95,17 @@ class WebullBroker(BrokerInterface):
             from src.services.webull_data_hub import get_webull_data_hub
             self._data_hub = get_webull_data_hub()
             self._streaming_client = WebullStreamingClient(self)
+            self._streaming_client.set_wb_instance(self.wb)
             self._streaming_client.start()
             print(f"[{self.name}] ✓ Streaming client started")
+            try:
+                from src.services.price_monitor_service import get_price_monitor
+                pm = get_price_monitor()
+                if pm and hasattr(pm, 'set_streaming_client'):
+                    pm.set_streaming_client(self._streaming_client)
+                    print(f"[{self.name}] ✓ Streaming client wired to PriceMonitor")
+            except Exception:
+                pass
         except Exception as e:
             print(f"[{self.name}] ⚠️ Could not start streaming: {e}")
             self._streaming_client = None

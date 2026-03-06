@@ -234,7 +234,20 @@ class TradeTracker:
                             print(f"[TRACKER] Unknown option type: {trade.option_type}")
                             return None
                         
-                        # Get option chain for the symbol
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            import time as _time
+                            hub = get_webull_data_hub()
+                            cached_oid = hub.get_option_ticker_id(trade.symbol, float(trade.strike), expire_date_iso, trade.option_type.upper()[:1])
+                            if cached_oid:
+                                hub_quote = hub.get_quote(str(cached_oid))
+                                if hub_quote and hub_quote.timestamp and (_time.time() - hub_quote.timestamp) < 10:
+                                    if hub_quote.last > 0:
+                                        print(f"[TRACKER] ✓ Hub-cached option price: {trade.symbol} ${trade.strike}{trade.option_type} = ${hub_quote.last}")
+                                        return hub_quote.last
+                        except Exception:
+                            pass
+
                         data = wb.get_options_by_strike_and_expire_date(
                             stock=trade.symbol,
                             expireDate=expire_date_iso,  # Format: YYYY-MM-DD
@@ -256,8 +269,17 @@ class TradeTracker:
                 
                 return await asyncio.to_thread(fetch_option_price)
             else:
-                # For stocks, get current quote
                 def fetch_stock_price():
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        import time as _time
+                        hub = get_webull_data_hub()
+                        hub_quote = hub.get_quote(trade.symbol)
+                        if hub_quote and hub_quote.timestamp and (_time.time() - hub_quote.timestamp) < 10:
+                            if hub_quote.last > 0:
+                                return hub_quote.last
+                    except Exception:
+                        pass
                     quote = wb.get_quote(trade.symbol)
                     if quote:
                         return float(quote.get('close', 0) or quote.get('last', 0) or 0)

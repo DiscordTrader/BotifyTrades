@@ -13,9 +13,13 @@ Architecture:
 """
 
 import time
+import asyncio
 import threading
-from typing import Dict, Optional, List, Any, Callable, Set
+import logging
+from typing import Dict, Optional, List, Any, Callable, Set, Tuple
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,6 +86,14 @@ class WebullDataHub:
         self.ORDER_CACHE_TTL = 30
         self.ACCOUNT_CACHE_TTL = 60
         self.QUOTE_STALE_THRESHOLD = 120
+        self.OPTION_ID_TTL = 600
+
+        self._option_id_cache: Dict[str, Tuple[int, float]] = {}
+        self._option_id_lock = threading.Lock()
+
+        self._refresh_positions_lock = asyncio.Lock()
+        self._refresh_account_lock = asyncio.Lock()
+        self._refresh_orders_lock = asyncio.Lock()
 
         self._risk_eval_requested = threading.Event()
 
@@ -209,9 +221,10 @@ class WebullDataHub:
 
         self._emit('positions_updated', positions)
 
-    def get_positions(self) -> Optional[List[Dict[str, Any]]]:
+    def get_positions(self, max_age_seconds: Optional[int] = None) -> Optional[List[Dict[str, Any]]]:
+        ttl = max_age_seconds if max_age_seconds is not None else self.POSITION_CACHE_TTL
         with self._positions_lock:
-            if self._positions_time > 0 and (time.time() - self._positions_time) < self.POSITION_CACHE_TTL:
+            if self._positions_time > 0 and (time.time() - self._positions_time) < ttl:
                 return list(self._positions)
         return None
 
@@ -225,9 +238,10 @@ class WebullDataHub:
             self._orders_time = time.time()
         self._emit('orders_updated', orders)
 
-    def get_pending_orders(self) -> Optional[List[Dict[str, Any]]]:
+    def get_pending_orders(self, max_age_seconds: Optional[int] = None) -> Optional[List[Dict[str, Any]]]:
+        ttl = max_age_seconds if max_age_seconds is not None else self.ORDER_CACHE_TTL
         with self._orders_lock:
-            if self._orders_time > 0 and (time.time() - self._orders_time) < self.ORDER_CACHE_TTL:
+            if self._orders_time > 0 and (time.time() - self._orders_time) < ttl:
                 return list(self._pending_orders)
         return None
 
@@ -237,9 +251,10 @@ class WebullDataHub:
             self._account_time = time.time()
         self._emit('account_updated', info)
 
-    def get_account_info(self) -> Optional[Dict[str, Any]]:
+    def get_account_info(self, max_age_seconds: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        ttl = max_age_seconds if max_age_seconds is not None else self.ACCOUNT_CACHE_TTL
         with self._account_lock:
-            if self._account_time > 0 and (time.time() - self._account_time) < self.ACCOUNT_CACHE_TTL:
+            if self._account_time > 0 and (time.time() - self._account_time) < ttl:
                 return dict(self._account_info)
         return None
 
@@ -284,6 +299,57 @@ class WebullDataHub:
         self.invalidate_positions()
         self.invalidate_orders()
         self.invalidate_account()
+
+    def get_option_ticker_id(self, symbol: str, strike: float, expiry: str, side: str) -> Optional[int]:
+        key = f"{symbol.upper()}_{float(strike):.2f}_{expiry}_{side.upper()}"
+        with self._option_id_lock:
+            entry = self._option_id_cache.get(key)
+            if entry and (time.time() - entry[1]) < self.OPTION_ID_TTL:
+                return entry[0]
+            if entry:
+                del self._option_id_cache[key]
+        return None
+
+    def set_option_ticker_id(self, symbol: str, strike: float, expiry: str, side: str, ticker_id: int):
+        key = f"{symbol.upper()}_{float(strike):.2f}_{expiry}_{side.upper()}"
+        with self._option_id_lock:
+            self._option_id_cache[key] = (ticker_id, time.time())
+
+    async def refresh_positions_once(self, wb_instance):
+        if self._refresh_positions_lock.locked():
+            return
+        async with self._refresh_positions_lock:
+            try:
+                positions = await asyncio.to_thread(wb_instance.get_positions)
+                if positions is not None:
+                    self.update_positions(positions)
+                    print("[WEBULL_HUB] Positions refreshed after order event")
+            except Exception as e:
+                logger.warning(f"Position refresh after order event failed: {e}")
+
+    async def refresh_account_once(self, wb_instance):
+        if self._refresh_account_lock.locked():
+            return
+        async with self._refresh_account_lock:
+            try:
+                account = await asyncio.to_thread(wb_instance.get_account)
+                if account and isinstance(account, dict):
+                    self.update_account_info(account)
+                    print("[WEBULL_HUB] Account refreshed after order event")
+            except Exception as e:
+                logger.warning(f"Account refresh after order event failed: {e}")
+
+    async def refresh_orders_once(self, wb_instance):
+        if self._refresh_orders_lock.locked():
+            return
+        async with self._refresh_orders_lock:
+            try:
+                orders = await asyncio.to_thread(wb_instance.get_current_orders)
+                if orders is not None:
+                    self.update_pending_orders(orders)
+                    print("[WEBULL_HUB] Orders refreshed after order event")
+            except Exception as e:
+                logger.warning(f"Orders refresh after order event failed: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         with self._quotes_lock:

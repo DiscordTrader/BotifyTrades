@@ -522,7 +522,17 @@ class NDXtoQQQConverter:
             sys.stdout.write(f"[NDX→QQQ] QuoteAggregator error: {e}\n")
             sys.stdout.flush()
         
-        # Fallback to direct broker call if aggregator unavailable
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            import time as _time
+            hub = get_webull_data_hub()
+            hub_quote = hub.get_quote('QQQ')
+            if hub_quote and hub_quote.timestamp and (_time.time() - hub_quote.timestamp) < 10:
+                if hub_quote.last > 0:
+                    return hub_quote.last
+        except Exception:
+            pass
+
         try:
             if broker and 'WEBULL' in broker.upper():
                 from webull import webull

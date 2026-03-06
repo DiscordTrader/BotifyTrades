@@ -33,6 +33,7 @@ class WebullStreamingClient:
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 10
         self._subscribed_ticker_ids: Set[str] = set()
+        self._subscription_levels: Dict[str, int] = {}
         self._symbol_to_ticker_id: Dict[str, str] = {}
         self._ticker_id_to_symbol: Dict[str, str] = {}
         self._conn = None
@@ -40,8 +41,12 @@ class WebullStreamingClient:
         self._lock = threading.Lock()
         self._did: Optional[str] = None
         self._access_token: Optional[str] = None
+        self._wb_instance = None
 
         print(f"[WEBULL_STREAM] Streaming client created for {broker_instance.name}")
+
+    def set_wb_instance(self, wb_instance):
+        self._wb_instance = wb_instance
 
     def _on_price_message(self, topic, data):
         try:
@@ -121,8 +126,27 @@ class WebullStreamingClient:
                     'raw': data
                 })
 
+                wb = self._wb_instance or getattr(self._broker, 'wb', None)
+                if wb is not None:
+                    try:
+                        import asyncio as _aio
+                        loop = _aio.get_event_loop()
+                        if loop.is_running():
+                            _aio.ensure_future(self._hub.refresh_positions_once(wb))
+                            _aio.ensure_future(self._hub.refresh_orders_once(wb))
+                    except Exception:
+                        pass
+
                 if order_status == 'Filled':
                     self._hub.invalidate_account()
+                    if wb is not None:
+                        try:
+                            import asyncio as _aio
+                            loop = _aio.get_event_loop()
+                            if loop.is_running():
+                                _aio.ensure_future(self._hub.refresh_account_once(wb))
+                        except Exception:
+                            pass
                     try:
                         from src.services.daily_pnl_limit_service import get_daily_pnl_service
                         broker_name = getattr(self._broker, 'name', 'WEBULL')
@@ -216,7 +240,8 @@ class WebullStreamingClient:
                 if self._subscribed_ticker_ids:
                     for tid in list(self._subscribed_ticker_ids):
                         try:
-                            self._conn.subscribe(tId=tid, level=105)
+                            level = self._subscription_levels.get(tid, 105)
+                            self._conn.subscribe(tId=tid, level=level)
                         except Exception as e:
                             print(f"[WEBULL_STREAM] Error resubscribing {tid}: {e}")
 
@@ -243,27 +268,40 @@ class WebullStreamingClient:
                     print(f"[WEBULL_STREAM] Reconnecting in {wait}s (attempt {self._reconnect_attempts})...")
                 time.sleep(wait)
 
-    def subscribe_symbol(self, symbol: str, ticker_id: str):
+    def subscribe_symbol(self, symbol: str, ticker_id: str, is_option: bool = False):
         with self._lock:
             ticker_id = str(ticker_id)
             if not ticker_id or ticker_id == '0':
                 return
+
+            level = 106 if is_option else 105
 
             self._symbol_to_ticker_id[symbol.upper()] = ticker_id
             self._ticker_id_to_symbol[ticker_id] = symbol.upper()
             self._hub.register_ticker_id(symbol, ticker_id)
 
             if ticker_id in self._subscribed_ticker_ids:
+                existing_level = self._subscription_levels.get(ticker_id, 105)
+                if existing_level == level:
+                    return
+                self._subscription_levels[ticker_id] = level
+                if self._connected and self._conn:
+                    try:
+                        self._conn.subscribe(tId=ticker_id, level=level)
+                        print(f"[WEBULL_STREAM] Re-subscribed {symbol} at level {level}")
+                    except Exception:
+                        pass
                 return
 
             self._subscribed_ticker_ids.add(ticker_id)
+            self._subscription_levels[ticker_id] = level
             self._hub._subscribed_ticker_ids.add(ticker_id)
             self._hub.add_subscribed_symbols({symbol.upper()})
 
             if self._connected and self._conn:
                 try:
-                    self._conn.subscribe(tId=ticker_id, level=105)
-                    print(f"[WEBULL_STREAM] Subscribed: {symbol} (tid={ticker_id})")
+                    self._conn.subscribe(tId=ticker_id, level=level)
+                    print(f"[WEBULL_STREAM] Subscribed: {symbol} (tid={ticker_id}, level={level})")
                 except Exception as e:
                     print(f"[WEBULL_STREAM] Error subscribing {symbol}: {e}")
 

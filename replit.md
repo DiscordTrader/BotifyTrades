@@ -34,7 +34,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Database Architecture**: Uses SQLite with WAL mode for concurrent read/write operations, storing critical trading data and encrypted credentials.
 - **AI Analysis**: Integrates OpenAI GPT for pre-trade and post-trade analysis, an AI chat assistant, and AI command toggles.
 - **Risk Engine Direct Exit Architecture**: Dual-path exit execution system ensuring stop-loss orders execute even when the event loop is blocked, using a primary queue-based path and a backup daemon thread for direct broker calls. Exit retry mechanism clears `_exit_executed_keys` on failure so subsequent retries are not blocked by stale dedupe state.
-- **Streaming Hub-First Architecture**: All price-fetching services prioritize WebullDataHub and SchwabDataHub before making REST API calls to reduce latency and errors.
+- **Streaming Hub-First Architecture**: Comprehensive hub-first + REST fallback pattern across all services. WebullDataHub caches account info, positions, pending orders, ticker IDs, option IDs (600s TTL), and streaming quotes. Every `wb.get_quote()`, `wb.get_positions()`, `wb.get_current_orders()`, `wb.get_ticker()`, and `wb.get_option_quote()` call checks hub cache first with caller-specified max_age (5-300s depending on context). Option quotes streamed via MQTT level 106 subscriptions. Streaming client auto-wires to PriceMonitor at startup. Saves ~3,000-4,000+ REST calls/hour. Services covered: selfbot_webull.py, routes.py, broker_live_analytics.py, price_monitor_service.py, trade_tracker.py, ndx_qqq_converter.py, webull_broker.py.
 
 **System Design Choices:**
 - **Broker Isolation**: Prevents data cross-contamination by isolating each broker's streaming data.

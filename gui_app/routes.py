@@ -3227,6 +3227,14 @@ def register_routes(app):
                     return None
                 if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
                     return None
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    cached = hub.get_account_info(max_age_seconds=300)
+                    if cached and isinstance(cached, dict) and not cached.get('code'):
+                        return cached
+                except Exception:
+                    pass
                 wb = getattr(_bot_instance.broker, '_client', None)
                 if not wb:
                     return None
@@ -4796,13 +4804,20 @@ def register_routes(app):
 
     async def _get_webull_account():
         """Helper to get Webull account data"""
-        # Skip during startup to prevent initialization hang
         elapsed = time.time() - _startup_time
         if elapsed < _startup_delay_seconds:
             return None
         
         try:
-            # Check if broker is initialized
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                cached = hub.get_account_info(max_age_seconds=300)
+                if cached and isinstance(cached, dict) and not cached.get('code'):
+                    return cached
+            except Exception:
+                pass
+
             if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
                 print("[API] Broker not initialized yet")
                 return None
@@ -4820,7 +4835,6 @@ def register_routes(app):
                     print(f"[API] Health monitor error: {health_err}")
                 return None
             
-            # Get account data
             def _blocking_call():
                 try:
                     account_info = wb.get_account()
@@ -5083,7 +5097,6 @@ def register_routes(app):
     
     async def _get_webull_open_orders():
         """Helper to get Webull open orders"""
-        # Check if broker is initialized
         if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
             return None
         
@@ -5091,8 +5104,15 @@ def register_routes(app):
         if not wb:
             return None
         
-        # Get open orders
         def _blocking_call():
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                cached_orders = hub.get_pending_orders(max_age_seconds=15)
+                if cached_orders is not None:
+                    return cached_orders
+            except Exception:
+                pass
             account_info = wb.get_account()
             open_orders = account_info.get('openOrders', [])
             
@@ -5506,7 +5526,18 @@ def register_routes(app):
                 # ---------- STOCK CLOSE: market or limit SELL ----------
                 if asset_type == 'stock':
                     print(f"[API] Looking up ticker for stock: {symbol}", flush=True)
-                    ticker = wb.get_ticker(symbol)
+                    ticker = None
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        cached_tid = hub.get_ticker_id(symbol)
+                        if cached_tid:
+                            ticker = int(cached_tid)
+                            print(f"[API] Hub cache hit for ticker {symbol}: {ticker}")
+                    except Exception:
+                        pass
+                    if not ticker:
+                        ticker = wb.get_ticker(symbol)
                     print(f"[API] get_ticker({symbol}) returned: {ticker} (type: {type(ticker).__name__})", flush=True)
                     
                     if not ticker:
@@ -5559,8 +5590,18 @@ def register_routes(app):
 
                 # ---------- OPTION CLOSE: limit SELL using optionId ----------
                 elif asset_type == 'option':
-                    account = wb.get_account()
-                    positions = account.get('positions', []) or []
+                    positions = None
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        cached_pos = hub.get_positions(max_age_seconds=10)
+                        if cached_pos is not None:
+                            positions = cached_pos
+                    except Exception:
+                        pass
+                    if positions is None:
+                        account = wb.get_account()
+                        positions = account.get('positions', []) or []
 
                     print(f"[DEBUG] Searching for option: {symbol} optionId={option_id}")
                     print(f"[DEBUG] Found {len(positions)} total positions")
@@ -5617,9 +5658,18 @@ def register_routes(app):
                     except Exception as token_err:
                         print(f"[DEBUG] Could not refresh trade token: {token_err}")
                     
-                    # First, check and cancel any pending orders for this option
                     try:
-                        pending_orders = wb.get_current_orders() or []
+                        pending_orders = None
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            hub = get_webull_data_hub()
+                            cached_orders = hub.get_pending_orders(max_age_seconds=10)
+                            if cached_orders is not None:
+                                pending_orders = cached_orders
+                        except Exception:
+                            pass
+                        if pending_orders is None:
+                            pending_orders = wb.get_current_orders() or []
                         print(f"[DEBUG] Found {len(pending_orders)} total pending orders")
                         for order in pending_orders:
                             order_ticker_id = order.get('ticker', {}).get('tickerId')
@@ -6262,14 +6312,24 @@ def register_routes(app):
                 
                 _option_id = option_id
                 
-                # Step 1: If option and no option_id, find it from live positions
                 if asset_type == 'option' and not _option_id:
                     print(f"[WEBULL-CLOSE] Looking up option_id from live positions...", flush=True)
+                    positions = None
                     try:
-                        account = wb.get_account()
-                        positions = (account or {}).get('positions', []) or []
-                    except Exception as e:
-                        return {'success': False, 'error': f'Failed to fetch positions: {e}'}
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        cached_pos = hub.get_positions(max_age_seconds=10)
+                        if cached_pos is not None:
+                            positions = cached_pos
+                            print(f"[WEBULL-CLOSE] Using hub-cached positions ({len(positions)} items)")
+                    except Exception:
+                        pass
+                    if positions is None:
+                        try:
+                            account = wb.get_account()
+                            positions = (account or {}).get('positions', []) or []
+                        except Exception as e:
+                            return {'success': False, 'error': f'Failed to fetch positions: {e}'}
                     
                     db_strike = float(strike) if strike else 0
                     db_call_put = str(call_put).upper()[0] if call_put else ''
@@ -6297,12 +6357,21 @@ def register_routes(app):
                     if not _option_id:
                         return {'success': False, 'error': f'Could not find option_id for {symbol} {strike}{call_put}'}
                 
-                # Step 2: Get live quantity
+                positions = None
                 try:
-                    account = wb.get_account()
-                    positions = (account or {}).get('positions', []) or []
-                except Exception as e:
-                    return {'success': False, 'error': f'Failed to fetch positions: {e}'}
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    cached_pos = hub.get_positions(max_age_seconds=10)
+                    if cached_pos is not None:
+                        positions = cached_pos
+                except Exception:
+                    pass
+                if positions is None:
+                    try:
+                        account = wb.get_account()
+                        positions = (account or {}).get('positions', []) or []
+                    except Exception as e:
+                        return {'success': False, 'error': f'Failed to fetch positions: {e}'}
                 
                 live_quantity = None
                 for p in positions:
@@ -6333,9 +6402,20 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         return {'success': False, 'error': 'Invalid quantity format'}
                 
-                # Step 3: Check pending orders
+                pending = None
                 try:
-                    pending = wb.get_current_orders() or []
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    cached_orders = hub.get_pending_orders(max_age_seconds=10)
+                    if cached_orders is not None:
+                        pending = cached_orders
+                except Exception:
+                    pass
+                if pending is None:
+                    pending = []
+                try:
+                    if not pending:
+                        pending = wb.get_current_orders() or []
                     for order in pending:
                         order_action = (order.get('action') or '').upper()
                         order_status = (order.get('status') or '').upper()

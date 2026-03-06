@@ -2070,10 +2070,28 @@ class WebullBroker:
         for symbol in symbols:
             sym_count = 0
             try:
-                tId = wb.get_ticker(symbol)
+                tId = self._ticker_id_cache.get(symbol.upper())
+                if not tId:
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        cached_tid = hub.get_ticker_id(symbol.upper())
+                        if cached_tid:
+                            tId = int(cached_tid)
+                    except Exception:
+                        pass
+                if not tId:
+                    tId = wb.get_ticker(symbol)
                 if not tId:
                     skipped += 1
                     continue
+                self._ticker_id_cache[symbol.upper()] = tId
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    hub.register_ticker_id(symbol.upper(), str(tId))
+                except Exception:
+                    pass
                 for exp_iso in expiry_dates:
                     for direction in ('call', 'put'):
                         opt_type = 'C' if direction == 'call' else 'P'
@@ -2794,6 +2812,16 @@ class WebullBroker:
             print(f"[WEBULL] 🔍 Index option detected: {symbol}")
         
         tId = self._ticker_id_cache.get(symbol.upper())
+        if not tId:
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                cached_tid = hub.get_ticker_id(symbol.upper())
+                if cached_tid:
+                    tId = int(cached_tid)
+                    self._ticker_id_cache[symbol.upper()] = tId
+            except Exception:
+                pass
         if tId:
             print(f"[WEBULL] get_ticker('{symbol}') cached: {tId}")
         else:
@@ -2801,6 +2829,12 @@ class WebullBroker:
             print(f"[WEBULL] get_ticker('{symbol}') returned: {tId}")
             if tId:
                 self._ticker_id_cache[symbol.upper()] = tId
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    hub.register_ticker_id(symbol.upper(), str(tId))
+                except Exception:
+                    pass
         if not tId:
             raise RuntimeError(f"Symbol not found: {symbol}")
 
@@ -2881,12 +2915,29 @@ class WebullBroker:
             except Exception:
                 pass
 
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                hub_quote = hub.get_quote(str(option_id))
+                if hub_quote and hub_quote.timestamp and (time.time() - hub_quote.timestamp) < 5:
+                    bid = hub_quote.bid
+                    ask = hub_quote.ask
+                    last = hub_quote.last
+                    if bid > 0 and ask > 0:
+                        mark = (bid + ask) / 2
+                        print(f"[SLIPPAGE] Hub-cached option quote: bid=${bid}, ask=${ask}, mark=${mark:.4f}")
+                        return mark
+                    elif last > 0:
+                        print(f"[SLIPPAGE] Hub-cached option last: ${last}")
+                        return last
+            except Exception:
+                pass
+
             quote = wb.get_option_quote(stock=broker_sym, optionId=str(option_id))
             if not quote:
                 print(f"[SLIPPAGE] ⚠️  No quote data available for option {option_id}")
                 return None
             
-            # Debug: Print full quote response to see what fields are available
             print(f"[SLIPPAGE] DEBUG: Quote response keys: {list(quote.keys())}")
             
             # Price data is nested in 'data' field - find matching option by option_id
@@ -2942,6 +2993,23 @@ class WebullBroker:
         Returns None if no quote available
         """
         try:
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                hub_quote = hub.get_quote(symbol)
+                if hub_quote and hub_quote.timestamp and (time.time() - hub_quote.timestamp) < 5:
+                    ask = hub_quote.ask
+                    bid = hub_quote.bid
+                    if ask > 0 and bid > 0:
+                        mark_price = (ask + bid) / 2
+                        print(f"[SLIPPAGE] Hub-cached stock price: ${mark_price:.2f} (bid: ${bid:.2f}, ask: ${ask:.2f})")
+                        return mark_price
+                    elif hub_quote.last > 0:
+                        print(f"[SLIPPAGE] Hub-cached stock last: ${hub_quote.last:.2f}")
+                        return hub_quote.last
+            except Exception:
+                pass
+
             quote = wb.get_quote(stock=symbol)
             if not quote:
                 print(f"[SLIPPAGE] ⚠️  No quote data available for stock {symbol}")
@@ -2975,6 +3043,32 @@ class WebullBroker:
         Supports pre-market and after-hours pricing via pPrice field.
         """
         try:
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                hub_quote = hub.get_quote(symbol)
+                if hub_quote and hub_quote.timestamp and (time.time() - hub_quote.timestamp) < 5:
+                    ask = hub_quote.ask
+                    bid = hub_quote.bid
+                    last = hub_quote.last
+                    if ask > 0 and bid > 0:
+                        mark_price = (ask + bid) / 2
+                    elif last > 0:
+                        mark_price = last
+                    else:
+                        mark_price = 0
+                    if mark_price > 0:
+                        return {
+                            'close': mark_price,
+                            'bid': bid,
+                            'ask': ask,
+                            'last': last,
+                            'premarket': 0,
+                            'symbol': symbol
+                        }
+            except Exception:
+                pass
+
             wb = self._client
             if not wb:
                 return None
@@ -3352,9 +3446,25 @@ class WebullBroker:
                 option_id = int(cached_id)
                 tId = self._ticker_id_cache.get(broker_sym.upper())
                 if not tId:
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        cached_tid = hub.get_ticker_id(broker_sym.upper())
+                        if cached_tid:
+                            tId = int(cached_tid)
+                            self._ticker_id_cache[broker_sym.upper()] = tId
+                    except Exception:
+                        pass
+                if not tId:
                     tId = wb.get_ticker(broker_sym)
                     if tId:
                         self._ticker_id_cache[broker_sym.upper()] = tId
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            hub = get_webull_data_hub()
+                            hub.register_ticker_id(broker_sym.upper(), str(tId))
+                        except Exception:
+                            pass
                 print(f"[WEBULL] ✓ Cache hit option_id={option_id}, ticker_id={tId} for {symbol} (skipped REST)")
                 sys.stdout.flush()
             else:
@@ -3511,7 +3621,17 @@ class WebullBroker:
             
             elif side == 'SELL':
                 try:
-                    positions = wb.get_positions()
+                    positions = None
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        cached_pos = hub.get_positions(max_age_seconds=10)
+                        if cached_pos is not None:
+                            positions = cached_pos
+                    except Exception:
+                        pass
+                    if positions is None:
+                        positions = wb.get_positions()
                     if positions:
                         for pos in positions:
                             pos_symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
@@ -3685,7 +3805,17 @@ class WebullBroker:
                     for retry_idx in range(1, len(buffers)):
                         _time.sleep(0.8)
                         try:
-                            orders_list = wb.get_current_orders() or []
+                            orders_list = None
+                            try:
+                                from src.services.webull_data_hub import get_webull_data_hub
+                                hub = get_webull_data_hub()
+                                cached_orders = hub.get_pending_orders(max_age_seconds=5)
+                                if cached_orders is not None:
+                                    orders_list = cached_orders
+                            except Exception:
+                                pass
+                            if orders_list is None:
+                                orders_list = wb.get_current_orders() or []
                             order_status = None
                             for o in orders_list:
                                 if str(o.get('orderId', '')) == str(order_id):
@@ -4090,7 +4220,24 @@ class WebullBroker:
             if not wb:
                 raise RuntimeError("Webull client not initialized")
             base_sym = fix_symbol(symbol, "in")
-            tId = wb.get_ticker(base_sym)
+            tId = None
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                hub = get_webull_data_hub()
+                cached_tid = hub.get_ticker_id(base_sym)
+                if cached_tid:
+                    tId = int(cached_tid)
+            except Exception:
+                pass
+            if not tId:
+                tId = wb.get_ticker(base_sym)
+                if tId:
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        hub.register_ticker_id(base_sym, str(tId))
+                    except Exception:
+                        pass
             if not tId:
                 raise RuntimeError(f"Symbol not found: {base_sym}")
 
@@ -4202,7 +4349,17 @@ class WebullBroker:
             
             elif side == 'SELL':
                 try:
-                    positions = wb.get_positions()
+                    positions = None
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        hub = get_webull_data_hub()
+                        cached_pos = hub.get_positions(max_age_seconds=10)
+                        if cached_pos is not None:
+                            positions = cached_pos
+                    except Exception:
+                        pass
+                    if positions is None:
+                        positions = wb.get_positions()
                     if positions:
                         for pos in positions:
                             pos_symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
@@ -4329,9 +4486,18 @@ class WebullBroker:
             
             positions = []
             
-            # Get all positions (stocks and options together)
             try:
-                all_positions = wb.get_positions()
+                all_positions = None
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    cached_pos = hub.get_positions(max_age_seconds=15)
+                    if cached_pos is not None:
+                        all_positions = cached_pos
+                except Exception:
+                    pass
+                if all_positions is None:
+                    all_positions = wb.get_positions()
                 if isinstance(all_positions, dict) and all_positions.get('code') == 'auth.token.expire':
                     self._tokens_valid = False
                     return []
@@ -4479,7 +4645,17 @@ class WebullBroker:
                 return []
             
             try:
-                orders_raw = wb.get_current_orders()
+                orders_raw = None
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    cached_orders = hub.get_pending_orders(max_age_seconds=15)
+                    if cached_orders is not None:
+                        orders_raw = cached_orders
+                except Exception:
+                    pass
+                if orders_raw is None:
+                    orders_raw = wb.get_current_orders()
                 orders = []
                 
                 if not orders_raw:
@@ -4670,6 +4846,22 @@ class WebullBroker:
 
     async def get_latest_quote(self, symbol: str, asset_type: str = 'stock', option_id: Optional[int] = None):
         """Get latest price quote for a symbol"""
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if asset_type == 'option' and option_id is not None:
+                hub_quote = hub.get_quote(str(option_id))
+                if hub_quote and hub_quote.timestamp and (time.time() - hub_quote.timestamp) < 10:
+                    if hub_quote.last > 0:
+                        return hub_quote.last
+            else:
+                hub_quote = hub.get_quote(symbol)
+                if hub_quote and hub_quote.timestamp and (time.time() - hub_quote.timestamp) < 10:
+                    if hub_quote.last > 0:
+                        return hub_quote.last
+        except Exception:
+            pass
+
         def _blocking_quote():
             wb = self._client
             if not wb:
@@ -4677,12 +4869,10 @@ class WebullBroker:
             
             try:
                 if asset_type == 'option' and option_id is not None:
-                    # For options, we need the option ID
                     quote = wb.get_option_quote(optionId=option_id)
                     if quote:
                         return float(quote.get('latestPrice', 0))
                 else:
-                    # For stocks
                     quote = wb.get_quote(stock=symbol)
                     if quote:
                         return float(quote.get('close', 0) or quote.get('lastPrice', 0))
@@ -16811,7 +17001,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if webull_broker and webull_broker.connected:
                                 wb = webull_broker._client
                                 if wb:
-                                    pending_orders = wb.get_current_orders() or []
+                                    pending_orders = None
+                                    try:
+                                        from src.services.webull_data_hub import get_webull_data_hub
+                                        hub = get_webull_data_hub()
+                                        cached_orders = hub.get_pending_orders(max_age_seconds=5)
+                                        if cached_orders is not None:
+                                            pending_orders = cached_orders
+                                    except Exception:
+                                        pass
+                                    if pending_orders is None:
+                                        pending_orders = wb.get_current_orders() or []
                                     symbol = signal['symbol'].upper()
                                     for order in pending_orders:
                                         order_symbol = str(order.get('ticker', {}).get('symbol', '') or order.get('symbol', '')).upper()

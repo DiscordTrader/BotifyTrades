@@ -97,8 +97,15 @@ class PriceMonitorService:
         self._max_failed_attempts = 5
         self._price_stale_threshold = 120
         
+        self._streaming_client = None
+        self._option_id_cache: Dict[str, int] = {}
+
         self._initialized = True
         print("[PRICE_MONITOR] ✓ PriceMonitorService initialized")
+
+    def set_streaming_client(self, client):
+        self._streaming_client = client
+        print("[PRICE_MONITOR] ✓ Streaming client registered for auto-subscribe")
     
     def set_webull_client(self, client):
         """Set the Webull client for price fetching."""
@@ -209,12 +216,8 @@ class PriceMonitorService:
         expiry: str, 
         option_type: str
     ) -> Optional[float]:
-        """Fetch option price from Webull."""
+        """Fetch option price from Webull. Uses cached option_id and auto-subscribes for streaming."""
         if not self._webull_client:
-            return None
-        
-        can_request, wait_time = self.rate_limiter.can_make_request('webull')
-        if not can_request:
             return None
         
         try:
@@ -231,37 +234,74 @@ class PriceMonitorService:
             
             iso_exp = exp_date.strftime("%Y-%m-%d")
             opt_type = 'call' if option_type.upper() == 'C' else 'put'
+            side = 'call' if option_type.upper() == 'C' else 'put'
             
-            def fetch_options():
-                return wb.get_options(stock=symbol, direction=opt_type, expireDate=iso_exp)
+            cache_key = f"{symbol.upper()}_{strike:.2f}_{iso_exp}_{option_type.upper()}"
+            option_id = self._option_id_cache.get(cache_key)
             
-            options = await asyncio.get_event_loop().run_in_executor(None, fetch_options)
-            self.rate_limiter.record_request('webull')
-            
-            if not options:
-                return None
-            
-            best_match = None
-            min_diff = float('inf')
-            
-            for opt in options:
-                opt_strike = float(opt.get('strikePrice', 0))
-                diff = abs(opt_strike - strike)
-                if diff < min_diff:
-                    min_diff = diff
-                    best_match = opt
-            
-            if not best_match or min_diff > 1.0:
-                return None
-            
-            option_id = best_match.get('tickerId')
             if not option_id:
-                return None
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    hub_id = hub.get_option_ticker_id(symbol, strike, iso_exp, side)
+                    if hub_id:
+                        option_id = hub_id
+                        self._option_id_cache[cache_key] = option_id
+                except Exception:
+                    pass
+            
+            if not option_id:
+                can_request, wait_time = self.rate_limiter.can_make_request('webull')
+                if not can_request:
+                    return None
+                
+                def fetch_options():
+                    return wb.get_options(stock=symbol, direction=opt_type, expireDate=iso_exp)
+                
+                options = await asyncio.get_event_loop().run_in_executor(None, fetch_options)
+                self.rate_limiter.record_request('webull')
+                
+                if not options:
+                    return None
+                
+                best_match = None
+                min_diff = float('inf')
+                
+                for opt in options:
+                    opt_strike = float(opt.get('strikePrice', 0))
+                    diff = abs(opt_strike - strike)
+                    if diff < min_diff:
+                        min_diff = diff
+                        best_match = opt
+                
+                if not best_match or min_diff > 1.0:
+                    return None
+                
+                option_id = best_match.get('tickerId')
+                if not option_id:
+                    return None
+                
+                self._option_id_cache[cache_key] = option_id
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    hub.set_option_ticker_id(symbol, strike, iso_exp, side, int(option_id))
+                except Exception:
+                    pass
+            
+            if self._streaming_client and option_id:
+                try:
+                    tid_str = str(option_id)
+                    if tid_str not in getattr(self._streaming_client, '_subscribed_ticker_ids', set()):
+                        opt_symbol = f"{symbol.upper()}_{strike}{option_type.upper()}"
+                        self._streaming_client.subscribe_symbol(opt_symbol, tid_str, is_option=True)
+                        print(f"[PRICE_MONITOR] Auto-subscribed option {opt_symbol} (tid={tid_str}) for streaming")
+                except Exception:
+                    pass
             
             can_request, _ = self.rate_limiter.can_make_request('webull')
             if not can_request:
-                last = float(best_match.get('close', 0) or best_match.get('latestPrice', 0) or 0)
-                return last if last > 0 else None
+                return None
             
             def fetch_quote():
                 return wb.get_option_quote(stock=symbol, optionId=str(option_id))

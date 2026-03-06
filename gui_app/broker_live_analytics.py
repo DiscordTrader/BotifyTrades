@@ -160,6 +160,15 @@ class BrokerLiveAnalytics:
                 if device_id:
                     wb.did = device_id
                 
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    cached = hub.get_account_info(max_age_seconds=300)
+                    if cached and isinstance(cached, dict) and not cached.get('code'):
+                        self._clients[broker_id] = wb
+                        return wb
+                except Exception:
+                    pass
                 account = await asyncio.to_thread(wb.get_account)
                 if account:
                     self._clients[broker_id] = wb
