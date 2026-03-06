@@ -5847,8 +5847,19 @@ INVALID_STOCK_SYMBOLS = {
     'SAY', 'SHE', 'TOO', 'USE', 'WAY', 'WHO', 'ANY', 'DAY', 'GET', 'GOT', 'LET', 'PUT',
     'RUN', 'SEE', 'SET', 'TOP', 'TRY', 'TWO', 'WIN', 'WON', 'MAX', 'MIN', 'PM', 'AM',
     'SIZE', 'RULES', 'ONLY', 'AFTER', 'BEFORE', 'ENTRY', 'ENTRIES', 'STOP', 'LOSS',
-    'PROFIT', 'TAKE', 'RISK', 'TRADE', 'TRADES', 'FOCUS', 'LOOK', 'OVER', 'UNDER'
+    'PROFIT', 'TAKE', 'RISK', 'TRADE', 'TRADES', 'FOCUS', 'LOOK', 'OVER', 'UNDER',
+    'NEXT', 'BACK', 'LAST', 'HALF', 'MORE', 'SOME', 'JUST', 'ALSO', 'EVEN', 'BEEN',
+    'THAN', 'THEM', 'THEN', 'THEY', 'THAT', 'THIS', 'WHAT', 'WHEN', 'WILL', 'WITH',
+    'FROM', 'HERE', 'TILL', 'WAIT', 'SAME', 'ONCE', 'SOON', 'NEAR',
+    'DONE', 'KEEP', 'VERY', 'STILL', 'ABOUT', 'BEING', 'ABOVE', 'BELOW',
+    'BREAK', 'LEVEL', 'WATCH', 'SETUP', 'ALERT', 'GOING', 'EVERY', 'THINK',
+    'COULD', 'WOULD', 'THEIR', 'THERE', 'WHERE', 'WHICH', 'THESE', 'THOSE', 'MIGHT'
 }
+
+NATURAL_LANG_FALSE_POSITIVE_AFTER = re.compile(
+    r'\s*(?:min(?:ute)?s?|hour|hr|candle|bar|chart|day|week|second|sec|lot|share|time|ago|later|dip)\b',
+    re.IGNORECASE
+)
 
 INCOMPLETE_OPTION_PATTERN = re.compile(
     r'^(BTO|STC)\s+\d*\s*\$?([A-Z]{1,5})\s+(\d+\.?\d*)\s+(\d{1,2}/\d{1,2})',
@@ -5909,6 +5920,12 @@ def _parse_natural_lang_stock(text: str) -> Optional[dict]:
         return None
     
     if len(symbol) > 5 or len(symbol) < 1:
+        return None
+    
+    match_obj = entry_match if entry_match else exit_match
+    after_price = stripped[match_obj.end():]
+    if NATURAL_LANG_FALSE_POSITIVE_AFTER.match(after_price):
+        print(f"[NATURAL LANG] ✗ Rejected false positive: '{symbol}' followed by '{after_price.strip()[:30]}' (commentary, not signal)")
         return None
     
     price = float(price_str)
