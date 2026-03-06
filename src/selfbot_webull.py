@@ -7384,6 +7384,7 @@ class SelfClient(discord.Client):
                 broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
+                self._sync_service = self.sync_service
                 
                 # Wire callback to set sync_ready after first sync (prevents conditional order race condition)
                 self.sync_service.set_first_sync_callback(lambda: self.sync_ready.set())
@@ -13213,6 +13214,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[QUEUE] ⛔ Signal SKIPPED - already rejected (see Dashboard)")
                     return
                 
+                import time as _tmod
+                opt['_queued_at'] = _tmod.monotonic()
                 await self.order_queue.put(opt)
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
                 print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
@@ -13644,6 +13647,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     print(f"[ENTRY CONFIRM]   Watching price: ${stk_watching_price} + {stk_entry_confirmation_pct}% = ${stk_confirmation_trigger}")
                                 else:
                                     print(f"[ENTRY CONFIRM] ❌ Failed to create conditional order - falling back to immediate execution")
+                                    import time as _tmod
+                                    stk['_queued_at'] = _tmod.monotonic()
                                     await self.order_queue.put(stk)
                                     print(f"[QUEUE] ✓ Signal queued for LIVE execution (entry confirm fallback)")
                                 return
@@ -13654,6 +13659,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             import traceback
                             traceback.print_exc()
                 
+                import time as _tmod
+                stk['_queued_at'] = _tmod.monotonic()
                 await self.order_queue.put(stk)
                 print(f"[QUEUE] ✓ Signal queued for LIVE execution")
             
@@ -13860,6 +13867,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
     
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
+        import time as _t
+        _t0 = _t.monotonic()
         try:
             action = signal.get('action', '').upper()
             if action == 'BTO':
@@ -15029,6 +15038,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 'broker': broker_name,
                 'error': str(e)
             }
+        finally:
+            _elapsed = _t.monotonic() - _t0
+            _original_print(f"[{broker_name}] [TIMING] execute_on_single_broker completed in {_elapsed:.2f}s")
     
     async def handle_analyze_trade_command(self, message: discord.Message, symbol: str):
         """Handle !analyze_trade SYMBOL command - comprehensive swing trading analysis"""
@@ -15272,7 +15284,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except Exception:
                         pass
                 
-                _original_print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}", flush=True)
+                import time as _tmod
+                _queue_latency = ''
+                if signal.get('_queued_at'):
+                    _queue_latency = f" (queue→worker: {(_tmod.monotonic() - signal['_queued_at']):.2f}s)"
+                _original_print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}{_queue_latency}", flush=True)
                 
                 # Handle NOTIFICATION signals (not orders - just messages)
                 if signal.get('action') == 'NOTIFICATION':
@@ -15584,6 +15600,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if broker_tasks:
                         _original_print(f"[MULTI-BROKER] ⚡ Launching {len(broker_tasks)} orders in parallel...")
                         
+                        _sync_svc = getattr(self, '_sync_service', None)
+                        if _sync_svc:
+                            _sync_svc.pause_for_order()
+                        
+                        import time as _time_mod
+                        _exec_start = _time_mod.monotonic()
+                        
                         async def execute_with_name(name, instance, sig):
                             """Wrapper to include broker name in result"""
                             try:
@@ -15593,24 +15616,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             except Exception as e:
                                 return {'success': False, 'msg': str(e), 'broker': name}
                         
-                        # Create coroutines for all brokers
-                        coroutines = [
-                            execute_with_name(name, instance, sig) 
-                            for name, instance, sig in broker_tasks
-                        ]
+                        try:
+                            coroutines = [
+                                execute_with_name(name, instance, sig) 
+                                for name, instance, sig in broker_tasks
+                            ]
+                            
+                            parallel_results = await asyncio.gather(*coroutines, return_exceptions=True)
+                            
+                            for i, result in enumerate(parallel_results):
+                                if isinstance(result, Exception):
+                                    broker_name = broker_tasks[i][0]
+                                    responses.append({'success': False, 'msg': str(result), 'broker': broker_name})
+                                else:
+                                    responses.append(result)
+                        finally:
+                            if _sync_svc:
+                                _sync_svc.resume_after_order()
                         
-                        # Execute all in parallel - return_exceptions=True prevents one failure from killing others
-                        parallel_results = await asyncio.gather(*coroutines, return_exceptions=True)
-                        
-                        # Process results
-                        for i, result in enumerate(parallel_results):
-                            if isinstance(result, Exception):
-                                broker_name = broker_tasks[i][0]
-                                responses.append({'success': False, 'msg': str(result), 'broker': broker_name})
-                            else:
-                                responses.append(result)
-                        
-                        _original_print(f"[MULTI-BROKER] ⚡ Parallel execution complete")
+                        _exec_elapsed = _time_mod.monotonic() - _exec_start
+                        _original_print(f"[MULTI-BROKER] ⚡ Parallel execution complete ({_exec_elapsed:.1f}s)")
                     
                     # Handle multi-broker responses
                     # Only treat as success if: success=True, OR orderId present without explicit failure

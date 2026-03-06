@@ -68,8 +68,18 @@ class BrokerSyncService:
         self._risk_manager = None  # Set via set_risk_manager()
         self._first_sync_callback = None  # Called after first sync completes
         self._first_sync_done = False
+        self._order_in_progress = asyncio.Event()
+        self._order_in_progress.set()
         
         print(f"[SYNC] BrokerSyncService initialized (interval={sync_interval}s)")
+    
+    def pause_for_order(self):
+        """Signal that an order is being executed — sync should yield"""
+        self._order_in_progress.clear()
+    
+    def resume_after_order(self):
+        """Signal that order execution is done — sync can proceed"""
+        self._order_in_progress.set()
     
     def set_first_sync_callback(self, callback):
         """Set callback to run after first sync cycle completes (used for sync_ready event)"""
@@ -159,7 +169,14 @@ class BrokerSyncService:
         
         while self.running:
             try:
-                # Perform sync FIRST, then sleep (so first sync happens immediately)
+                if not self._order_in_progress.is_set():
+                    print("[SYNC] ⏸️ Order in progress — deferring sync cycle", flush=True)
+                    try:
+                        await asyncio.wait_for(self._order_in_progress.wait(), timeout=30)
+                    except asyncio.TimeoutError:
+                        print("[SYNC] ⚠️ Order pause timeout (30s) — resuming sync", flush=True)
+                        self._order_in_progress.set()
+                
                 await self._perform_sync()
                 await asyncio.sleep(self.sync_interval)
                 
@@ -170,7 +187,6 @@ class BrokerSyncService:
                 print(f"[SYNC] Error in sync loop: {e}")
                 import traceback
                 traceback.print_exc()
-                # Continue running despite errors
     
     async def _perform_sync(self):
         """Perform one sync cycle across all brokers"""
