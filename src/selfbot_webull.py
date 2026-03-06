@@ -1991,12 +1991,18 @@ class WebullBroker:
             del self._option_id_cache[cache_key]
         return None
 
+    _PREFETCH_SKIP_SYMBOLS = {'SPX', 'SPXW', 'NDX', 'NDXP', 'XSP', 'VIX', 'RUT', 'DJX', 'OEX', 'XEO'}
+
     async def _prefetch_option_id(self, signal: dict):
         """
         Fire-and-forget background prefetch of option_id into cache.
         Called at parse time BEFORE queuing so the cache is warm when
         the worker's _blocking_place() runs. Eliminates 4-6s REST lookup
         from the critical order-execution path.
+        
+        IMPORTANT: Only works for Webull-tradable symbols. Index options
+        (SPXW, SPX, NDX, etc.) are skipped since they aren't on Webull.
+        A 10s timeout prevents hanging if the Webull API doesn't respond.
         """
         import time as _pf_time
         try:
@@ -2009,6 +2015,10 @@ class WebullBroker:
             opt_type = signal.get('opt_type')
             expiry = signal.get('expiry')
             if not all([symbol, strike, opt_type, expiry]):
+                return
+
+            if symbol.upper() in self._PREFETCH_SKIP_SYMBOLS:
+                print(f"[PREFETCH] ⚡ Skipping Webull lookup for {symbol} (index option, not on Webull)")
                 return
 
             _yr = signal.get('expiry_year') or datetime.now().strftime('%Y')
@@ -2034,9 +2044,17 @@ class WebullBroker:
             print(f"[PREFETCH] Starting background option_id lookup: {symbol} ${strike}{opt_type} {expiry}")
 
             loop = asyncio.get_running_loop()
-            option_id, tId = await loop.run_in_executor(
-                None, self._wb_get_option_id_strict, wb, symbol, strike, opt_type, expiry, signal.get('expiry_year')
-            )
+            try:
+                option_id, tId = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None, self._wb_get_option_id_strict, wb, symbol, strike, opt_type, expiry, signal.get('expiry_year')
+                    ),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                _elapsed = (_pf_time.monotonic() - _t0) * 1000
+                print(f"[PREFETCH] ⚠️ Webull lookup timed out after {_elapsed:.0f}ms for {symbol} ${strike}{opt_type} — proceeding without cache")
+                return
 
             _elapsed = (_pf_time.monotonic() - _t0) * 1000
             if option_id:
