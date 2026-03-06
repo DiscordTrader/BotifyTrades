@@ -1991,6 +1991,63 @@ class WebullBroker:
             del self._option_id_cache[cache_key]
         return None
 
+    async def _prefetch_option_id(self, signal: dict):
+        """
+        Fire-and-forget background prefetch of option_id into cache.
+        Called at parse time BEFORE queuing so the cache is warm when
+        the worker's _blocking_place() runs. Eliminates 4-6s REST lookup
+        from the critical order-execution path.
+        """
+        import time as _pf_time
+        try:
+            if signal.get('asset') != 'option':
+                return
+            if signal.get('action', '').upper() not in ('BTO', 'STC', 'BTC'):
+                return
+            symbol = signal.get('symbol')
+            strike = signal.get('strike')
+            opt_type = signal.get('opt_type')
+            expiry = signal.get('expiry')
+            if not all([symbol, strike, opt_type, expiry]):
+                return
+
+            _yr = signal.get('expiry_year') or datetime.now().strftime('%Y')
+            if '/' in str(expiry):
+                _parts = str(expiry).split('/')
+                full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
+            elif '-' in str(expiry) and len(str(expiry)) >= 10:
+                full_expiry = str(expiry)[:10]
+            else:
+                full_expiry = str(expiry)
+
+            cached = self.get_cached_option_id(symbol, float(strike), full_expiry, opt_type)
+            if cached:
+                signal['option_id'] = cached
+                print(f"[PREFETCH] Cache hit for {symbol} ${strike}{opt_type} {expiry} → option_id={cached}")
+                return
+
+            wb = self._client
+            if not wb:
+                return
+
+            _t0 = _pf_time.monotonic()
+            print(f"[PREFETCH] Starting background option_id lookup: {symbol} ${strike}{opt_type} {expiry}")
+
+            loop = asyncio.get_running_loop()
+            option_id, tId = await loop.run_in_executor(
+                None, self._wb_get_option_id_strict, wb, symbol, strike, opt_type, expiry, signal.get('expiry_year')
+            )
+
+            _elapsed = (_pf_time.monotonic() - _t0) * 1000
+            if option_id:
+                self.cache_option_id(symbol, float(strike), full_expiry, opt_type, str(option_id))
+                signal['option_id'] = str(option_id)
+                print(f"[PREFETCH] ✓ Got option_id={option_id} for {symbol} ${strike}{opt_type} in {_elapsed:.0f}ms (cached for worker)")
+            else:
+                print(f"[PREFETCH] ⚠️ Could not resolve option_id for {symbol} ${strike}{opt_type} ({_elapsed:.0f}ms)")
+        except Exception as e:
+            print(f"[PREFETCH] Error (non-fatal): {e}")
+
     def _prewarm_option_cache(self, wb, symbols=None):
         """
         Pre-fetch option IDs for commonly traded symbols at startup.
@@ -2139,10 +2196,8 @@ class WebullBroker:
             print("[PREWARM] ⚠️ No Webull client available — pre-warm skipped")
             return
 
-        # Delay startup pre-warm to avoid competing with MQTT streaming and initial sync
-        # on the shared Webull client (Webull SDK is not thread-safe at startup)
-        print("[PREWARM] ⏳ Waiting 5 minutes for bot to fully stabilize before pre-warming cache...")
-        await asyncio.sleep(300)
+        print("[PREWARM] ⏳ Waiting 30s for MQTT streaming to stabilize before pre-warming cache...")
+        await asyncio.sleep(30)
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._prewarm_option_cache, wb)
@@ -3299,24 +3354,24 @@ class WebullBroker:
                     print(f"[SLIPPAGE] ⚡ Hub hit: ${current_price:.4f} (0ms, no REST)")
             
             if not current_price or current_price <= 0:
-                _chk_yr = expiry_year or datetime.now().strftime('%Y')
-                if '/' in expiry_mmdd:
-                    _chk_parts = expiry_mmdd.split('/')
-                    _chk_exp = f"{_chk_yr}-{_chk_parts[0].zfill(2)}-{_chk_parts[1].zfill(2)}"
+                if ALLOW_ORDER_WHEN_NO_QUOTE:
+                    print(f"[SLIPPAGE] ⚡ Hub miss — skipping REST fallback (allow_when_no_quote=true, limit ${limit_price:.2f} protects)")
                 else:
-                    _chk_exp = expiry_mmdd
-                cached_opt_id = self.get_cached_option_id(symbol, float(strike), _chk_exp, opt_type)
-                if cached_opt_id:
-                    current_price = await asyncio.to_thread(get_quote)
-                    if current_price:
-                        print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
-                elif ALLOW_ORDER_WHEN_NO_QUOTE:
-                    print(f"[SLIPPAGE] ⚡ No hub price & no cached option_id — skipping slow REST lookup (allow_when_no_quote=true)")
-                    print(f"[SLIPPAGE] Limit price ${limit_price:.2f} will protect against adverse fills")
-                else:
-                    current_price = await asyncio.to_thread(get_quote)
-                    if current_price:
-                        print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
+                    _chk_yr = expiry_year or datetime.now().strftime('%Y')
+                    if '/' in expiry_mmdd:
+                        _chk_parts = expiry_mmdd.split('/')
+                        _chk_exp = f"{_chk_yr}-{_chk_parts[0].zfill(2)}-{_chk_parts[1].zfill(2)}"
+                    else:
+                        _chk_exp = expiry_mmdd
+                    cached_opt_id = self.get_cached_option_id(symbol, float(strike), _chk_exp, opt_type)
+                    if cached_opt_id:
+                        current_price = await asyncio.to_thread(get_quote)
+                        if current_price:
+                            print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
+                    else:
+                        current_price = await asyncio.to_thread(get_quote)
+                        if current_price:
+                            print(f"[SLIPPAGE] REST fallback: ${current_price:.4f}")
             
             _slippage_reference = limit_price
             _is_conditional = kwargs.get('_conditional_order_id') or kwargs.get('conditional_order_id')
@@ -8899,7 +8954,11 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                 signal['_use_market_order'] = True
                                 print(f"[ALERT PARSER] ✓ Market order enabled for BTO (channel entry_order_mode=market)")
                             
-                            # Add directly to queue for execution
+                            if signal.get('asset') == 'option' and not signal.get('option_id'):
+                                await self._prefetch_option_id(signal)
+                            import time as _tmod
+                            signal['_parsed_at'] = _tmod.monotonic()
+                            signal['_queued_at'] = _tmod.monotonic()
                             await self.order_queue.put(signal)
                             print(f"[ALERT PARSER] ✅ Added signal to execution queue: BTO 1 {structured['symbol']} @${structured['entry_price']}")
                             print(f"[ALERT PARSER]    → Channel: {target_channel_info['name']} | Paper: {bool(target_channel_info.get('paper_trade_enabled', 0))} | Signal ID: {signal_id}")
@@ -13423,7 +13482,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if _pre_q_sync:
                     _pre_q_sync.pause_for_order()
                 
+                if opt.get('asset') == 'option' and not opt.get('option_id'):
+                    await self._prefetch_option_id(opt)
+
                 import time as _tmod
+                opt['_parsed_at'] = _tmod.monotonic()
                 opt['_queued_at'] = _tmod.monotonic()
                 await self.order_queue.put(opt)
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
@@ -13627,6 +13690,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt['channel_id'] = str(message.channel.id)
                                 opt['message_id'] = str(message.id)
                                 opt['author'] = author_name
+                            if opt.get('asset') == 'option' and not opt.get('option_id'):
+                                await self._prefetch_option_id(opt)
+                            import time as _tmod
+                            opt['_parsed_at'] = _tmod.monotonic()
+                            opt['_queued_at'] = _tmod.monotonic()
                             await self.order_queue.put(opt)
                             print(f"[QUEUE] ✓ Signal queued for execution")
                         return
@@ -13873,12 +13941,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     _pre_q_sync.pause_for_order()
                 
                 import time as _tmod
+                stk['_parsed_at'] = _tmod.monotonic()
                 stk['_queued_at'] = _tmod.monotonic()
                 await self.order_queue.put(stk)
                 print(f"[QUEUE] ✓ Signal queued for LIVE execution")
             
-            # Paper trading - only queue separately if execute_enabled is False
-            # If execute_enabled is True, multi-broker execution already handles paper brokers via enabled_brokers
             if track_enabled and not execute_enabled:
                 paper_trade_enabled = channel_info.get('paper_trade_enabled', 0) if channel_info else 0
                 if paper_trade_enabled:
@@ -14812,8 +14879,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     )
                 
                 _t_post_order = _t.monotonic()
-                _original_print(f"[{broker_name}] [TIMING] Order API call: {(_t_post_order - _t_pre_order)*1000:.0f}ms (total: {(_t_post_order - _t0)*1000:.0f}ms)")
-                
+                _api_ms = (_t_post_order - _t_pre_order) * 1000
+                _total_ms = (_t_post_order - _t0) * 1000
+                _original_print(f"[{broker_name}] [TIMING] Order API call: {_api_ms:.0f}ms (total: {_total_ms:.0f}ms)")
+                _parsed_at = signal.get('_parsed_at')
+                _queued_at = signal.get('_queued_at')
+                if _parsed_at:
+                    _e2e_ms = (_t_post_order - _parsed_at) * 1000
+                    _q_to_w = ((_queued_at - _parsed_at) * 1000) if _queued_at and _parsed_at else 0
+                    _health_ms = ((_t_health - _t0) * 1000)
+                    _setup_ms = ((_t_pre_order - _t_health) * 1000)
+                    _original_print(f"[{broker_name}] [FAST-PATH] Parse→Queue: {_q_to_w:.0f}ms | Queue→Worker: {((_t0 - _queued_at)*1000) if _queued_at else 0:.0f}ms | Health: {_health_ms:.0f}ms | Setup: {_setup_ms:.0f}ms | API: {_api_ms:.0f}ms | TOTAL: {_e2e_ms:.0f}ms")
+
                 order_succeeded = False
                 if hasattr(result, 'success'):
                     if result.success:
@@ -15011,8 +15088,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     )
                 
                 _t_post_stk_order = _t.monotonic()
-                _original_print(f"[{broker_name}] [TIMING] Stock order API: {(_t_post_stk_order - _t_pre_stk_order)*1000:.0f}ms (total: {(_t_post_stk_order - _t0)*1000:.0f}ms)")
-                
+                _stk_api_ms = (_t_post_stk_order - _t_pre_stk_order) * 1000
+                _stk_total_ms = (_t_post_stk_order - _t0) * 1000
+                _original_print(f"[{broker_name}] [TIMING] Stock order API: {_stk_api_ms:.0f}ms (total: {_stk_total_ms:.0f}ms)")
+                _parsed_at = signal.get('_parsed_at')
+                _queued_at = signal.get('_queued_at')
+                if _parsed_at:
+                    _e2e_ms = (_t_post_stk_order - _parsed_at) * 1000
+                    _original_print(f"[{broker_name}] [FAST-PATH] Parse→Order: {_e2e_ms:.0f}ms | Health: {((_t_health - _t0)*1000):.0f}ms | Setup: {((_t_pre_stk_order - _t_health)*1000):.0f}ms | API: {_stk_api_ms:.0f}ms")
+
                 stock_order_succeeded = False
                 if hasattr(result, 'success'):
                     stock_order_succeeded = result.success
