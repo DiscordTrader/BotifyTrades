@@ -5360,10 +5360,19 @@ def register_routes(app):
         
         def _blocking_call():
             try:
-                # Get order details first (for Discord notification)
                 order_details = None
                 try:
-                    orders = wb.get_current_orders()
+                    orders = None
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub
+                        _hub = get_webull_data_hub()
+                        cached_orders = _hub.get_pending_orders(max_age_seconds=10)
+                        if cached_orders is not None:
+                            orders = cached_orders
+                    except Exception:
+                        pass
+                    if orders is None:
+                        orders = wb.get_current_orders()
                     if orders:
                         for order in orders:
                             if order.get('orderId') == order_id:
@@ -6707,27 +6716,64 @@ def register_routes(app):
                                                 break
                         
                         if option_id:
-                            quote = wb.get_option_quote(optionId=option_id)
-                            if quote:
-                                prices[str(trade_id)] = {
-                                    'bid': float(quote.get('bidPrice', 0) or 0),
-                                    'ask': float(quote.get('askPrice', 0) or 0),
-                                    'mid': float((float(quote.get('bidPrice', 0) or 0) + float(quote.get('askPrice', 0) or 0)) / 2),
-                                    'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
-                                }
-                    else:
-                        # Get stock quote - try Webull first, then yfinance fallback
-                        quote_data = None
-                        if wb:
+                            hub_hit = False
                             try:
-                                ticker_id = wb.get_ticker(symbol)
+                                from src.services.webull_data_hub import get_webull_data_hub
+                                import time as _hub_time
+                                _hub = get_webull_data_hub()
+                                _hq = _hub.get_quote(str(option_id))
+                                if _hq and _hq.timestamp and (_hub_time.time() - _hq.timestamp) < 15:
+                                    if _hq.bid > 0 or _hq.ask > 0 or _hq.last > 0:
+                                        prices[str(trade_id)] = {
+                                            'bid': _hq.bid,
+                                            'ask': _hq.ask,
+                                            'mid': (_hq.bid + _hq.ask) / 2 if _hq.bid > 0 and _hq.ask > 0 else _hq.last,
+                                            'last': _hq.last
+                                        }
+                                        hub_hit = True
+                            except Exception:
+                                pass
+                            if not hub_hit:
+                                quote = wb.get_option_quote(optionId=option_id)
+                                if quote:
+                                    prices[str(trade_id)] = {
+                                        'bid': float(quote.get('bidPrice', 0) or 0),
+                                        'ask': float(quote.get('askPrice', 0) or 0),
+                                        'mid': float((float(quote.get('bidPrice', 0) or 0) + float(quote.get('askPrice', 0) or 0)) / 2),
+                                        'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
+                                    }
+                    else:
+                        quote_data = None
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            import time as _hub_time
+                            _hub = get_webull_data_hub()
+                            _hq = _hub.get_quote(symbol)
+                            if _hq and _hq.timestamp and (_hub_time.time() - _hq.timestamp) < 15:
+                                if _hq.last > 0 or (_hq.bid > 0 and _hq.ask > 0):
+                                    mid = (_hq.bid + _hq.ask) / 2 if _hq.bid > 0 and _hq.ask > 0 else _hq.last
+                                    quote_data = {'bid': _hq.bid, 'ask': _hq.ask, 'mid': mid, 'last': _hq.last}
+                        except Exception:
+                            pass
+                        if not quote_data and wb:
+                            try:
+                                ticker_id = None
+                                try:
+                                    from src.services.webull_data_hub import get_webull_data_hub
+                                    _hub = get_webull_data_hub()
+                                    cached_tid = _hub.get_ticker_id(symbol)
+                                    if cached_tid:
+                                        ticker_id = int(cached_tid)
+                                except Exception:
+                                    pass
+                                if not ticker_id:
+                                    ticker_id = wb.get_ticker(symbol)
                                 if ticker_id:
                                     quote = wb.get_quote(ticker_id)
                                     if quote:
                                         bid = float(quote.get('bidPrice', 0) or 0)
                                         ask = float(quote.get('askPrice', 0) or 0)
                                         last = float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
-                                        # Only use Webull data if we have valid price
                                         if last > 0 or (bid > 0 and ask > 0):
                                             mid = (bid + ask) / 2 if bid and ask else last
                                             quote_data = {'bid': bid, 'ask': ask, 'mid': mid, 'last': last}
@@ -7114,7 +7160,17 @@ def register_routes(app):
                     if hasattr(_bot_instance, 'broker') and _bot_instance.broker:
                         wb = getattr(_bot_instance.broker, '_client', None)
                         if wb:
-                            webull_orders = wb.get_current_orders() or []
+                            webull_orders = None
+                            try:
+                                from src.services.webull_data_hub import get_webull_data_hub
+                                _hub = get_webull_data_hub()
+                                cached_orders = _hub.get_pending_orders(max_age_seconds=15)
+                                if cached_orders is not None:
+                                    webull_orders = cached_orders
+                            except Exception:
+                                pass
+                            if webull_orders is None:
+                                webull_orders = wb.get_current_orders() or []
                 except Exception as e:
                     print(f"[API] Webull orders fetch error: {e}")
             

@@ -967,7 +967,12 @@ class CandlePreWarmService:
 
             try:
                 from src.services.webull_data_hub import get_webull_data_hub
+                import time as _time
                 webull_hub = get_webull_data_hub()
+                hub_quote = webull_hub.get_quote(symbol)
+                if hub_quote and hub_quote.timestamp and (_time.time() - hub_quote.timestamp) < 10:
+                    if hub_quote.last > 0:
+                        return hub_quote.last
                 if webull_hub and hasattr(webull_hub, '_broker') and webull_hub._broker:
                     broker = webull_hub._broker
                     if hasattr(broker, '_wb'):
