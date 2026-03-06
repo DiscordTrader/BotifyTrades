@@ -13496,16 +13496,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[QUEUE] ⛔ Signal SKIPPED - already rejected (see Dashboard)")
                     return
                 
+                print(f"[DEBUG] STEP-1: NDX reject check passed", flush=True)
+                
                 _pre_q_sync = getattr(self, '_sync_service', None)
                 if _pre_q_sync:
                     _pre_q_sync.pause_for_order()
                 
+                print(f"[DEBUG] STEP-2: Sync paused, about to prefetch. asset={opt.get('asset')}, option_id={opt.get('option_id')}", flush=True)
+                
                 if opt.get('asset') == 'option' and not opt.get('option_id'):
+                    print(f"[DEBUG] STEP-3: Calling _prefetch_option_id for {opt.get('symbol')}", flush=True)
                     await self._prefetch_option_id(opt)
+                    print(f"[DEBUG] STEP-3b: _prefetch_option_id returned", flush=True)
+                else:
+                    print(f"[DEBUG] STEP-3: Skipping prefetch (asset={opt.get('asset')}, option_id={opt.get('option_id')})", flush=True)
 
                 import time as _tmod
                 opt['_parsed_at'] = _tmod.monotonic()
                 opt['_queued_at'] = _tmod.monotonic()
+                print(f"[DEBUG] STEP-4: About to queue.put, queue exists={self.order_queue is not None}", flush=True)
                 await self.order_queue.put(opt)
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
                 print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
