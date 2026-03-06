@@ -281,7 +281,16 @@ class BrokerSyncService:
         
         print(f"[SYNC] Syncing {len(brokers_to_sync)} broker(s): {[b[0] for b in brokers_to_sync]}")
         
+        _sync_interrupted = False
+        _synced_count = 0
         for broker_name, broker_instance in brokers_to_sync:
+            if not self._order_in_progress.is_set():
+                _remaining = [b[0] for b in brokers_to_sync[_synced_count:]]
+                print(f"[SYNC] ⚡ Order incoming — interrupting sync (skipping: {_remaining})", flush=True)
+                _sync_interrupted = True
+                await asyncio.sleep(0)
+                break
+            
             try:
                 await asyncio.wait_for(
                     self._sync_broker(broker_name, broker_instance),
@@ -302,8 +311,12 @@ class BrokerSyncService:
                     print(f"[SYNC] ⏳ Transient error syncing {broker_name}: {e}")
                 else:
                     print(f"[SYNC] Error syncing {broker_name}: {e}")
+            _synced_count += 1
         
-        print(f"[SYNC] ✓ Sync cycle complete ({len(brokers_to_sync)} brokers)", flush=True)
+        if _sync_interrupted:
+            print(f"[SYNC] ✓ Sync cycle interrupted for order priority ({_synced_count}/{len(brokers_to_sync)} brokers)", flush=True)
+        else:
+            print(f"[SYNC] ✓ Sync cycle complete ({len(brokers_to_sync)} brokers)", flush=True)
         
         # Fire first sync callback (signals sync_ready event to worker)
         if not self._first_sync_done and self._first_sync_callback:
@@ -327,12 +340,14 @@ class BrokerSyncService:
         print(f"[SYNC] Syncing {broker_name}...")
         
         normalized_data = await self._fetch_and_normalize(broker_name, broker_instance)
+        await asyncio.sleep(0)
         
         if not normalized_data:
             print(f"[SYNC] No data from {broker_name}")
             return
         
         await self._reconcile_trades(broker_name, normalized_data)
+        await asyncio.sleep(0)
         
         if not hasattr(self, '_fill_sync_counter'):
             self._fill_sync_counter = {}
@@ -341,9 +356,11 @@ class BrokerSyncService:
         if self._fill_sync_counter[broker_name] >= 5:
             await self._sync_filled_orders(broker_name, broker_instance)
             self._fill_sync_counter[broker_name] = 0
+            await asyncio.sleep(0)
         
         if hasattr(self, '_risk_manager') and self._risk_manager:
             await self.reconcile_risk_orders(self._risk_manager)
+            await asyncio.sleep(0)
         
         print(f"[SYNC] ✓ {broker_name} sync complete")
         

@@ -538,18 +538,32 @@ class SetupWizard:
                 os.chmod(self.config_file, 0o600)
             except Exception:
                 pass
+            SetupWizard._credential_cache = None
+            SetupWizard._credential_cache_time = 0
             print(f"✅ Credentials saved to: {self.config_file}")
             return True
         except Exception as e:
             print(f"❌ Failed to save credentials: {e}")
             return False
     
+    _credential_cache = None
+    _credential_cache_time = 0
+    _CREDENTIAL_CACHE_TTL = 120
+    
     def _load_credentials(self) -> dict:
-        """Load existing credentials"""
+        """Load existing credentials (cached for 120s to avoid repeated DPAPI calls)"""
+        import time as _time
+        now = _time.monotonic()
+        if (SetupWizard._credential_cache is not None
+                and (now - SetupWizard._credential_cache_time) < SetupWizard._CREDENTIAL_CACHE_TTL):
+            return SetupWizard._credential_cache.copy()
+        
         try:
             encrypted = self.config_file.read_bytes()
             credentials = self._decrypt_data(encrypted)
             print("✅ Loaded existing credentials (Windows DPAPI)")
+            SetupWizard._credential_cache = credentials
+            SetupWizard._credential_cache_time = now
             return credentials
         except Exception as e:
             print(f"❌ Failed to load credentials: {e}")

@@ -13214,6 +13214,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[QUEUE] ⛔ Signal SKIPPED - already rejected (see Dashboard)")
                     return
                 
+                _pre_q_sync = getattr(self, '_sync_service', None)
+                if _pre_q_sync:
+                    _pre_q_sync.pause_for_order()
+                
                 import time as _tmod
                 opt['_queued_at'] = _tmod.monotonic()
                 await self.order_queue.put(opt)
@@ -13659,6 +13663,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             import traceback
                             traceback.print_exc()
                 
+                _pre_q_sync = getattr(self, '_sync_service', None)
+                if _pre_q_sync:
+                    _pre_q_sync.pause_for_order()
+                
                 import time as _tmod
                 stk['_queued_at'] = _tmod.monotonic()
                 await self.order_queue.put(stk)
@@ -13953,7 +13961,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as e:
                 _original_print(f"[{broker_name}] Pre-trade validation error (continuing): {e}")
             
-            # Check if trade was blocked by MAX POSITION$ cap
+            _t_health = _t.monotonic()
+            _original_print(f"[{broker_name}] [TIMING] Pre-trade checks: {(_t_health - _t0)*1000:.0f}ms")
+            
             if signal.get('_blocked_by_max_position'):
                 block_reason = signal.get('_block_reason', 'Position exceeds MAX POSITION$ limit')
                 _original_print(f"[{broker_name}] ❌ Trade BLOCKED: {block_reason}")
@@ -14525,6 +14535,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 order_price = _fp
                 # ─────────────────────────────────────────────────────────────────────
 
+                _t_pre_order = _t.monotonic()
+                _original_print(f"[{broker_name}] [TIMING] Pre-order setup: {(_t_pre_order - _t_health)*1000:.0f}ms (total: {(_t_pre_order - _t0)*1000:.0f}ms)")
                 _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${order_price}")
                 
                 if uses_modern_signature:
@@ -14586,7 +14598,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         price=order_price
                     )
                 
-                # Log the result for debugging (applies to all option orders)
+                _t_post_order = _t.monotonic()
+                _original_print(f"[{broker_name}] [TIMING] Order API call: {(_t_post_order - _t_pre_order)*1000:.0f}ms (total: {(_t_post_order - _t0)*1000:.0f}ms)")
+                
                 order_succeeded = False
                 if hasattr(result, 'success'):
                     if result.success:
@@ -14756,6 +14770,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 stock_order_price = _fp2
                 # ─────────────────────────────────────────────────────────────────────
 
+                _t_pre_stk_order = _t.monotonic()
+                _original_print(f"[{broker_name}] [TIMING] Stock pre-order: {(_t_pre_stk_order - _t_health)*1000:.0f}ms (total: {(_t_pre_stk_order - _t0)*1000:.0f}ms)")
+                
                 if uses_modern_signature:
                     if 'ALPACA' in broker_upper:
                         result = await broker_instance.place_stock_order(
@@ -14779,7 +14796,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         quantity=signal['qty'],
                         price=stock_order_price
                     )
-                # Convert OrderResult to dict format for consistency
+                
+                _t_post_stk_order = _t.monotonic()
+                _original_print(f"[{broker_name}] [TIMING] Stock order API: {(_t_post_stk_order - _t_pre_stk_order)*1000:.0f}ms (total: {(_t_post_stk_order - _t0)*1000:.0f}ms)")
+                
                 stock_order_succeeded = False
                 if hasattr(result, 'success'):
                     stock_order_succeeded = result.success
