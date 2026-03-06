@@ -13495,38 +13495,39 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         traceback.print_exc()
                         print(f"[CONDITIONAL] Falling back to immediate execution")
                 
-                # Check if signal was rejected (e.g., NDX→QQQ conversion failed)
                 if opt.get('_ndx_rejected'):
                     print(f"[QUEUE] ⛔ Signal SKIPPED - already rejected (see Dashboard)")
                     return
+                
+                _original_print(f"[FLOW] A: Past NDX reject check for {opt.get('symbol')}", flush=True)
                 
                 _pre_q_sync = getattr(self, '_sync_service', None)
                 if _pre_q_sync:
                     _pre_q_sync.pause_for_order()
                 
+                _original_print(f"[FLOW] B: Sync paused, checking prefetch skip", flush=True)
+                
                 _skip_syms = self._PREFETCH_SKIP_SYMBOLS
                 _sym_upper = (opt.get('symbol') or '').upper()
                 if opt.get('asset') == 'option' and not opt.get('option_id') and _sym_upper not in _skip_syms:
+                    _original_print(f"[FLOW] C1: Prefetching {_sym_upper}", flush=True)
                     try:
                         await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
                     except asyncio.TimeoutError:
-                        import sys as _sys
-                        _sys.stderr.write(f"[PREFETCH] ⚠️ Timed out for {_sym_upper} — proceeding without cache\n")
-                        _sys.stderr.flush()
+                        _original_print(f"[PREFETCH] ⚠️ Timed out for {_sym_upper} — proceeding without cache", flush=True)
                     except Exception as _pf_err:
-                        import sys as _sys
-                        _sys.stderr.write(f"[PREFETCH] Error (non-fatal): {_pf_err}\n")
-                        _sys.stderr.flush()
+                        _original_print(f"[PREFETCH] Error (non-fatal): {_pf_err}", flush=True)
                 elif _sym_upper in _skip_syms:
-                    import sys as _sys
-                    _sys.stderr.write(f"[PREFETCH] ⚡ Skipping Webull lookup for {_sym_upper} (index option)\n")
-                    _sys.stderr.flush()
+                    _original_print(f"[FLOW] C2: Skipping prefetch for {_sym_upper} (index option)", flush=True)
+                else:
+                    _original_print(f"[FLOW] C3: No prefetch needed (asset={opt.get('asset')})", flush=True)
 
+                _original_print(f"[FLOW] D: About to queue.put", flush=True)
                 import time as _tmod
                 opt['_parsed_at'] = _tmod.monotonic()
                 opt['_queued_at'] = _tmod.monotonic()
                 await self.order_queue.put(opt)
-                print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
+                _original_print(f"[QUEUE] ✅ Signal queued for LIVE execution: {opt.get('action')} {opt.get('symbol')}", flush=True)
             
             # Paper trading - only queue separately if execute_enabled is False
             # If execute_enabled is True, multi-broker execution already handles paper brokers via enabled_brokers
