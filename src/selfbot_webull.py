@@ -2005,20 +2005,25 @@ class WebullBroker:
         A 10s timeout prevents hanging if the Webull API doesn't respond.
         """
         import time as _pf_time
+        print(f"[PREFETCH] ENTERED _prefetch_option_id for {signal.get('symbol')}", flush=True)
         try:
             if signal.get('asset') != 'option':
+                print(f"[PREFETCH] Early return: asset={signal.get('asset')} != option", flush=True)
                 return
             if signal.get('action', '').upper() not in ('BTO', 'STC', 'BTC'):
+                print(f"[PREFETCH] Early return: action={signal.get('action')} not in BTO/STC/BTC", flush=True)
                 return
             symbol = signal.get('symbol')
             strike = signal.get('strike')
             opt_type = signal.get('opt_type')
             expiry = signal.get('expiry')
+            print(f"[PREFETCH] Fields: symbol={symbol}, strike={strike}, opt_type={opt_type}, expiry={expiry}", flush=True)
             if not all([symbol, strike, opt_type, expiry]):
+                print(f"[PREFETCH] Early return: missing field(s)", flush=True)
                 return
 
             if symbol.upper() in self._PREFETCH_SKIP_SYMBOLS:
-                print(f"[PREFETCH] ⚡ Skipping Webull lookup for {symbol} (index option, not on Webull)")
+                print(f"[PREFETCH] ⚡ Skipping Webull lookup for {symbol} (index option, not on Webull)", flush=True)
                 return
 
             _yr = signal.get('expiry_year') or datetime.now().strftime('%Y')
