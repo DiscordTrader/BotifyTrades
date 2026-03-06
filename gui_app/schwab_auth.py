@@ -52,6 +52,7 @@ class SchwabTokenManager:
         self._token_data = None
         self._last_refresh_attempt = 0
         self._refresh_failures = 0
+        self._token_dead = False
         self.load_tokens()
     
     def load_tokens(self):
@@ -81,6 +82,7 @@ class SchwabTokenManager:
                 json.dump(self._token_data, f, indent=2)
             print(f"[SCHWAB TOKEN] Saved tokens, expires in {expires_in}s")
             self._refresh_failures = 0
+            self._token_dead = False
             return True
         except Exception as e:
             print(f"[SCHWAB TOKEN] Error saving tokens: {e}")
@@ -144,6 +146,8 @@ class SchwabTokenManager:
         
         access_valid = now < expiry
         refresh_valid = (now - refresh_created) < (7 * 24 * 60 * 60) if refresh_created else True
+        if self._token_dead:
+            refresh_valid = False
         
         seconds_until_expiry = max(0, expiry - now)
         minutes_until_expiry = int(seconds_until_expiry / 60)
@@ -230,8 +234,9 @@ class SchwabTokenManager:
                     print(f"[SCHWAB TOKEN] Refresh failed: {response.status_code}")
                     print(f"[SCHWAB TOKEN] Response: {response.text}")
                     
-                    if response.status_code == 400 and 'invalid_grant' in response.text:
-                        print("[SCHWAB TOKEN] Refresh token expired or revoked. Re-authentication required.")
+                    if response.status_code == 400 and ('invalid_grant' in response.text or 'refresh_token_authentication_error' in response.text or 'unsupported_token_type' in response.text):
+                        self._token_dead = True
+                        print("[SCHWAB TOKEN] ❌ Refresh token expired or revoked. Re-authentication required via Settings → Brokers.")
                     
                     return False
                     
@@ -285,6 +290,9 @@ class SchwabTokenManager:
                         # Time to refresh
                         print("[SCHWAB TOKEN] Auto-refresh triggered")
                         success = self.refresh_tokens()
+                        if not success and self._token_dead:
+                            print("[SCHWAB TOKEN] Refresh token is dead. Stopping auto-refresh. Re-authenticate via Settings → Brokers.")
+                            break
                         if not success and self._refresh_failures >= 3:
                             print("[SCHWAB TOKEN] Multiple refresh failures, stopping auto-refresh")
                             break

@@ -357,10 +357,10 @@ class SchwabBroker(BrokerInterface):
                 return False
             elif response.status_code == 400:
                 error_text = response.text
-                if 'invalid_grant' in error_text:
+                if 'invalid_grant' in error_text or 'refresh_token_authentication_error' in error_text or 'unsupported_token_type' in error_text:
                     self._token_auth_dead = True
                     self.connected = False
-                    print(f"[{self.name}] ❌ Refresh token expired or revoked. Re-authentication required. (Token refresh suspended until re-auth)")
+                    print(f"[{self.name}] ❌ Refresh token expired or revoked. Re-authentication required via Settings → Brokers. (Token refresh suspended until re-auth)")
                 else:
                     self._apply_token_backoff()
                     if self._token_refresh_failures <= 3:
