@@ -1893,6 +1893,8 @@ def register_routes(app):
             )
         
         if channel_id:
+            if _bot_instance and hasattr(_bot_instance, 'invalidate_channel_cache'):
+                _bot_instance.invalidate_channel_cache()
             return jsonify({'success': True, 'id': channel_id})
         else:
             return jsonify({'success': False, 'error': 'Channel already exists or invalid configuration'}), 400
@@ -1925,6 +1927,9 @@ def register_routes(app):
         
         # Perform the update
         db.update_channel(channel_id, **data)
+        
+        if _bot_instance and hasattr(_bot_instance, 'invalidate_channel_cache'):
+            _bot_instance.invalidate_channel_cache()
         
         # Save-and-verify: Re-read and confirm critical settings were persisted
         verification_errors = []
@@ -2021,6 +2026,8 @@ def register_routes(app):
     def api_delete_channel(channel_id):
         """Delete a channel"""
         db.delete_channel(channel_id)
+        if _bot_instance and hasattr(_bot_instance, 'invalidate_channel_cache'):
+            _bot_instance.invalidate_channel_cache()
         return jsonify({'success': True})
     
     @app.route('/api/channels/<int:channel_id>/reset', methods=['POST'])

@@ -6295,20 +6295,34 @@ class SelfClient(discord.Client):
         channel_info = self._get_channel_info(channel_id)
         return channel_info['category'] if channel_info else None
     
+    _channel_info_cache = {}
+    _channel_info_cache_ts = 0
+
     def _get_channel_info(self, channel_id: int) -> Optional[dict]:
         """Get full channel information from database including dual-mode flags"""
         if not self.db:
             return None
         
         try:
-            channels = self.db.get_channels()
-            for channel in channels:
-                if channel['discord_channel_id'] == str(channel_id) and channel['is_active']:
-                    return channel
-            return None
+            import time as _ci_time
+            _now = _ci_time.monotonic()
+            if _now - self._channel_info_cache_ts > 10:
+                channels = self.db.get_channels()
+                self._channel_info_cache = {}
+                for channel in channels:
+                    cid = channel.get('discord_channel_id', '')
+                    if channel.get('is_active'):
+                        self._channel_info_cache[cid] = channel
+                self._channel_info_cache_ts = _now
+            
+            return self._channel_info_cache.get(str(channel_id))
         except Exception as e:
             print(f"[DATABASE] Error checking channel info: {e}")
             return None
+    
+    def invalidate_channel_cache(self):
+        """Force refresh on next _get_channel_info call"""
+        self._channel_info_cache_ts = 0
     
     def _get_channel_brokers(self, channel_info: dict) -> list:
         """Extract broker list from channel config for conditional orders."""
@@ -14005,25 +14019,35 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ SOD cache error: {sod_err} — falling back to live balance")
                     
                     if not sod_used:
-                        _original_print(f"[{broker_name}] [DEBUG] Checking position sizing - has get_account_info: {hasattr(broker_instance, 'get_account_info')}")
-                        
-                        if hasattr(broker_instance, 'get_account_info'):
-                            account_info = await broker_instance.get_account_info()
-                            _original_print(f"[{broker_name}] [DEBUG] get_account_info returned: {account_info}")
-                            if account_info:
+                        try:
+                            from src.services.broker_health_monitor import get_health_monitor
+                            _hm = get_health_monitor()
+                            _cached = _hm.get_cached_account_info(broker_name)
+                            if _cached:
+                                account_info = _cached
                                 options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
-                        elif hasattr(broker_instance, 'wb') and broker_instance.wb:
-                            import asyncio
-                            raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
-                            if raw_account:
-                                account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
-                                options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
-                        elif hasattr(broker_instance, 'get_account'):
-                            import asyncio
-                            raw_account = await asyncio.to_thread(broker_instance.get_account)
-                            if raw_account:
-                                account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
-                                options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                                _original_print(f"[{broker_name}] [POSITION SIZE] Using cached account data (0ms)")
+                        except Exception:
+                            pass
+                        
+                        if not account_info:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] Cache miss — falling back to live API")
+                            if hasattr(broker_instance, 'get_account_info'):
+                                account_info = await broker_instance.get_account_info()
+                                if account_info:
+                                    options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
+                            elif hasattr(broker_instance, 'wb') and broker_instance.wb:
+                                import asyncio
+                                raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
+                                if raw_account:
+                                    account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
+                                    options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                            elif hasattr(broker_instance, 'get_account'):
+                                import asyncio
+                                raw_account = await asyncio.to_thread(broker_instance.get_account)
+                                if raw_account:
+                                    account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
+                                    options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
                     
                     if account_info:
                         buying_power = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
@@ -14429,9 +14453,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     order_price = None
                     _original_print(f"[{broker_name}] ⚡ MARKET ORDER for option {signal.get('action', 'BTO')} — price=None triggers real-time quote + aggressive limit (fallback=${_signal_price_fallback})")
                 else:
-                    _signal_price_fallback = None
-                    # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
-                    # The limit_price acts as a ceiling - order fills at market or better, up to limit
+                    _signal_price_fallback = signal.get('price')
                     order_price = signal.get('price')
                     if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
                         order_price = signal['_limit_price']
@@ -15283,10 +15305,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 is_risk_order = signal.get('_risk_management_order', False)
                 if not self.sync_ready.is_set() and not is_risk_order:
-                    _original_print(f"[WORKER] ⏸️ Holding {signal.get('action')} {signal.get('symbol')} until first sync completes...", flush=True)
-                    await self.order_queue.put(signal)
-                    await asyncio.sleep(2)
-                    continue
+                    _original_print(f"[WORKER] ⏸️ Waiting for first sync to complete (up to 5s)...", flush=True)
+                    try:
+                        await asyncio.wait_for(self.sync_ready.wait(), timeout=5.0)
+                        _original_print(f"[WORKER] ✅ Sync ready — proceeding with {signal.get('action')} {signal.get('symbol')}", flush=True)
+                    except asyncio.TimeoutError:
+                        _original_print(f"[WORKER] ⚠️ Sync not ready after 5s — proceeding anyway with {signal.get('action')} {signal.get('symbol')}", flush=True)
                 
                 if is_risk_order and not self.sync_ready.is_set():
                     _original_print(f"[WORKER] ⚡ Processing risk exit {signal.get('symbol')} IMMEDIATELY (bypassing sync gate)", flush=True)
@@ -15305,9 +15329,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         pass
                 
                 import time as _tmod
+                _worker_t0 = _tmod.monotonic()
                 _queue_latency = ''
                 if signal.get('_queued_at'):
-                    _queue_latency = f" (queue→worker: {(_tmod.monotonic() - signal['_queued_at']):.2f}s)"
+                    _queue_latency = f" (queue→worker: {(_tmod.monotonic() - signal['_queued_at'])*1000:.0f}ms)"
                 _original_print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}{_queue_latency}", flush=True)
                 
                 # Handle NOTIFICATION signals (not orders - just messages)
@@ -15637,6 +15662,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 return {'success': False, 'msg': str(e), 'broker': name}
                         
                         try:
+                            _worker_pre_gather = _tmod.monotonic()
+                            _original_print(f"[WORKER] [TIMING] Worker pre-processing: {(_worker_pre_gather - _worker_t0)*1000:.0f}ms (dedup+analysis+mapping)", flush=True)
+                            
                             coroutines = [
                                 execute_with_name(name, instance, sig) 
                                 for name, instance, sig in broker_tasks
@@ -15655,7 +15683,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _sync_svc.resume_after_order()
                         
                         _exec_elapsed = _time_mod.monotonic() - _exec_start
-                        _original_print(f"[MULTI-BROKER] ⚡ Parallel execution complete ({_exec_elapsed:.1f}s)")
+                        _e2e_ms = (_time_mod.monotonic() - _worker_t0) * 1000
+                        _original_print(f"[MULTI-BROKER] ⚡ Parallel execution complete ({_exec_elapsed:.1f}s) | Worker total: {_e2e_ms:.0f}ms")
                     
                     # Handle multi-broker responses
                     # Only treat as success if: success=True, OR orderId present without explicit failure
