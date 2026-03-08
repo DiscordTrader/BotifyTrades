@@ -366,8 +366,9 @@ class BrokerSyncService:
         
         if not hasattr(self, '_health_sync_counter'):
             self._health_sync_counter = {}
+        is_first_health_update = broker_name not in self._health_sync_counter
         self._health_sync_counter[broker_name] = self._health_sync_counter.get(broker_name, 0) + 1
-        if self._health_sync_counter[broker_name] >= 3:
+        if is_first_health_update or self._health_sync_counter[broker_name] >= 3:
             self._health_sync_counter[broker_name] = 0
             asyncio.ensure_future(self._update_health_async(broker_name, broker_instance))
     
