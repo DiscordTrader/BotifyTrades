@@ -52,7 +52,7 @@ class SchwabBroker(BrokerInterface):
         
         self._api_rate_lock = None
         self._last_api_call = 0
-        self._min_api_interval = 1.0
+        self._min_api_interval = 0.3
         self._last_valid_positions = []
         self._last_valid_positions_time = 0
         self._position_cache_ttl = 60
@@ -548,12 +548,12 @@ class SchwabBroker(BrokerInterface):
             headers['Accept'] = 'application/json'
 
         async def _async_request(m, u, h, kw):
-            async with httpx.AsyncClient(timeout=15.0) as c:
+            async with httpx.AsyncClient(timeout=8.0) as c:
                 return await c.request(m, u, headers=h, **kw)
 
         response = await asyncio.wait_for(
             _async_request(method, url, headers, kwargs),
-            timeout=20.0
+            timeout=10.0
         )
 
         if response.status_code == 429:
@@ -1142,74 +1142,24 @@ class SchwabBroker(BrokerInterface):
             
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
-                print(f"[{self.name}] ✓ Order accepted by Schwab (order_id={order_id}), verifying fill status...")
-                
-                verified_status = await self._verify_order_fill(order_id, action, option_symbol, max_checks=6, interval=0.5)
-                
-                if verified_status['status'] == 'filled':
-                    fill_price = verified_status.get('average_price', price)
-                    filled_qty = verified_status.get('filled_quantity', quantity)
-                    print(f"[{self.name}] ✅ Order FILLED: {filled_qty}x @ ${fill_price:.2f}")
-                    return OrderResult(
-                        success=True,
-                        order_id=order_id,
-                        message=f"Option order FILLED: {action} {filled_qty} {option_symbol} @ ${fill_price:.2f}",
-                        price=fill_price,
-                        quantity=filled_qty,
-                        symbol=symbol,
-                        action=action
+                print(f"[{self.name}] ✅ Order accepted by Schwab (order_id={order_id})")
+
+                try:
+                    asyncio.get_event_loop().create_task(
+                        self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity)
                     )
-                elif verified_status['status'] == 'rejected':
-                    reject_reason = verified_status.get('reason', 'Order rejected by exchange')
-                    print(f"[{self.name}] ❌ Order REJECTED by exchange: {reject_reason}")
-                    return OrderResult(
-                        success=False,
-                        order_id=order_id,
-                        message=f"Order REJECTED: {reject_reason}",
-                        symbol=symbol,
-                        action=action
-                    )
-                elif verified_status['status'] == 'cancelled':
-                    cancel_reason = verified_status.get('reason', 'Order cancelled')
-                    print(f"[{self.name}] ❌ Order CANCELLED: {cancel_reason}")
-                    return OrderResult(
-                        success=False,
-                        order_id=order_id,
-                        message=f"Order CANCELLED: {cancel_reason}",
-                        symbol=symbol,
-                        action=action
-                    )
-                elif verified_status['status'] == 'expired':
-                    print(f"[{self.name}] ❌ Order EXPIRED without filling")
-                    return OrderResult(
-                        success=False,
-                        order_id=order_id,
-                        message=f"Order EXPIRED: limit price ${price:.2f} not reached",
-                        symbol=symbol,
-                        action=action
-                    )
-                elif verified_status['status'] == 'pending':
-                    print(f"[{self.name}] ⏳ Order still WORKING after verification window — treating as pending success")
-                    return OrderResult(
-                        success=True,
-                        order_id=order_id,
-                        message=f"Option order PENDING: {action} {quantity} {option_symbol} @ ${price:.2f} (still working)",
-                        price=price,
-                        quantity=quantity,
-                        symbol=symbol,
-                        action=action
-                    )
-                else:
-                    print(f"[{self.name}] ⚠️ Unknown order status: {verified_status['status']} — treating as placed")
-                    return OrderResult(
-                        success=True,
-                        order_id=order_id,
-                        message=f"Option order placed: {action} {quantity} {option_symbol} (status: {verified_status['status']})",
-                        price=price,
-                        quantity=quantity,
-                        symbol=symbol,
-                        action=action
-                    )
+                except Exception:
+                    pass
+
+                return OrderResult(
+                    success=True,
+                    order_id=order_id,
+                    message=f"Option order placed: {action} {quantity} {option_symbol} @ ${price:.2f}",
+                    price=price,
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
             else:
                 error_msg = response.text
                 return OrderResult(
@@ -1279,6 +1229,29 @@ class SchwabBroker(BrokerInterface):
                 return {'status': 'pending', 'reason': f'Verification error: {e}'}
         
         return {'status': 'pending', 'reason': 'Verification exhausted'}
+
+    async def _background_verify_order(self, order_id: str, action: str, option_symbol: str,
+                                        symbol: str, price: float, quantity: int):
+        """Background task: verify order fill status after placement.
+        
+        Runs asynchronously — does not block the caller. If order is rejected/cancelled/expired,
+        logs the failure. The broker sync service will reconcile DB state on its next cycle.
+        """
+        await asyncio.sleep(1.5)
+
+        verified = await self._verify_order_fill(order_id, action, option_symbol, max_checks=3, interval=1.5)
+        status = verified.get('status', 'pending')
+
+        if status == 'filled':
+            fill_price = verified.get('average_price', price)
+            filled_qty = verified.get('filled_quantity', quantity)
+            print(f"[{self.name}] ✅ Background verify: Order {order_id} FILLED {filled_qty}x @ ${fill_price:.2f}")
+        elif status in ('rejected', 'cancelled', 'expired'):
+            reason = verified.get('reason', status)
+            print(f"[{self.name}] ❌ Background verify: Order {order_id} {status.upper()}: {reason}")
+            print(f"[{self.name}] ⚠️ Sync service will reconcile trade status on next cycle")
+        else:
+            print(f"[{self.name}] ⏳ Background verify: Order {order_id} still {status} — sync service will track")
 
     _INDEX_OPTION_MAP = {
         'SPX': 'SPXW',
@@ -2520,7 +2493,7 @@ class SchwabBroker(BrokerInterface):
             }
 
             async def _async_order_status(url, h):
-                async with httpx.AsyncClient(timeout=25.0) as c:
+                async with httpx.AsyncClient(timeout=8.0) as c:
                     return await c.get(url, headers=h)
             
             response = await asyncio.wait_for(
@@ -2528,7 +2501,7 @@ class SchwabBroker(BrokerInterface):
                     f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
                     headers
                 ),
-                timeout=30.0
+                timeout=10.0
             )
 
             if response.status_code == 200:
