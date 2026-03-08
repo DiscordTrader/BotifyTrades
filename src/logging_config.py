@@ -99,6 +99,8 @@ class CleanConsoleFormatter(logging.Formatter):
         '[CONDITIONAL]',
         # Streaming / Data Hub
         '[WEBULL_STREAM]', '[WEBULL_HUB]', '[SCHWAB_STREAM]', '[SCHWAB_HUB]',
+        # Token management / Hot-connect
+        '[SCHWAB TOKEN]', '[SCHWAB HOT-CONNECT]',
         # Debug (when enabled)
         '[DEBUG]', '[API]', '[ROUTE]'
     ]
