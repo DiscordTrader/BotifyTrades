@@ -82,9 +82,9 @@ class WebullDataHub:
         self._subscribed_symbols: Set[str] = set()
         self._subscribed_ticker_ids: Set[str] = set()
 
-        self.POSITION_CACHE_TTL = 30
-        self.ORDER_CACHE_TTL = 30
-        self.ACCOUNT_CACHE_TTL = 60
+        self.POSITION_CACHE_TTL = 45
+        self.ORDER_CACHE_TTL = 45
+        self.ACCOUNT_CACHE_TTL = 90
         self.QUOTE_STALE_THRESHOLD = 120
         self.OPTION_ID_TTL = 600
 

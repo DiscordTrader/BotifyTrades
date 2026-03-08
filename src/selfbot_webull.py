@@ -3698,7 +3698,7 @@ class WebullBroker:
                     try:
                         from src.services.webull_data_hub import get_webull_data_hub
                         hub = get_webull_data_hub()
-                        cached_pos = hub.get_positions(max_age_seconds=10)
+                        cached_pos = hub.get_positions(max_age_seconds=30)
                         if cached_pos is not None:
                             positions = cached_pos
                     except Exception:
@@ -4426,7 +4426,7 @@ class WebullBroker:
                     try:
                         from src.services.webull_data_hub import get_webull_data_hub
                         hub = get_webull_data_hub()
-                        cached_pos = hub.get_positions(max_age_seconds=10)
+                        cached_pos = hub.get_positions(max_age_seconds=30)
                         if cached_pos is not None:
                             positions = cached_pos
                     except Exception:
@@ -4564,13 +4564,18 @@ class WebullBroker:
                 try:
                     from src.services.webull_data_hub import get_webull_data_hub
                     hub = get_webull_data_hub()
-                    cached_pos = hub.get_positions(max_age_seconds=15)
+                    cached_pos = hub.get_positions(max_age_seconds=45)
                     if cached_pos is not None:
                         all_positions = cached_pos
                 except Exception:
                     pass
                 if all_positions is None:
                     all_positions = wb.get_positions()
+                    if all_positions and isinstance(all_positions, list):
+                        try:
+                            hub.update_positions(all_positions, source="rest")
+                        except Exception:
+                            pass
                 if isinstance(all_positions, dict) and all_positions.get('code') == 'auth.token.expire':
                     self._tokens_valid = False
                     return []
@@ -4598,61 +4603,27 @@ class WebullBroker:
                         )
                         
                         if is_option:
-                            # Option position - use tickerId to fetch details if missing
                             ticker_id = pos.get('tickerId', 0)
                             symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
                             
-                            # Try to get option details from API using tickerId
-                            option_details = None
-                            if ticker_id:
-                                try:
-                                    # Use tickerId as optionId to get full option details
-                                    option_details = wb.get_option_quote(stock=symbol, optionId=str(ticker_id))
-                                except Exception as e:
-                                    print(f"[RISK] Warning: Could not fetch option details for {symbol}: {e}")
+                            strike = float(pos.get('strikePrice', 0))
+                            option_id = pos.get('optionId', ticker_id)
+                            raw_direction = (pos.get('direction', '') or '').lower()
+                            direction = 'C' if raw_direction == 'call' else ('P' if raw_direction == 'put' else '')
                             
-                            # Extract option metadata from API response or fallback to empty
-                            strike = 0.0
+                            raw_expiry = pos.get('expireDate', '')
                             expiry = ''
-                            direction = ''
-                            option_id = ticker_id
-                            
-                            if option_details and isinstance(option_details, dict) and 'data' in option_details:
-                                # Search for the matching option in the data array by tickerId
-                                matched_option = None
-                                for opt in option_details.get('data', []):
-                                    if opt.get('tickerId') == ticker_id:
-                                        matched_option = opt
-                                        break
-                                
-                                if matched_option:
-                                    # Extract metadata from matched option
-                                    strike = float(matched_option.get('strikePrice', 0))
-                                    
-                                    # Convert expiry date: "2025-12-19" -> "12/19" or "12/19/25"
-                                    raw_expiry = matched_option.get('expireDate', '')
-                                    if raw_expiry:
-                                        from datetime import datetime
-                                        try:
-                                            exp_date = datetime.strptime(raw_expiry, '%Y-%m-%d')
-                                            current_year = datetime.now().year
-                                            if exp_date.year == current_year:
-                                                expiry = exp_date.strftime('%m/%d')  # Same year: "12/19"
-                                            else:
-                                                expiry = exp_date.strftime('%m/%d/%y')  # Future year: "12/19/25"
-                                        except:
-                                            expiry = raw_expiry
-                                    
-                                    # Convert direction: "call" -> "C", "put" -> "P"
-                                    raw_direction = matched_option.get('direction', '').lower()
-                                    if raw_direction == 'call':
-                                        direction = 'C'
-                                    elif raw_direction == 'put':
-                                        direction = 'P'
-                                    
-                                    option_id = ticker_id
-                                else:
-                                    print(f"[RISK] Warning: Could not match option metadata for {symbol} (tickerId={ticker_id})")
+                            if raw_expiry:
+                                from datetime import datetime
+                                try:
+                                    exp_date = datetime.strptime(raw_expiry, '%Y-%m-%d')
+                                    current_year = datetime.now().year
+                                    if exp_date.year == current_year:
+                                        expiry = exp_date.strftime('%m/%d')
+                                    else:
+                                        expiry = exp_date.strftime('%m/%d/%y')
+                                except:
+                                    expiry = raw_expiry
                             
                             positions.append({
                                 'asset': 'option',
@@ -4665,7 +4636,7 @@ class WebullBroker:
                                 'strike': strike,
                                 'expiry': expiry,
                                 'direction': direction,
-                                'ticker_id': ticker_id  # Keep for future lookups
+                                'ticker_id': ticker_id
                             })
                         else:
                             # Stock position

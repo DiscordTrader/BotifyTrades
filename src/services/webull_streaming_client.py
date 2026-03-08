@@ -126,27 +126,35 @@ class WebullStreamingClient:
                     'raw': data
                 })
 
-                wb = self._wb_instance or getattr(self._broker, 'wb', None)
-                if wb is not None:
-                    try:
-                        import asyncio as _aio
-                        loop = _aio.get_event_loop()
-                        if loop.is_running():
-                            _aio.ensure_future(self._hub.refresh_positions_once(wb))
-                            _aio.ensure_future(self._hub.refresh_orders_once(wb))
-                    except Exception:
-                        pass
-
-                if order_status == 'Filled':
-                    self._hub.invalidate_account()
+                now = time.time()
+                last_refresh = getattr(self, '_last_order_refresh_ts', 0)
+                if now - last_refresh < 5.0:
+                    pass
+                else:
+                    self._last_order_refresh_ts = now
+                    wb = self._wb_instance or getattr(self._broker, 'wb', None)
                     if wb is not None:
                         try:
                             import asyncio as _aio
                             loop = _aio.get_event_loop()
                             if loop.is_running():
-                                _aio.ensure_future(self._hub.refresh_account_once(wb))
+                                _aio.ensure_future(self._hub.refresh_positions_once(wb))
+                                _aio.ensure_future(self._hub.refresh_orders_once(wb))
                         except Exception:
                             pass
+
+                if order_status == 'Filled':
+                    self._hub.invalidate_account()
+                    if now - last_refresh >= 5.0:
+                        wb = self._wb_instance or getattr(self._broker, 'wb', None)
+                        if wb is not None:
+                            try:
+                                import asyncio as _aio
+                                loop = _aio.get_event_loop()
+                                if loop.is_running():
+                                    _aio.ensure_future(self._hub.refresh_account_once(wb))
+                            except Exception:
+                                pass
                     try:
                         from src.services.daily_pnl_limit_service import get_daily_pnl_service
                         broker_name = getattr(self._broker, 'name', 'WEBULL')

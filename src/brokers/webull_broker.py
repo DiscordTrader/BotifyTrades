@@ -469,9 +469,17 @@ class WebullBroker(BrokerInterface):
             return {}
     
     async def get_positions_detailed(self) -> list:
-        """Get detailed positions with full information"""
+        """Get detailed positions with full information. Uses hub cache when fresh."""
         try:
-            positions_raw = await self._retry_on_busy(self.wb.get_positions, 'get_positions')
+            positions_raw = None
+            _from_rest = False
+            if self._data_hub:
+                cached = self._data_hub.get_positions(max_age_seconds=45)
+                if cached is not None:
+                    positions_raw = cached
+            if positions_raw is None:
+                positions_raw = await self._retry_on_busy(self.wb.get_positions, 'get_positions')
+                _from_rest = True
             positions = []
             
             for pos in positions_raw:
@@ -542,7 +550,7 @@ class WebullBroker(BrokerInterface):
                         'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
                     })
             
-            if self._data_hub:
+            if self._data_hub and _from_rest:
                 self._data_hub.update_positions(positions_raw, source="rest")
             if self._streaming_client:
                 self._streaming_client.subscribe_positions(positions)

@@ -1272,40 +1272,114 @@ class RiskManager:
         self.cache.save()
     
     async def _fetch_all_positions(self) -> List[PositionSnapshot]:
-        """Fetch positions from all brokers with rate limit enforcement.
+        """Fetch positions from all brokers — hub-first, zero API cost when possible.
         
-        When rate-limited, uses cached positions from last successful fetch
-        to ensure risk monitoring continues without gaps.
+        Priority chain for Webull:
+        1. WebullDataHub streaming/cached positions (zero API cost)
+        2. position_fetcher() which itself uses hub cache then REST fallback
+        3. In-memory cached snapshots from last successful fetch
+        
+        This ensures the risk engine NEVER goes blind due to rate limiting.
         """
         positions = []
         rate_manager = get_rate_limit_manager() if RATE_LIMIT_AVAILABLE else None
         
         import time as _time
-        if rate_manager:
-            can_proceed, wait_time = rate_manager.can_make_request('webull')
-            if not can_proceed:
-                cache_age = _time.time() - getattr(self, '_webull_cache_ts', 0)
-                if hasattr(self, '_last_webull_positions') and self._last_webull_positions and cache_age < 30:
-                    positions.extend(self._last_webull_positions)
-                elif hasattr(self, '_last_webull_positions') and self._last_webull_positions:
-                    print(f"[RISK] Webull rate limit - cached positions stale ({cache_age:.0f}s), skipping")
+        
+        webull_snapshots = None
+        
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            hub_positions = hub.get_positions(max_age_seconds=60)
+            if hub_positions is not None and len(hub_positions) > 0:
+                fetched = []
+                for pos in hub_positions:
+                    position_qty = float(pos.get('position', 0))
+                    if position_qty <= 0:
+                        continue
+                    symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+                    asset_type = pos.get('assetType', 'unknown')
+                    is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos or asset_type in ('option', 'OPTION', 'OPT'))
+                    
+                    if is_option:
+                        ticker_id = pos.get('tickerId', 0)
+                        strike = float(pos.get('strikePrice', 0))
+                        option_id = pos.get('optionId', ticker_id)
+                        raw_dir = (pos.get('direction', '') or '').lower()
+                        direction = 'C' if raw_dir == 'call' else ('P' if raw_dir == 'put' else '')
+                        raw_exp = pos.get('expireDate', '')
+                        expiry = ''
+                        if raw_exp and '-' in raw_exp:
+                            try:
+                                from datetime import datetime as _dt
+                                ed = _dt.strptime(raw_exp, '%Y-%m-%d')
+                                expiry = ed.strftime('%m/%d') if ed.year == _dt.now().year else ed.strftime('%m/%d/%y')
+                            except:
+                                expiry = raw_exp
+                        
+                        snap_data = {
+                            'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
+                            'quantity': position_qty, 'avg_cost': float(pos.get('costPrice', 0)),
+                            'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
+                            'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                            'option_id': option_id, 'strike': strike, 'expiry': expiry,
+                            'direction': direction, 'ticker_id': ticker_id
+                        }
+                        fetched.append(self._to_snapshot(snap_data))
+                    else:
+                        quantity = position_qty
+                        market_value = float(pos.get('marketValue', 0))
+                        current_price = market_value / quantity if quantity > 0 else 0
+                        snap_data = {
+                            'broker': 'Webull', 'asset': 'stock', 'symbol': symbol,
+                            'quantity': quantity, 'avg_cost': float(pos.get('costPrice', 0)),
+                            'current_price': current_price,
+                            'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                            'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
+                        }
+                        fetched.append(self._to_snapshot(snap_data))
+                
+                if fetched:
+                    webull_snapshots = fetched
+                    self._last_webull_positions = fetched
+                    self._webull_cache_ts = _time.time()
+                    positions.extend(fetched)
+            elif hub_positions is not None:
+                hub_age = hub.get_positions_age()
+                if hub_age < 30:
+                    webull_snapshots = []
+                    self._last_webull_positions = []
+                    self._webull_cache_ts = _time.time()
+        except ImportError:
+            pass
+        except Exception as e:
+            pass
+        
+        if webull_snapshots is None:
+            if rate_manager:
+                can_proceed, wait_time = rate_manager.can_make_request('webull')
+                if not can_proceed:
+                    cache_age = _time.time() - getattr(self, '_webull_cache_ts', 0)
+                    if hasattr(self, '_last_webull_positions') and self._last_webull_positions and cache_age < 120:
+                        positions.extend(self._last_webull_positions)
+                    elif hasattr(self, '_last_webull_positions') and self._last_webull_positions:
+                        positions.extend(self._last_webull_positions)
                 else:
-                    print(f"[RISK] Webull rate limit reached - no cached positions (wait {wait_time:.1f}s)")
+                    rate_manager.record_request('webull')
+                    webull_positions = await self.position_fetcher() or []
+                    webull_snapshots_rest = []
+                    for pos in webull_positions:
+                        pos['broker'] = 'Webull'
+                        webull_snapshots_rest.append(self._to_snapshot(pos))
+                    self._last_webull_positions = webull_snapshots_rest
+                    self._webull_cache_ts = _time.time()
+                    positions.extend(webull_snapshots_rest)
             else:
-                rate_manager.record_request('webull')
                 webull_positions = await self.position_fetcher() or []
-                webull_snapshots = []
                 for pos in webull_positions:
                     pos['broker'] = 'Webull'
-                    webull_snapshots.append(self._to_snapshot(pos))
-                self._last_webull_positions = webull_snapshots
-                self._webull_cache_ts = _time.time()
-                positions.extend(webull_snapshots)
-        else:
-            webull_positions = await self.position_fetcher() or []
-            for pos in webull_positions:
-                pos['broker'] = 'Webull'
-                positions.append(self._to_snapshot(pos))
+                    positions.append(self._to_snapshot(pos))
         
         if self.alpaca_broker and getattr(self.alpaca_broker, 'connected', False):
             try:

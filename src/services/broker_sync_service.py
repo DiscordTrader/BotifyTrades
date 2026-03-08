@@ -364,7 +364,12 @@ class BrokerSyncService:
         
         print(f"[SYNC] ✓ {broker_name} sync complete")
         
-        asyncio.ensure_future(self._update_health_async(broker_name, broker_instance))
+        if not hasattr(self, '_health_sync_counter'):
+            self._health_sync_counter = {}
+        self._health_sync_counter[broker_name] = self._health_sync_counter.get(broker_name, 0) + 1
+        if self._health_sync_counter[broker_name] >= 3:
+            self._health_sync_counter[broker_name] = 0
+            asyncio.ensure_future(self._update_health_async(broker_name, broker_instance))
     
     async def _update_health_async(self, broker_name, broker_instance):
         try:

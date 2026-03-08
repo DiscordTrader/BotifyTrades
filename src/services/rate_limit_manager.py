@@ -39,10 +39,10 @@ class BrokerBucket:
 BROKER_LIMITS: Dict[str, BrokerLimit] = {
     'webull': BrokerLimit(
         name='Webull',
-        requests_per_window=10,
-        window_seconds=30,
-        min_interval_seconds=6.0,
-        active_interval_seconds=10.0,
+        requests_per_window=30,
+        window_seconds=60,
+        min_interval_seconds=2.0,
+        active_interval_seconds=5.0,
         idle_interval_seconds=30.0
     ),
     'alpaca': BrokerLimit(
