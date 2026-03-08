@@ -2791,17 +2791,24 @@ async function loadConditionalOrders() {
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(90deg, rgba(34,197,94,0.08), rgba(59,130,246,0.08)); border-top: 1px solid rgba(255,255,255,0.05);">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Adjust Trigger Offset</span>
+                            <select id="offset-mode-${order.id}" onchange="toggleOffsetMode(${order.id}, this.value, ${order.original_signal_price || triggerPrice})"
+                                style="background: rgba(0,0,0,0.5); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer;">
+                                <option value="percent">%</option>
+                                <option value="dollar">$</option>
+                            </select>
                             <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.3); padding: 4px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
-                                <button onclick="adjustOffset(${order.id}, -1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(220,38,38,0.4);">−</button>
-                                <button onclick="adjustOffset(${order.id}, -0.1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #f97316, #ea580c); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(249,115,22,0.4);">−.1</button>
+                                <button onclick="adjustOffset(${order.id}, 'down-big')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(220,38,38,0.4);">−</button>
+                                <button onclick="adjustOffset(${order.id}, 'down-small')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #f97316, #ea580c); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(249,115,22,0.4);">−.1</button>
                                 <div style="display: flex; align-items: center; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 0 8px; border: 1px solid rgba(255,255,255,0.15); margin: 0 4px;">
                                     <input type="number" id="offset-${order.id}" step="0.1" value="${currentOffset.toFixed(1)}" 
                                         style="width: 50px; text-align: center; background: transparent; border: none; color: var(--text-primary); padding: 6px 0; font-size: 1rem; font-weight: 700;"
-                                        onchange="updateOffsetDisplay(${order.id}, this.value)">
-                                    <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">%</span>
+                                        onchange="updateOffsetDisplay(${order.id}, this.value)"
+                                        data-base-price="${order.original_signal_price || triggerPrice}"
+                                        data-trigger-type="${order.trigger_type}">
+                                    <span id="offset-unit-${order.id}" style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">%</span>
                                 </div>
-                                <button onclick="adjustOffset(${order.id}, 0.1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(34,197,94,0.4);">+.1</button>
-                                <button onclick="adjustOffset(${order.id}, 1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(16,185,129,0.4);">+</button>
+                                <button onclick="adjustOffset(${order.id}, 'up-small')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(34,197,94,0.4);">+.1</button>
+                                <button onclick="adjustOffset(${order.id}, 'up-big')" style="width: 32px; height: 32px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(16,185,129,0.4);">+</button>
                             </div>
                             <button onclick="applyOffset(${order.id})" style="background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 8px 20px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(20,184,166,0.4); margin-left: 8px;">
                                 Apply
@@ -2832,38 +2839,73 @@ function updateOffsetDisplay(orderId, value) {
     }
 }
 
-function adjustOffset(orderId, delta) {
+function getOffsetMode(orderId) {
+    const modeSelect = document.getElementById(`offset-mode-${orderId}`);
+    return modeSelect ? modeSelect.value : 'percent';
+}
+
+function getOffsetDeltas(mode) {
+    if (mode === 'dollar') {
+        return { big: 1.00, small: 0.10 };
+    }
+    return { big: 1.0, small: 0.1 };
+}
+
+function toggleOffsetMode(orderId, mode, basePrice) {
+    const input = document.getElementById(`offset-${orderId}`);
+    const unit = document.getElementById(`offset-unit-${orderId}`);
+    if (!input || !unit) return;
+
+    unit.textContent = mode === 'dollar' ? '$' : '%';
+    input.value = '0';
+    input.step = mode === 'dollar' ? '0.10' : '0.1';
+    updateOffsetPreview(orderId, 0);
+}
+
+function adjustOffset(orderId, direction) {
     const input = document.getElementById(`offset-${orderId}`);
     if (!input) return;
     
+    const mode = getOffsetMode(orderId);
+    const deltas = getOffsetDeltas(mode);
+    let delta = 0;
+    if (direction === 'down-big') delta = -deltas.big;
+    else if (direction === 'down-small') delta = -deltas.small;
+    else if (direction === 'up-small') delta = deltas.small;
+    else if (direction === 'up-big') delta = deltas.big;
+    
     let currentValue = parseFloat(input.value) || 0;
     let newValue = currentValue + delta;
-    // Clamp to reasonable range (-20% to +20%)
-    newValue = Math.max(-20, Math.min(20, newValue));
-    input.value = newValue.toFixed(1);
+
+    if (mode === 'dollar') {
+        newValue = Math.max(-1000, Math.min(1000, newValue));
+        input.value = newValue.toFixed(2);
+    } else {
+        newValue = Math.max(-50, Math.min(50, newValue));
+        input.value = newValue.toFixed(1);
+    }
     
-    // Update preview if exists
     updateOffsetPreview(orderId, newValue);
 }
 
-function updateOffsetPreview(orderId, offsetPct) {
+function updateOffsetPreview(orderId, offsetVal) {
     const preview = document.getElementById(`preview-${orderId}`);
-    if (!preview) return;
+    const input = document.getElementById(`offset-${orderId}`);
+    if (!preview || !input) return;
     
-    // Get original trigger price from data attribute or recalculate
-    const card = preview.closest('.conditional-order-card');
-    if (!card) return;
+    const mode = getOffsetMode(orderId);
+    const basePrice = parseFloat(input.dataset.basePrice) || 0;
+    const triggerType = (input.dataset.triggerType || 'over').toLowerCase();
+    const isBullish = ['over', 'above', 'price_above', 'bto'].includes(triggerType);
     
-    // Find trigger cell and extract price
-    const triggerCell = card.querySelector('[style*="Trigger"]');
-    if (!triggerCell) return;
+    if (basePrice <= 0) return;
     
-    const triggerText = triggerCell.textContent;
-    const priceMatch = triggerText.match(/\$?([\d.]+)/);
-    if (!priceMatch) return;
-    
-    const basePrice = parseFloat(priceMatch[1]);
-    const newPrice = basePrice * (1 + offsetPct / 100);
+    let newPrice;
+    if (mode === 'dollar') {
+        newPrice = isBullish ? basePrice + offsetVal : basePrice - offsetVal;
+    } else {
+        newPrice = isBullish ? basePrice * (1 + offsetVal / 100) : basePrice * (1 - offsetVal / 100);
+    }
     preview.textContent = newPrice.toFixed(2);
 }
 
@@ -2871,13 +2913,19 @@ async function applyOffset(orderId) {
     const input = document.getElementById(`offset-${orderId}`);
     if (!input) return;
     
-    const offsetPercent = parseFloat(input.value);
+    const mode = getOffsetMode(orderId);
+    const offsetValue = parseFloat(input.value);
+    
+    const payload = { offset_mode: mode, offset_value: offsetValue };
+    if (mode === 'percent') {
+        payload.offset_percent = offsetValue;
+    }
     
     try {
         const response = await fetch(`/api/conditional_orders/${orderId}/offset`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ offset_percent: offsetPercent })
+            body: JSON.stringify(payload)
         });
         
         const result = await response.json();
