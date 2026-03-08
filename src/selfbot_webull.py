@@ -14345,13 +14345,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if account_info:
                                     options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
                             elif hasattr(broker_instance, 'wb') and broker_instance.wb:
-                                import asyncio
                                 raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
                                 if raw_account:
                                     account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
                                     options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
                             elif hasattr(broker_instance, 'get_account'):
-                                import asyncio
                                 raw_account = await asyncio.to_thread(broker_instance.get_account)
                                 if raw_account:
                                     account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
@@ -14570,7 +14568,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if hasattr(broker_instance, 'get_account_info'):
                                 account_info = await broker_instance.get_account_info()
                             elif hasattr(broker_instance, 'wb') and broker_instance.wb:
-                                import asyncio
                                 raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
                                 if raw_account:
                                     account_info = {
@@ -14578,7 +14575,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
                                     }
                             elif hasattr(broker_instance, 'get_account'):
-                                import asyncio
                                 raw_account = await asyncio.to_thread(broker_instance.get_account)
                                 if raw_account:
                                     account_info = {
