@@ -7993,38 +7993,75 @@ class SelfClient(discord.Client):
             _original_print(f"[PREWARM] ⚠️ Account pre-warm error: {e}")
 
     async def _sod_balance_scheduler(self):
-        """Capture start-of-day balances at startup and daily at 9:30 AM ET."""
+        """Capture balance snapshots at startup, daily at 4:00 AM ET (pre-market), and 9:30 AM ET (market open)."""
         import asyncio
         from datetime import datetime, timezone, timedelta
 
-        _original_print("[SOD] ⏳ Waiting 3 minutes for brokers to stabilize before initial SOD capture...")
+        _original_print("[SOD] Waiting 3 minutes for brokers to stabilize before initial capture...")
         await asyncio.sleep(180)
+
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        et_tz = ZoneInfo('America/New_York')
 
         try:
             from src.services.sod_balance_cache import get_sod_cache
             sod = get_sod_cache()
-            await sod.capture_all_brokers(self)
+            now_et = datetime.now(et_tz)
+            hour_et = now_et.hour
+            minute_et = now_et.minute
+
+            if hour_et >= 4:
+                _original_print("[SOD] Bot started after 4 AM ET — capturing pre-market snapshot now...")
+                await sod.capture_all_brokers(self, snapshot_type="pre_market")
+
+            if hour_et > 9 or (hour_et == 9 and minute_et >= 30):
+                _original_print("[SOD] Bot started after 9:30 AM ET — capturing start-of-day snapshot now...")
+                await sod.capture_all_brokers(self, snapshot_type="start_of_day")
         except Exception as e:
-            _original_print(f"[SOD] ⚠️ Initial SOD capture failed: {e}")
+            _original_print(f"[SOD] Initial capture failed: {e}")
 
         while True:
             try:
-                now_utc = datetime.now(timezone.utc)
-                target = now_utc.replace(hour=14, minute=30, second=0, microsecond=0)
-                if now_utc >= target:
-                    target += timedelta(days=1)
-                wait_seconds = (target - now_utc).total_seconds()
-                _original_print(f"[SOD] Next capture at 9:30 AM ET ({wait_seconds/3600:.1f}h from now)")
+                now_et = datetime.now(et_tz)
+
+                today_4am = now_et.replace(hour=4, minute=0, second=0, microsecond=0)
+                today_930am = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+                tomorrow_4am = (now_et + timedelta(days=1)).replace(hour=4, minute=0, second=0, microsecond=0)
+
+                upcoming = []
+                if now_et < today_4am:
+                    upcoming.append(('pre_market', today_4am))
+                if now_et < today_930am:
+                    upcoming.append(('start_of_day', today_930am))
+                upcoming.append(('pre_market', tomorrow_4am))
+
+                next_type, next_target = upcoming[0]
+                wait_seconds = (next_target - now_et).total_seconds()
+                if wait_seconds < 1:
+                    wait_seconds = 60
+
+                label = "4:00 AM ET (pre-market)" if next_type == "pre_market" else "9:30 AM ET (market open)"
+                _original_print(f"[SOD] Next capture: {label} ({wait_seconds/3600:.1f}h from now)")
                 await asyncio.sleep(wait_seconds)
-                _original_print("[SOD] 🔄 Daily 9:30 AM ET — capturing start-of-day balances...")
+
                 from src.services.sod_balance_cache import get_sod_cache
                 sod = get_sod_cache()
-                sod.clear()
-                await sod.capture_all_brokers(self)
+                sod.clear(snapshot_type=next_type)
+
+                if next_type == "pre_market":
+                    _original_print("[SOD] Daily 4:00 AM ET — capturing pre-market balances...")
+                    await sod.capture_all_brokers(self, snapshot_type="pre_market")
+                else:
+                    _original_print("[SOD] Daily 9:30 AM ET — capturing start-of-day balances...")
+                    await sod.capture_all_brokers(self, snapshot_type="start_of_day")
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                _original_print(f"[SOD] ⚠️ Scheduler error: {e}")
+                _original_print(f"[SOD] Scheduler error: {e}")
                 await asyncio.sleep(3600)
 
     async def token_refresh_scheduler(self):
@@ -12698,8 +12735,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[POSITION SIZE] ✓ Channel max position size: ${channel_max_position_size}")
                 
                 channel_sizing_mode = channel_info.get('sizing_mode', 'live') if channel_info else 'live'
-                if channel_sizing_mode == 'start_of_day':
-                    opt['_sizing_mode'] = 'start_of_day'
+                if channel_sizing_mode in ('start_of_day', 'pre_market'):
+                    opt['_sizing_mode'] = channel_sizing_mode
                 
                 if channel_default_qty:
                     signal_qty_val = opt.get('qty')
@@ -13826,8 +13863,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[BRACKET ORDER] ✓ Including SL=${stk.get('stop_loss_price')} Target=${stk.get('profit_target_price')}")
                 
                 stk_sizing_mode = channel_info.get('sizing_mode', 'live') if channel_info else 'live'
-                if stk_sizing_mode == 'start_of_day':
-                    stk['_sizing_mode'] = 'start_of_day'
+                if stk_sizing_mode in ('start_of_day', 'pre_market'):
+                    stk['_sizing_mode'] = stk_sizing_mode
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
                 # Priority: Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
@@ -14326,11 +14363,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     sod_used = False
                     sizing_mode = signal.get('_sizing_mode', 'live')
                     
-                    if sizing_mode == 'start_of_day':
+                    if sizing_mode in ('start_of_day', 'pre_market'):
                         try:
                             from src.services.sod_balance_cache import get_sod_cache
                             sod = get_sod_cache()
-                            sod_snapshot = sod.get_snapshot(broker_name)
+                            sod_snapshot = sod.get_snapshot(broker_name, snapshot_type=sizing_mode)
                             if sod_snapshot:
                                 account_info = {
                                     'buying_power': sod_snapshot['buying_power'],
@@ -14338,11 +14375,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 }
                                 options_buying_power = sod_snapshot['options_buying_power']
                                 sod_used = True
-                                _original_print(f"[{broker_name}] [POSITION SIZE] Using START-OF-DAY balance (captured {sod_snapshot['captured_at']})")
+                                label = "PRE-MARKET 4AM" if sizing_mode == "pre_market" else "START-OF-DAY"
+                                _original_print(f"[{broker_name}] [POSITION SIZE] Using {label} balance (captured {sod_snapshot['captured_at']})")
                             else:
-                                _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ SOD snapshot not available for {broker_name} — falling back to live balance")
+                                label = "Pre-market" if sizing_mode == "pre_market" else "SOD"
+                                _original_print(f"[{broker_name}] [POSITION SIZE] {label} snapshot not available for {broker_name} — falling back to live balance")
                         except Exception as sod_err:
-                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ SOD cache error: {sod_err} — falling back to live balance")
+                            _original_print(f"[{broker_name}] [POSITION SIZE] SOD cache error: {sod_err} — falling back to live balance")
                     
                     if not sod_used:
                         try:
@@ -14552,22 +14591,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     cache_used = False
                     sizing_mode = signal.get('_sizing_mode', 'live')
                     
-                    if sizing_mode == 'start_of_day':
+                    if sizing_mode in ('start_of_day', 'pre_market'):
                         try:
                             from src.services.sod_balance_cache import get_sod_cache
                             sod = get_sod_cache()
-                            sod_snapshot = sod.get_snapshot(broker_name)
+                            sod_snapshot = sod.get_snapshot(broker_name, snapshot_type=sizing_mode)
                             if sod_snapshot:
                                 account_info = {
                                     'buying_power': sod_snapshot['buying_power'],
                                     'options_buying_power': sod_snapshot['options_buying_power']
                                 }
                                 sod_used = True
-                                _original_print(f"[{broker_name}] [FUNDS] Using START-OF-DAY balance (captured {sod_snapshot['captured_at']})")
+                                label = "PRE-MARKET 4AM" if sizing_mode == "pre_market" else "START-OF-DAY"
+                                _original_print(f"[{broker_name}] [FUNDS] Using {label} balance (captured {sod_snapshot['captured_at']})")
                             else:
-                                _original_print(f"[{broker_name}] [FUNDS] ⚠️ SOD snapshot not available — falling back to live balance")
+                                label = "Pre-market" if sizing_mode == "pre_market" else "SOD"
+                                _original_print(f"[{broker_name}] [FUNDS] {label} snapshot not available — falling back to live balance")
                         except Exception as sod_err:
-                            _original_print(f"[{broker_name}] [FUNDS] ⚠️ SOD cache error: {sod_err} — falling back to live balance")
+                            _original_print(f"[{broker_name}] [FUNDS] SOD cache error: {sod_err} — falling back to live balance")
                     
                     if not sod_used:
                         try:

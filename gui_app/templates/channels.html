@@ -1636,9 +1636,10 @@ function buildSizingTab(ch) {
                     <label>Balance Mode</label>
                     <select onchange="updateSizingMode(${ch.id}, this.value)">
                         <option value="live" ${(ch.sizing_mode || 'live') === 'live' ? 'selected' : ''}>Live (Real-time)</option>
+                        <option value="pre_market" ${ch.sizing_mode === 'pre_market' ? 'selected' : ''}>Pre-Market (4:00 AM)</option>
                         <option value="start_of_day" ${ch.sizing_mode === 'start_of_day' ? 'selected' : ''}>Start-of-Day (9:30 AM)</option>
                     </select>
-                    <div class="settings-helper">Live uses current buying power. Start-of-Day uses 9:30 AM snapshot.</div>
+                    <div class="settings-helper">Live uses current buying power. Pre-Market uses 4:00 AM snapshot. Start-of-Day uses 9:30 AM snapshot.</div>
                 </div>
             </div>
             <div class="settings-section mint">
@@ -2029,8 +2030,8 @@ async function updateSizingMode(channelId, mode) {
         
         if (response.ok) {
             updateLocalChannel(channelId, { sizing_mode: mode });
-            const label = mode === 'start_of_day' ? 'Start-of-Day (9:30 AM snapshot)' : 'Live (real-time)';
-            showNotification(`Position sizing balance mode: ${label}`);
+            const labels = { 'live': 'Live (real-time)', 'pre_market': 'Pre-Market (4:00 AM snapshot)', 'start_of_day': 'Start-of-Day (9:30 AM snapshot)' };
+            showNotification(`Position sizing balance mode: ${labels[mode] || mode}`);
         } else {
             showNotification('Error updating sizing mode', 'error');
         }

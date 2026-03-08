@@ -667,7 +667,7 @@ def init_db():
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE channels ADD COLUMN sizing_mode TEXT DEFAULT 'live'")
         conn.commit()
-        print("[DATABASE] ✓ Added sizing_mode column (live/start_of_day) for per-channel position sizing base")
+        print("[DATABASE] Added sizing_mode column (live/pre_market/start_of_day) for per-channel position sizing base")
     
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''

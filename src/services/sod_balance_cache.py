@@ -43,10 +43,10 @@ class SODBalanceCache:
 
     def __init__(self):
         self._cache = {}
-        self._captured_date = None
+        self._captured_date = {}
         self._lock = threading.Lock()
 
-    def capture_snapshot(self, broker_name, buying_power, options_buying_power, portfolio_value=None):
+    def capture_snapshot(self, broker_name, buying_power, options_buying_power, portfolio_value=None, snapshot_type="start_of_day"):
         try:
             from zoneinfo import ZoneInfo
         except ImportError:
@@ -55,17 +55,20 @@ class SODBalanceCache:
         today_str = now_et.strftime('%Y-%m-%d')
         normalized = _normalize_broker_name(broker_name)
         pv = float(portfolio_value or 0)
+        cache_key = f"{normalized}_{snapshot_type}"
+        label = "Pre-Market 4AM" if snapshot_type == "pre_market" else "SOD 9:30AM"
         with self._lock:
-            self._cache[normalized] = {
+            self._cache[cache_key] = {
                 'buying_power': float(buying_power or 0),
                 'options_buying_power': float(options_buying_power or 0),
                 'portfolio_value': pv,
                 'captured_at': now_et.isoformat(),
+                'snapshot_type': snapshot_type,
             }
-            self._captured_date = today_str
-        print(f"[SOD] ✓ Captured {normalized}: Stock BP=${buying_power:,.2f}, Options BP=${options_buying_power:,.2f}, Portfolio=${pv:,.2f}")
+            self._captured_date[cache_key] = today_str
+        print(f"[SOD] [{label}] Captured {normalized}: Stock BP=${buying_power:,.2f}, Options BP=${options_buying_power:,.2f}, Portfolio=${pv:,.2f}")
 
-    def get_snapshot(self, broker_name):
+    def get_snapshot(self, broker_name, snapshot_type="start_of_day"):
         try:
             from zoneinfo import ZoneInfo
         except ImportError:
@@ -73,26 +76,34 @@ class SODBalanceCache:
         now_et = datetime.now(ZoneInfo('America/New_York'))
         today_str = now_et.strftime('%Y-%m-%d')
         normalized = _normalize_broker_name(broker_name)
+        cache_key = f"{normalized}_{snapshot_type}"
         with self._lock:
-            if self._captured_date != today_str:
+            if self._captured_date.get(cache_key) != today_str:
                 return None
-            return self._cache.get(normalized)
+            return self._cache.get(cache_key)
 
-    def is_captured_today(self, broker_name):
-        snapshot = self.get_snapshot(broker_name)
+    def is_captured_today(self, broker_name, snapshot_type="start_of_day"):
+        snapshot = self.get_snapshot(broker_name, snapshot_type=snapshot_type)
         return snapshot is not None
 
     def get_all_snapshots(self):
         with self._lock:
             return dict(self._cache)
 
-    def clear(self):
+    def clear(self, snapshot_type=None):
         with self._lock:
-            self._cache.clear()
-            self._captured_date = None
-        print("[SOD] Cache cleared")
+            if snapshot_type:
+                keys_to_remove = [k for k in self._cache if k.endswith(f"_{snapshot_type}")]
+                for k in keys_to_remove:
+                    del self._cache[k]
+                    self._captured_date.pop(k, None)
+                print(f"[SOD] Cache cleared for type={snapshot_type}")
+            else:
+                self._cache.clear()
+                self._captured_date.clear()
+                print("[SOD] Cache cleared (all types)")
 
-    async def capture_all_brokers(self, bot_instance):
+    async def capture_all_brokers(self, bot_instance, snapshot_type="start_of_day"):
         broker_attrs = [
             'broker', 'webull_paper_broker', 'paper_broker', 'schwab_broker',
             'tastytrade_broker', 'robinhood_broker', 'ibkr_broker', 'questrade_broker'
@@ -104,11 +115,12 @@ class SODBalanceCache:
                 brokers_to_capture.append(b)
 
         if not brokers_to_capture:
-            print("[SOD] ⚠️ No brokers available for SOD capture")
+            print(f"[SOD] No brokers available for {snapshot_type} capture")
             return
 
         import asyncio
-        print(f"[SOD] 📸 Capturing start-of-day balances for {len(brokers_to_capture)} broker(s)...")
+        label = "Pre-Market 4AM" if snapshot_type == "pre_market" else "SOD 9:30AM"
+        print(f"[SOD] [{label}] Capturing balances for {len(brokers_to_capture)} broker(s)...")
 
         async def _capture_one(broker):
             try:
@@ -117,16 +129,16 @@ class SODBalanceCache:
                     bp = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
                     opts_bp = float(account_info.get('options_buying_power') or bp)
                     pv = float(account_info.get('net_liquidation') or account_info.get('portfolio_value') or account_info.get('total_equity') or bp)
-                    self.capture_snapshot(broker.name, bp, opts_bp, portfolio_value=pv)
+                    self.capture_snapshot(broker.name, bp, opts_bp, portfolio_value=pv, snapshot_type=snapshot_type)
                 else:
-                    print(f"[SOD] ⚠️ {broker.name}: get_account_info returned empty")
+                    print(f"[SOD] {broker.name}: get_account_info returned empty")
             except asyncio.TimeoutError:
-                print(f"[SOD] ⚠️ {broker.name}: Timed out after 15s")
+                print(f"[SOD] {broker.name}: Timed out after 15s")
             except Exception as e:
-                print(f"[SOD] ⚠️ {broker.name}: Failed to capture - {e}")
+                print(f"[SOD] {broker.name}: Failed to capture - {e}")
 
         await asyncio.gather(*[_capture_one(b) for b in brokers_to_capture])
 
         with self._lock:
-            captured = list(self._cache.keys())
-        print(f"[SOD] ✓ SOD capture complete: {captured}")
+            captured = [k for k in self._cache.keys() if k.endswith(f"_{snapshot_type}")]
+        print(f"[SOD] [{label}] Capture complete: {captured}")
