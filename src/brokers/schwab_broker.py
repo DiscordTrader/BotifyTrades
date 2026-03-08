@@ -40,7 +40,7 @@ class SchwabBroker(BrokerInterface):
         self.account_hash = None
         self.account_number = None
         self.dry_run = config.get('dry_run', False)
-        self._token_refresh_lock = asyncio.Lock()
+        self._token_refresh_lock = None
         self._token_refresh_failures = 0
         self._token_refresh_backoff_until = 0
         self._token_auth_dead = False
@@ -69,7 +69,12 @@ class SchwabBroker(BrokerInterface):
         self._API_BUDGET_LIMIT = 120
         self._API_BUDGET_THROTTLE = 96
         self._API_BUDGET_CRITICAL = 108
-    
+
+    def _get_token_refresh_lock(self):
+        if self._token_refresh_lock is None:
+            self._token_refresh_lock = asyncio.Lock()
+        return self._token_refresh_lock
+
     async def connect(self) -> bool:
         """Connect to Schwab using stored tokens"""
         try:
@@ -480,7 +485,7 @@ class SchwabBroker(BrokerInterface):
         if not self.access_token:
             return False
         if self.token_expiry and datetime.now().timestamp() >= (self.token_expiry - 120):
-            async with self._token_refresh_lock:
+            async with self._get_token_refresh_lock():
                 if self.token_expiry and datetime.now().timestamp() >= (self.token_expiry - 120):
                     return await self._refresh_access_token()
         return True
@@ -585,7 +590,7 @@ class SchwabBroker(BrokerInterface):
                 self._register_success()
 
         elif response.status_code == 401:
-            async with self._token_refresh_lock:
+            async with self._get_token_refresh_lock():
                 refreshed = await self._refresh_access_token()
             if refreshed:
                 headers['Authorization'] = f'Bearer {self.access_token}'
