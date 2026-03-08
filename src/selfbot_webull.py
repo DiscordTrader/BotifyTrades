@@ -8986,7 +8986,8 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                             _alert_sym = (signal.get('symbol') or '').upper()
                             if signal.get('asset') == 'option' and not signal.get('option_id') and _alert_sym not in self._PREFETCH_SKIP_SYMBOLS:
                                 try:
-                                    await asyncio.wait_for(self._prefetch_option_id(signal), timeout=10.0)
+                                    if hasattr(self, '_prefetch_option_id'):
+                                        await asyncio.wait_for(self._prefetch_option_id(signal), timeout=10.0)
                                 except (asyncio.TimeoutError, Exception):
                                     pass
                             import time as _tmod
@@ -13521,7 +13522,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     _skip_syms = getattr(self.__class__, '_PREFETCH_SKIP_SYMBOLS', set())
                     if opt.get('asset') == 'option' and not opt.get('option_id') and _sym_upper not in _skip_syms:
                         try:
-                            await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
+                            if hasattr(self, '_prefetch_option_id'):
+                                await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
                         except (asyncio.TimeoutError, Exception) as _pf_err:
                             _original_print(f"[PREFETCH] ⚠️ {_sym_upper}: {_pf_err}", flush=True)
                     
@@ -13736,7 +13738,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _te_sym = (opt.get('symbol') or '').upper()
                             if opt.get('asset') == 'option' and not opt.get('option_id') and _te_sym not in self._PREFETCH_SKIP_SYMBOLS:
                                 try:
-                                    await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
+                                    if hasattr(self, '_prefetch_option_id'):
+                                        await asyncio.wait_for(self._prefetch_option_id(opt), timeout=10.0)
                                 except (asyncio.TimeoutError, Exception):
                                     pass
                             import time as _tmod
@@ -14978,22 +14981,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if action == 'BTO':
                         try:
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
-                            import threading
-                            def _post_bto_pnl_check(bn=broker_name, bi=broker_instance):
+                            async def _post_bto_pnl_async(bn=broker_name, bi=broker_instance):
                                 try:
-                                    import asyncio as _aio
                                     pnl_svc = get_daily_pnl_service()
                                     ai = None
                                     if hasattr(bi, 'get_account_info'):
-                                        loop = _aio.new_event_loop()
-                                        try:
-                                            coro = bi.get_account_info()
-                                            if _aio.iscoroutine(coro):
-                                                ai = loop.run_until_complete(coro)
-                                            else:
-                                                ai = coro
-                                        finally:
-                                            loop.close()
+                                        ai = await asyncio.wait_for(bi.get_account_info(), timeout=10)
                                     if ai:
                                         pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
                                         if pv > 0:
@@ -15001,7 +14994,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             pnl_svc.update_broker_pnl(bn, pv)
                                 except Exception as ex:
                                     _original_print(f"[DAILY_PNL] Post-BTO refresh error: {ex}")
-                            threading.Thread(target=_post_bto_pnl_check, daemon=True).start()
+                            try:
+                                loop = asyncio.get_running_loop()
+                                loop.create_task(_post_bto_pnl_async())
+                            except RuntimeError:
+                                _original_print(f"[DAILY_PNL] Post-BTO skipped: no running event loop")
                         except ImportError:
                             pass
 
@@ -15189,22 +15186,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if action == 'BTO':
                         try:
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
-                            import threading
-                            def _post_stock_bto_pnl(bn=broker_name, bi=broker_instance):
+                            async def _post_stock_bto_pnl_async(bn=broker_name, bi=broker_instance):
                                 try:
-                                    import asyncio as _aio
                                     pnl_svc = get_daily_pnl_service()
                                     ai = None
                                     if hasattr(bi, 'get_account_info'):
-                                        loop = _aio.new_event_loop()
-                                        try:
-                                            coro = bi.get_account_info()
-                                            if _aio.iscoroutine(coro):
-                                                ai = loop.run_until_complete(coro)
-                                            else:
-                                                ai = coro
-                                        finally:
-                                            loop.close()
+                                        ai = await asyncio.wait_for(bi.get_account_info(), timeout=10)
                                     if ai:
                                         pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
                                         if pv > 0:
@@ -15212,7 +15199,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             pnl_svc.update_broker_pnl(bn, pv)
                                 except Exception as ex:
                                     _original_print(f"[DAILY_PNL] Post-BTO refresh error: {ex}")
-                            threading.Thread(target=_post_stock_bto_pnl, daemon=True).start()
+                            try:
+                                loop = asyncio.get_running_loop()
+                                loop.create_task(_post_stock_bto_pnl_async())
+                            except RuntimeError:
+                                _original_print(f"[DAILY_PNL] Post-BTO skipped: no running event loop")
                         except ImportError:
                             pass
 

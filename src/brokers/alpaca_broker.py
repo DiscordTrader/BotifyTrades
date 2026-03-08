@@ -161,14 +161,17 @@ class AlpacaBroker(BrokerInterface):
             if options_bp is None:
                 options_bp = account.buying_power  # Fall back to regular buying power
             
-            # SETTLED CASH: Use cash_withdrawable as the conservative "settled cash" measure
-            # This only includes settled funds that are clear for trading without good faith violations
             cash_withdrawable = float(getattr(account, 'cash_withdrawable', 0) or 0)
             non_marginable_bp = float(getattr(account, 'non_marginable_buying_power', 0) or 0)
             
-            # For settled cash, use the more conservative of cash_withdrawable or non_marginable_buying_power
-            # non_marginable_buying_power represents cash that can be used without margin (settled only)
-            settled_cash = min(cash_withdrawable, non_marginable_bp) if non_marginable_bp > 0 else cash_withdrawable
+            is_paper = str(getattr(account, 'account_number', '')).startswith('PA') or 'paper' in str(getattr(account, 'status', '')).lower()
+            
+            if is_paper:
+                settled_cash = float(getattr(account, 'cash', 0) or 0)
+                if settled_cash <= 0:
+                    settled_cash = float(getattr(account, 'buying_power', 0) or 0)
+            else:
+                settled_cash = min(cash_withdrawable, non_marginable_bp) if non_marginable_bp > 0 else cash_withdrawable
             
             # Unsettled cash = total cash - settled (withdrawable) cash
             total_cash = float(account.cash)

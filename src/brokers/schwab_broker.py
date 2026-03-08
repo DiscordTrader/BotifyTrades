@@ -1145,9 +1145,17 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] ✅ Order accepted by Schwab (order_id={order_id})")
 
                 try:
-                    asyncio.get_event_loop().create_task(
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
                         self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity)
                     )
+                except RuntimeError:
+                    try:
+                        asyncio.ensure_future(
+                            self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity)
+                        )
+                    except Exception:
+                        pass
                 except Exception:
                     pass
 

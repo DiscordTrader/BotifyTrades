@@ -2436,7 +2436,11 @@ class RiskManager:
                             print(f"[RISK] [DIRECT-EXIT] {pos_key} already executed by worker — skipping")
                             return
                     if not self.cache.is_closing(pos_key):
-                        print(f"[RISK] [DIRECT-EXIT] {pos_key} no longer closing — worker handled it")
+                        entry = self.cache.get(pos_key)
+                        if entry and hasattr(entry, 'exit_retry_count') and entry.exit_retry_count > 0:
+                            print(f"[RISK] [DIRECT-EXIT] {pos_key} closing reset due to FAILED exit (retries={entry.exit_retry_count}) — will retry on next risk cycle")
+                        else:
+                            print(f"[RISK] [DIRECT-EXIT] {pos_key} no longer closing — worker handled it")
                         return
                     with self._exit_executed_lock:
                         if pos_key in self._exit_executed_keys:
