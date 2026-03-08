@@ -23,6 +23,9 @@ author = "agent"
 task = "shell.exec"
 args = "python src/selfbot_webull.py"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [nix]
 channel = "stable-25_05"
 packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt", "libyaml", "openssl", "pkg-config", "rustc", "sqlite", "zip"]
