@@ -484,6 +484,38 @@ class SchwabBroker(BrokerInterface):
                     return await self._refresh_access_token()
         return True
 
+    @staticmethod
+    def _round_to_cboe_increment(price: float, is_sell: bool = False) -> float:
+        """Round option price to valid CBOE penny increment.
+        
+        CBOE rules:
+        - Options priced UNDER $3.00: $0.05 increments (e.g. 1.45, 1.50, 1.55)
+        - Options priced AT/OVER $3.00: $0.10 increments (e.g. 3.10, 3.20, 3.30)
+        
+        For sell orders, round DOWN to nearest valid increment to improve fill probability.
+        For buy orders, round UP to nearest valid increment.
+        """
+        import math
+        if price <= 0:
+            return 0.05
+        
+        if price < 3.00:
+            increment = 0.05
+        else:
+            increment = 0.10
+        
+        ticks = round(price / increment, 8)
+        
+        if is_sell:
+            rounded = math.floor(ticks) * increment
+        else:
+            rounded = math.ceil(ticks) * increment
+        
+        rounded = round(rounded, 2)
+        if rounded <= 0:
+            rounded = increment
+        return rounded
+
     def _format_price(self, price: float) -> str:
         """Format price for Schwab API.
         For prices < $1: truncate to 4 decimal places
@@ -1033,6 +1065,15 @@ class SchwabBroker(BrokerInterface):
                             price = round(_fallback_price * 1.03, 2)
                         print(f"[{self.name}] ✓ Using fallback price after error: ${price:.2f}")
             
+            if price and price > 0:
+                is_sell = (instruction == "SELL_TO_CLOSE")
+                original_price = price
+                price = self._round_to_cboe_increment(price, is_sell=is_sell)
+                if price != original_price:
+                    print(f"[{self.name}] 📐 CBOE increment: ${original_price:.4f} → ${price:.2f} "
+                          f"({'$0.05' if price < 3.00 else '$0.10'} increment, "
+                          f"{'rounded down for sell' if is_sell else 'rounded up for buy'})")
+            
             order_type = "LIMIT" if price else "MARKET"
             
             session = self._get_session_type()
@@ -1101,15 +1142,74 @@ class SchwabBroker(BrokerInterface):
             
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
-                return OrderResult(
-                    success=True,
-                    order_id=order_id,
-                    message=f"Option order placed: {action} {quantity} {option_symbol}",
-                    price=price,
-                    quantity=quantity,
-                    symbol=symbol,
-                    action=action
-                )
+                print(f"[{self.name}] ✓ Order accepted by Schwab (order_id={order_id}), verifying fill status...")
+                
+                verified_status = await self._verify_order_fill(order_id, action, option_symbol, max_checks=6, interval=0.5)
+                
+                if verified_status['status'] == 'filled':
+                    fill_price = verified_status.get('average_price', price)
+                    filled_qty = verified_status.get('filled_quantity', quantity)
+                    print(f"[{self.name}] ✅ Order FILLED: {filled_qty}x @ ${fill_price:.2f}")
+                    return OrderResult(
+                        success=True,
+                        order_id=order_id,
+                        message=f"Option order FILLED: {action} {filled_qty} {option_symbol} @ ${fill_price:.2f}",
+                        price=fill_price,
+                        quantity=filled_qty,
+                        symbol=symbol,
+                        action=action
+                    )
+                elif verified_status['status'] == 'rejected':
+                    reject_reason = verified_status.get('reason', 'Order rejected by exchange')
+                    print(f"[{self.name}] ❌ Order REJECTED by exchange: {reject_reason}")
+                    return OrderResult(
+                        success=False,
+                        order_id=order_id,
+                        message=f"Order REJECTED: {reject_reason}",
+                        symbol=symbol,
+                        action=action
+                    )
+                elif verified_status['status'] == 'cancelled':
+                    cancel_reason = verified_status.get('reason', 'Order cancelled')
+                    print(f"[{self.name}] ❌ Order CANCELLED: {cancel_reason}")
+                    return OrderResult(
+                        success=False,
+                        order_id=order_id,
+                        message=f"Order CANCELLED: {cancel_reason}",
+                        symbol=symbol,
+                        action=action
+                    )
+                elif verified_status['status'] == 'expired':
+                    print(f"[{self.name}] ❌ Order EXPIRED without filling")
+                    return OrderResult(
+                        success=False,
+                        order_id=order_id,
+                        message=f"Order EXPIRED: limit price ${price:.2f} not reached",
+                        symbol=symbol,
+                        action=action
+                    )
+                elif verified_status['status'] == 'pending':
+                    print(f"[{self.name}] ⏳ Order still WORKING after verification window — treating as pending success")
+                    return OrderResult(
+                        success=True,
+                        order_id=order_id,
+                        message=f"Option order PENDING: {action} {quantity} {option_symbol} @ ${price:.2f} (still working)",
+                        price=price,
+                        quantity=quantity,
+                        symbol=symbol,
+                        action=action
+                    )
+                else:
+                    print(f"[{self.name}] ⚠️ Unknown order status: {verified_status['status']} — treating as placed")
+                    return OrderResult(
+                        success=True,
+                        order_id=order_id,
+                        message=f"Option order placed: {action} {quantity} {option_symbol} (status: {verified_status['status']})",
+                        price=price,
+                        quantity=quantity,
+                        symbol=symbol,
+                        action=action
+                    )
             else:
                 error_msg = response.text
                 return OrderResult(
@@ -1127,6 +1227,59 @@ class SchwabBroker(BrokerInterface):
                 action=action
             )
     
+    async def _verify_order_fill(self, order_id: str, action: str, option_symbol: str, 
+                                max_checks: int = 6, interval: float = 0.5) -> Dict[str, Any]:
+        """Verify order fill status by polling Schwab order status API.
+        
+        Checks order status up to max_checks times with interval seconds between checks.
+        Returns dict with 'status' key: 'filled', 'rejected', 'cancelled', 'expired', 'pending'
+        """
+        import asyncio as _aio
+        
+        for check_num in range(1, max_checks + 1):
+            try:
+                status_result = await self.get_order_status(order_id)
+                if not status_result:
+                    if check_num < max_checks:
+                        await _aio.sleep(interval)
+                        continue
+                    print(f"[{self.name}] ⚠️ Could not retrieve order status after {max_checks} checks")
+                    return {'status': 'pending', 'reason': 'Status check failed'}
+                
+                status = status_result.get('status', 'unknown')
+                
+                if status == 'filled':
+                    return {
+                        'status': 'filled',
+                        'average_price': status_result.get('average_price', 0),
+                        'filled_quantity': status_result.get('filled_quantity', 0)
+                    }
+                elif status == 'rejected':
+                    return {'status': 'rejected', 'reason': f'Exchange rejected order {order_id}'}
+                elif status == 'cancelled':
+                    return {'status': 'cancelled', 'reason': f'Order {order_id} was cancelled'}
+                elif status == 'expired':
+                    return {'status': 'expired', 'reason': f'Order {order_id} expired'}
+                elif status == 'pending':
+                    if check_num < max_checks:
+                        await _aio.sleep(interval)
+                        continue
+                    return {'status': 'pending', 'reason': f'Order still working after {max_checks * interval:.1f}s'}
+                else:
+                    if check_num < max_checks:
+                        await _aio.sleep(interval)
+                        continue
+                    return {'status': status, 'reason': f'Unexpected status: {status}'}
+                    
+            except Exception as e:
+                print(f"[{self.name}] ⚠️ Fill verification check {check_num} error: {e}")
+                if check_num < max_checks:
+                    await _aio.sleep(interval)
+                    continue
+                return {'status': 'pending', 'reason': f'Verification error: {e}'}
+        
+        return {'status': 'pending', 'reason': 'Verification exhausted'}
+
     _INDEX_OPTION_MAP = {
         'SPX': 'SPXW',
         'NDX': 'NDXP',
