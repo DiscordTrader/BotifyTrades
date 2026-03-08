@@ -451,6 +451,10 @@ class UnfilledOrderChaser:
     
     async def _check_and_chase_orders(self):
         """Check all tracked orders and chase stale ones"""
+        if not self._is_market_active():
+            print("[ORDER_CHASER] Market closed — skipping exit chase cycle")
+            return
+
         now = datetime.now()
         orders_to_chase = []
         
@@ -495,7 +499,24 @@ class UnfilledOrderChaser:
             )
             
             if not order_still_pending:
-                print(f"[ORDER_CHASER] Order {order.order_id} no longer pending - may have filled")
+                print(f"[ORDER_CHASER] Order {order.order_id} no longer pending — verifying fill status...")
+                verified = await self._verify_order_fill(broker, order.order_id, order.symbol, order.asset_type, order.action)
+                if verified == 'CANCELLED':
+                    print(f"[ORDER_CHASER] Order {order.order_id} was CANCELLED/REJECTED by broker — not marking as filled")
+                    async with self._lock:
+                        if order.order_id in self._tracked_orders:
+                            self._tracked_orders[order.order_id].status = OrderChaseStatus.CANCELLED
+                            del self._tracked_orders[order.order_id]
+                    try:
+                        from gui_app.database import record_order_event
+                        record_order_event('ORDER_CANCELLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='CANCELLED', reason="Order verified as cancelled/rejected by broker", severity='warning', source='order_chaser', position_key=order.position_key)
+                    except Exception:
+                        pass
+                    return
+                if verified == 'UNKNOWN':
+                    print(f"[ORDER_CHASER] Order {order.order_id} status UNKNOWN — assuming filled (legacy behavior)")
+                else:
+                    print(f"[ORDER_CHASER] Order {order.order_id} verified as filled")
                 await self.mark_filled(order.order_id)
                 return
             
@@ -756,6 +777,10 @@ class UnfilledOrderChaser:
     
     async def _check_and_chase_entry_orders(self):
         """Check all tracked entry orders and chase stale ones"""
+        if not self._is_market_active():
+            print("[ORDER_CHASER] Market closed — skipping chase cycle")
+            return
+
         now = datetime.now()
         orders_to_chase = []
         orders_to_cancel = []
@@ -835,7 +860,24 @@ class UnfilledOrderChaser:
             )
             
             if not order_still_pending:
-                print(f"[ORDER_CHASER] Entry order {order.order_id} no longer pending - may have filled")
+                print(f"[ORDER_CHASER] Entry order {order.order_id} no longer pending — verifying fill status...")
+                verified = await self._verify_order_fill(broker, order.order_id, order.symbol, order.asset_type, order.action)
+                if verified == 'CANCELLED':
+                    print(f"[ORDER_CHASER] Entry order {order.order_id} was CANCELLED/REJECTED by broker — not marking as filled")
+                    async with self._lock:
+                        if order.order_id in self._tracked_entry_orders:
+                            self._tracked_entry_orders[order.order_id].status = OrderChaseStatus.CANCELLED
+                            del self._tracked_entry_orders[order.order_id]
+                    try:
+                        from gui_app.database import record_order_event
+                        record_order_event('ORDER_CANCELLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='CANCELLED', reason="Entry order verified as cancelled/rejected by broker", severity='warning', source='order_chaser')
+                    except Exception:
+                        pass
+                    return
+                if verified == 'UNKNOWN':
+                    print(f"[ORDER_CHASER] Entry order {order.order_id} status UNKNOWN — assuming filled (legacy behavior)")
+                else:
+                    print(f"[ORDER_CHASER] Entry order {order.order_id} verified as filled")
                 await self.mark_entry_filled(order.order_id)
                 return
             
@@ -1094,6 +1136,67 @@ class UnfilledOrderChaser:
             import traceback
             traceback.print_exc()
     
+    async def _verify_order_fill(self, broker, order_id: str, symbol: str, asset_type: str = 'option', action: str = 'BTO') -> str:
+        """Verify whether an order that left pending was actually filled.
+        
+        Returns: 'FILLED', 'CANCELLED', or 'UNKNOWN'
+        """
+        try:
+            if hasattr(broker, 'get_order_status'):
+                result = broker.get_order_status(order_id)
+                if inspect.iscoroutine(result):
+                    result = await result
+                if result:
+                    status_str = ''
+                    if isinstance(result, str):
+                        status_str = result.upper()
+                    elif isinstance(result, dict):
+                        status_str = str(result.get('status', '') or result.get('orderStatus', '') or '').upper()
+                    if status_str:
+                        if status_str in ('FILLED', 'COMPLETE', 'COMPLETED'):
+                            print(f"[ORDER_CHASER] ✓ Order {order_id} verified as filled via get_order_status")
+                            return 'FILLED'
+                        elif status_str in ('CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED', 'FAILED'):
+                            print(f"[ORDER_CHASER] Order {order_id} verified as {status_str} via get_order_status")
+                            return 'CANCELLED'
+        except Exception as e:
+            print(f"[ORDER_CHASER] get_order_status check failed for {order_id}: {e}")
+
+        try:
+            if action.upper() in ('BTO', 'BUY'):
+                if hasattr(broker, 'get_positions') or hasattr(broker, 'get_positions_detailed'):
+                    positions = None
+                    if hasattr(broker, 'get_positions_detailed'):
+                        result = broker.get_positions_detailed()
+                        if inspect.iscoroutine(result):
+                            positions = await result
+                        else:
+                            positions = result
+                    elif hasattr(broker, 'get_positions'):
+                        result = broker.get_positions()
+                        if inspect.iscoroutine(result):
+                            positions = await result
+                        else:
+                            positions = result
+                    
+                    if positions:
+                        symbol_upper = symbol.upper()
+                        found = any(
+                            symbol_upper in str(p.get('symbol', '') or p.get('ticker', '')).upper()
+                            for p in (positions if isinstance(positions, list) else [positions])
+                        )
+                        if found:
+                            print(f"[ORDER_CHASER] ✓ Order {order_id} verified as filled — {symbol} found in positions")
+                            return 'FILLED'
+                        else:
+                            print(f"[ORDER_CHASER] Order {order_id} not found in positions — marking cancelled")
+                            return 'CANCELLED'
+        except Exception as e:
+            print(f"[ORDER_CHASER] Position verification failed for {order_id}: {e}")
+
+        print(f"[ORDER_CHASER] ⚠️ Could not verify order {order_id} status — assuming filled (fallback)")
+        return 'UNKNOWN'
+
     def _get_broker(self, broker_id: str):
         """Get broker instance by ID"""
         if not self.broker_manager:
@@ -1163,6 +1266,28 @@ class UnfilledOrderChaser:
         """Number of exit orders currently being tracked"""
         return len(self._tracked_orders)
     
+    @staticmethod
+    def _is_market_active() -> bool:
+        """Check if market is active (weekday, 4 AM - 8 PM ET).
+        
+        During off-hours, GTC limit orders should sit undisturbed.
+        No point chasing or cancelling when market is closed.
+        Returns False on exceptions (fail-safe: don't chase if unsure).
+        """
+        try:
+            try:
+                import zoneinfo
+                et = zoneinfo.ZoneInfo("America/New_York")
+            except (ImportError, Exception):
+                from datetime import timezone
+                et = timezone(timedelta(hours=-5))
+            now = datetime.now(et)
+            if now.weekday() >= 5:
+                return False
+            return 4 <= now.hour < 20
+        except Exception:
+            return False
+
     @property
     def tracked_entry_count(self) -> int:
         """Number of entry orders currently being tracked"""

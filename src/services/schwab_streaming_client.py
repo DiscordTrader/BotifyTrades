@@ -369,6 +369,8 @@ class SchwabStreamingClient:
                         self._subscribed_options.clear()
                         await self.subscribe_options(old_opt)
 
+                    await self._auto_subscribe_positions()
+
                     msg_count = 0
                     while self._running:
                         try:
@@ -424,6 +426,38 @@ class SchwabStreamingClient:
                     wait = min(5 * (2 ** min(self._reconnect_attempts, 6)), 120)
                     print(f"[SCHWAB_STREAM] Reconnecting in {wait}s (attempt {self._reconnect_attempts})...")
                 await asyncio.sleep(wait)
+
+    async def _auto_subscribe_positions(self):
+        try:
+            if not self._broker or not self._connected:
+                return
+            if hasattr(self._broker, 'get_positions_detailed'):
+                positions = await self._broker.get_positions_detailed()
+            elif hasattr(self._broker, 'get_positions'):
+                positions = await self._broker.get_positions()
+            else:
+                return
+            if not positions:
+                return
+            equity_symbols = []
+            option_symbols = []
+            for pos in (positions or []):
+                if isinstance(pos, dict):
+                    sym = pos.get('symbol', '')
+                    asset = pos.get('assetType', pos.get('asset', 'EQUITY'))
+                    if asset == 'OPTION' or len(sym) > 10:
+                        option_symbols.append(sym)
+                    elif sym:
+                        equity_symbols.append(sym)
+            if equity_symbols:
+                await self.subscribe_equities(equity_symbols)
+            if option_symbols:
+                await self.subscribe_options(option_symbols)
+            total = len(equity_symbols) + len(option_symbols)
+            if total > 0:
+                print(f"[SCHWAB_STREAM] ✓ Auto-subscribed {total} position symbols ({len(equity_symbols)} equity, {len(option_symbols)} option)")
+        except Exception as e:
+            print(f"[SCHWAB_STREAM] Auto-subscribe positions skipped: {e}")
 
     def start(self, loop: Optional[asyncio.AbstractEventLoop] = None):
         if self._running:

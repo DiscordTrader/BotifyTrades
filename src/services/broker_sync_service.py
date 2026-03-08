@@ -376,10 +376,28 @@ class BrokerSyncService:
         try:
             from src.services.broker_health_monitor import get_health_monitor
             health_monitor = get_health_monitor()
+
+            if not hasattr(self, '_last_account_fetch_ts'):
+                self._last_account_fetch_ts = {}
+            import time as _time
+            now = _time.time()
+            last_fetch = self._last_account_fetch_ts.get(broker_name, 0)
+            if now - last_fetch < 60:
+                if not hasattr(self, '_cached_account_info'):
+                    self._cached_account_info = {}
+                cached = self._cached_account_info.get(broker_name)
+                if cached:
+                    health_monitor.update_broker_status(broker_name, True, account_info=cached)
+                    return
+
             account_info = await asyncio.wait_for(
                 self._fetch_account_info(broker_name, broker_instance),
                 timeout=15
             )
+            self._last_account_fetch_ts[broker_name] = now
+            if not hasattr(self, '_cached_account_info'):
+                self._cached_account_info = {}
+            self._cached_account_info[broker_name] = account_info
             health_monitor.update_broker_status(broker_name, True, account_info=account_info)
 
             try:

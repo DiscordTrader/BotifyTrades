@@ -30,11 +30,16 @@ class PositionCache:
     
     CLOSING_CYCLE_RESET = 60  # Reset closing flag after this many cycles (~60s at 1s/cycle)
     
+    FLIP_FLOP_HISTORY_SIZE = 3
+    ENTRY_PRICE_CHANGE_TOLERANCE = 0.05
+
     def __init__(self, cache_file: Optional[Path] = None):
         self.cache_file = cache_file or Path.cwd() / '.position_cache.json'
         self._cache: Dict[str, PositionCacheEntry] = {}
         self._trade_id_map: Dict[str, int] = {}  # position_key -> trade_id for database persistence
         self._persist_lock = threading.Lock()  # Concurrency safety for DB writes
+        self._last_entry_prices: Dict[str, list] = {}
+        self._locked_entry_prices: Dict[str, float] = {}
     
     def restore_trailing_state_from_db(self) -> int:
         """Restore trailing stop state from database for all open trades. 
@@ -419,9 +424,37 @@ class PositionCache:
                     cached_entry.source_order_id = None
                     cached_entry.source_trade_id = None
                     cached_entry.seed_time = None
+                    if pos_key in self._locked_entry_prices:
+                        del self._locked_entry_prices[pos_key]
+                    if pos_key in self._last_entry_prices:
+                        del self._last_entry_prices[pos_key]
                 else:
-                    cached_entry.entry_price = broker_entry_price
-                    print(f"[RISK] ✓ Updated {pos_key} entry price: ${old_price:.2f} → ${broker_entry_price:.2f} (broker sync)")
+                    if pos_key in self._locked_entry_prices:
+                        locked = self._locked_entry_prices[pos_key]
+                        if abs(cached_entry.entry_price - locked) < 0.001:
+                            pass
+                        else:
+                            cached_entry.entry_price = locked
+                    else:
+                        pct_diff = abs(broker_entry_price - old_price) / old_price if old_price > 0 else 1.0
+                        if pct_diff < self.ENTRY_PRICE_CHANGE_TOLERANCE:
+                            pass
+                        else:
+                            history = self._last_entry_prices.get(pos_key, [])
+                            is_flip_flop = any(abs(broker_entry_price - h) < 0.001 for h in history)
+                            history.append(old_price)
+                            if len(history) > self.FLIP_FLOP_HISTORY_SIZE:
+                                history = history[-self.FLIP_FLOP_HISTORY_SIZE:]
+                            self._last_entry_prices[pos_key] = history
+                            if is_flip_flop:
+                                first_price = history[0]
+                                self._locked_entry_prices[pos_key] = first_price
+                                cached_entry.entry_price = first_price
+                                print(f"[RISK] 🔒 Flip-flop detected for {pos_key}: locking entry price to ${first_price:.2f} "
+                                      f"(suppressed ${old_price:.2f} → ${broker_entry_price:.2f})")
+                            else:
+                                cached_entry.entry_price = broker_entry_price
+                                print(f"[RISK] ✓ Updated {pos_key} entry price: ${old_price:.2f} → ${broker_entry_price:.2f} (broker sync)")
         
         return self._cache[pos_key]
     

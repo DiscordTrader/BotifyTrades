@@ -165,6 +165,26 @@ class BrokerHealthMonitor:
                 UPDATE broker_notifications SET is_read = 1
                 WHERE notification_type = 'broker_disconnect' AND is_read = 0
             ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS broker_states (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    broker_name TEXT NOT NULL UNIQUE,
+                    country_code TEXT NOT NULL,
+                    region TEXT NOT NULL,
+                    is_connected INTEGER DEFAULT 0,
+                    balance REAL DEFAULT 0,
+                    buying_power REAL DEFAULT 0,
+                    currency TEXT DEFAULT 'USD',
+                    account_id TEXT,
+                    account_number TEXT,
+                    is_paper INTEGER DEFAULT 0,
+                    last_sync_at TEXT,
+                    sync_error TEXT,
+                    extra_data TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             try:
                 cursor.execute('DELETE FROM broker_states')
             except Exception:
@@ -422,6 +442,10 @@ class BrokerHealthMonitor:
         with self._state_lock:
             return self._broker_states.copy()
     
+    def get_broker_state(self, broker_name: str) -> Optional[Dict]:
+        """Get current state for a broker (alias for get_broker_status for GUI compatibility)."""
+        return self.get_broker_status(broker_name)
+
     def is_broker_healthy(self, broker_name: str) -> bool:
         """Check if broker is connected and healthy."""
         broker_key = self._normalize_broker_name(broker_name)

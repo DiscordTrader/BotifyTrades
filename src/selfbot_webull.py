@@ -3372,6 +3372,14 @@ class WebullBroker:
                     print(f"[SLIPPAGE] ⚡ Hub hit: ${current_price:.4f} (0ms, no REST)")
             
             if not current_price or current_price <= 0:
+                if self._streaming_client:
+                    try:
+                        _miss_sym = fix_symbol(symbol, "in")
+                        _miss_tid = self._ticker_id_cache.get(_miss_sym.upper())
+                        if _miss_tid:
+                            self._streaming_client.subscribe_symbol(_miss_sym.upper(), str(_miss_tid), is_option=True)
+                    except Exception:
+                        pass
                 if ALLOW_ORDER_WHEN_NO_QUOTE:
                     print(f"[SLIPPAGE] ⚡ Hub miss — skipping REST fallback (allow_when_no_quote=true, limit ${limit_price:.2f} protects)")
                 else:
@@ -3939,7 +3947,16 @@ class WebullBroker:
             return result
 
         resp = await self.loop.run_in_executor(None, _blocking_place)
-        
+
+        if resp and isinstance(resp, dict) and resp.get('orderId') and self._streaming_client:
+            try:
+                _sub_sym = fix_symbol(symbol, "in")
+                _sub_tid = self._ticker_id_cache.get(_sub_sym.upper())
+                if _sub_tid:
+                    self._streaming_client.subscribe_symbol(_sub_sym.upper(), str(_sub_tid), is_option=True)
+            except Exception:
+                pass
+
         _TOKEN_RETRY_CODES = {'trade.token.expire', 'trade.system.exception', 'trade.busy', 'system.busy'}
         resp_code = resp.get('code', '') if resp and isinstance(resp, dict) else ''
         resp_msg = str(resp.get('msg', '')) if resp and isinstance(resp, dict) else ''
@@ -6709,6 +6726,7 @@ class SelfClient(discord.Client):
             
             # Add signal metadata
             signal['channel_id'] = channel_id
+            arrived_at = signal.get('arrived_at')
             signal['received_at'] = arrived_at or datetime.now()
             
             # Get signal ID from database (last inserted)
