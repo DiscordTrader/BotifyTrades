@@ -49,6 +49,10 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Modular Broker Abstraction**: Uses a common interface for diverse broker APIs.
 - **Market Isolation**: Conditional order services for different markets operate independently.
 - **Conditional Order Guards**: Includes per-channel Breakout Reset Guard and Limit Cap.
+- **Single-Application Trigger Offset**: Offset applied once at conditional order creation (stored as `adjusted_trigger_price`), never re-applied at execution time. `original_signal_price` column preserves the raw signal price for dynamic offset recalculation.
+- **Slippage Enforcement Deferral**: Stage A (base.py) logs slippage warnings but does not kill orders; enforcement is deferred to Stage B/C broker pipeline wait-and-recover.
+- **Entry Confirmation Independence**: `_entry_confirmation` flag bypasses `conditional_order_enabled` channel setting to create conditional orders from entry confirmation signals.
+- **Dynamic Offset Recalculation**: `update_conditional_order_trigger_offset()` uses `original_signal_price` as baseline, supports both percent and dollar modes, and recalculates `limit_price` when limit cap is enabled.
 
 ## External Dependencies
 

@@ -992,7 +992,8 @@ class BaseConditionalOrderService(ABC):
                   f"exit_mode={channel_settings.get('exit_strategy_mode')}, "
                   f"slippage={channel_settings.get('slippage_protection_enabled')}/{channel_settings.get('slippage_max_pct')}, "
                   f"trailing={channel_settings.get('trailing_stop_pct')}")
-        if not channel_settings.get('conditional_order_enabled', True):
+        is_entry_confirmation = bool(parsed_signal.get('_entry_confirmation'))
+        if not channel_settings.get('conditional_order_enabled', True) and not is_entry_confirmation:
             self._log(f"Disabled for channel {channel_id}")
             return None
         
@@ -1175,6 +1176,7 @@ class BaseConditionalOrderService(ABC):
             limit_price=limit_price,
             message_id=parsed_signal.get('message_id'),
             breakout_reset_enabled=breakout_reset_enabled,
+            original_signal_price=parsed_signal.get('trigger_price', 0),
         )
         
         if order_id:
@@ -1511,65 +1513,24 @@ class BaseConditionalOrderService(ABC):
         except Exception as cb_err:
             self._log(f"Circuit breaker check error: {cb_err}")
         
-        # SAFETY CHECK 3: Slippage protection (execution price guard)
         slippage_enabled = order.get('slippage_protection_enabled', 0)
         slippage_max_pct = order.get('slippage_max_pct', 0.0) or 0.0
         original_trigger = order.get('trigger_price', 0)
         trigger_type = order.get('trigger_type', 'over')
         
         if slippage_enabled and slippage_max_pct > 0 and original_trigger > 0:
-            # Calculate max allowed slippage from original trigger price
             if trigger_type == 'over':
-                # For "over" trigger, block if price ran too far above trigger
                 max_allowed_price = original_trigger * (1 + slippage_max_pct / 100)
                 if trigger_price > max_allowed_price:
                     slippage_pct = ((trigger_price - original_trigger) / original_trigger) * 100
-                    self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Slippage too high ({slippage_pct:.1f}% > {slippage_max_pct}% max)")
-                    self._log(f"   Trigger: ${original_trigger:.2f}, Current: ${trigger_price:.2f}, Max: ${max_allowed_price:.2f}")
-                    update_conditional_order_status(
-                        order_id,
-                        'SLIPPAGE_BLOCKED',
-                        event='SLIPPAGE_EXCEEDED',
-                        details=f"Price ${trigger_price:.2f} exceeded {slippage_max_pct}% slippage (max ${max_allowed_price:.2f})"
-                    )
-                    try:
-                        notify_conditional_failed(
-                            symbol=symbol,
-                            broker=order.get('broker_primary', ''),
-                            order_id=order_id,
-                            error=f"Slippage {slippage_pct:.1f}% exceeded max {slippage_max_pct}% (${trigger_price:.2f} vs max ${max_allowed_price:.2f})",
-                            stage="slippage_check"
-                        )
-                    except Exception as e:
-                        self._log(f"Notification error (slippage): {e}")
-                    await self._cleanup_order(order_id)
-                    return
+                    self._log(f"⚠️ SLIPPAGE WARNING #{order_id} {symbol}: {slippage_pct:.1f}% > {slippage_max_pct}% — deferring to broker execution wait-and-recover")
             else:
                 min_allowed_price = original_trigger * (1 - slippage_max_pct / 100)
                 if trigger_price < min_allowed_price:
                     slippage_pct = ((original_trigger - trigger_price) / original_trigger) * 100
-                    self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Slippage too high ({slippage_pct:.1f}% > {slippage_max_pct}% max)")
-                    self._log(f"   Trigger: ${original_trigger:.2f}, Current: ${trigger_price:.2f}, Min: ${min_allowed_price:.2f}")
-                    update_conditional_order_status(
-                        order_id,
-                        'SLIPPAGE_BLOCKED',
-                        event='SLIPPAGE_EXCEEDED',
-                        details=f"Price ${trigger_price:.2f} exceeded {slippage_max_pct}% slippage (min ${min_allowed_price:.2f})"
-                    )
-                    try:
-                        notify_conditional_failed(
-                            symbol=symbol,
-                            broker=order.get('broker_primary', ''),
-                            order_id=order_id,
-                            error=f"Slippage {slippage_pct:.1f}% exceeded max {slippage_max_pct}% (${trigger_price:.2f} vs min ${min_allowed_price:.2f})",
-                            stage="slippage_check"
-                        )
-                    except Exception as e:
-                        self._log(f"Notification error (slippage): {e}")
-                    await self._cleanup_order(order_id)
-                    return
+                    self._log(f"⚠️ SLIPPAGE WARNING #{order_id} {symbol}: {slippage_pct:.1f}% > {slippage_max_pct}% — deferring to broker execution wait-and-recover")
             
-            self._log(f"✓ Slippage OK: ${trigger_price:.2f} within {slippage_max_pct}% of ${original_trigger:.2f}")
+            self._log(f"✓ Slippage check: ${trigger_price:.2f} vs trigger ${original_trigger:.2f} (threshold {slippage_max_pct}%) — enforcement deferred to broker pipeline")
         
         # Stop the monitor (trigger condition met)
         if order_id in self.monitors:

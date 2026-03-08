@@ -11082,6 +11082,7 @@ def init_conditional_orders_table():
         ('author_name', 'TEXT'),
         ('message_id', 'TEXT'),
         ('breakout_reset_enabled', 'INTEGER DEFAULT 1'),
+        ('original_signal_price', 'REAL'),
     ]
     for col_name, col_type in extended_columns:
         try:
@@ -11333,7 +11334,8 @@ def create_conditional_order(
     limit_price: float = None,
     author_name: str = None,
     message_id: str = None,
-    breakout_reset_enabled: int = 1
+    breakout_reset_enabled: int = 1,
+    original_signal_price: float = None
 ) -> Optional[int]:
     """Create a new conditional order with full channel settings linkage.
     
@@ -11359,8 +11361,9 @@ def create_conditional_order(
                 stop_loss_fixed, stop_loss_pct, target_ranges, status,
                 exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
                 trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
-                limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id, breakout_reset_enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id, breakout_reset_enabled,
+                original_signal_price
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
@@ -11369,7 +11372,8 @@ def create_conditional_order(
             stop_loss_fixed, stop_loss_pct, target_ranges,
             exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
             trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
-            limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id, breakout_reset_enabled
+            limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id, breakout_reset_enabled,
+            original_signal_price
         ))
         
         order_id = cursor.lastrowid
@@ -11782,26 +11786,31 @@ def purge_conditional_orders(market: str = None, keep_active: bool = True) -> in
 def compute_adjusted_trigger(trigger_price: float, trigger_type: str, mode: str, value: float) -> float:
     """Compute adjusted trigger price given mode ('percent' or 'dollar') and value.
     
-    For 'over' triggers: adds offset (higher trigger = confirm breakout)
-    For 'under' triggers: subtracts offset (lower trigger = confirm breakdown)
+    For bullish triggers (over/ABOVE/PRICE_ABOVE/BTO): adds offset (higher trigger = confirm breakout)
+    For bearish triggers (under/BELOW/PRICE_BELOW/STO): subtracts offset (lower trigger = confirm breakdown)
     """
     if not value or value == 0:
         return trigger_price
     
+    is_bullish = trigger_type.lower() in ('over', 'above', 'price_above', 'bto')
+    
     if mode == 'dollar':
-        if trigger_type == 'over':
+        if is_bullish:
             return trigger_price + value
         else:
             return trigger_price - value
     else:
-        if trigger_type == 'over':
+        if is_bullish:
             return trigger_price * (1 + value / 100)
         else:
             return trigger_price * (1 - value / 100)
 
 
 def update_conditional_order_trigger_offset(order_id: int, offset_percent: float = None, offset_mode: str = 'percent', offset_value: float = None) -> bool:
-    """Update the trigger offset for a conditional order and recalculate adjusted price.
+    """Update the trigger offset for a conditional order and recalculate adjusted price + limit cap.
+    
+    Uses original_signal_price as the baseline for recalculation (falls back to trigger_price
+    for orders created before original_signal_price was added).
     
     Args:
         order_id: The conditional order ID
@@ -11813,29 +11822,51 @@ def update_conditional_order_trigger_offset(order_id: int, offset_percent: float
     cursor = conn.cursor()
     
     try:
-        cursor.execute('SELECT trigger_price, trigger_type FROM conditional_orders WHERE id = ?', (order_id,))
+        cursor.execute('''
+            SELECT trigger_price, trigger_type, original_signal_price,
+                   limit_cap_enabled, limit_cap_pct
+            FROM conditional_orders WHERE id = ?
+        ''', (order_id,))
         row = cursor.fetchone()
         if not row:
             return False
         
-        trigger_price = row['trigger_price']
+        baseline_price = row['original_signal_price'] if row['original_signal_price'] else row['trigger_price']
         trigger_type = row['trigger_type']
         
         effective_value = offset_value if offset_value is not None else (offset_percent or 0)
         effective_mode = offset_mode or 'percent'
         
-        adjusted_price = compute_adjusted_trigger(trigger_price, trigger_type, effective_mode, effective_value)
+        adjusted_price = compute_adjusted_trigger(baseline_price, trigger_type, effective_mode, effective_value)
         
-        cursor.execute('''
-            UPDATE conditional_orders 
-            SET adjusted_trigger_price = ?
-            WHERE id = ?
-        ''', (adjusted_price, order_id))
+        new_limit_price = None
+        limit_cap_enabled = row['limit_cap_enabled']
+        limit_cap_pct = row['limit_cap_pct']
+        if limit_cap_enabled and limit_cap_pct and float(limit_cap_pct) > 0:
+            if trigger_type in ('over', 'ABOVE', 'PRICE_ABOVE', 'BTO'):
+                new_limit_price = round(adjusted_price * (1 + float(limit_cap_pct) / 100), 4)
+            else:
+                new_limit_price = round(adjusted_price * (1 - float(limit_cap_pct) / 100), 4)
+        
+        if new_limit_price is not None:
+            cursor.execute('''
+                UPDATE conditional_orders 
+                SET adjusted_trigger_price = ?, limit_price = ?
+                WHERE id = ?
+            ''', (adjusted_price, new_limit_price, order_id))
+        else:
+            cursor.execute('''
+                UPDATE conditional_orders 
+                SET adjusted_trigger_price = ?
+                WHERE id = ?
+            ''', (adjusted_price, order_id))
         
         if effective_mode == 'dollar':
-            detail_str = f'Trigger offset adjusted to {"+$" if effective_value >= 0 else "-$"}{abs(effective_value):.2f} -> ${adjusted_price:.2f}'
+            detail_str = f'Trigger offset adjusted to {"+$" if effective_value >= 0 else "-$"}{abs(effective_value):.2f} -> ${adjusted_price:.2f} (baseline: ${baseline_price:.2f})'
         else:
-            detail_str = f'Trigger offset adjusted to {effective_value:+.1f}% -> ${adjusted_price:.2f}'
+            detail_str = f'Trigger offset adjusted to {effective_value:+.1f}% -> ${adjusted_price:.2f} (baseline: ${baseline_price:.2f})'
+        if new_limit_price:
+            detail_str += f' | Limit cap recalculated: ${new_limit_price:.4f}'
         
         cursor.execute('''
             INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)

@@ -8423,36 +8423,55 @@ def register_routes(app):
     
     @app.route('/api/conditional_orders/<int:order_id>/offset', methods=['POST'])
     def api_update_conditional_order_offset(order_id):
-        """Update trigger offset for a conditional order"""
+        """Update trigger offset for a conditional order (supports percent and dollar modes)"""
         try:
             data = request.json or {}
-            offset_percent = float(data.get('offset_percent', 0))
+            offset_mode = data.get('offset_mode', 'percent') or 'percent'
             
-            if offset_percent < -50 or offset_percent > 50:
-                return jsonify({'error': 'Offset must be between -50% and +50%'}), 400
+            if offset_mode == 'dollar':
+                offset_val = float(data.get('offset_value', 0))
+                if offset_val < -1000 or offset_val > 1000:
+                    return jsonify({'error': 'Dollar offset must be between -$1000 and +$1000'}), 400
+            else:
+                offset_val = float(data.get('offset_percent', data.get('offset_value', 0)))
+                if offset_val < -50 or offset_val > 50:
+                    return jsonify({'error': 'Percent offset must be between -50% and +50%'}), 400
             
-            success = db.update_conditional_order_trigger_offset(order_id, offset_percent)
+            success = db.update_conditional_order_trigger_offset(
+                order_id,
+                offset_percent=offset_val if offset_mode == 'percent' else None,
+                offset_mode=offset_mode,
+                offset_value=offset_val if offset_mode == 'dollar' else None
+            )
             
             if success:
                 order = db.get_conditional_order_by_id(order_id)
                 adjusted_price = order.get('adjusted_trigger_price') if order else None
+                limit_price = order.get('limit_price') if order else None
                 
-                # Update in-memory pending_orders for the active monitor
                 try:
                     from src.services.conditional_orders.base import conditional_order_services
                     for market, service in conditional_order_services.items():
                         if order_id in service.pending_orders:
                             service.pending_orders[order_id]['adjusted_trigger_price'] = adjusted_price
-                            service.pending_orders[order_id]['trigger_offset'] = offset_percent
-                            print(f"[API] Updated in-memory order #{order_id} adjusted_trigger_price={adjusted_price}")
+                            service.pending_orders[order_id]['trigger_offset'] = offset_val
+                            if limit_price is not None:
+                                service.pending_orders[order_id]['limit_price'] = limit_price
+                            print(f"[API] Updated in-memory order #{order_id} adjusted_trigger_price={adjusted_price}, limit_price={limit_price}")
                             break
                 except Exception as mem_err:
                     print(f"[API] Warning: Could not update in-memory order: {mem_err}")
                 
+                if offset_mode == 'dollar':
+                    msg = f'Offset updated to {"+" if offset_val >= 0 else ""}{offset_val:.2f}'
+                else:
+                    msg = f'Offset updated to {offset_val:+.1f}%'
+                
                 return jsonify({
                     'success': True,
-                    'message': f'Offset updated to {offset_percent:+.1f}%',
-                    'adjusted_trigger_price': adjusted_price
+                    'message': msg,
+                    'adjusted_trigger_price': adjusted_price,
+                    'limit_price': limit_price
                 })
             else:
                 return jsonify({'error': 'Failed to update offset'}), 500

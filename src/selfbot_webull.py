@@ -9459,38 +9459,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         currency = '₹' if market == 'INDIA' else '$'
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
                         
-                        # Get entry price offset: CHANNEL first, then GLOBAL fallback
-                        entry_price_offset = 0.0
-                        offset_source = None
-                        try:
-                            from gui_app.database import get_conditional_order_settings, get_channel_by_discord_id
-                            
-                            # Priority 1: Channel-level offset
-                            channel_id = order.get('channel_id')
-                            if channel_id:
-                                ch = get_channel_by_discord_id(str(channel_id))
-                                if ch:
-                                    channel_offset = ch.get('entry_price_offset_percent') or ch.get('trigger_offset_percent')
-                                    if channel_offset and float(channel_offset) != 0:
-                                        entry_price_offset = float(channel_offset)
-                                        offset_source = f"channel '{ch.get('channel_name', channel_id)}'"
-                            
-                            # Priority 2: Global settings fallback
-                            if entry_price_offset == 0:
-                                global_cond_settings = get_conditional_order_settings()
-                                global_offset = global_cond_settings.get('entry_price_offset_percent', 0)
-                                if global_offset and float(global_offset) != 0:
-                                    entry_price_offset = float(global_offset)
-                                    offset_source = "global settings"
-                        except Exception as e:
-                            sys.stderr.write(f"[CONDITIONAL EXEC] Could not load entry price offset: {e}\n")
-                        
-                        # Store offset for later application (after QOT for options)
-                        # We'll apply it to the final execution price
+                        channel_id = order.get('channel_id')
                         execution_price = triggered_price
-                        if entry_price_offset != 0 and offset_source:
-                            sys.stderr.write(f"[CONDITIONAL EXEC] Entry price offset: {'+' if entry_price_offset > 0 else ''}{entry_price_offset}% from {offset_source}\n")
-                            sys.stderr.flush()
                         
                         sys.stderr.write(f"[CONDITIONAL EXEC] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{execution_price:.2f}\n")
                         sys.stderr.flush()
@@ -9513,21 +9483,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         is_channel_market_mode = (channel_entry_mode == 'market')
                         
-                        # Determine order type: market vs limit
-                        # PRIORITY: Market mode > Trigger Offset > Default limit
-                        # Market mode OVERRIDES trigger offset (user wants fastest fill)
-                        # Limit Cap still acts as safety ceiling even in market mode
                         if is_channel_market_mode:
                             use_limit_order = False
-                            if entry_price_offset != 0:
-                                sys.stderr.write(f"[CONDITIONAL EXEC] ⚡ Market mode OVERRIDES trigger offset ({entry_price_offset}%) - using market order for fastest fill\n")
-                                sys.stderr.flush()
-                                entry_price_offset = 0
-                            else:
-                                sys.stderr.write(f"[CONDITIONAL EXEC] ⚡ Channel market mode active - using market order\n")
-                                sys.stderr.flush()
+                            sys.stderr.write(f"[CONDITIONAL EXEC] ⚡ Channel market mode active - using market order\n")
+                            sys.stderr.flush()
                         else:
-                            use_limit_order = limit_cap_enabled or entry_price_offset != 0
+                            use_limit_order = bool(limit_cap_enabled)
                         
                         # If limit cap is enabled, use the stored limit_price as max price
                         # Limit Cap acts as hard ceiling EVEN in market mode
@@ -9549,9 +9510,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 use_limit_order = False
                                 sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ Limit Cap enabled but no percentage - using market order\n")
                                 sys.stderr.flush()
-                        elif entry_price_offset != 0 and not is_channel_market_mode:
-                            effective_limit_price = execution_price * (1 + entry_price_offset / 100)
-                        
                         all_enabled_brokers = None
                         try:
                             if channel_id:
@@ -9645,16 +9603,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if qot_price and qot_price > 0:
                                     sys.stderr.write(f"[CONDITIONAL QOT] Got option quote: ${qot_price:.2f} (trigger: ${triggered_price:.2f})\n")
                                     sys.stderr.flush()
-                                    
-                                    # Apply entry price offset to QOT price (not trigger price)
-                                    if entry_price_offset != 0:
-                                        base_price = qot_price
-                                        adjusted_qot = qot_price * (1 + entry_price_offset / 100)
-                                        sys.stderr.write(f"[CONDITIONAL QOT] Applied offset {'+' if entry_price_offset > 0 else ''}{entry_price_offset}%: ${base_price:.2f} → ${adjusted_qot:.2f}\n")
-                                        sys.stderr.flush()
-                                        signal['price'] = adjusted_qot
-                                    else:
-                                        signal['price'] = qot_price
+                                    signal['price'] = qot_price
                                     
                                     signal['_qot_price'] = qot_price
                                     signal['_trigger_price'] = triggered_price
@@ -9662,15 +9611,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             except Exception as qot_err:
                                 sys.stderr.write(f"[CONDITIONAL QOT] Quote fetch failed, using market order: {qot_err}\n")
                                 sys.stderr.flush()
-                        
-                        # Apply offset for non-option orders (stocks) - offset wasn't applied earlier
-                        if not order.get('strike') and entry_price_offset != 0:
-                            base_price = signal.get('price', triggered_price)
-                            adjusted_price = base_price * (1 + entry_price_offset / 100)
-                            sys.stderr.write(f"[CONDITIONAL EXEC] Applied offset {'+' if entry_price_offset > 0 else ''}{entry_price_offset}%: ${base_price:.2f} → ${adjusted_price:.2f}\n")
-                            sys.stderr.flush()
-                            signal['price'] = adjusted_price
-                            signal['is_market_order'] = False  # Force limit order
                         
                         # Handle Indian options orders
                         elif market == 'INDIA':
@@ -13531,6 +13471,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'author_name': str(message.author),
                                 'author_id': str(message.author.id),
                                 'market': 'US',
+                                '_entry_confirmation': opt.get('_entry_confirmation', False),
                             }
                             
                             # Add option details if present
@@ -15176,7 +15117,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             symbol=signal['symbol'],
                             action=signal['action'],
                             quantity=signal['qty'],
-                            price=stock_order_price
+                            price=stock_order_price,
+                            _conditional_order_id=signal.get('_conditional_order_id'),
+                            _conditional_expires_at=signal.get('_conditional_expires_at'),
+                            channel_id=signal.get('channel_id')
                         )
                 else:
                     result = await broker_instance.place_stock_order(
