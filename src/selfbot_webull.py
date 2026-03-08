@@ -7920,6 +7920,12 @@ class SelfClient(discord.Client):
         
         _original_print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked", flush=True)
 
+        # Pre-warm account caches for all connected brokers (eliminates 1s+ cache miss on first order)
+        try:
+            asyncio.ensure_future(self._prewarm_account_caches())
+        except Exception as e:
+            _original_print(f"[PREWARM] ⚠️ Account cache pre-warm error: {e}", flush=True)
+
         # Start option ID pre-warm in background (eliminates 4s REST lookup on first signal)
         try:
             if self.broker and getattr(self.broker, '_client', None):
@@ -7934,6 +7940,40 @@ class SelfClient(discord.Client):
         except Exception as e:
             _original_print(f"[SOD] ⚠️ Could not start SOD scheduler: {e}", flush=True)
     
+    async def _prewarm_account_caches(self):
+        """Pre-warm account data into BrokerHealthMonitor cache for all connected brokers.
+        Eliminates 1s+ cache miss on the first order after startup."""
+        import asyncio
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            hm = get_health_monitor()
+            
+            brokers_to_warm = []
+            if self.broker and (getattr(self.broker, '_logged_in', False) or getattr(self.broker, 'wb', None)):
+                brokers_to_warm.append(('WEBULL', self.broker))
+            if self.schwab_broker and getattr(self.schwab_broker, 'connected', False):
+                brokers_to_warm.append(('SCHWAB', self.schwab_broker))
+            if self.paper_broker and getattr(self.paper_broker, 'connected', False):
+                brokers_to_warm.append(('ALPACA_PAPER', self.paper_broker))
+            if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
+                brokers_to_warm.append(('ROBINHOOD', self.robinhood_broker))
+            
+            warmed = 0
+            for broker_name, broker_instance in brokers_to_warm:
+                try:
+                    account_info = await asyncio.wait_for(broker_instance.get_account_info(), timeout=10)
+                    if account_info:
+                        hm.update_broker_status(broker_name, True, account_info=account_info)
+                        bp = account_info.get('buying_power', 0) or account_info.get('options_buying_power', 0)
+                        _original_print(f"[PREWARM] ✓ {broker_name} account cached (BP=${float(bp or 0):,.2f})")
+                        warmed += 1
+                except Exception as e:
+                    _original_print(f"[PREWARM] ⚠️ {broker_name} account pre-warm failed: {e}")
+            
+            _original_print(f"[PREWARM] 🔥 Account caches pre-warmed for {warmed}/{len(brokers_to_warm)} brokers")
+        except Exception as e:
+            _original_print(f"[PREWARM] ⚠️ Account pre-warm error: {e}")
+
     async def _sod_balance_scheduler(self):
         """Capture start-of-day balances at startup and daily at 9:30 AM ET."""
         import asyncio

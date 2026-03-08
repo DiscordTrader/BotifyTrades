@@ -53,6 +53,7 @@ class SchwabBroker(BrokerInterface):
         self._api_rate_lock = None
         self._last_api_call = 0
         self._min_api_interval = 0.3
+        self._http_client = None
         self._last_valid_positions = []
         self._last_valid_positions_time = 0
         self._position_cache_ttl = 60
@@ -547,12 +548,11 @@ class SchwabBroker(BrokerInterface):
         if 'Accept' not in headers:
             headers['Accept'] = 'application/json'
 
-        async def _async_request(m, u, h, kw):
-            async with httpx.AsyncClient(timeout=8.0) as c:
-                return await c.request(m, u, headers=h, **kw)
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(timeout=8.0, http2=False, limits=httpx.Limits(max_connections=5, max_keepalive_connections=3))
 
         response = await asyncio.wait_for(
-            _async_request(method, url, headers, kwargs),
+            self._http_client.request(method, url, headers=headers, **kwargs),
             timeout=10.0
         )
 
@@ -574,7 +574,7 @@ class SchwabBroker(BrokerInterface):
             await self._ensure_valid_token()
             headers['Authorization'] = f'Bearer {self.access_token}'
             response = await asyncio.wait_for(
-                _async_request(method, url, headers, kwargs),
+                self._http_client.request(method, url, headers=headers, **kwargs),
                 timeout=20.0
             )
             
@@ -590,7 +590,7 @@ class SchwabBroker(BrokerInterface):
             if refreshed:
                 headers['Authorization'] = f'Bearer {self.access_token}'
                 response = await asyncio.wait_for(
-                    _async_request(method, url, headers, kwargs),
+                    self._http_client.request(method, url, headers=headers, **kwargs),
                     timeout=20.0
                 )
         
