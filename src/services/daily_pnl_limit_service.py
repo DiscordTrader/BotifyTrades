@@ -79,15 +79,30 @@ class DailyPnLLimitService:
             from backports.zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo('America/New_York')).isoformat()
 
+    def _resolve_snapshot_type(self, settings):
+        reset_time_str = settings.get('daily_pnl_reset_time') or '09:30'
+        if not isinstance(reset_time_str, str):
+            reset_time_str = '09:30'
+        try:
+            parts = reset_time_str.split(':')
+            reset_hour = int(parts[0])
+            reset_minute = int(parts[1]) if len(parts) > 1 else 0
+        except (ValueError, IndexError):
+            reset_hour, reset_minute = 9, 30
+        if reset_hour < 9 or (reset_hour == 9 and reset_minute < 30):
+            return 'pre_market'
+        return 'start_of_day'
+
     def update_broker_pnl(self, broker_name, current_portfolio_value):
         normalized = _normalize(broker_name)
         settings = self._get_settings()
         if not settings.get('daily_pnl_limit_enabled'):
             return
 
+        snapshot_type = self._resolve_snapshot_type(settings)
         from src.services.sod_balance_cache import get_sod_cache
         sod_cache = get_sod_cache()
-        snapshot = sod_cache.get_snapshot(normalized)
+        snapshot = sod_cache.get_snapshot(normalized, snapshot_type=snapshot_type)
         if not snapshot:
             return
 
@@ -291,8 +306,10 @@ class DailyPnLLimitService:
                         warning = 'profit'
             item['warning'] = warning
 
+        snapshot_type = self._resolve_snapshot_type(settings)
         return {
             'enabled': enabled,
+            'snapshot_type': snapshot_type,
             'limits': {
                 'loss_dollar': loss_limit,
                 'loss_pct': loss_limit_pct,
