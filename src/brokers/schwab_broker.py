@@ -52,7 +52,7 @@ class SchwabBroker(BrokerInterface):
         
         self._api_rate_lock = None
         self._last_api_call = 0
-        self._min_api_interval = 0.3
+        self._min_api_interval = 0.5
         self._http_client = None
         self._last_valid_positions = []
         self._last_valid_positions_time = 0
@@ -1201,6 +1201,8 @@ class SchwabBroker(BrokerInterface):
         
         for check_num in range(1, max_checks + 1):
             try:
+                if self._is_in_429_backoff() > 0:
+                    return {'status': 'pending', 'reason': '429 backoff active, deferring to sync service'}
                 status_result = await self.get_order_status(order_id)
                 if not status_result:
                     if check_num < max_checks:
@@ -1250,9 +1252,13 @@ class SchwabBroker(BrokerInterface):
         Runs asynchronously — does not block the caller. If order is rejected/cancelled/expired,
         logs the failure. The broker sync service will reconcile DB state on its next cycle.
         """
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2.0)
 
-        verified = await self._verify_order_fill(order_id, action, option_symbol, max_checks=3, interval=1.5)
+        if self._is_in_429_backoff() > 0:
+            print(f"[{self.name}] ⏳ Background verify skipped — in 429 backoff, sync service will reconcile")
+            return
+
+        verified = await self._verify_order_fill(order_id, action, option_symbol, max_checks=3, interval=2.0)
         status = verified.get('status', 'pending')
 
         if status == 'filled':

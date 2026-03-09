@@ -14979,6 +14979,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
                             async def _post_bto_pnl_async(bn=broker_name, bi=broker_instance):
                                 try:
+                                    await asyncio.sleep(8)
+                                    if hasattr(bi, '_is_in_429_backoff') and bi._is_in_429_backoff() > 0:
+                                        _original_print(f"[DAILY_PNL] Post-BTO refresh skipped for {bn} — in 429 backoff")
+                                        return
                                     pnl_svc = get_daily_pnl_service()
                                     ai = None
                                     if hasattr(bi, 'get_account_info'):
@@ -15187,6 +15191,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
                             async def _post_stock_bto_pnl_async(bn=broker_name, bi=broker_instance):
                                 try:
+                                    await asyncio.sleep(8)
+                                    if hasattr(bi, '_is_in_429_backoff') and bi._is_in_429_backoff() > 0:
+                                        _original_print(f"[DAILY_PNL] Post-BTO refresh skipped for {bn} — in 429 backoff")
+                                        return
                                     pnl_svc = get_daily_pnl_service()
                                     ai = None
                                     if hasattr(bi, 'get_account_info'):
