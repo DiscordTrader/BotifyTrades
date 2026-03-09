@@ -192,7 +192,7 @@ class RiskDBAdapter:
                        max_profit_giveback_enabled, max_profit_giveback_pct,
                        exit_strategy_mode, price_monitor_enabled,
                        enable_early_trailing, early_trailing_activation_pct, early_trailing_step_pct,
-                       sl_order_type
+                       sl_order_type, escalation_only_mode
                 FROM signal_routing_mappings
                 WHERE id = ? AND enabled = 1
                 LIMIT 1
@@ -225,6 +225,7 @@ class RiskDBAdapter:
             early_trailing_activation_pct = row[24] if len(row) > 24 and row[24] is not None else 5.0
             early_trailing_step_pct = row[25] if len(row) > 25 and row[25] is not None else 3.0
             sl_order_type = row[26] if len(row) > 26 and row[26] else 'limit'
+            escalation_only = bool(row[27]) if len(row) > 27 and row[27] else False
             
             has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0 or enable_early_trailing)
             
@@ -257,7 +258,8 @@ class RiskDBAdapter:
                 giveback_allowed_pct=giveback_pct,
                 enable_early_trailing=enable_early_trailing,
                 early_trailing_activation_pct=early_trailing_activation_pct,
-                early_trailing_step_pct=early_trailing_step_pct
+                early_trailing_step_pct=early_trailing_step_pct,
+                escalation_only_mode=escalation_only
             )
         except Exception as e:
             print(f"[RISK] Warning: Could not fetch signal routing risk settings: {e}")

@@ -1677,6 +1677,7 @@ def init_db():
         ('early_trailing_activation_pct', 'REAL DEFAULT 5.0'),
         ('early_trailing_step_pct', 'REAL DEFAULT 3.0'),
         ('order_chase_enabled', 'INTEGER DEFAULT NULL'),
+        ('escalation_only_mode', 'INTEGER DEFAULT 0'),
     ]
     for col_name, col_type in migration_columns:
         try:
@@ -2899,7 +2900,8 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
         'order_chase_enabled', 'entry_chase_enabled',
         'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
-        'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles'
+        'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
+        'escalation_only_mode'
     ]
     
     updates = []

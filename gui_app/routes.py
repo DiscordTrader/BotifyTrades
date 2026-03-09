@@ -2355,6 +2355,7 @@ def register_routes(app):
                     'early_trailing_activation_pct': mapping.get('early_trailing_activation_pct', 5.0),
                     'early_trailing_step_pct': mapping.get('early_trailing_step_pct', 3.0),
                     'order_chase_enabled': mapping.get('order_chase_enabled'),
+                    'escalation_only_mode': mapping.get('escalation_only_mode', 0),
                 }
                 return jsonify({'success': True, 'settings': settings})
             else:
@@ -2367,7 +2368,7 @@ def register_routes(app):
                     'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30,
                     'exit_strategy_mode': 'risk',
                     'enable_early_trailing': 0, 'early_trailing_activation_pct': 5.0, 'early_trailing_step_pct': 3.0,
-                    'order_chase_enabled': None
+                    'order_chase_enabled': None, 'escalation_only_mode': 0
                 }})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -2415,10 +2416,16 @@ def register_routes(app):
                 enable_early_trailing=data.get('enable_early_trailing', 0),
                 early_trailing_activation_pct=data.get('early_trailing_activation_pct', 5.0),
                 early_trailing_step_pct=data.get('early_trailing_step_pct', 3.0),
-                order_chase_enabled=data.get('order_chase_enabled')
+                order_chase_enabled=data.get('order_chase_enabled'),
+                escalation_only_mode=data.get('escalation_only_mode', 0)
             )
             
             if success:
+                try:
+                    from src.risk.position_monitor import request_settings_invalidation
+                    request_settings_invalidation()
+                except Exception:
+                    pass
                 return jsonify({'success': True, 'message': 'Risk settings updated'})
             else:
                 return jsonify({'success': False, 'error': 'Failed to update settings'}), 500

@@ -749,6 +749,15 @@
                 </div>
             </div>
             
+            <h4 style="margin: 25px 0 15px; color: var(--warning); font-size: 0.95rem;">🔄 SL Escalation Only Mode</h4>
+            <div style="padding: 15px; background: rgba(255, 193, 7, 0.05); border-radius: 8px; border-left: 3px solid rgba(255, 193, 7, 0.5);">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <input type="checkbox" id="risk-escalation-only">
+                    <label for="risk-escalation-only" style="font-weight: 600;">Enable SL Escalation Only</label>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Profit targets will ONLY escalate the stop loss — no partial sells. Full position stays open until Early Trailing Stop or Giveback Guard triggers the exit.</p>
+            </div>
+            
             <h4 style="margin: 25px 0 15px; color: var(--info); font-size: 0.95rem;">📉 Max Profit Giveback Guard</h4>
             <div style="padding: 15px; background: rgba(23, 162, 184, 0.08); border-radius: 8px; border-left: 3px solid var(--info);">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -1129,6 +1138,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-giveback').checked = !!s.max_profit_giveback_enabled;
                 document.getElementById('risk-giveback-pct').value = s.max_profit_giveback_pct || 30;
                 document.getElementById('risk-order-chase').checked = s.order_chase_enabled !== 0;
+                document.getElementById('risk-escalation-only').checked = !!s.escalation_only_mode;
                 const exitMode = s.exit_strategy_mode || 'risk';
                 document.querySelector(`input[name="exit-strategy-mode"][value="${exitMode}"]`).checked = true;
                 document.querySelectorAll('.exit-mode-option').forEach(opt => {
@@ -1171,7 +1181,8 @@ document.addEventListener('DOMContentLoaded', function() {
             max_profit_giveback_enabled: document.getElementById('risk-giveback').checked ? 1 : 0,
             max_profit_giveback_pct: parseFloat(document.getElementById('risk-giveback-pct').value) || 30,
             exit_strategy_mode: document.querySelector('input[name="exit-strategy-mode"]:checked').value,
-            order_chase_enabled: document.getElementById('risk-order-chase').checked ? 1 : 0
+            order_chase_enabled: document.getElementById('risk-order-chase').checked ? 1 : 0,
+            escalation_only_mode: document.getElementById('risk-escalation-only').checked ? 1 : 0
         };
         
         try {
