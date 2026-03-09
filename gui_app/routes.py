@@ -1979,7 +1979,7 @@ def register_routes(app):
                        'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                        'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
                        'trim_order_mode', 'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct',
-                       'order_chase_enabled', 'entry_chase_enabled'}
+                       'order_chase_enabled', 'entry_chase_enabled', 'use_global_risk_settings'}
         cache_warning = None
         if any(field in data for field in risk_fields):
             try:

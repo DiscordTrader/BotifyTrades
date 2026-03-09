@@ -1849,9 +1849,7 @@ class RiskManager:
                     3: channel_settings.profit_target_3_pct,
                     4: channel_settings.profit_target_4_pct
                 }
-                pnl_pct = position.pnl_percent if hasattr(position, 'pnl_percent') else 0
-                if cache.entry_price and cache.entry_price > 0:
-                    pnl_pct = ((position.current_price - cache.entry_price) / cache.entry_price) * 100
+                pnl_pct = position.pct_change if hasattr(position, 'pct_change') else 0
                 for tier in [1, 2, 3, 4]:
                     threshold = tier_thresholds.get(tier, 0)
                     if threshold <= 0:
