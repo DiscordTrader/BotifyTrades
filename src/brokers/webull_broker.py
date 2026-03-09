@@ -1196,13 +1196,22 @@ class WebullBroker(BrokerInterface):
                     elif _fallback_price and _fallback_price > 0:
                         price = round(_fallback_price * 1.03, 2)
                         print(f"[{self.name}] ⚡ Market BTO: no quote, fallback → ${price:.2f}")
+                    else:
+                        print(f"[{self.name}] ❌ Market BTO: no ask quote and no fallback price — cannot place order")
+                        return OrderResult(
+                            success=False,
+                            message="Cannot place market BTO: no quote available and no fallback price",
+                            symbol=symbol,
+                            action=action
+                        )
             
-            if is_stc and price and price > 0:
+            if price and price > 0:
                 original_price = price
-                price = self._round_to_cboe_increment(price, is_sell=True)
+                price = self._round_to_cboe_increment(price, is_sell=is_stc)
                 if price != original_price:
+                    direction = "down for sell" if is_stc else "up for buy"
                     print(f"[{self.name}] CBOE increment: ${original_price:.4f} -> ${price:.2f} "
-                          f"({'$0.05' if price < 3.00 else '$0.10'} increment, rounded down for sell)")
+                          f"({'$0.05' if price < 3.00 else '$0.10'} increment, rounded {direction})")
 
             def execute_order():
                 return self.wb.place_order_option(
