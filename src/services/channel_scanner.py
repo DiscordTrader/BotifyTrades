@@ -326,7 +326,7 @@ def scan_messages(messages: List[Dict[str, Any]]) -> List[DetectedPattern]:
     return patterns[:30]
 
 
-async def scan_channel_history(bot_instance, channel_id: int, limit: int = 1000) -> Dict[str, Any]:
+async def scan_channel_history(bot_instance, channel_id: int, limit: int = 1000, raw_only: bool = False) -> Dict[str, Any]:
     try:
         target_channel = bot_instance.get_channel(channel_id)
         if not target_channel:
@@ -365,13 +365,24 @@ async def scan_channel_history(bot_instance, channel_id: int, limit: int = 1000)
 
         print(f"[SCANNER] Fetched {count} messages from channel {channel_id}")
 
+        channel_name = getattr(target_channel, 'name', str(channel_id))
+
+        if raw_only:
+            from datetime import datetime as _dt
+            return {
+                'success': True,
+                'channel_id': str(channel_id),
+                'channel_name': channel_name,
+                'extracted_at': _dt.now().isoformat(),
+                'message_count': count,
+                'messages': messages_data
+            }
+
         detected = scan_messages(messages_data)
 
         print(f"[SCANNER] Detected {len(detected)} patterns from {count} messages")
         for p in detected:
             print(f"[SCANNER]   {p.action} '{p.name}': {p.match_count} matches, confidence={p.confidence:.2f}")
-
-        channel_name = getattr(target_channel, 'name', str(channel_id))
 
         return {
             'success': True,
