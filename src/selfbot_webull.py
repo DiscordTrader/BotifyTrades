@@ -3565,6 +3565,16 @@ class WebullBroker:
             market_buy_buffers = [0.01, 0.02, 0.03, 0.05]
             market_sell_buffers = [0.01, 0.02, 0.03, 0.04]
             
+            def _cboe_round(p, is_sell):
+                import math
+                if p <= 0:
+                    return 0.05
+                increment = 0.05 if p < 3.00 else 0.10
+                ticks = round(p / increment, 8)
+                rounded = math.floor(ticks) * increment if is_sell else math.ceil(ticks) * increment
+                rounded = round(rounded, 2)
+                return max(increment, rounded)
+
             def _get_market_price(wb_client, sym, opt_id, order_side, buffer_pct):
                 try:
                     qd = wb_client.get_option_quote(stock=sym, optionId=opt_id)
@@ -3574,25 +3584,25 @@ class WebullBroker:
                         ask_list = qd.get('askList', [])
                         raw = float(ask_list[0].get('price', 0)) if ask_list else float(qd.get('askPrice', 0) or 0)
                         if raw and raw > 0:
-                            price = round(raw * (1 + buffer_pct), 2)
-                            print(f"[WEBULL] ⚡ MARKET BUY: ask=${raw:.2f} → limit=${price:.2f} (+{buffer_pct*100:.0f}% buffer)", flush=True)
+                            price = _cboe_round(raw * (1 + buffer_pct), is_sell=False)
+                            print(f"[WEBULL] ⚡ MARKET BUY: ask=${raw:.2f} → limit=${price:.2f} (+{buffer_pct*100:.0f}% buffer, CBOE rounded up)", flush=True)
                             return price, raw
                         last = float(qd.get('close', 0) or qd.get('lastPrice', 0) or 0)
                         if last and last > 0:
-                            price = round(last * (1 + buffer_pct + 0.01), 2)
-                            print(f"[WEBULL] ⚡ MARKET BUY: last=${last:.2f} → limit=${price:.2f} (+{(buffer_pct+0.01)*100:.0f}% buffer)", flush=True)
+                            price = _cboe_round(last * (1 + buffer_pct + 0.01), is_sell=False)
+                            print(f"[WEBULL] ⚡ MARKET BUY: last=${last:.2f} → limit=${price:.2f} (+{(buffer_pct+0.01)*100:.0f}% buffer, CBOE rounded up)", flush=True)
                             return price, last
                     else:
                         bid_list = qd.get('bidList', [])
                         raw = float(bid_list[0].get('price', 0)) if bid_list else float(qd.get('bidPrice', 0) or 0)
                         if raw and raw > 0:
-                            price = max(0.01, round(raw * (1 - buffer_pct), 2))
-                            print(f"[WEBULL] ⚡ MARKET SELL: bid=${raw:.2f} → limit=${price:.2f} (-{buffer_pct*100:.0f}% buffer)", flush=True)
+                            price = max(0.05, _cboe_round(raw * (1 - buffer_pct), is_sell=True))
+                            print(f"[WEBULL] ⚡ MARKET SELL: bid=${raw:.2f} → limit=${price:.2f} (-{buffer_pct*100:.0f}% buffer, CBOE rounded down)", flush=True)
                             return price, raw
                         last = float(qd.get('close', 0) or qd.get('lastPrice', 0) or 0)
                         if last and last > 0:
-                            price = max(0.01, round(last * (1 - buffer_pct - 0.01), 2))
-                            print(f"[WEBULL] ⚡ MARKET SELL: last=${last:.2f} → limit=${price:.2f} (-{(buffer_pct+0.01)*100:.0f}% buffer)", flush=True)
+                            price = max(0.05, _cboe_round(last * (1 - buffer_pct - 0.01), is_sell=True))
+                            print(f"[WEBULL] ⚡ MARKET SELL: last=${last:.2f} → limit=${price:.2f} (-{(buffer_pct+0.01)*100:.0f}% buffer, CBOE rounded down)", flush=True)
                             return price, last
                     return None, None
                 except Exception as e:
@@ -3609,11 +3619,11 @@ class WebullBroker:
                 if not effective_price or effective_price <= 0:
                     if _fallback_price and _fallback_price > 0:
                         if side == 'SELL':
-                            effective_price = max(0.01, round(_fallback_price * (1 - 0.03), 2))
+                            effective_price = max(0.05, _cboe_round(_fallback_price * (1 - 0.03), is_sell=True))
                         else:
-                            effective_price = round(_fallback_price * (1 + 0.03), 2)
+                            effective_price = _cboe_round(_fallback_price * (1 + 0.03), is_sell=False)
                         _raw_price = _fallback_price
-                        print(f"[WEBULL] ⚡ Quote unavailable — using signal fallback price ${_fallback_price:.2f} → limit ${effective_price:.2f} (3% buffer)", flush=True)
+                        print(f"[WEBULL] ⚡ Quote unavailable — using signal fallback price ${_fallback_price:.2f} → limit ${effective_price:.2f} (3% buffer, CBOE rounded)", flush=True)
                     else:
                         return {
                             'success': False,
@@ -3871,6 +3881,13 @@ class WebullBroker:
                 return last_result or {'success': False, 'msg': 'All transient retries exhausted', 'error': 'TRANSIENT_EXHAUSTED'}
             
             order_mode_label = "MARKET-MODE (aggressive limit)" if is_market_mode else "LIMIT"
+            if effective_price and effective_price > 0:
+                is_sell_order = side == 'SELL'
+                original_ep = effective_price
+                effective_price = _cboe_round(effective_price, is_sell=is_sell_order)
+                if effective_price != original_ep:
+                    direction = "down for sell" if is_sell_order else "up for buy"
+                    print(f"[{self.name}] 📐 CBOE increment: ${original_ep:.4f} → ${effective_price:.2f} (rounded {direction})")
             print(f"[{self.name}] Placing {order_mode_label} option order via direct API")
             
             result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, "[Attempt 1] ")
