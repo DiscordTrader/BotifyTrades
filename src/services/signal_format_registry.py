@@ -571,34 +571,81 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
         
-        # Phoenix trim: selling X% here SYMBOL
+        # Phoenix trim: selling/sold X% here SYMBOL
         self.register(
             name="phoenix_trim_here",
             description="Phoenix partial exit - selling X% here",
             priority=63,
-            pattern=r'selling\s+(\d+)%\s+here\s+\$?([A-Z]{1,5})(?![a-z])',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+here\s+\$?([A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_trim,
-            examples=["selling 80% here PAVM", "selling 80% here IBRX"]
+            examples=["selling 80% here PAVM", "selling 80% here IBRX", "sold 80% here PAVM"],
+            flags=re.IGNORECASE
         )
         
-        # Phoenix trim: selling X% more SYMBOL (skip "here" before symbol)
+        # Phoenix trim: selling/sold X% here (no symbol — needs position context)
+        self.register(
+            name="phoenix_trim_here_no_sym",
+            description="Phoenix partial exit - selling X% here (no symbol)",
+            priority=63,
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+here(?:\s|$|[.,!])',
+            parser=self._parse_phoenix_trim_no_sym,
+            examples=["selling 80% here", "Selling 80% here", "sold 50% here"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix trim: selling/sold X% more SYMBOL (skip "here" before symbol)
         self.register(
             name="phoenix_trim_more",
             description="Phoenix partial exit - selling X% more",
             priority=64,
-            pattern=r'selling\s+(\d+)%\s+more\s+(?:here\s+)?\$?((?!HERE|MORE|NOW)[A-Z]{1,5})(?![a-z])',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+more\s+(?:here\s+)?\$?((?!HERE|MORE|NOW)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_trim,
-            examples=["selling 10% more GITS", "selling 10% more CRVS", "selling 10% more here ARTV"]
+            examples=["selling 10% more GITS", "selling 10% more CRVS", "selling 10% more here ARTV"],
+            flags=re.IGNORECASE
         )
         
-        # Phoenix trim: selling X% SYMBOL (simple — SYMBOL must not be reserved word)
+        # Phoenix trim: selling/sold half/quarter/third SYMBOL
+        self.register(
+            name="phoenix_trim_fraction",
+            description="Phoenix partial exit - selling half/quarter/third",
+            priority=64,
+            pattern=r'(?:selling|sold)\s+(half|quarter|third)\s+(?:(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?(?:here\s+)?)?(?:\$?([A-Z]{1,5})(?![a-z]))',
+            parser=self._parse_phoenix_trim_fraction,
+            examples=["selling half here GITS", "selling half PAVM", "sold half ENVB"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix trim: selling/sold X% SYMBOL (simple — SYMBOL must not be reserved word)
         self.register(
             name="phoenix_trim_simple",
             description="Phoenix partial exit - selling X% SYMBOL (simple format)",
             priority=65,
-            pattern=r'selling\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF)[A-Z]{1,5})(?:\s|$)',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF|ALL|REST)[A-Z]{1,5})(?:\s|$)',
             parser=self._parse_phoenix_trim,
-            examples=["selling 80% XHLD", "selling 10% GITS"]
+            examples=["selling 80% XHLD", "selling 10% GITS", "sold 50% ENVB"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix trim: selling/sold X% (no symbol — needs position context)
+        self.register(
+            name="phoenix_trim_pct_no_sym",
+            description="Phoenix partial exit - selling X% (no symbol)",
+            priority=65,
+            pattern=r'(?:selling|sold)\s+(\d+)%(?:\s|$|[.,!])',
+            parser=self._parse_phoenix_trim_no_sym,
+            examples=["selling 80%", "sold 50%"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix trim: trimming SYMBOL (natural language, implies partial exit)
+        self.register(
+            name="phoenix_trimming",
+            description="Phoenix partial exit - trimming SYMBOL",
+            priority=65,
+            pattern=r'trimm?(?:ing|ed)\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF)[A-Z]{1,5})(?![a-z])',
+            parser=self._parse_phoenix_trimming,
+            examples=["trimming GITS", "trimmed PAVM"],
+            flags=re.IGNORECASE
         )
         
         # Phoenix trim: leaving X% SYMBOL (must not capture reserved words)
@@ -608,7 +655,8 @@ class SignalFormatRegistry:
             priority=66,
             pattern=r'leaving\s+(\d+)%\s+(?:here\s+)?(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?\$?((?!HERE|NOW|ON|MORE|THE|MY)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_leaving,
-            examples=["leaving 10% here GITS", "leaving 20% PAVM"]
+            examples=["leaving 10% here GITS", "leaving 20% PAVM"],
+            flags=re.IGNORECASE
         )
         
         # Phoenix trim: leaving X% (no symbol — needs position context)
@@ -618,7 +666,8 @@ class SignalFormatRegistry:
             priority=66,
             pattern=r'leaving\s+(\d+)%\s*(?:here|now)?(?:\s|$)',
             parser=self._parse_phoenix_leaving_no_sym,
-            examples=["leaving 5% now", "leaving 5% here", "leaving 10%"]
+            examples=["leaving 5% now", "leaving 5% here", "leaving 10%"],
+            flags=re.IGNORECASE
         )
         
         # Phoenix trim: let the rest run (runner signal)
@@ -628,7 +677,8 @@ class SignalFormatRegistry:
             priority=67,
             pattern=r'let\s+(?:the\s+)?rest\s+run',
             parser=self._parse_phoenix_let_rest_run,
-            examples=["let the rest run", "let rest run"]
+            examples=["let the rest run", "let rest run"],
+            flags=re.IGNORECASE
         )
         
         # Phoenix exit: SL hit with SYMBOL / SYMBOL SL hit
@@ -658,9 +708,21 @@ class SignalFormatRegistry:
             name="phoenix_out_of",
             description="Phoenix exit - out of SYMBOL",
             priority=70,
-            pattern=r'out\s+of\s+\$?([A-Z]{1,5})(?![a-z])',
+            pattern=r'out\s+(?:of\s+)?\$?([A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_exit,
-            examples=["out of PHGE", "out of PHGE with a loss"]
+            examples=["out of PHGE", "out of PHGE with a loss", "out PAVM"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix exit: stopped out SYMBOL
+        self.register(
+            name="phoenix_stopped_out",
+            description="Phoenix stopped out exit",
+            priority=70,
+            pattern=r'stopped?\s+out\s+(?:of\s+)?\$?([A-Z]{1,5})(?![a-z])',
+            parser=self._parse_phoenix_exit,
+            examples=["stopped out MIGI", "stopped out of ENVB"],
+            flags=re.IGNORECASE
         )
         
         # Phoenix exit: got a loss with SYMBOL
@@ -670,7 +732,8 @@ class SignalFormatRegistry:
             priority=71,
             pattern=r'got\s+a\s+loss\s+with\s+\$?([A-Z]{1,5})',
             parser=self._parse_phoenix_exit,
-            examples=["got a loss with ADTX"]
+            examples=["got a loss with ADTX"],
+            flags=re.IGNORECASE
         )
         
         # Load learned patterns from database
@@ -1332,6 +1395,86 @@ class SignalFormatRegistry:
             "is_full_exit": False,
             "trim_percentage": percentage,
             "confidence": 1.0,
+            "_phoenix_trim": True
+        }
+    
+    def _parse_phoenix_trim_no_sym(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trim without symbol: selling 80% here, selling 80%"""
+        groups = match.groups()
+        percentage = float(groups[0]) if groups else None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": None,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": percentage,
+            "confidence": 0.7,
+            "_phoenix_trim": True,
+            "_needs_position_context": True
+        }
+    
+    def _parse_phoenix_trim_fraction(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trim with fraction: selling half here GITS"""
+        groups = match.groups()
+        fraction_word = groups[0].lower() if groups else None
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+        
+        fraction_map = {"half": 50.0, "quarter": 25.0, "third": 33.0}
+        percentage = fraction_map.get(fraction_word, 50.0)
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": percentage,
+            "confidence": 1.0,
+            "_phoenix_trim": True
+        }
+    
+    def _parse_phoenix_trimming(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trimming: trimming GITS (implies 50% partial exit)"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": 50.0,
+            "confidence": 0.9,
             "_phoenix_trim": True
         }
     

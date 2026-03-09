@@ -405,7 +405,7 @@ FULL_EXIT_PATTERN = re.compile(
 DIRECT_SELL_PATTERN = re.compile(
     r'(?:(?:i\'?m|i\s+am|we\'?re|we\s+are|just)\s+)?'  # Optional natural language prefix
     r'(?:selling|sold)\s+(?!\d)'  # Must NOT be followed by a number (that's partial exit)
-    r'(?:\$?(?P<symbol>(?!here|now|on|more|all|half|quarter|third)[A-Z]{1,5}))(?:\s|$)',
+    r'(?:\$?(?P<symbol>(?!here|now|on|more|all|half|quarter|third|rest)[A-Z]{1,5}))(?:\s|$)',
     re.IGNORECASE
 )
 
