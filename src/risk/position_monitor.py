@@ -344,7 +344,7 @@ class RiskDBAdapter:
                                    c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                    c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                    c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                                   c.ema_use_underlying, c.ema_no_trend_candles
+                                   c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -368,7 +368,7 @@ class RiskDBAdapter:
                                    c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                    c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                    c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                                   c.ema_use_underlying, c.ema_no_trend_candles
+                                   c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -400,7 +400,7 @@ class RiskDBAdapter:
                                c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                               c.ema_use_underlying, c.ema_no_trend_candles
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -424,7 +424,7 @@ class RiskDBAdapter:
                                c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                               c.ema_use_underlying, c.ema_no_trend_candles
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -570,8 +570,8 @@ class RiskDBAdapter:
                 ema_extended_hours = bool(row[41]) if len(row) > 41 and row[41] else False
                 ema_use_underlying = bool(row[42]) if len(row) > 42 and row[42] is not None else True
                 ema_no_trend_candles = row[43] if len(row) > 43 and row[43] is not None else 3
+                escalation_only_mode = bool(row[44]) if len(row) > 44 and row[44] else False
 
-                # Risk management is enabled - return settings
                 return ChannelRiskSettings(
                     channel_id=str(row[0]),
                     channel_name=row[7] or 'Unknown',
@@ -610,7 +610,8 @@ class RiskDBAdapter:
                     ema_escalation_enabled=ema_escalation_enabled,
                     ema_extended_hours=ema_extended_hours,
                     ema_use_underlying=ema_use_underlying,
-                    ema_no_trend_candles=ema_no_trend_candles
+                    ema_no_trend_candles=ema_no_trend_candles,
+                    escalation_only_mode=escalation_only_mode
                 )
             
             return None
@@ -1841,10 +1842,30 @@ class RiskManager:
                 return decision
         
         if channel_settings and channel_settings.has_tiered_targets:
-            decision = evaluate_tiered_targets(position, cache, channel_settings)
-            if decision.should_exit:
-                decision.reason = format_tier_reason(decision, channel_settings.channel_name)
-                return decision
+            if channel_settings.escalation_only_mode:
+                tier_thresholds = {
+                    1: channel_settings.profit_target_1_pct,
+                    2: channel_settings.profit_target_2_pct,
+                    3: channel_settings.profit_target_3_pct,
+                    4: channel_settings.profit_target_4_pct
+                }
+                pnl_pct = position.pnl_percent if hasattr(position, 'pnl_percent') else 0
+                if cache.entry_price and cache.entry_price > 0:
+                    pnl_pct = ((position.current_price - cache.entry_price) / cache.entry_price) * 100
+                for tier in [1, 2, 3, 4]:
+                    threshold = tier_thresholds.get(tier, 0)
+                    if threshold <= 0:
+                        continue
+                    tier_attr = f'tier{tier}_hit'
+                    already_hit = getattr(cache, tier_attr, False)
+                    if not already_hit and pnl_pct >= threshold:
+                        setattr(cache, tier_attr, True)
+                        print(f"[RISK] ESCALATION ONLY: T{tier} hit ({pnl_pct:.1f}% >= {threshold}%) — SL escalated, NO partial sell")
+            else:
+                decision = evaluate_tiered_targets(position, cache, channel_settings)
+                if decision.should_exit:
+                    decision.reason = format_tier_reason(decision, channel_settings.channel_name)
+                    return decision
         
         if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled):
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)

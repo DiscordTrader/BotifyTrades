@@ -750,6 +750,25 @@ class WebullBroker(BrokerInterface):
             return []
     
     @staticmethod
+    def _round_to_cboe_increment(price: float, is_sell: bool = False) -> float:
+        import math
+        if price <= 0:
+            return 0.05
+        if price < 3.00:
+            increment = 0.05
+        else:
+            increment = 0.10
+        ticks = round(price / increment, 8)
+        if is_sell:
+            rounded = math.floor(ticks) * increment
+        else:
+            rounded = math.ceil(ticks) * increment
+        rounded = round(rounded, 2)
+        if rounded <= 0:
+            rounded = increment
+        return rounded
+
+    @staticmethod
     def _get_min_lot_size(price: float) -> int:
         """Webull minimum order sizes for low-priced stocks."""
         if price is None or price <= 0:
@@ -1172,6 +1191,13 @@ class WebullBroker(BrokerInterface):
                         price = round(_fallback_price * 1.03, 2)
                         print(f"[{self.name}] ⚡ Market BTO: no quote, fallback → ${price:.2f}")
             
+            if is_stc and price and price > 0:
+                original_price = price
+                price = self._round_to_cboe_increment(price, is_sell=True)
+                if price != original_price:
+                    print(f"[{self.name}] CBOE increment: ${original_price:.4f} -> ${price:.2f} "
+                          f"({'$0.05' if price < 3.00 else '$0.10'} increment, rounded down for sell)")
+
             def execute_order():
                 return self.wb.place_order_option(
                     optionId=option_id,
@@ -1232,6 +1258,7 @@ class WebullBroker(BrokerInterface):
                         price = max(0.01, round(fresh_bid * (1 - buf), 2))
                     else:
                         price = max(0.01, round(price * (1 - 0.02), 2))
+                    price = self._round_to_cboe_increment(price, is_sell=True)
                     print(f"[{self.name}] ⚡ STC retry #{buf_idx}: refreshed bid=${fresh_bid or 'N/A'} → limit ${price:.2f} (-{buf*100:.0f}% buffer)")
                     def retry_order(p=price):
                         return self.wb.place_order_option(

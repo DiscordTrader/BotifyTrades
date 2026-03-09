@@ -461,8 +461,9 @@ def evaluate_exit_actions(
             tier_thresholds[tier] = pct
     
     if enabled_tiers:
+        escalation_only = getattr(config, 'escalation_only_mode', False)
         leave_runner = config.leave_runner_pct if config.leave_runner_enabled else 0
-        tier_qtys = calculate_auto_tier_quantities(state.qty, leave_runner, enabled_tiers)
+        tier_qtys = calculate_auto_tier_quantities(state.qty, leave_runner, enabled_tiers) if not escalation_only else {}
         
         for tier in enabled_tiers:
             tier_hit_attr = f'pt{tier}_hit'
@@ -471,17 +472,18 @@ def evaluate_exit_actions(
             
             if not already_hit and pnl_pct >= threshold:
                 setattr(state, tier_hit_attr, True)
-                sell_qty = tier_qtys.get(tier, 0)
                 
-                if sell_qty > 0 and sell_qty <= state.remaining_qty:
-                    actions.append(RiskAction(
-                        action_type=ActionType.SELL_PARTIAL,
-                        reason=f"PT{tier} hit ({pnl_pct:.1f}% >= {threshold}%)",
-                        qty=sell_qty,
-                        tier=tier,
-                        priority=4
-                    ))
-                    state.remaining_qty -= sell_qty
+                if not escalation_only:
+                    sell_qty = tier_qtys.get(tier, 0)
+                    if sell_qty > 0 and sell_qty <= state.remaining_qty:
+                        actions.append(RiskAction(
+                            action_type=ActionType.SELL_PARTIAL,
+                            reason=f"PT{tier} hit ({pnl_pct:.1f}% >= {threshold}%)",
+                            qty=sell_qty,
+                            tier=tier,
+                            priority=4
+                        ))
+                        state.remaining_qty -= sell_qty
     
     # 6. Legacy Trailing Stop - SKIP if Early Trailing is enabled (mutually exclusive)
     if config.trailing_stop_pct > 0 and not config.enable_early_trailing:

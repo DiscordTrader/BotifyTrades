@@ -661,6 +661,13 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added entry_chase_enabled column for per-channel entry order chasing")
     
+    try:
+        cursor.execute('SELECT escalation_only_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN escalation_only_mode INTEGER DEFAULT 0')
+        conn.commit()
+        print("[DATABASE] ✓ Added escalation_only_mode column for SL-escalation-only targets")
+    
     # Migrate: Add per-channel sizing mode (live vs start_of_day)
     try:
         cursor.execute('SELECT sizing_mode FROM channels LIMIT 1')
@@ -2689,7 +2696,7 @@ def update_channel(channel_id: int, **kwargs):
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'trigger_offset_mode', 'trigger_offset_value', 'order_timeout_minutes', 'entry_confirmation_pct',
                    'slippage_protection_enabled', 'slippage_max_pct', 'slippage_wait_minutes', 'limit_cap_enabled', 'limit_cap_pct', 'breakout_reset_enabled',
                    'signal_update_automation', 'signal_update_automation_override',
-                   'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
+                   'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile', 'escalation_only_mode',
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
                    'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',

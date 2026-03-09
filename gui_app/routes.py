@@ -1973,7 +1973,7 @@ def register_routes(app):
                        'trailing_stop_pct', 'trailing_activation_pct', 'leave_runner_enabled',
                        'leave_runner_pct', 'profit_target_qty_1', 'profit_target_qty_2',
                        'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode',
-                       'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
+                       'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile', 'escalation_only_mode',
                        'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                        'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
                        'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',

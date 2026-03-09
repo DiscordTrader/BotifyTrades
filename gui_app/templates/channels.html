@@ -1701,6 +1701,14 @@ function buildRiskControlsTab(ch) {
                 </div>
             </div>
             <div class="settings-helper">Signal: follow trader exits. Risk: auto PT/SL. Hybrid: both active, first trigger wins.</div>
+            <div class="settings-toggle-row" style="margin-top: 10px;">
+                <span>SL Escalation Only</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" ${ch.escalation_only_mode ? 'checked' : ''} onchange="updateEscalationOnlyMode(${ch.id}, this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="settings-helper">Targets escalate stop loss only — no partial sells. Closing via Early Trailing + Giveback Guard.</div>
         </div>
         <div class="settings-section cyan">
             <div class="settings-section-title">🛡 Slippage Protection</div>
@@ -2142,6 +2150,26 @@ async function updateExitStrategy(channelId, mode) {
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function updateEscalationOnlyMode(channelId, enabled) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ escalation_only_mode: enabled ? 1 : 0 })
+        });
+        if (response.ok) {
+            updateLocalChannel(channelId, { escalation_only_mode: enabled ? 1 : 0 });
+            showNotification(enabled ?
+                'SL Escalation Only enabled — targets escalate SL, no partial sells' :
+                'SL Escalation Only disabled — normal tiered profit taking active');
+        } else {
+            showNotification('Error updating SL Escalation Only mode', 'error');
+        }
+    } catch (e) {
+        showNotification('Error updating SL Escalation Only mode', 'error');
     }
 }
 

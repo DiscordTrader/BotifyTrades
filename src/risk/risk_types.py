@@ -93,6 +93,8 @@ class ChannelRiskSettings:
     early_trailing_activation_pct: float = 5.0  # Move to breakeven at this % gain
     early_trailing_step_pct: float = 3.0  # Lock profit in this % increments
 
+    escalation_only_mode: bool = False
+    
     # EMA Risk Management Settings (EMA-5 Candlestick Risk Engine)
     ema_risk_enabled: bool = False
     ema_period: int = 5
@@ -140,7 +142,8 @@ class ChannelRiskSettings:
             self.trim_order_mode, self.sl_order_mode,
             self.ema_risk_enabled, self.ema_period, self.ema_timeframe_minutes,
             self.ema_buffer_pct, self.ema_exit_enabled, self.ema_escalation_enabled,
-            self.ema_no_trend_candles
+            self.ema_no_trend_candles,
+            self.escalation_only_mode
         )
         hash_input = str(key_fields).encode()
         return hashlib.md5(hash_input).hexdigest()[:12]
