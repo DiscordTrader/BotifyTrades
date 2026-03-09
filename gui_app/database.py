@@ -2187,6 +2187,19 @@ def init_db():
     if cursor.rowcount > 0:
         print("[DATABASE] ✓ Created GUI_EXEC channel for options page tracking")
     
+    _default_channels = [
+        ('1293555678111072347', 'phoenix', 'EXECUTE', 1, 1, 1),
+        ('1178749711163859025', 'jacob', 'EXECUTE', 1, 1, 1),
+        ('1443262702515650713', 'pro-trader', 'EXECUTE', 1, 1, 1),
+    ]
+    for _dc_id, _dc_name, _dc_cat, _dc_exec, _dc_track, _dc_active in _default_channels:
+        cursor.execute("""
+            INSERT OR IGNORE INTO channels (discord_channel_id, name, category, execute_enabled, track_enabled, is_active)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (_dc_id, _dc_name, _dc_cat, _dc_exec, _dc_track, _dc_active))
+        if cursor.rowcount > 0:
+            print(f"[DATABASE] ✓ Created default channel: {_dc_name} ({_dc_id})")
+    
     conn.commit()
     
     # Ensure signal verification tables exist
