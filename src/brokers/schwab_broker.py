@@ -1149,15 +1149,16 @@ class SchwabBroker(BrokerInterface):
                 order_id = response.headers.get('Location', '').split('/')[-1]
                 print(f"[{self.name}] ✅ Order accepted by Schwab (order_id={order_id})")
 
+                _pos_key = kwargs.get('position_key') or kwargs.get('_exit_marker_key')
                 try:
                     loop = asyncio.get_running_loop()
                     loop.create_task(
-                        self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity)
+                        self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity, position_key=_pos_key)
                     )
                 except RuntimeError:
                     try:
                         asyncio.ensure_future(
-                            self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity)
+                            self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity, position_key=_pos_key)
                         )
                     except Exception:
                         pass
@@ -1220,11 +1221,26 @@ class SchwabBroker(BrokerInterface):
                         'filled_quantity': status_result.get('filled_quantity', 0)
                     }
                 elif status == 'rejected':
-                    return {'status': 'rejected', 'reason': f'Exchange rejected order {order_id}'}
+                    desc = status_result.get('status_description', '')
+                    reason_str = f'Exchange rejected order {order_id}'
+                    if desc:
+                        reason_str += f' ({desc})'
+                    return {'status': 'rejected', 'reason': reason_str}
                 elif status == 'cancelled':
-                    return {'status': 'cancelled', 'reason': f'Order {order_id} was cancelled'}
+                    desc = status_result.get('status_description', '')
+                    cancel_time = status_result.get('cancel_time', '')
+                    reason_str = f'Order {order_id} was cancelled'
+                    if desc:
+                        reason_str += f' ({desc})'
+                    if cancel_time:
+                        reason_str += f' at {cancel_time}'
+                    return {'status': 'cancelled', 'reason': reason_str}
                 elif status == 'expired':
-                    return {'status': 'expired', 'reason': f'Order {order_id} expired'}
+                    desc = status_result.get('status_description', '')
+                    reason_str = f'Order {order_id} expired'
+                    if desc:
+                        reason_str += f' ({desc})'
+                    return {'status': 'expired', 'reason': reason_str}
                 elif status == 'pending':
                     if check_num < max_checks:
                         await _aio.sleep(interval)
@@ -1246,7 +1262,7 @@ class SchwabBroker(BrokerInterface):
         return {'status': 'pending', 'reason': 'Verification exhausted'}
 
     async def _background_verify_order(self, order_id: str, action: str, option_symbol: str,
-                                        symbol: str, price: float, quantity: int):
+                                        symbol: str, price: float, quantity: int, position_key: str = None):
         """Background task: verify order fill status after placement.
         
         Runs asynchronously — does not block the caller. If order is rejected/cancelled/expired,
@@ -1268,7 +1284,24 @@ class SchwabBroker(BrokerInterface):
         elif status in ('rejected', 'cancelled', 'expired'):
             reason = verified.get('reason', status)
             print(f"[{self.name}] ❌ Background verify: Order {order_id} {status.upper()}: {reason}")
-            print(f"[{self.name}] ⚠️ Sync service will reconcile trade status on next cycle")
+            if action and action.upper() in ('STC', 'SELL_TO_CLOSE', 'SELL'):
+                try:
+                    from src.risk.position_monitor import risk_manager_instance
+                    rm = risk_manager_instance
+                    if rm and position_key and hasattr(rm, '_exit_executed_keys') and hasattr(rm, '_exit_executed_lock'):
+                        with rm._exit_executed_lock:
+                            rm._exit_executed_keys.discard(position_key)
+                        if hasattr(rm, 'cache'):
+                            rm.cache.record_exit_failure(position_key, f"Exchange {status}: {reason}", is_stop_loss=True)
+                        print(f"[{self.name}] ✓ Cleared exit lock for {position_key} after exchange {status} — retry enabled")
+                    elif rm and not position_key:
+                        print(f"[{self.name}] ⚠️ Exchange {status} but no position_key available — order chaser will handle")
+                    elif not rm:
+                        print(f"[{self.name}] ⚠️ Exchange {status} but risk manager not available — order chaser will handle")
+                except Exception as bg_err:
+                    print(f"[{self.name}] ⚠️ Could not clear exit lock after {status}: {bg_err}")
+            else:
+                print(f"[{self.name}] ⚠️ Sync service will reconcile trade status on next cycle")
         else:
             print(f"[{self.name}] ⏳ Background verify: Order {order_id} still {status} — sync service will track")
 
@@ -2560,12 +2593,21 @@ class SchwabBroker(BrokerInterface):
                 elif filled_quantity > 0:
                     avg_price = float(order.get('price', 0))
 
-                return {
+                result = {
                     'status': mapped_status,
                     'filled_quantity': filled_quantity,
                     'remaining_quantity': remaining_quantity,
                     'average_price': avg_price
                 }
+                if mapped_status in ('rejected', 'cancelled'):
+                    cancel_time = order.get('cancelTime', '')
+                    status_desc = order.get('statusDescription', '')
+                    close_time = order.get('closeTime', '')
+                    result['cancel_time'] = cancel_time
+                    result['status_description'] = status_desc
+                    result['close_time'] = close_time
+                    result['schwab_raw_status'] = schwab_status
+                return result
 
             else:
                 print(f"[{self.name}] Error getting order status: {response.status_code}")

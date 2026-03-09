@@ -523,6 +523,21 @@ class UnfilledOrderChaser:
                             get_exit_lease_manager().force_release(order.position_key)
                         except Exception:
                             pass
+                        try:
+                            bot = self.broker_manager
+                            rm = None
+                            if bot:
+                                rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
+                            if rm and hasattr(rm, '_exit_executed_keys') and hasattr(rm, '_exit_executed_lock'):
+                                with rm._exit_executed_lock:
+                                    if order.position_key in rm._exit_executed_keys:
+                                        rm._exit_executed_keys.discard(order.position_key)
+                                        print(f"[ORDER_CHASER] ✓ Cleared exit-executed lock for {order.position_key} — retry enabled after exchange rejection")
+                            if rm and hasattr(rm, 'cache'):
+                                rm.cache.record_exit_failure(order.position_key, f"Exchange rejected order {order.order_id}", is_stop_loss=True)
+                                print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
+                        except Exception as e:
+                            print(f"[ORDER_CHASER] ⚠️ Could not clear exit lock after rejection: {e}")
                     return
                 if verified == 'UNKNOWN':
                     print(f"[ORDER_CHASER] Order {order.order_id} status UNKNOWN — assuming filled (legacy behavior)")

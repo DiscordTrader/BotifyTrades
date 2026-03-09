@@ -16908,6 +16908,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'expiry_mmdd': signal['expiry'],
                                 'limit_price': None if use_market_order else signal.get('price'),
                                 '_risk_management_order': signal.get('_risk_management_order', False),
+                                'position_key': signal.get('_position_key') or signal.get('_exit_marker_key'),
                             }
                             if use_market_order and signal.get('price'):
                                 order_kwargs['_signal_price_fallback'] = signal.get('price')
