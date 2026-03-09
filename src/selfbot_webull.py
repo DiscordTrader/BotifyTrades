@@ -3197,6 +3197,9 @@ class WebullBroker:
                 print(f"[SLIPPAGE] ❌ No valid current price - marking as ABORT (illiquid)")
                 return (SlippageDecision.ABORT, 0.0)
         
+        if signal_price <= 0:
+            print(f"[SLIPPAGE] ⚠️  Signal price is ${signal_price} - cannot calculate slippage, proceeding")
+            return (SlippageDecision.IMMEDIATE, 0.0)
         slippage_pct = abs(current_price - signal_price) / signal_price * 100
         
         threshold = threshold_override if threshold_override is not None else HIGH_SLIPPAGE_THRESHOLD_PCT

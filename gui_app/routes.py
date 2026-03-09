@@ -96,6 +96,19 @@ _login_attempts: Dict[str, list] = {}  # {ip: [timestamp1, timestamp2, ...]}
 _max_attempts = 5  # Max attempts per window
 _lockout_window = 300  # 5 minutes in seconds
 
+import math
+
+def _cboe_round_option_price(price: float, is_sell: bool = True) -> float:
+    if price <= 0:
+        return 0.05
+    tick = 0.05 if price < 3.0 else 0.10
+    if is_sell:
+        rounded = math.floor(price / tick) * tick
+    else:
+        rounded = math.ceil(price / tick) * tick
+    rounded = round(rounded, 2)
+    return max(tick, rounded)
+
 def fetch_stock_price_reliable(symbol: str) -> float:
     """Fetch stock price using yfinance as primary source (works for stocks and indices like SPX).
     Returns the price or 0 if unable to fetch.
@@ -5649,13 +5662,12 @@ def register_routes(app):
                     if last_price <= 0:
                         last_price = 0.01
 
-                    # Use user-provided limit price, or fallback to auto-calculated
                     if user_limit_price:
-                        limit_price = float(user_limit_price)
-                        print(f"[DEBUG] Using USER limit price: ${limit_price}")
+                        limit_price = _cboe_round_option_price(float(user_limit_price), is_sell=True)
+                        print(f"[DEBUG] Using USER limit price: ${limit_price} (CBOE rounded)")
                     else:
-                        limit_price = max(0.01, round(last_price * 0.95, 2))
-                        print(f"[DEBUG] Using AUTO limit price: ${limit_price} (95% of last)")
+                        limit_price = _cboe_round_option_price(last_price * 0.95, is_sell=True)
+                        print(f"[DEBUG] Using AUTO limit price: ${limit_price} (95% of last, CBOE rounded)")
 
                     print(f"[DEBUG] Closing option {symbol} | optionId={option_id}, qty={quantity}, "
                           f"last={last_price}, limit={limit_price}")
@@ -6490,15 +6502,15 @@ def register_routes(app):
                             pass
 
                         if hub_bid > 0 and hub_ask > 0:
-                            limit_price = round(hub_bid, 2)
-                            print(f"[WEBULL-CLOSE] Using streaming hub bid: ${hub_bid:.2f} (ask: ${hub_ask:.2f})", flush=True)
+                            limit_price = _cboe_round_option_price(hub_bid, is_sell=True)
+                            print(f"[WEBULL-CLOSE] Using streaming hub bid: ${hub_bid:.2f} → ${limit_price:.2f} (CBOE rounded)", flush=True)
                         else:
                             last_price = float(
                                 (option_position or {}).get('lastPrice') or
                                 (option_position or {}).get('price') or
                                 (option_position or {}).get('avgPrice') or 0
                             )
-                            limit_price = max(0.01, round(last_price * 0.95, 2)) if last_price > 0 else 0.01
+                            limit_price = _cboe_round_option_price(last_price * 0.95, is_sell=True) if last_price > 0 else 0.05
                     
                     max_retries = 3
                     for attempt in range(max_retries):
