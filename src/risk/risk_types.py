@@ -243,6 +243,7 @@ class PositionCacheEntry:
     trailing_activated: bool = False
     closing: bool = False
     closing_cycles: int = 0
+    closing_since: float = 0
     stop_loss_price: Optional[float] = None
     profit_target_price: Optional[float] = None
     broker: str = ""
@@ -347,6 +348,7 @@ class PositionCacheEntry:
         """Reset closing state after stuck position detection."""
         self.closing = False
         self.closing_cycles = 0
+        self.closing_since = 0
     
     def update_highest_price(self, current_price: float, position_key: Optional[str] = None, verbose: bool = False) -> bool:
         """Track highest price for trailing stop. Returns True if new high was set."""

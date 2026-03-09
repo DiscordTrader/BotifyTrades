@@ -10612,7 +10612,7 @@ def update_global_risk_settings(updates: Dict) -> bool:
         if 'risk_check_interval_seconds' in updates:
             try:
                 val = float(updates['risk_check_interval_seconds'])
-                updates['risk_check_interval_seconds'] = max(1.0, min(60.0, val))
+                updates['risk_check_interval_seconds'] = max(0.2, min(60.0, val))
             except (TypeError, ValueError):
                 updates['risk_check_interval_seconds'] = 2.0
         

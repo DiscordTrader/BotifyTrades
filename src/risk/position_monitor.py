@@ -1068,6 +1068,7 @@ class RiskManager:
                     
                     await self._monitoring_cycle()
                     interval = self._get_adaptive_interval()
+                    _wake_chunk = min(0.1, interval)
                     elapsed = 0.0
                     while elapsed < interval:
                         try:
@@ -1084,8 +1085,8 @@ class RiskManager:
                                 break
                         except Exception:
                             pass
-                        await asyncio.sleep(min(0.5, interval - elapsed))
-                        elapsed += 0.5
+                        await asyncio.sleep(min(_wake_chunk, interval - elapsed))
+                        elapsed += _wake_chunk
                 else:
                     if not self._standby_mode:
                         print("[RISK] ⏸️ Entering standby mode - no risk settings enabled (zero API calls)")
@@ -1109,12 +1110,22 @@ class RiskManager:
                 traceback.print_exc()
                 await asyncio.sleep(self.monitoring_interval)
     
+    _service_enabled_cache = None
+    _service_enabled_cache_ts = 0
+
     def _check_service_enabled(self) -> bool:
-        """Check if risk monitoring should be active (any channel has risk enabled)."""
+        """Check if risk monitoring should be active (cached 10s to reduce DB overhead)."""
+        import time as _t
+        now = _t.monotonic()
+        if self._service_enabled_cache is not None and (now - self._service_enabled_cache_ts) < 10:
+            return self._service_enabled_cache
+
         try:
             from gui_app.database import get_setting
             risk_monitor_enabled = get_setting('risk_monitor_enabled', 'true').lower() == 'true'
             if not risk_monitor_enabled:
+                self._service_enabled_cache = False
+                self._service_enabled_cache_ts = now
                 return False
         except Exception:
             pass
@@ -1122,7 +1133,10 @@ class RiskManager:
         risk_settings = self._get_risk_settings()
         channel_count = self.db_adapter.count_channels_with_risk()
         
-        return risk_settings.enabled or channel_count > 0
+        result = risk_settings.enabled or channel_count > 0
+        self._service_enabled_cache = result
+        self._service_enabled_cache_ts = now
+        return result
     
     def _get_adaptive_interval(self) -> float:
         """Get monitoring interval - configurable via GUI settings.
@@ -1132,7 +1146,7 @@ class RiskManager:
         2. Default 1 second for real-time live position monitoring
         
         Configure in Settings → Risk Management → Check Interval
-        Recommended: 1-2 seconds for active trading
+        Supports sub-second intervals (0.2s minimum) for faster risk evaluation.
         """
         try:
             from gui_app.database import get_global_risk_settings
@@ -1140,7 +1154,7 @@ class RiskManager:
             custom_interval = settings.get('risk_check_interval_seconds')
             if custom_interval is not None:
                 interval = float(custom_interval)
-                if 1 <= interval <= 60:
+                if 0.2 <= interval <= 60:
                     return interval
         except Exception:
             pass
@@ -1272,7 +1286,13 @@ class RiskManager:
                 if stale_imports:
                     self._auto_imported_keys -= stale_imports
         
-        self.cache.save()
+        import time as _save_t
+        if not hasattr(self, '_last_cache_save_ts'):
+            self._last_cache_save_ts = 0
+        _now_save = _save_t.monotonic()
+        if (_now_save - self._last_cache_save_ts) >= 2.0:
+            self.cache.save()
+            self._last_cache_save_ts = _now_save
     
     async def _fetch_all_positions(self) -> List[PositionSnapshot]:
         """Fetch positions from all brokers — hub-first, zero API cost when possible.
@@ -2316,10 +2336,14 @@ class RiskManager:
                 print(f"[RISK] Arbiter check failed, proceeding with exit: {e}")
         
         if not decision.is_partial:
+            from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE
+            lease_mgr = get_exit_lease_manager()
+            tier_label = getattr(decision, 'tier', None)
+            if not lease_mgr.acquire(pos_key, OWNER_RISK_ENGINE, tier=tier_label):
+                lease_info = lease_mgr.get_state(pos_key)
+                print(f"[RISK] Exit lease active for {pos_key} (owner={lease_info['owner']}, age={lease_info['age']:.1f}s) — skipping duplicate exit")
+                return
             self.cache.mark_closing(pos_key)
-        
-        # Note: tier_hit is added to signal and marked AFTER successful execution
-        # This prevents re-trigger issues when orders fail
         
         try:
             stc_signal = self._build_stc_signal(position, decision)
@@ -2457,6 +2481,12 @@ class RiskManager:
                 import time as _t
                 _t.sleep(10)
                 try:
+                    from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_WORKER, OWNER_BACKUP, LEASE_EXECUTING
+                    lease_mgr = get_exit_lease_manager()
+                    lease_info = lease_mgr.get_state(pos_key)
+                    if lease_info['owner'] == OWNER_WORKER and lease_info['state'] == LEASE_EXECUTING:
+                        print(f"[RISK] [DIRECT-EXIT] {pos_key} already being executed by worker — skipping")
+                        return
                     with self._exit_executed_lock:
                         if pos_key in self._exit_executed_keys:
                             print(f"[RISK] [DIRECT-EXIT] {pos_key} already executed by worker — skipping")
@@ -2467,6 +2497,11 @@ class RiskManager:
                             print(f"[RISK] [DIRECT-EXIT] {pos_key} closing reset due to FAILED exit (retries={entry.exit_retry_count}) — will retry on next risk cycle")
                         else:
                             print(f"[RISK] [DIRECT-EXIT] {pos_key} no longer closing — worker handled it")
+                        return
+                    from src.risk.exit_lease_manager import OWNER_RISK_ENGINE
+                    if not lease_mgr.transfer(pos_key, OWNER_BACKUP, LEASE_EXECUTING, expected_owner=OWNER_RISK_ENGINE):
+                        current_lease = lease_mgr.get_state(pos_key)
+                        print(f"[RISK] [DIRECT-EXIT] {pos_key} lease owned by {current_lease['owner']} — skipping backup")
                         return
                     with self._exit_executed_lock:
                         if pos_key in self._exit_executed_keys:
@@ -2488,6 +2523,11 @@ class RiskManager:
             
         except Exception as e:
             self.cache.reset_closing(pos_key)
+            try:
+                from src.risk.exit_lease_manager import get_exit_lease_manager
+                get_exit_lease_manager().force_release(pos_key)
+            except Exception:
+                pass
             print(f"[RISK] ✗ Failed to queue STC order for {pos_key}: {e}")
     
     async def _direct_execute_exit(self, stc_signal: dict, pos_key: str):

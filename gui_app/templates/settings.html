@@ -1640,8 +1640,8 @@ input:checked + .slider:before {
             
             <div class="form-group">
                 <label>Risk Check Interval (seconds)</label>
-                <input type="number" id="global-risk-check-interval" value="2" min="1" max="60" step="0.5">
-                <p class="help-text">How often the risk engine checks positions for SL/PT triggers. Default: 2s. Minimum: 1s. Lower = faster reaction but more API calls.</p>
+                <input type="number" id="global-risk-check-interval" value="1" min="0.2" max="60" step="0.1">
+                <p class="help-text">How often the risk engine checks positions for SL/PT triggers. Default: 1s. Minimum: 0.2s. Prices come from streaming cache — sub-second intervals do NOT increase API calls.</p>
             </div>
         </div>
         
@@ -3292,7 +3292,7 @@ async function loadConditionalOrdersSettings() {
             document.getElementById('global-circuit-breaker').checked = riskSettings.enable_circuit_breaker === true || riskSettings.enable_circuit_breaker === 1;
             document.getElementById('global-daily-loss-limit').value = riskSettings.global_daily_loss_limit || 0;
             document.getElementById('global-max-positions').value = riskSettings.global_max_positions || 10;
-            document.getElementById('global-risk-check-interval').value = riskSettings.risk_check_interval_seconds || 2;
+            document.getElementById('global-risk-check-interval').value = riskSettings.risk_check_interval_seconds || 1;
             document.getElementById('daily-pnl-limit-enabled').checked = riskSettings.daily_pnl_limit_enabled === true || riskSettings.daily_pnl_limit_enabled === 1;
             document.getElementById('daily-loss-limit-dollar').value = riskSettings.daily_loss_limit_dollar || 0;
             document.getElementById('daily-loss-limit-pct').value = riskSettings.daily_loss_limit_pct || 0;

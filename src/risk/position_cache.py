@@ -28,7 +28,7 @@ def get_position_cache() -> 'PositionCache':
 class PositionCache:
     """Manages position state cache with file persistence."""
     
-    CLOSING_CYCLE_RESET = 60  # Reset closing flag after this many cycles (~60s at 1s/cycle)
+    CLOSING_TIMEOUT_SECONDS = 60
     
     FLIP_FLOP_HISTORY_SIZE = 3
     ENTRY_PRICE_CHANGE_TOLERANCE = 0.05
@@ -542,28 +542,37 @@ class PositionCache:
         return results
     
     def is_closing(self, position_key: str) -> bool:
-        """Check if position is in closing state, with auto-reset after 3 cycles."""
+        """Check if position is in closing state, with auto-reset after wall-clock timeout."""
+        import time as _time
         entry = self._cache.get(position_key)
         if not entry:
             return False
         
         if entry.closing:
-            entry.closing_cycles += 1
-            
-            if entry.closing_cycles >= self.CLOSING_CYCLE_RESET:
-                print(f"[RISK] ⚠️ {position_key}: Position still exists after {entry.closing_cycles} "
-                      f"closing cycles - resetting closing flag")
-                entry.reset_closing()
-                return False
+            closing_since = getattr(entry, 'closing_since', 0) or 0
+            if closing_since > 0:
+                elapsed = _time.monotonic() - closing_since
+                if elapsed >= self.CLOSING_TIMEOUT_SECONDS:
+                    print(f"[RISK] ⚠️ {position_key}: Position still exists after {elapsed:.0f}s "
+                          f"closing — resetting closing flag")
+                    entry.reset_closing()
+                    return False
+            else:
+                entry.closing_cycles += 1
+                if entry.closing_cycles >= 60:
+                    entry.reset_closing()
+                    return False
             
             return True
         return False
     
     def mark_closing(self, position_key: str, is_partial: bool = False) -> None:
         """Mark position as being closed."""
+        import time as _time
         if position_key in self._cache and not is_partial:
             self._cache[position_key].closing = True
             self._cache[position_key].closing_cycles = 0
+            self._cache[position_key].closing_since = _time.monotonic()
             print(f"[RISK] Marked {position_key} as closing (prevent duplicate triggers)")
     
     def reset_closing(self, position_key: str) -> None:

@@ -344,6 +344,11 @@ class UnfilledOrderChaser:
                                 print(f"[ORDER_CHASER] ✓ Risk tier confirmed via chaser fill for {position_key}")
                     except Exception as e:
                         print(f"[ORDER_CHASER] Warning: Could not confirm risk tier: {e}")
+                    try:
+                        from src.risk.exit_lease_manager import get_exit_lease_manager
+                        get_exit_lease_manager().force_release(position_key)
+                    except Exception:
+                        pass
     
     async def untrack_order(self, order_id: str):
         """Stop tracking an order (exit or entry)"""
@@ -512,6 +517,12 @@ class UnfilledOrderChaser:
                         record_order_event('ORDER_CANCELLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='CANCELLED', reason="Order verified as cancelled/rejected by broker", severity='warning', source='order_chaser', position_key=order.position_key)
                     except Exception:
                         pass
+                    if order.position_key:
+                        try:
+                            from src.risk.exit_lease_manager import get_exit_lease_manager
+                            get_exit_lease_manager().force_release(order.position_key)
+                        except Exception:
+                            pass
                     return
                 if verified == 'UNKNOWN':
                     print(f"[ORDER_CHASER] Order {order.order_id} status UNKNOWN — assuming filled (legacy behavior)")

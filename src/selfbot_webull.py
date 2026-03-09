@@ -15648,6 +15648,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if is_risk_order and signal.get('_exit_marker_key'):
                     _marker_key = signal['_exit_marker_key']
                     try:
+                        from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_WORKER, OWNER_BACKUP, OWNER_RISK_ENGINE, LEASE_EXECUTING
+                        _lease_mgr = get_exit_lease_manager()
+                        _lease_info = _lease_mgr.get_state(_marker_key)
+                        if _lease_info['owner'] == OWNER_BACKUP:
+                            _original_print(f"[WORKER] ⚠️ {_marker_key} already taken by backup thread — skipping", flush=True)
+                            continue
+                        if not _lease_mgr.transfer(_marker_key, OWNER_WORKER, LEASE_EXECUTING, expected_owner=OWNER_RISK_ENGINE):
+                            _original_print(f"[WORKER] ⚠️ {_marker_key} lease transfer failed (owner={_lease_info['owner']}) — skipping", flush=True)
+                            continue
+                    except Exception:
+                        pass
+                    try:
                         _rm = getattr(self, '_risk_manager', None) or getattr(self, 'risk_manager', None)
                         if _rm and hasattr(_rm, '_exit_executed_lock'):
                             with _rm._exit_executed_lock:
@@ -17190,6 +17202,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     with risk_manager_instance._exit_executed_lock:
                                         risk_manager_instance._exit_executed_keys.discard(signal['_position_key'])
                                     _original_print(f"[RISK-RETRY] ✓ Cleared exit-executed lock for {signal['_position_key']} — retry enabled", flush=True)
+                                try:
+                                    from src.risk.exit_lease_manager import get_exit_lease_manager
+                                    get_exit_lease_manager().force_release(signal['_position_key'])
+                                except Exception:
+                                    pass
                                 retry_state = cache.get_retry_state(signal['_position_key'])
                                 
                                 if retry_state.get('permanent_failure'):
