@@ -515,7 +515,13 @@ class WebullBroker(BrokerInterface):
                             expiry_mmdd = expiry
                     
                     opt_id_val = pos.get('optionId', 0)
-                    opt_direction = 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else '')
+                    d_upper = direction.upper() if direction else ''
+                    if d_upper in ('CALL', 'C'):
+                        opt_direction = 'C'
+                    elif d_upper in ('PUT', 'P'):
+                        opt_direction = 'P'
+                    else:
+                        opt_direction = d_upper[:1] if d_upper else ''
                     
                     if opt_id_val and expiry and opt_direction:
                         self.cache_option_id(symbol, strike, expiry, opt_direction, str(opt_id_val))

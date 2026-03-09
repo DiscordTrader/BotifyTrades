@@ -753,7 +753,7 @@ class UnfilledOrderChaser:
                     action=order.action,
                     strike=order.strike,
                     expiry=order.expiry,
-                    direction=order.call_put,
+                    option_type=order.call_put,
                     order_type='LIMIT'
                 )
             else:
@@ -1057,7 +1057,7 @@ class UnfilledOrderChaser:
                     action=order.action,
                     strike=order.strike,
                     expiry=order.expiry,
-                    direction=order.call_put,
+                    option_type=order.call_put,
                     order_type='LIMIT'
                 )
             else:

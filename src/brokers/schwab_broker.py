@@ -136,8 +136,8 @@ class SchwabBroker(BrokerInterface):
         option_symbols = []
         for pos in positions:
             symbol = pos.get('symbol', '') if isinstance(pos, dict) else str(pos)
-            asset_type = pos.get('assetType', 'EQUITY') if isinstance(pos, dict) else 'EQUITY'
-            if asset_type == 'OPTION' or len(symbol) > 10:
+            asset_type = pos.get('assetType', pos.get('asset', 'EQUITY')) if isinstance(pos, dict) else 'EQUITY'
+            if asset_type in ('OPTION', 'option') or len(symbol) > 10:
                 option_symbols.append(symbol)
             else:
                 equity_symbols.append(symbol)

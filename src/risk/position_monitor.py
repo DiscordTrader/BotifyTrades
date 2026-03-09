@@ -1309,8 +1309,13 @@ class RiskManager:
                         ticker_id = pos.get('tickerId', 0)
                         strike = float(pos.get('strikePrice', 0))
                         option_id = pos.get('optionId', ticker_id)
-                        raw_dir = (pos.get('direction', '') or '').lower()
-                        direction = 'C' if raw_dir == 'call' else ('P' if raw_dir == 'put' else '')
+                        raw_dir = (pos.get('direction', '') or '').upper()
+                        if raw_dir in ('CALL', 'C'):
+                            direction = 'C'
+                        elif raw_dir in ('PUT', 'P'):
+                            direction = 'P'
+                        else:
+                            direction = raw_dir[:1] if raw_dir else ''
                         raw_exp = pos.get('expireDate', '')
                         expiry = ''
                         if raw_exp and '-' in raw_exp:

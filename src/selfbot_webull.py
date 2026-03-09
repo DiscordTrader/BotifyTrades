@@ -14722,6 +14722,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         sig_symbol_set = _STC_SYMBOL_ALIASES.get(sig_symbol, {sig_symbol})
                         
                         matched_qty = 0
+                        matched_pos = None
                         for p in pos_list:
                             if p.get('asset') != 'option':
                                 continue
@@ -14737,7 +14738,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 p_dir == sig_opt and
                                 expiry_match):
                                 matched_qty = int(p.get('quantity', 0))
+                                matched_pos = p
                                 break
+                        
+                        if matched_pos:
+                            if matched_pos.get('option_id'):
+                                if signal.get('option_id') != matched_pos['option_id']:
+                                    _original_print(f"[{broker_name}] STC: Using option_id={matched_pos['option_id']} from matched position (was {signal.get('option_id', 'None')})")
+                                signal['option_id'] = matched_pos['option_id']
+                            if matched_pos.get('expiry_full') and not signal.get('expiry_full'):
+                                signal['expiry_full'] = matched_pos['expiry_full']
                         
                         if matched_qty <= 0:
                             _original_print(f"[{broker_name}] ⚠️ STC rejected: No matching position for {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}")
