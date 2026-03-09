@@ -392,11 +392,17 @@ PARTIAL_EXIT_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Full exit without percentage: "out of POLA", "out of SEGG with remaining shares"
+# Full exit without percentage: "out of POLA", "out PAVM", "stopped out MIGI", "out of SEGG with remaining shares"
 FULL_EXIT_PATTERN = re.compile(
-    r'(?:out\s+of|exiting|exited|closed?\s+out|closing)\s+'
+    r'(?:out\s+(?:of\s+)?|exiting|exited|closed?\s+out|closing|stopped?\s+out\s+(?:of\s+)?)\s*'
     r'(?:\$?(?P<symbol>[A-Z]{1,5}))'
     r'(?:\s+with\s+(?:the\s+)?remain(?:ing|der))?',
+    re.IGNORECASE
+)
+
+# Trimming pattern: "trimming GITS", "trimmed PAVM" (implies ~50% partial exit)
+TRIMMING_PATTERN = re.compile(
+    r'trimm?(?:ing|ed)\s+\$?(?P<symbol>(?!here|now|on|more|all|the|my|of)[A-Z]{1,5})(?![a-z])',
     re.IGNORECASE
 )
 
@@ -1199,6 +1205,22 @@ def parse_partial_exit_signal(text: str) -> Optional[Dict[str, Any]]:
         print(f"[FULL EXIT] Selling 100% of {symbol.upper() if symbol else 'position'}")
         return result
     
+    # Check for trimming pattern: "trimming GITS", "trimmed PAVM" (implies 50%)
+    trimming_match = TRIMMING_PATTERN.search(text)
+    if trimming_match:
+        symbol = trimming_match.group('symbol')
+        
+        result = {
+            'format': 'PARTIAL_EXIT',
+            'action': 'PARTIAL_EXIT',
+            'exit_percent': 50.0,
+            'symbol': symbol.upper() if symbol else None,
+            '_original_message': text,
+        }
+        
+        print(f"[PARTIAL EXIT] Trimming 50% of {symbol.upper() if symbol else 'position'}")
+        return result
+    
     return None
 
 
@@ -1431,7 +1453,8 @@ def is_partial_exit_signal(text: str) -> bool:
     return (PARTIAL_EXIT_PATTERN.search(text) is not None or 
             LEAVING_RUNNER_PATTERN.search(text) is not None or
             FULL_EXIT_PATTERN.search(text) is not None or
-            DIRECT_SELL_PATTERN.search(text) is not None)
+            DIRECT_SELL_PATTERN.search(text) is not None or
+            TRIMMING_PATTERN.search(text) is not None)
 
 
 def is_cancel_order_signal(text: str) -> bool:
