@@ -308,5 +308,14 @@ class SchwabDataHub:
         }
 
 
+_schwab_data_hub_instance: Optional[SchwabDataHub] = None
+_schwab_data_hub_lock = threading.Lock()
+
+
 def get_schwab_data_hub() -> SchwabDataHub:
-    return SchwabDataHub()
+    global _schwab_data_hub_instance
+    if _schwab_data_hub_instance is None:
+        with _schwab_data_hub_lock:
+            if _schwab_data_hub_instance is None:
+                _schwab_data_hub_instance = SchwabDataHub()
+    return _schwab_data_hub_instance

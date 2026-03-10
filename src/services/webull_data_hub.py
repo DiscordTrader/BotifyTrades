@@ -344,10 +344,24 @@ class WebullDataHub:
             return
         async with self._refresh_orders_lock:
             try:
-                orders = await asyncio.to_thread(wb_instance.get_current_orders)
-                if orders is not None:
-                    self.update_pending_orders(orders)
-                    print("[WEBULL_HUB] Orders refreshed after order event")
+                orders_raw = await asyncio.to_thread(wb_instance.get_current_orders)
+                if orders_raw is not None:
+                    normalized = []
+                    for order in orders_raw:
+                        ticker = order.get('ticker', {})
+                        symbol = ticker.get('symbol', '') if ticker else ''
+                        normalized.append({
+                            'order_id': str(order.get('orderId', '')),
+                            'symbol': symbol,
+                            'quantity': int(order.get('totalQuantity', 0)),
+                            'limit_price': float(order.get('lmtPrice', 0)) if order.get('lmtPrice') else None,
+                            'action': order.get('action', ''),
+                            'status': order.get('status', ''),
+                            'order_type': order.get('orderType', ''),
+                            'filled_quantity': int(order.get('filledQuantity', 0))
+                        })
+                    self.update_pending_orders(normalized)
+                    print(f"[WEBULL_HUB] Orders refreshed after order event ({len(normalized)} orders)")
             except Exception as e:
                 logger.warning(f"Orders refresh after order event failed: {e}")
 
@@ -368,5 +382,14 @@ class WebullDataHub:
         }
 
 
+_webull_data_hub_instance: Optional[WebullDataHub] = None
+_webull_data_hub_lock = threading.Lock()
+
+
 def get_webull_data_hub() -> WebullDataHub:
-    return WebullDataHub()
+    global _webull_data_hub_instance
+    if _webull_data_hub_instance is None:
+        with _webull_data_hub_lock:
+            if _webull_data_hub_instance is None:
+                _webull_data_hub_instance = WebullDataHub()
+    return _webull_data_hub_instance

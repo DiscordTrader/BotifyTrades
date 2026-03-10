@@ -1084,6 +1084,24 @@ class BrokerSyncService:
             if fetch_error:
                 print(f"[SYNC] ⚠️ {broker_name} returned empty data with fetch error — skipping PENDING trade cancellation to avoid false cancels")
                 active_trades = [t for t in active_trades if t['status'] != 'PENDING']
+                if not hasattr(self, '_consecutive_empty_counts'):
+                    self._consecutive_empty_counts = {}
+                self._consecutive_empty_counts[broker_name] = 0
+            else:
+                if not hasattr(self, '_consecutive_empty_counts'):
+                    self._consecutive_empty_counts = {}
+                self._consecutive_empty_counts[broker_name] = self._consecutive_empty_counts.get(broker_name, 0) + 1
+                empty_count = self._consecutive_empty_counts[broker_name]
+                if empty_count < 2:
+                    print(f"[SYNC] ⚠️ {broker_name} returned empty with PENDING trades (empty_count={empty_count}/2) — deferring cancellation for re-verify")
+                    active_trades = [t for t in active_trades if t['status'] != 'PENDING']
+                else:
+                    print(f"[SYNC] {broker_name} returned empty for {empty_count} consecutive cycles — proceeding with PENDING trade reconciliation")
+        else:
+            if not hasattr(self, '_consecutive_empty_counts'):
+                self._consecutive_empty_counts = {}
+            if broker_name in getattr(self, '_consecutive_empty_counts', {}):
+                self._consecutive_empty_counts[broker_name] = 0
         
         for trade in active_trades:
             symbol = trade['symbol']
@@ -1272,10 +1290,8 @@ class BrokerSyncService:
                             pass
                         continue
                     
-                    # GRACE PERIOD: Don't close PENDING trades too quickly (prevents race condition)
-                    # Wait at least 60 seconds after trade creation before marking as cancelled
                     trade_created_at = trade.get('created_at') or trade.get('executed_at')
-                    grace_period_seconds = 60
+                    grace_period_seconds = 120
                     
                     if trade_created_at:
                         try:
@@ -1301,8 +1317,6 @@ class BrokerSyncService:
                         except Exception as parse_err:
                             print(f"[SYNC] ⚠️ Could not parse trade created_at: {parse_err}")
                     
-                    # Pending order no longer exists after grace period = cancelled or rejected
-                    # Check if already closed by user cancel action (avoid duplicate notification)
                     try:
                         from gui_app.database import get_trade_by_id
                         fresh_trade = get_trade_by_id(trade_id)
@@ -1312,16 +1326,79 @@ class BrokerSyncService:
                         print(f"[SYNC] Trade #{trade_id} ({symbol}) already CLOSED (likely user-cancelled), skipping")
                         continue
                     
-                    cancel_reason = 'order_cancelled_or_rejected'
                     order_id_str = trade.get('order_id', '') or ''
                     _broker_inst = None
                     _bn_upper = broker_name.upper()
+
+                    if _bn_upper == 'SCHWAB':
+                        _broker_inst = getattr(self.broker_manager, 'schwab_broker', None)
+                        if _broker_inst and order_id_str and hasattr(_broker_inst, 'get_order_status'):
+                            try:
+                                status_result = await asyncio.wait_for(
+                                    _broker_inst.get_order_status(order_id_str),
+                                    timeout=10.0
+                                )
+                                if status_result:
+                                    live_status = status_result.get('status', 'unknown')
+                                    print(f"[SYNC] 🔍 Schwab re-verify order #{order_id_str}: status={live_status}")
+                                    if live_status in ('pending', 'working'):
+                                        print(f"[SYNC] ✓ Order #{order_id_str} still {live_status} on Schwab — skipping cancellation (stale pending list)")
+                                        continue
+                                    elif live_status == 'filled':
+                                        fill_price = status_result.get('average_price', 0)
+                                        fill_qty = status_result.get('filled_quantity', trade.get('quantity', 1))
+                                        print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) FILLED on re-verify: {fill_qty}x @ ${fill_price}")
+                                        self.db.update_trade(
+                                            trade_id,
+                                            status='OPEN',
+                                            executed_price=fill_price,
+                                            quantity=fill_qty,
+                                            executed_at=datetime.now().isoformat()
+                                        )
+                                        try:
+                                            from gui_app.discord_notifier import notify_order_filled
+                                            notify_order_filled(
+                                                symbol=symbol, action=trade.get('action', 'BTO'),
+                                                broker=broker_name, quantity=int(fill_qty),
+                                                price=float(fill_price), strike=trade.get('strike'),
+                                                expiry=trade.get('expiry'),
+                                                opt_type=trade.get('call_put') or trade.get('opt_type')
+                                            )
+                                        except Exception:
+                                            pass
+                                        continue
+                                else:
+                                    print(f"[SYNC] ⚠️ Schwab re-verify returned None for order #{order_id_str} — deferring cancellation")
+                                    continue
+                            except (asyncio.TimeoutError, asyncio.CancelledError):
+                                print(f"[SYNC] ⚠️ Schwab re-verify timed out for order #{order_id_str} — deferring cancellation")
+                                continue
+                            except Exception as rv_err:
+                                print(f"[SYNC] ⚠️ Schwab re-verify error: {rv_err} — deferring cancellation")
+                                continue
+
                     if _bn_upper in ('WEBULL', 'WEBULL_PAPER'):
                         if _bn_upper == 'WEBULL_PAPER':
                             _broker_inst = getattr(self.broker_manager, 'webull_paper_broker', None) or getattr(self.broker_manager, 'webull_broker', None)
                         else:
                             _broker_inst = getattr(self.broker_manager, 'webull_broker', None) or getattr(self.broker_manager, 'webull_paper_broker', None)
+
+                    cancel_reason = 'order_cancelled_or_rejected'
+
                     if order_id_str and _broker_inst and hasattr(_broker_inst, 'wb'):
+                        try:
+                            _broker_inst._data_hub and _broker_inst._data_hub.invalidate_orders()
+                            fresh_pending = await _broker_inst.get_pending_orders()
+                            fresh_ids = {str(o.get('order_id', '')) for o in (fresh_pending or [])}
+                            if order_id_str in fresh_ids:
+                                print(f"[SYNC] ✓ Webull re-verify: order #{order_id_str} found in fresh pending — skipping cancellation")
+                                continue
+                            print(f"[SYNC] 🔍 Webull re-verify: order #{order_id_str} NOT in fresh pending ({len(fresh_ids)} orders)")
+                        except Exception as rv_err:
+                            print(f"[SYNC] ⚠️ Webull re-verify error: {rv_err} — deferring cancellation")
+                            continue
+
+                        _skip_cancel = False
                         try:
                             all_orders_raw = await asyncio.to_thread(
                                 _broker_inst.wb.get_history_orders, count=20
@@ -1332,13 +1409,18 @@ class BrokerSyncService:
                                     raw_msg = raw_order.get('statusStr', '') or raw_order.get('msg', '') or ''
                                     cancel_reason_detail = raw_order.get('cancelReason', '') or raw_order.get('rejectReason', '') or ''
                                     print(f"[SYNC] 🔍 Order #{order_id_str} history: status={raw_status}, statusStr={raw_msg}, reason={cancel_reason_detail}")
-                                    if cancel_reason_detail:
+                                    if raw_status.upper() in ('WORKING', 'PENDING', 'SUBMITTED'):
+                                        print(f"[SYNC] ✓ Order #{order_id_str} still {raw_status} in history — skipping cancellation")
+                                        _skip_cancel = True
+                                    elif cancel_reason_detail:
                                         cancel_reason = f"broker_rejected: {cancel_reason_detail}"
                                     elif raw_msg:
                                         cancel_reason = f"broker_rejected: {raw_msg}"
                                     break
                         except Exception as hist_err:
                             print(f"[SYNC] ⚠️ Could not query order history for rejection reason: {hist_err}")
+                        if _skip_cancel:
+                            continue
                     
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in pending orders: PENDING → CLOSED (cancelled) reason={cancel_reason}")
                     self.db.update_trade(
