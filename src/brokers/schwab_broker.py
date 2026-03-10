@@ -659,6 +659,11 @@ class SchwabBroker(BrokerInterface):
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information including settled cash for good faith violation prevention"""
         try:
+            if self._data_hub:
+                cached = self._data_hub.get_account_info()
+                if cached is not None:
+                    return dict(cached)
+
             if self._should_skip_non_critical():
                 if hasattr(self, '_last_account_info') and self._last_account_info:
                     return dict(self._last_account_info)
@@ -733,6 +738,8 @@ class SchwabBroker(BrokerInterface):
                     'account_id': self.account_number or ''
                 }
                 self._last_account_info = result
+                if self._data_hub:
+                    self._data_hub.update_account_info(result)
                 return result
                     
         except Exception as e:
@@ -926,6 +933,8 @@ class SchwabBroker(BrokerInterface):
             
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 return OrderResult(
                     success=True,
                     order_id=order_id,
@@ -1148,6 +1157,8 @@ class SchwabBroker(BrokerInterface):
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
                 print(f"[{self.name}] ✅ Order accepted by Schwab (order_id={order_id})")
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
 
                 _pos_key = kwargs.get('position_key') or kwargs.get('_exit_marker_key')
                 try:
@@ -1702,6 +1713,11 @@ class SchwabBroker(BrokerInterface):
     async def get_pending_orders(self) -> List[Dict[str, Any]]:
         """Get open/pending orders"""
         try:
+            if self._data_hub:
+                cached = self._data_hub.get_pending_orders()
+                if cached is not None:
+                    return list(cached)
+
             if self._should_skip_non_critical():
                 return getattr(self, '_last_pending_orders', [])
             
@@ -1750,6 +1766,8 @@ class SchwabBroker(BrokerInterface):
                     })
                 
                 self._last_pending_orders = list(result)
+                if self._data_hub:
+                    self._data_hub.update_pending_orders(result)
                 return result
                     
         except Exception as e:
@@ -1762,6 +1780,11 @@ class SchwabBroker(BrokerInterface):
     async def get_order_history(self, count: int = 50) -> List[Dict[str, Any]]:
         """Get filled order history for sync"""
         try:
+            if self._data_hub:
+                cached = self._data_hub.get_order_history()
+                if cached is not None:
+                    return list(cached[:count])
+
             if not await self._ensure_valid_token():
                 return []
             
@@ -1848,6 +1871,8 @@ class SchwabBroker(BrokerInterface):
                     
                     result.append(order_data)
                 
+                if self._data_hub:
+                    self._data_hub.update_order_history(result)
                 return result
                     
         except Exception as e:
@@ -1925,6 +1950,8 @@ class SchwabBroker(BrokerInterface):
 
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 print(f"[{self.name}] ✓ STOP order placed: {instruction} {quantity} {symbol} @ ${stop_price} (ID: {order_id})")
                 return OrderResult(
                     success=True, order_id=order_id,
@@ -2013,6 +2040,8 @@ class SchwabBroker(BrokerInterface):
 
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 print(f"[{self.name}] ✓ STOP_LIMIT order placed: {instruction} {quantity} {symbol} stop=${stop_price} limit=${limit_price} (ID: {order_id})")
                 return OrderResult(
                     success=True, order_id=order_id,
@@ -2105,6 +2134,8 @@ class SchwabBroker(BrokerInterface):
 
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 print(f"[{self.name}] ✓ TRAILING_STOP placed: {instruction} {quantity} {symbol} trail={trail_offset} ({trail_type}) (ID: {order_id})")
                 return OrderResult(
                     success=True, order_id=order_id,
@@ -2227,6 +2258,8 @@ class SchwabBroker(BrokerInterface):
 
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 print(f"[{self.name}] ✓ OCO order placed: {instruction} {quantity} {symbol} PT=${profit_target_price} SL=${stop_loss_price} (ID: {order_id})")
                 return OrderResult(
                     success=True, order_id=order_id,
@@ -2403,6 +2436,8 @@ class SchwabBroker(BrokerInterface):
 
             if response.status_code in [200, 201, 202]:
                 order_id = response.headers.get('Location', '').split('/')[-1]
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 sl_str = f" SL=${stop_loss_price}" if stop_loss_price else ""
                 pt_str = f" PT=${profit_target_price}" if profit_target_price else ""
                 print(f"[{self.name}] ✓ BRACKET order placed: {entry_instruction} {quantity} {symbol}{sl_str}{pt_str} (ID: {order_id})")
@@ -2497,6 +2532,8 @@ class SchwabBroker(BrokerInterface):
             )
 
             if response.status_code in [200, 201, 202, 204]:
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 return {'success': True, 'message': f'Order {order_id} cancelled successfully'}
             else:
                 return {'success': False, 'message': f'Cancel failed: {response.status_code} - {response.text}'}
@@ -2524,6 +2561,8 @@ class SchwabBroker(BrokerInterface):
 
             if response.status_code in [200, 201, 202, 204]:
                 new_order_id = response.headers.get('Location', '').split('/')[-1] if response.headers.get('Location') else order_id
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
                 return {'success': True, 'order_id': new_order_id, 'message': f'Order {order_id} replaced with {new_order_id}'}
             else:
                 return {'success': False, 'order_id': None, 'message': f'Replace failed: {response.status_code} - {response.text}'}
