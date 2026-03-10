@@ -30,6 +30,7 @@ class WebullBroker(BrokerInterface):
         self._token_refresh_task = None
         self._option_id_cache = {}
         self._option_id_cache_ttl = 300
+        self._reverse_option_id_cache = {}
         self._streaming_client = None
         self._data_hub = None
     
@@ -128,6 +129,7 @@ class WebullBroker(BrokerInterface):
         self.connected = False
         self._tokens_valid = False
         self._option_id_cache.clear()
+        self._reverse_option_id_cache.clear()
         print(f"[{self.name}] Disconnected")
     
     def is_authenticated(self) -> bool:
@@ -288,6 +290,13 @@ class WebullBroker(BrokerInterface):
             'option_id': option_id,
             'cached_at': time.time()
         }
+        self._reverse_option_id_cache[str(option_id)] = {
+            'symbol': symbol,
+            'strike': float(strike),
+            'expiry': expiry,
+            'option_type': option_type.upper(),
+            'cached_at': time.time()
+        }
     
     def get_cached_option_id(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[str]:
         """Retrieve a cached option_id if still valid"""
@@ -298,6 +307,14 @@ class WebullBroker(BrokerInterface):
             return entry['option_id']
         if entry:
             del self._option_id_cache[cache_key]
+        return None
+
+    def get_option_details_by_id(self, option_id) -> Optional[dict]:
+        """Reverse lookup: given an optionId, return cached {symbol, strike, expiry, option_type}"""
+        import time
+        entry = self._reverse_option_id_cache.get(str(option_id))
+        if entry and (time.time() - entry['cached_at']) < self._option_id_cache_ttl:
+            return entry
         return None
     
     async def _retry_on_busy(self, func, label: str, max_retries: int = 2, delay: float = 2.0):
@@ -510,7 +527,19 @@ class WebullBroker(BrokerInterface):
                     direction = (pos.get('direction', '') or pos.get('optionType', '') or pos.get('callPut', '') or pos.get('right', '') or '').upper()
                     expiry = pos.get('expireDate', '') or pos.get('optionExpireDate', '') or pos.get('expirationDate', '') or ''
                     
-                    # Format expiry from YYYY-MM-DD to MM/DD
+                    opt_id_val = pos.get('optionId', 0)
+                    ticker_id = pos.get('ticker', {}).get('tickerId', 0)
+
+                    if (not strike or strike == 0.0) and opt_id_val:
+                        reverse = self.get_option_details_by_id(opt_id_val)
+                        if not reverse and ticker_id:
+                            reverse = self.get_option_details_by_id(ticker_id)
+                        if reverse:
+                            strike = reverse['strike']
+                            expiry = reverse['expiry']
+                            direction = reverse['option_type']
+                            print(f"[{self.name}] ✓ Reverse cache enriched position: {symbol} {strike} {direction} {expiry}")
+
                     expiry_mmdd = ''
                     if expiry and '-' in expiry:
                         from datetime import datetime
@@ -520,7 +549,6 @@ class WebullBroker(BrokerInterface):
                         except:
                             expiry_mmdd = expiry
                     
-                    opt_id_val = pos.get('optionId', 0)
                     d_upper = direction.upper() if direction else ''
                     if d_upper in ('CALL', 'C'):
                         opt_direction = 'C'

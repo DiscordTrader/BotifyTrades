@@ -1326,7 +1326,7 @@ class RiskManager:
                     is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos or asset_type in ('option', 'OPTION', 'OPT'))
                     
                     if is_option:
-                        ticker_id = pos.get('tickerId', 0)
+                        ticker_id = pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
                         strike = float(pos.get('strikePrice', 0))
                         option_id = pos.get('optionId', ticker_id)
                         raw_dir = (pos.get('direction', '') or '').upper()
@@ -1337,6 +1337,22 @@ class RiskManager:
                         else:
                             direction = raw_dir[:1] if raw_dir else ''
                         raw_exp = pos.get('expireDate', '')
+
+                        if (not strike or strike == 0.0) and (option_id or ticker_id):
+                            try:
+                                wb_broker = getattr(self, '_webull_broker', None) or getattr(self.bot, 'broker', None)
+                                if wb_broker and hasattr(wb_broker, 'get_option_details_by_id'):
+                                    reverse = wb_broker.get_option_details_by_id(option_id)
+                                    if not reverse and ticker_id:
+                                        reverse = wb_broker.get_option_details_by_id(ticker_id)
+                                    if reverse:
+                                        strike = reverse['strike']
+                                        direction = reverse['option_type']
+                                        raw_exp = reverse['expiry']
+                                        print(f"[RISK] ✓ Reverse cache enriched Webull position: {symbol} {strike} {direction} {raw_exp}")
+                            except Exception:
+                                pass
+
                         expiry = ''
                         if raw_exp and '-' in raw_exp:
                             try:
@@ -2389,6 +2405,12 @@ class RiskManager:
         
         try:
             stc_signal = self._build_stc_signal(position, decision)
+            if stc_signal is None:
+                if not decision.is_partial:
+                    self.cache.clear_closing(pos_key)
+                    from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE as _OWN
+                    get_exit_lease_manager().release(pos_key, _OWN)
+                return
             
             hub_quotes = self._get_streaming_bid_ask(position)
             hub_bid = hub_quotes['bid']
@@ -2698,15 +2720,17 @@ class RiskManager:
                             year = datetime.datetime.now().year
                             expiry = f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
                     if '-' in expiry:
-                        opt_type = (position.direction or 'C').upper()
+                        opt_type = (position.direction or '').upper()
                         if opt_type == 'CALL': opt_type = 'C'
                         elif opt_type == 'PUT': opt_type = 'P'
-                        else: opt_type = opt_type[0] if opt_type else 'C'
-                        from src.brokers.schwab_broker import SchwabBroker
-                        occ = SchwabBroker._build_option_symbol(None, position.symbol, expiry, position.strike, opt_type)
-                        q = _extract_quotes(schwab_hub.get_quote_detailed(occ), 'schwab_hub')
-                        if q:
-                            return q
+                        elif opt_type and opt_type[0] in ('C', 'P'): opt_type = opt_type[0]
+                        else: opt_type = ''
+                        if opt_type:
+                            from src.brokers.schwab_broker import SchwabBroker
+                            occ = SchwabBroker._build_option_symbol(None, position.symbol, expiry, position.strike, opt_type)
+                            q = _extract_quotes(schwab_hub.get_quote_detailed(occ), 'schwab_hub')
+                            if q:
+                                return q
                 elif position.asset != 'option':
                     q = _extract_quotes(schwab_hub.get_quote_detailed(position.symbol), 'schwab_hub')
                     if q:
@@ -2752,8 +2776,25 @@ class RiskManager:
                 opt_type = 'C'
             elif direction == 'PUT':
                 opt_type = 'P'
+            elif direction and direction[0] in ('C', 'P'):
+                opt_type = direction[0]
             else:
-                opt_type = direction[0] if direction else 'C'
+                opt_type = ''
+                try:
+                    from gui_app.database import get_trade_by_id
+                    trade_id = getattr(position, '_trade_id', None) or self.cache.get_trade_id(position.position_key)
+                    if trade_id:
+                        trade = get_trade_by_id(trade_id)
+                        if trade:
+                            db_opt = (trade.get('option_type', '') or trade.get('opt_type', '') or '').upper()
+                            if db_opt in ('C', 'P', 'CALL', 'PUT'):
+                                opt_type = 'C' if db_opt in ('C', 'CALL') else 'P'
+                                print(f"[RISK] ✓ Inferred opt_type={opt_type} from DB trade #{trade_id} for {position.position_key}")
+                except Exception:
+                    pass
+                if not opt_type:
+                    print(f"[RISK] ⚠️ UNKNOWN direction for {position.position_key} — cannot construct STC (strike={position.strike}, expiry={expiry_iso})")
+                    return None
             
             stc_signal['strike'] = position.strike or 0
             stc_signal['opt_type'] = opt_type

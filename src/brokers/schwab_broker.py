@@ -153,9 +153,9 @@ class SchwabBroker(BrokerInterface):
                 return price
         return None
 
-    def get_hub_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_hub_quote_detailed(self, symbol: str, max_age: Optional[float] = None) -> Optional[Dict[str, Any]]:
         if self._data_hub:
-            return self._data_hub.get_quote_detailed(symbol)
+            return self._data_hub.get_quote_detailed(symbol, max_age=max_age)
         return None
 
     def _track_api_call(self) -> bool:
@@ -1010,7 +1010,7 @@ class SchwabBroker(BrokerInterface):
             if not price:
                 print(f"[{self.name}] ⚠️ Options require LIMIT orders on Schwab - no price provided, attempting mid-price lookup")
                 try:
-                    quote = await self.get_option_quote(symbol, strike, expiry_formatted, option_type)
+                    quote = await self.get_option_quote(symbol, strike, expiry_formatted, option_type, max_age=10)
                     if quote and quote.get('bid') and quote.get('ask'):
                         mid_price = round((quote['bid'] + quote['ask']) / 2, 2)
                         bid_price = quote['bid']
@@ -1424,12 +1424,12 @@ class SchwabBroker(BrokerInterface):
         
         return None
     
-    async def get_option_quote(self, underlying: str, strike: float, expiry: str, opt_type: str) -> Optional[Dict[str, Any]]:
+    async def get_option_quote(self, underlying: str, strike: float, expiry: str, opt_type: str, max_age: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """Get option quote for signal verification. Tries hub first."""
         try:
             option_symbol = self._build_option_symbol(underlying, expiry, strike, opt_type[0])
 
-            hub_data = self.get_hub_quote_detailed(option_symbol)
+            hub_data = self.get_hub_quote_detailed(option_symbol, max_age=max_age)
             if hub_data and hub_data.get('last', 0) > 0:
                 return hub_data
 

@@ -154,9 +154,10 @@ class SchwabDataHub:
 
         self._emit('quote_updated', {'symbol': symbol, 'quote': existing})
 
-    def get_quote(self, symbol: str) -> Optional[QuoteData]:
+    def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[QuoteData]:
         quote = self._quotes.get(symbol)
-        if quote and (time.time() - quote.timestamp) < self.QUOTE_STALE_THRESHOLD:
+        threshold = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
+        if quote and (time.time() - quote.timestamp) < threshold:
             return quote
         return None
 
@@ -166,8 +167,8 @@ class SchwabDataHub:
             return quote.last
         return None
 
-    def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
-        quote = self.get_quote(symbol)
+    def get_quote_detailed(self, symbol: str, max_age: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        quote = self.get_quote(symbol, max_age=max_age)
         if quote:
             return {
                 'bid': quote.bid,

@@ -187,32 +187,60 @@ def _fetch_webull(bot) -> List[Dict]:
                     dis_symbol = ticker_data.get('disSymbol', '') or ''
                     name_val = ticker_data.get('name', '') or ''
                     _log(f"[WEBULL-POS] {symbol} option fallback: disSymbol='{dis_symbol}', name='{name_val}', assetType={asset_type}")
-                    m = re.match(r'^(\w+)\s+(\d{2}/\d{2}/\d{4})\s+([\d.]+)\s+(Put|Call)$', dis_symbol, re.IGNORECASE)
-                    if m:
-                        from datetime import datetime as dt
+
+                    opt_id_for_reverse = pos.get('optionId', 0) or ticker_data.get('tickerId', 0)
+                    reverse_found = False
+                    if opt_id_for_reverse and webull_broker:
                         try:
-                            exp_date = dt.strptime(m.group(2), '%m/%d/%Y')
-                            expiry = exp_date.strftime('%m/%d')
-                        except Exception:
-                            expiry = m.group(2)[:5]
-                        strike = float(m.group(3))
-                        call_put = 'C' if m.group(4).upper() == 'CALL' else 'P'
-                    else:
-                        name_field = ticker_data.get('name', '') or ''
-                        m2 = re.search(r'(\d+(?:\.\d+)?)\s+(Put|Call)\s+(\d{2}/\d{2}/\d{2,4})', name_field, re.IGNORECASE)
-                        if m2:
-                            strike = float(m2.group(1))
-                            call_put = 'C' if m2.group(2).upper() == 'CALL' else 'P'
-                            try:
-                                from datetime import datetime as dt
-                                exp_str = m2.group(3)
-                                if len(exp_str) == 8:
-                                    exp_date = dt.strptime(exp_str, '%m/%d/%y')
+                            reverse = webull_broker.get_option_details_by_id(opt_id_for_reverse)
+                            if not reverse:
+                                tid_for_reverse = ticker_data.get('tickerId', 0)
+                                if tid_for_reverse and tid_for_reverse != opt_id_for_reverse:
+                                    reverse = webull_broker.get_option_details_by_id(tid_for_reverse)
+                            if reverse:
+                                strike = reverse['strike']
+                                call_put = reverse['option_type']
+                                raw_exp = reverse['expiry']
+                                if raw_exp and '-' in raw_exp:
+                                    from datetime import datetime as dt
+                                    try:
+                                        expiry = dt.strptime(raw_exp, '%Y-%m-%d').strftime('%m/%d')
+                                    except Exception:
+                                        expiry = raw_exp
                                 else:
-                                    exp_date = dt.strptime(exp_str, '%m/%d/%Y')
+                                    expiry = raw_exp
+                                reverse_found = True
+                                _log(f"[WEBULL-POS] ✓ Reverse cache enriched: {symbol} {strike} {call_put} {expiry}")
+                        except Exception:
+                            pass
+
+                    if not reverse_found:
+                        m = re.match(r'^(\w+)\s+(\d{2}/\d{2}/\d{4})\s+([\d.]+)\s+(Put|Call)$', dis_symbol, re.IGNORECASE)
+                        if m:
+                            from datetime import datetime as dt
+                            try:
+                                exp_date = dt.strptime(m.group(2), '%m/%d/%Y')
                                 expiry = exp_date.strftime('%m/%d')
                             except Exception:
-                                expiry = m2.group(3)[:5]
+                                expiry = m.group(2)[:5]
+                            strike = float(m.group(3))
+                            call_put = 'C' if m.group(4).upper() == 'CALL' else 'P'
+                        else:
+                            name_field = ticker_data.get('name', '') or ''
+                            m2 = re.search(r'(\d+(?:\.\d+)?)\s+(Put|Call)\s+(\d{2}/\d{2}/\d{2,4})', name_field, re.IGNORECASE)
+                            if m2:
+                                strike = float(m2.group(1))
+                                call_put = 'C' if m2.group(2).upper() == 'CALL' else 'P'
+                                try:
+                                    from datetime import datetime as dt
+                                    exp_str = m2.group(3)
+                                    if len(exp_str) == 8:
+                                        exp_date = dt.strptime(exp_str, '%m/%d/%y')
+                                    else:
+                                        exp_date = dt.strptime(exp_str, '%m/%d/%Y')
+                                    expiry = exp_date.strftime('%m/%d')
+                                except Exception:
+                                    expiry = m2.group(3)[:5]
 
             avg_cost = float(pos.get('costPrice', 0))
             cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
