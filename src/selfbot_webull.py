@@ -9465,6 +9465,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 async def execute_conditional_order(order, triggered_price):
                     """Execute a triggered conditional order using sync signal queue."""
                     import sys
+                    from gui_app.database import get_channel_by_discord_id
                     global _telegram_signal_queue
                     try:
                         sys.stderr.write(f"[CONDITIONAL EXEC] Starting execution for order: {order.get('id')}\n")
@@ -9651,6 +9652,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             signal['exchange_segment'] = 'NSE_FNO'
                         
                         # Add position sizing
+                        cond_sizing_mode = None
+                        try:
+                            if channel_id:
+                                _ch_for_sizing = get_channel_by_discord_id(str(channel_id))
+                                if _ch_for_sizing:
+                                    cond_sizing_mode = _ch_for_sizing.get('sizing_mode', 'live') or 'live'
+                                    if cond_sizing_mode in ('start_of_day', 'pre_market'):
+                                        signal['_sizing_mode'] = cond_sizing_mode
+                        except Exception:
+                            pass
+                        
                         size_mode = order.get('size_mode')
                         if size_mode == 'percent_account':
                             signal['_position_size_pct'] = order.get('qty_value')
@@ -9722,7 +9734,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Add stop loss and profit targets
                         import json
-                        from gui_app.database import get_channel_by_discord_id
                         
                         has_signal_sl = bool(order.get('stop_loss_value'))
                         has_signal_targets = bool(order.get('take_profit_targets'))
