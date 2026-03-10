@@ -353,10 +353,21 @@ class BrokerSyncService:
             self._fill_sync_counter = {}
         self._fill_sync_counter[broker_name] = self._fill_sync_counter.get(broker_name, 0) + 1
         
-        if self._fill_sync_counter[broker_name] >= 5:
+        has_positions = bool(normalized_data.get('positions'))
+        has_db_trades = False
+        try:
+            from gui_app.database import get_open_trades_for_broker
+            active = get_open_trades_for_broker(broker_name)
+            has_db_trades = bool(active)
+        except Exception:
+            has_db_trades = True
+
+        if self._fill_sync_counter[broker_name] >= 5 and (has_positions or has_db_trades):
             await self._sync_filled_orders(broker_name, broker_instance)
             self._fill_sync_counter[broker_name] = 0
             await asyncio.sleep(0)
+        elif self._fill_sync_counter[broker_name] >= 5:
+            self._fill_sync_counter[broker_name] = 0
         
         if hasattr(self, '_risk_manager') and self._risk_manager:
             await self.reconcile_risk_orders(self._risk_manager)

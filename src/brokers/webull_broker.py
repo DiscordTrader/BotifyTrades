@@ -315,8 +315,13 @@ class WebullBroker(BrokerInterface):
         return result
 
     async def get_account_info(self) -> Dict[str, Any]:
-        """Get account information"""
+        """Get account information. Uses hub cache when fresh."""
         try:
+            if self._data_hub:
+                cached = self._data_hub.get_account_info(max_age_seconds=90)
+                if cached is not None:
+                    return cached
+
             account_response = await self._retry_on_busy(self.wb.get_account, 'get_account')
             
             # DEBUG: Print raw response structure first
@@ -446,6 +451,8 @@ class WebullBroker(BrokerInterface):
                 'account_id': str(account_id)
             }
             print(f"[{self.name}] [DEBUG] Final account info: Type={account_type}, BP=${buying_power:.2f}, OptBP=${options_buying_power:.2f}, SettledCash=${settled_cash:.2f}, UnsettledCash=${unsettled_cash:.2f}, PortValue=${portfolio_value:.2f}")
+            if self._data_hub:
+                self._data_hub.update_account_info(result)
             return result
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
@@ -569,16 +576,19 @@ class WebullBroker(BrokerInterface):
             return []
     
     async def get_pending_orders(self) -> list:
-        """Get all pending/open orders from Webull
-        
-        Returns:
-            List of order dicts with keys: orderId, symbol, quantity, limit_price, action, status
-        """
+        """Get all pending/open orders from Webull. Uses hub cache when fresh."""
         try:
+            if self._data_hub:
+                cached = self._data_hub.get_pending_orders(max_age_seconds=45)
+                if cached is not None:
+                    return cached
+
             orders_raw = await self._retry_on_busy(self.wb.get_current_orders, 'get_pending_orders')
             orders = []
             
             if not orders_raw:
+                if self._data_hub:
+                    self._data_hub.update_pending_orders([])
                 return []
             
             for order in orders_raw:
@@ -597,6 +607,8 @@ class WebullBroker(BrokerInterface):
                     'filled_quantity': int(order.get('filledQuantity', 0))
                 })
             
+            if self._data_hub:
+                self._data_hub.update_pending_orders(orders)
             return orders
         except Exception as e:
             print(f"[{self.name}] Error getting pending orders: {e}")
@@ -654,6 +666,8 @@ class WebullBroker(BrokerInterface):
             result = await asyncio.to_thread(self.wb.cancel_order, order_id)
             if result:
                 print(f"[{self.name}] ✓ Order {order_id} cancelled successfully")
+                if self._data_hub:
+                    self._data_hub.invalidate_orders()
                 return {'success': True, 'order_id': order_id}
             else:
                 print(f"[{self.name}] ❌ Failed to cancel order {order_id}")
@@ -699,17 +713,31 @@ class WebullBroker(BrokerInterface):
             print(f"[{self.name}] Error getting option quote for {symbol} {strike}{call_put}: {e}")
             return None
     
-    async def get_order_history(self, count: int = 50) -> list:
+    async def get_order_history(self, count: int = 50, max_cache_age: int = 120) -> list:
         """Get filled/completed order history from Webull
         
         Args:
             count: Number of recent orders to fetch (default 50)
+            max_cache_age: Max cache age in seconds (default 120)
             
         Returns:
             List of filled order dicts with keys: order_id, symbol, quantity, 
             filled_price, action, filled_time, asset_type, strike, expiry, direction
         """
         try:
+            import time as _t
+            import threading as _threading
+            if not hasattr(self, '_order_history_cache'):
+                self._order_history_cache = None
+                self._order_history_cache_time = 0
+                self._order_history_cache_count = 0
+                self._order_history_lock = _threading.Lock()
+            with self._order_history_lock:
+                if (self._order_history_cache is not None
+                        and (_t.time() - self._order_history_cache_time) < max_cache_age
+                        and self._order_history_cache_count >= count):
+                    return list(self._order_history_cache[:count])
+
             orders_raw = await asyncio.to_thread(self.wb.get_history_orders, count=count)
             orders = []
             
@@ -748,6 +776,10 @@ class WebullBroker(BrokerInterface):
                 
                 orders.append(order_dict)
             
+            with self._order_history_lock:
+                self._order_history_cache = orders
+                self._order_history_cache_time = _t.time()
+                self._order_history_cache_count = count
             return orders
         except Exception as e:
             print(f"[{self.name}] Error getting order history: {e}")
@@ -893,6 +925,9 @@ class WebullBroker(BrokerInterface):
                 except Exception as e:
                     print(f"[{self.name}] Failed to send Discord notification: {e}")
                 
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
+                self._order_history_cache = None
                 return OrderResult(
                     success=True,
                     order_id=str(response.get('orderId', '')),
@@ -1314,6 +1349,9 @@ class WebullBroker(BrokerInterface):
                 except Exception as e:
                     print(f"[{self.name}] Failed to send Discord notification: {e}")
                 
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
+                self._order_history_cache = None
                 return OrderResult(
                     success=True,
                     order_id=str(response.get('orderId', '')),
