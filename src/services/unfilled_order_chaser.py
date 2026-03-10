@@ -455,12 +455,21 @@ class UnfilledOrderChaser:
     
     async def _monitor_loop(self):
         """Main monitoring loop - checks for stale orders and initiates chase"""
+        _entry_log_counter = 0
         while self._running:
             try:
                 if self._enabled and self._tracked_orders:
                     await self._check_and_chase_orders()
                 if self._entry_chase_enabled and self._tracked_entry_orders:
+                    _entry_log_counter += 1
+                    if _entry_log_counter <= 3 or _entry_log_counter % 30 == 0:
+                        entry_ids = list(self._tracked_entry_orders.keys())
+                        entry_statuses = [o.status.value for o in self._tracked_entry_orders.values()]
+                        print(f"[ORDER_CHASER] Entry check #{_entry_log_counter}: {len(entry_ids)} orders, statuses={entry_statuses}")
                     await self._check_and_chase_entry_orders()
+                else:
+                    if _entry_log_counter > 0:
+                        _entry_log_counter = 0
                 await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:
                 break
@@ -478,6 +487,7 @@ class UnfilledOrderChaser:
 
         now = datetime.now()
         orders_to_chase = []
+        failed_orders = []
         
         async with self._lock:
             for order_id, order in list(self._tracked_orders.items()):
@@ -489,8 +499,36 @@ class UnfilledOrderChaser:
                     if order.chase_attempts < self.max_chase_attempts:
                         orders_to_chase.append(order)
                     else:
-                        print(f"[ORDER_CHASER] ⚠️ Max chase attempts reached for {order_id}")
+                        print(f"[ORDER_CHASER] ⚠️ Max chase attempts reached for {order_id} — releasing exit lease")
                         order.status = OrderChaseStatus.FAILED
+                        failed_orders.append(order)
+        
+        for order in failed_orders:
+            async with self._lock:
+                if order.order_id in self._tracked_orders:
+                    del self._tracked_orders[order.order_id]
+            if order.position_key:
+                try:
+                    from src.risk.exit_lease_manager import get_exit_lease_manager
+                    get_exit_lease_manager().force_release(order.position_key)
+                    print(f"[ORDER_CHASER] ✓ Released exit lease for {order.position_key}")
+                except Exception:
+                    pass
+                try:
+                    bot = self.broker_manager
+                    rm = None
+                    if bot:
+                        rm = getattr(bot, 'risk_manager', None) or getattr(bot, '_risk_manager', None)
+                    if rm:
+                        rm.record_exit_failure(order.position_key, "Order chaser max attempts exhausted", is_stop_loss=True)
+                        print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
+                except Exception:
+                    pass
+            try:
+                from gui_app.database import record_order_event
+                record_order_event('ORDER_CHASE_FAILED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='FAILED', reason="Max chase attempts exhausted", severity='error', source='order_chaser', position_key=order.position_key)
+            except Exception:
+                pass
         
         for order in orders_to_chase:
             await self._chase_order(order)
@@ -513,10 +551,16 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER]   Symbol: {order.symbol}")
             print(f"[ORDER_CHASER]   Original Price: ${order.original_price:.2f}")
             
-            pending_orders = await broker.get_pending_orders()
+            pending_orders = []
+            if hasattr(broker, 'get_pending_orders'):
+                _result = broker.get_pending_orders()
+                if inspect.iscoroutine(_result):
+                    pending_orders = await _result
+                else:
+                    pending_orders = _result
             order_still_pending = any(
                 str(po.get('order_id', '')) == str(order.order_id) 
-                for po in pending_orders
+                for po in (pending_orders or [])
             )
             
             if not order_still_pending:
@@ -556,7 +600,14 @@ class UnfilledOrderChaser:
                             print(f"[ORDER_CHASER] ⚠️ Could not clear exit lock after rejection: {e}")
                     return
                 if verified == 'UNKNOWN':
-                    print(f"[ORDER_CHASER] Order {order.order_id} status UNKNOWN — assuming filled (legacy behavior)")
+                    print(f"[ORDER_CHASER] Order {order.order_id} status UNKNOWN — treating as cancelled (safe default, will retry)")
+                    order.status = OrderChaseStatus.PENDING
+                    try:
+                        from gui_app.database import record_order_event
+                        record_order_event('ORDER_STATUS_UNKNOWN', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='UNKNOWN', reason="Exit order status unknown — not marking as filled", severity='warning', source='order_chaser', position_key=order.position_key)
+                    except Exception:
+                        pass
+                    return
                 else:
                     print(f"[ORDER_CHASER] Order {order.order_id} verified as filled")
                 await self.mark_filled(order.order_id)
@@ -818,7 +869,6 @@ class UnfilledOrderChaser:
     async def _check_and_chase_entry_orders(self):
         """Check all tracked entry orders and chase stale ones"""
         if not self._is_market_active():
-            print("[ORDER_CHASER] Market closed — skipping chase cycle")
             return
 
         now = datetime.now()
@@ -833,7 +883,6 @@ class UnfilledOrderChaser:
                 age = now - order.placed_at
                 age_seconds = age.total_seconds()
                 
-                # Check channel-level timeout (order_timeout_minutes) - CANCEL if exceeded
                 if order.timeout_minutes:
                     timeout_seconds = order.timeout_minutes * 60
                     if age_seconds >= timeout_seconds:
@@ -842,9 +891,9 @@ class UnfilledOrderChaser:
                         orders_to_cancel.append(order)
                         continue
                 
-                # Check chase timeout (30s default) - CHASE if exceeded but within channel timeout
                 if age > self.chase_timeout:
                     if order.chase_attempts < self.max_chase_attempts:
+                        print(f"[ORDER_CHASER] Entry order {order_id} ({order.symbol}) age={age_seconds:.1f}s, attempts={order.chase_attempts}/{self.max_chase_attempts} — scheduling chase")
                         orders_to_chase.append(order)
                     else:
                         print(f"[ORDER_CHASER] ⚠️ Max entry chase attempts reached for {order_id}")
@@ -893,10 +942,16 @@ class UnfilledOrderChaser:
             if order.entry_range_high:
                 print(f"[ORDER_CHASER]   Max Entry Price: ${order.entry_range_high:.2f}")
             
-            pending_orders = await broker.get_pending_orders()
+            pending_orders = []
+            if hasattr(broker, 'get_pending_orders'):
+                _result = broker.get_pending_orders()
+                if inspect.iscoroutine(_result):
+                    pending_orders = await _result
+                else:
+                    pending_orders = _result
             order_still_pending = any(
                 str(po.get('order_id', '')) == str(order.order_id) 
-                for po in pending_orders
+                for po in (pending_orders or [])
             )
             
             if not order_still_pending:
@@ -915,7 +970,17 @@ class UnfilledOrderChaser:
                         pass
                     return
                 if verified == 'UNKNOWN':
-                    print(f"[ORDER_CHASER] Entry order {order.order_id} status UNKNOWN — assuming filled (legacy behavior)")
+                    print(f"[ORDER_CHASER] Entry order {order.order_id} status UNKNOWN — treating as cancelled (safe default)")
+                    async with self._lock:
+                        if order.order_id in self._tracked_entry_orders:
+                            self._tracked_entry_orders[order.order_id].status = OrderChaseStatus.CANCELLED
+                            del self._tracked_entry_orders[order.order_id]
+                    try:
+                        from gui_app.database import record_order_event
+                        record_order_event('ORDER_CANCELLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='CANCELLED', reason="Entry order status unknown — assumed cancelled", severity='warning', source='order_chaser')
+                    except Exception:
+                        pass
+                    return
                 else:
                     print(f"[ORDER_CHASER] Entry order {order.order_id} verified as filled")
                 await self.mark_entry_filled(order.order_id)
@@ -1197,34 +1262,46 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] get_order_status check failed for {order_id}: {e}")
 
         try:
-            if action.upper() in ('BTO', 'BUY'):
-                if hasattr(broker, 'get_positions') or hasattr(broker, 'get_positions_detailed'):
-                    positions = None
-                    if hasattr(broker, 'get_positions_detailed'):
-                        result = broker.get_positions_detailed()
-                        if inspect.iscoroutine(result):
-                            positions = await result
-                        else:
-                            positions = result
-                    elif hasattr(broker, 'get_positions'):
-                        result = broker.get_positions()
-                        if inspect.iscoroutine(result):
-                            positions = await result
-                        else:
-                            positions = result
+            if hasattr(broker, 'get_positions') or hasattr(broker, 'get_positions_detailed'):
+                positions = None
+                if hasattr(broker, 'get_positions_detailed'):
+                    result = broker.get_positions_detailed()
+                    if inspect.iscoroutine(result):
+                        positions = await result
+                    else:
+                        positions = result
+                elif hasattr(broker, 'get_positions'):
+                    result = broker.get_positions()
+                    if inspect.iscoroutine(result):
+                        positions = await result
+                    else:
+                        positions = result
+                
+                if positions is not None:
+                    pos_list = positions if isinstance(positions, list) else [positions] if positions else []
+                    symbol_upper = symbol.upper()
+                    found = any(
+                        symbol_upper in str(p.get('symbol', '') or p.get('ticker', '')).upper()
+                        for p in pos_list
+                    )
                     
-                    if positions:
-                        symbol_upper = symbol.upper()
-                        found = any(
-                            symbol_upper in str(p.get('symbol', '') or p.get('ticker', '')).upper()
-                            for p in (positions if isinstance(positions, list) else [positions])
-                        )
+                    if action.upper() in ('BTO', 'BUY'):
+                        if len(pos_list) == 0:
+                            print(f"[ORDER_CHASER] Order {order_id}: no positions at all on broker — BTO was not filled")
+                            return 'CANCELLED'
                         if found:
                             print(f"[ORDER_CHASER] ✓ Order {order_id} verified as filled — {symbol} found in positions")
                             return 'FILLED'
                         else:
                             print(f"[ORDER_CHASER] Order {order_id} not found in positions — marking cancelled")
                             return 'CANCELLED'
+                    elif action.upper() in ('STC', 'SELL'):
+                        if found:
+                            print(f"[ORDER_CHASER] Order {order_id}: {symbol} still in positions — STC was NOT filled")
+                            return 'CANCELLED'
+                        else:
+                            print(f"[ORDER_CHASER] ✓ Order {order_id} verified as filled — {symbol} no longer in positions")
+                            return 'FILLED'
         except Exception as e:
             print(f"[ORDER_CHASER] Position verification failed for {order_id}: {e}")
 
