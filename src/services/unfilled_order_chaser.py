@@ -1297,8 +1297,8 @@ class UnfilledOrderChaser:
                             return 'CANCELLED'
                     elif action.upper() in ('STC', 'SELL'):
                         if found:
-                            print(f"[ORDER_CHASER] Order {order_id}: {symbol} still in positions — STC was NOT filled")
-                            return 'CANCELLED'
+                            print(f"[ORDER_CHASER] Order {order_id}: {symbol} still in positions — could be partial exit, cannot confirm fill from positions alone")
+                            pass
                         else:
                             print(f"[ORDER_CHASER] ✓ Order {order_id} verified as filled — {symbol} no longer in positions")
                             return 'FILLED'
