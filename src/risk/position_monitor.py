@@ -2599,22 +2599,25 @@ class RiskManager:
         
         try:
             if asset_type == 'option':
-                result = await broker_instance.place_option_order(
-                    symbol=stc_signal['symbol'],
-                    strike=stc_signal.get('strike'),
-                    expiry=stc_signal.get('expiry'),
-                    option_type=stc_signal.get('opt_type'),
-                    action='STC',
-                    quantity=stc_signal['qty'],
-                    price=stc_signal['price'],
-                    option_id=stc_signal.get('option_id'),
-                    _risk_management_order=True,
-                )
+                option_kwargs = {
+                    'symbol': stc_signal['symbol'],
+                    'strike': stc_signal.get('strike'),
+                    'expiry': stc_signal.get('expiry'),
+                    'option_type': stc_signal.get('opt_type'),
+                    'action': 'STC',
+                    'quantity': stc_signal['qty'],
+                    'price': stc_signal['price'],
+                }
+                if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB'):
+                    option_kwargs['option_id'] = stc_signal.get('option_id')
+                    option_kwargs['_risk_management_order'] = True
+                result = await broker_instance.place_option_order(**option_kwargs)
             else:
-                result = await broker_instance.sell_stock(
+                result = await broker_instance.place_stock_order(
                     symbol=stc_signal['symbol'],
                     quantity=stc_signal['qty'],
                     price=stc_signal['price'],
+                    action='STC',
                 )
             
             order_id = None

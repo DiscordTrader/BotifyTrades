@@ -506,10 +506,9 @@ class WebullBroker(BrokerInterface):
                 )
                 
                 if is_option:
-                    # Option position
-                    strike = float(pos.get('strikePrice', 0))
-                    direction = pos.get('direction', '').upper()
-                    expiry = pos.get('expireDate', '')
+                    strike = float(pos.get('strikePrice', 0) or pos.get('optionExercisePrice', 0) or pos.get('strike', 0) or 0)
+                    direction = (pos.get('direction', '') or pos.get('optionType', '') or pos.get('callPut', '') or pos.get('right', '') or '').upper()
+                    expiry = pos.get('expireDate', '') or pos.get('optionExpireDate', '') or pos.get('expirationDate', '') or ''
                     
                     # Format expiry from YYYY-MM-DD to MM/DD
                     expiry_mmdd = ''

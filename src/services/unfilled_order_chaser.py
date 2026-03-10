@@ -783,12 +783,11 @@ class UnfilledOrderChaser:
                     order_type='LIMIT'
                 )
             else:
-                result = await broker.place_order(
+                result = await broker.place_stock_order(
                     symbol=order.symbol,
                     quantity=int(order.quantity),
                     price=price,
-                    action=order.action,
-                    order_type='LIMIT'
+                    action=order.action
                 )
             
             if result and hasattr(result, 'order_id') and result.order_id:
@@ -1087,12 +1086,11 @@ class UnfilledOrderChaser:
                     order_type='LIMIT'
                 )
             else:
-                result = await broker.place_order(
+                result = await broker.place_stock_order(
                     symbol=order.symbol,
                     quantity=int(order.quantity),
                     price=price,
-                    action=order.action,
-                    order_type='LIMIT'
+                    action=order.action
                 )
             
             if result and hasattr(result, 'order_id') and result.order_id:
