@@ -15297,17 +15297,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     try:
                         order_chaser = get_order_chaser()
                         if order_chaser:
-                            # Get entry price range if available
                             entry_range_high = None
                             entry_price = signal.get('price') or signal.get('limit_price')
                             entry_high = signal.get('price_high') or signal.get('entry_high')
                             if entry_high and float(entry_high) > 0:
                                 entry_range_high = float(entry_high)
                             
-                            # Get channel slippage, timeout, and entry chase settings
                             slippage_max_pct = None
                             order_timeout_minutes = None
-                            entry_chase_enabled = True  # Default to enabled
+                            entry_chase_enabled = True
                             channel_id = signal.get('channel_id')
                             if channel_id and DATABASE_MODULE_AVAILABLE:
                                 try:
@@ -15318,22 +15316,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             slippage_max_pct = ch.get('slippage_max_pct')
                                             if slippage_max_pct:
                                                 _original_print(f"[EXEC] Using channel slippage limit: {slippage_max_pct}%")
-                                        # Get channel-level order timeout
                                         order_timeout_minutes = ch.get('order_timeout_minutes')
                                         if order_timeout_minutes:
                                             _original_print(f"[EXEC] Using channel order timeout: {order_timeout_minutes} min")
-                                        # Check entry chase enabled (NULL = use global default = enabled)
                                         entry_chase_val = ch.get('entry_chase_enabled')
                                         if entry_chase_val is not None:
                                             entry_chase_enabled = bool(entry_chase_val)
                                 except Exception:
                                     pass
                             
-                            # Only track if entry chase is enabled for this channel
                             if entry_chase_enabled:
                                 asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
                                 signal_price = signal.get('signal_price') or entry_price
-                                # Get limit cap price from conditional order if set
                                 limit_cap_price = signal.get('_limit_price') if signal.get('_limit_cap_enabled') else None
                                 await order_chaser.track_entry_order(
                                     order_id=str(order_id),
@@ -15353,8 +15347,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     timeout_minutes=order_timeout_minutes,
                                     limit_cap_price=limit_cap_price
                                 )
+                                signal['_entry_chase_tracked'] = True
+                                resp['_entry_chase_tracked'] = True
+                                _original_print(f"[ORDER_CHASER] ✓ Tracking {broker_name} entry order: {order_id}")
                             else:
                                 _original_print(f"[EXEC] Entry chase disabled for channel {channel_id}")
+                        else:
+                            _original_print(f"[ORDER_CHASER] ⚠️ Chaser not initialized, skipping entry tracking for {order_id}")
                     except Exception as track_err:
                         _original_print(f"[EXEC] Warning: Could not track entry order: {track_err}")
                 
@@ -16109,6 +16108,72 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 )
                             except Exception:
                                 pass
+                        
+                        # Track entry orders for unfilled order chasing (multi-broker fallback)
+                        _untracked_bto_successes = [
+                            s for s in successes
+                            if not s.get('_entry_chase_tracked')
+                        ] if signal.get('action', '').upper() in ('BTO', 'BUY') else []
+                        if _untracked_bto_successes:
+                            _original_print(f"[ORDER_CHASER] ⚠️ {len(_untracked_bto_successes)} BTO(s) not tracked by inner path — fallback tracking")
+                            entry_chase_enabled = True
+                            channel_id = signal.get('channel_id')
+                            slippage_max_pct = None
+                            order_timeout_minutes = None
+                            if channel_id and DATABASE_MODULE_AVAILABLE:
+                                try:
+                                    from gui_app import database as db
+                                    ch = db.get_channel_by_discord_id(str(channel_id)) or db.get_channel_by_telegram_id(str(channel_id))
+                                    if ch:
+                                        if ch.get('slippage_protection_enabled'):
+                                            slippage_max_pct = ch.get('slippage_max_pct')
+                                        order_timeout_minutes = ch.get('order_timeout_minutes')
+                                        entry_chase_val = ch.get('entry_chase_enabled')
+                                        if entry_chase_val is not None:
+                                            entry_chase_enabled = bool(entry_chase_val)
+                                except Exception:
+                                    pass
+
+                            if entry_chase_enabled:
+                                entry_price = signal.get('price') or signal.get('limit_price')
+                                entry_range_high = None
+                                entry_high = signal.get('price_high') or signal.get('entry_high')
+                                if entry_high and float(entry_high) > 0:
+                                    entry_range_high = float(entry_high)
+                                signal_price = signal.get('signal_price') or entry_price
+                                limit_cap_price = signal.get('_limit_price') if signal.get('_limit_cap_enabled') else None
+
+                                for success_resp in _untracked_bto_successes:
+                                    order_id = success_resp.get('orderId') or success_resp.get('order_id')
+                                    broker_name = success_resp.get('broker', 'UNKNOWN')
+                                    if order_id:
+                                        try:
+                                            order_chaser = get_order_chaser()
+                                            if order_chaser:
+                                                asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
+                                                await order_chaser.track_entry_order(
+                                                    order_id=str(order_id),
+                                                    broker_id=broker_name,
+                                                    symbol=signal.get('symbol', ''),
+                                                    asset_type=asset_type,
+                                                    quantity=signal.get('qty', 1),
+                                                    price=float(entry_price) if entry_price else 0.0,
+                                                    action='BTO',
+                                                    channel_id=str(channel_id) if channel_id else '',
+                                                    strike=float(signal.get('strike', 0)) if signal.get('strike') else None,
+                                                    expiry=signal.get('expiry'),
+                                                    call_put=signal.get('opt_type') or signal.get('call_put') or signal.get('direction'),
+                                                    entry_range_high=entry_range_high,
+                                                    slippage_max_pct=slippage_max_pct,
+                                                    signal_price=float(signal_price) if signal_price else None,
+                                                    timeout_minutes=order_timeout_minutes,
+                                                    limit_cap_price=limit_cap_price
+                                                )
+                                                _original_print(f"[ORDER_CHASER] ✓ Fallback tracking {broker_name} entry order: {order_id}")
+                                        except Exception as chase_err:
+                                            _original_print(f"[ORDER_CHASER] ⚠️ Entry track error: {chase_err}")
+                            else:
+                                _original_print(f"[ORDER_CHASER] ℹ️ Entry chase disabled for channel {channel_id}")
                         
                         # Track exit orders for unfilled order chasing (multi-broker)
                         if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
