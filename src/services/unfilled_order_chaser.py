@@ -157,6 +157,22 @@ class UnfilledOrderChaser:
         
         print(f"[ORDER_CHASER] Initialized (timeout={chase_timeout_seconds}s, max_attempts={max_chase_attempts}, cancel_on_fail={cancel_entry_on_max_attempts})")
     
+    async def _cancel_broker_order(self, broker, order_id: str, asset_type: str = 'option', broker_id: str = '') -> bool:
+        try:
+            broker_upper = broker_id.upper() if broker_id else ''
+            if 'ROBINHOOD' in broker_upper:
+                cancel_result = await broker.cancel_order(order_id, order_type=asset_type)
+            else:
+                cancel_result = await broker.cancel_order(order_id)
+            if isinstance(cancel_result, bool):
+                return cancel_result
+            if isinstance(cancel_result, dict):
+                return cancel_result.get('success', False)
+            return bool(cancel_result)
+        except Exception as e:
+            print(f"[ORDER_CHASER] ⚠️ Cancel error: {e}")
+            return False
+    
     def set_enabled(self, enabled: bool):
         """Enable or disable the order chaser"""
         self._enabled = enabled
@@ -554,9 +570,9 @@ class UnfilledOrderChaser:
             
             print(f"[ORDER_CHASER]   Exit Price (bid): ${mid_price:.2f}")
             
-            cancel_result = await broker.cancel_order(order.order_id)
-            if not cancel_result.get('success'):
-                print(f"[ORDER_CHASER] ❌ Failed to cancel: {cancel_result.get('error')}")
+            cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
+            if not cancel_ok:
+                print(f"[ORDER_CHASER] ❌ Failed to cancel exit order")
                 order.status = OrderChaseStatus.PENDING
                 return
             
@@ -779,8 +795,7 @@ class UnfilledOrderChaser:
                     action=order.action,
                     strike=order.strike,
                     expiry=order.expiry,
-                    option_type=order.call_put,
-                    order_type='LIMIT'
+                    option_type=order.call_put
                 )
             else:
                 result = await broker.place_stock_order(
@@ -924,9 +939,9 @@ class UnfilledOrderChaser:
             
             print(f"[ORDER_CHASER]   New Chase Price: ${chase_price:.2f}")
             
-            cancel_result = await broker.cancel_order(order.order_id)
-            if not cancel_result.get('success'):
-                print(f"[ORDER_CHASER] ❌ Failed to cancel entry order: {cancel_result.get('error')}")
+            cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
+            if not cancel_ok:
+                print(f"[ORDER_CHASER] ❌ Failed to cancel entry order")
                 order.status = OrderChaseStatus.PENDING
                 return
             
@@ -1082,8 +1097,7 @@ class UnfilledOrderChaser:
                     action=order.action,
                     strike=order.strike,
                     expiry=order.expiry,
-                    option_type=order.call_put,
-                    order_type='LIMIT'
+                    option_type=order.call_put
                 )
             else:
                 result = await broker.place_stock_order(
@@ -1135,15 +1149,11 @@ class UnfilledOrderChaser:
                 order.status = OrderChaseStatus.FILLED
                 return
             
-            cancel_result = None
+            _cancel_ok = False
             if hasattr(broker, 'cancel_order'):
-                result = broker.cancel_order(order.order_id)
-                if inspect.iscoroutine(result):
-                    cancel_result = await result
-                else:
-                    cancel_result = result
+                _cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
             
-            if cancel_result:
+            if _cancel_ok:
                 print(f"[ORDER_CHASER] ✅ Entry order cancelled successfully")
                 order.status = OrderChaseStatus.CANCELLED
                 

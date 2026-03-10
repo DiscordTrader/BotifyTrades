@@ -15138,24 +15138,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 _original_print(f"[{broker_name}] [TIMING] Stock pre-order: {(_t_pre_stk_order - _t_health)*1000:.0f}ms (total: {(_t_pre_stk_order - _t0)*1000:.0f}ms)")
                 
                 if uses_modern_signature:
+                    _stk_kwargs = dict(
+                        symbol=signal['symbol'],
+                        action=signal['action'],
+                        quantity=signal['qty'],
+                        price=stock_order_price,
+                    )
                     if 'ALPACA' in broker_upper:
-                        result = await broker_instance.place_stock_order(
-                            symbol=signal['symbol'],
-                            action=signal['action'],
-                            quantity=signal['qty'],
-                            price=stock_order_price,
-                            channel_id=signal.get('channel_id')
-                        )
-                    else:
-                        result = await broker_instance.place_stock_order(
-                            symbol=signal['symbol'],
-                            action=signal['action'],
-                            quantity=signal['qty'],
-                            price=stock_order_price,
-                            _conditional_order_id=signal.get('_conditional_order_id'),
-                            _conditional_expires_at=signal.get('_conditional_expires_at'),
-                            channel_id=signal.get('channel_id')
-                        )
+                        _stk_kwargs['channel_id'] = signal.get('channel_id')
+                    elif 'SCHWAB' in broker_upper:
+                        _stk_kwargs['_conditional_order_id'] = signal.get('_conditional_order_id')
+                        _stk_kwargs['_conditional_expires_at'] = signal.get('_conditional_expires_at')
+                        _stk_kwargs['channel_id'] = signal.get('channel_id')
+                    result = await broker_instance.place_stock_order(**_stk_kwargs)
                 else:
                     result = await broker_instance.place_stock_order(
                         symbol=signal['symbol'],
