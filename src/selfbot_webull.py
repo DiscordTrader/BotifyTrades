@@ -15673,9 +15673,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _lease_info = _lease_mgr.get_state(_marker_key)
                         if _lease_info['owner'] == OWNER_BACKUP:
                             _original_print(f"[WORKER] ⚠️ {_marker_key} already taken by backup thread — skipping", flush=True)
+                            self.order_queue.task_done()
                             continue
                         if not _lease_mgr.transfer(_marker_key, OWNER_WORKER, LEASE_EXECUTING, expected_owner=OWNER_RISK_ENGINE):
                             _original_print(f"[WORKER] ⚠️ {_marker_key} lease transfer failed (owner={_lease_info['owner']}) — skipping", flush=True)
+                            self.order_queue.task_done()
                             continue
                     except Exception:
                         pass
@@ -15685,6 +15687,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             with _rm._exit_executed_lock:
                                 if _marker_key in _rm._exit_executed_keys:
                                     _original_print(f"[WORKER] ⚠️ {_marker_key} already executed by backup thread — skipping", flush=True)
+                                    self.order_queue.task_done()
                                     continue
                                 _rm._exit_executed_keys.add(_marker_key)
                     except Exception:
@@ -15897,7 +15900,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             channel_name = signal.get('_channel_name', 'Unknown')
                             _original_print(f"[ROUTING] ❌ REJECTED - No broker configured for channel '{channel_name}' (channel_id={channel_id})")
                             _original_print(f"[ROUTING] Configure enabled_brokers in channel settings to execute trades")
-                            continue  # Skip this signal - do not execute on any broker
+                            self.order_queue.task_done()
+                            continue
 
                 if enabled_brokers and isinstance(enabled_brokers, list) and len(enabled_brokers) > 0:
                     # MULTI-BROKER EXECUTION - Execute on all selected brokers IN PARALLEL
@@ -16430,7 +16434,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 resp = {'success': False, 'msg': 'Alpaca broker not connected'}
                                 order_success = False
                             
-                            continue  # Skip the rest of the single broker execution
+                            self.order_queue.task_done()
+                            continue
                         
                         elif 'webull' in risk_broker.lower():
                             # Use Webull broker - fall through to normal execution
@@ -16492,7 +16497,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 resp = {'success': False, 'msg': 'Tastytrade broker not connected'}
                                 order_success = False
                             
-                            continue  # Skip the rest of the single broker execution
+                            self.order_queue.task_done()
+                            continue
                     
                     # Check if this is a paper trading signal from tracking channel
                     is_paper_trade = signal.get('_paper_trade_mode', False)
@@ -16506,7 +16512,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         channel_name = signal.get('_channel_name', 'Unknown')
                         _original_print(f"[EXECUTION] ⚠️ SKIPPING - No broker selected for channel '{channel_name}'")
                         _original_print(f"[EXECUTION] Configure a broker in the Execution page to enable trading for this channel")
-                        # Save to database as skipped for tracking
                         try:
                             from gui_app.database import save_signal
                             signal_copy = signal.copy()
@@ -16515,6 +16520,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             save_signal(signal_copy)
                         except Exception as e:
                             _original_print(f"[EXECUTION] Failed to log skipped signal: {e}")
+                        self.order_queue.task_done()
                         continue
                     paper_config = signal.get('_channel_paper_config', {})
                     _original_print(f"[DEBUG] Paper trade mode: {is_paper_trade}, Signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
@@ -16819,10 +16825,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 _original_print(f"[LIVE TRADE] ❌ REJECTED: Broker override '{broker_override}' not available or not connected")
                                 _original_print(f"[LIVE TRADE] Please check broker configuration in Settings")
+                                self.order_queue.task_done()
                                 continue
                         else:
                             _original_print(f"[LIVE TRADE] ❌ REJECTED: No broker configured for this channel")
                             _original_print(f"[LIVE TRADE] Please configure 'enabled_brokers' in the Execution page")
+                            self.order_queue.task_done()
                             continue
                         
                         # Position sizing calculation for conditional orders with _calculate_qty flag

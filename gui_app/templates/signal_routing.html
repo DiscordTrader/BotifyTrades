@@ -1130,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-trailing-stop').value = s.trailing_stop_pct || '';
                 document.getElementById('risk-trailing-activation').value = s.trailing_activation_pct || '';
                 document.querySelector(`input[name="trim-order-type"][value="${s.trim_order_type || 'market'}"]`).checked = true;
-                document.querySelector(`input[name="sl-order-type"][value="${s.sl_order_mode || 'limit'}"]`).checked = true;
+                document.querySelector(`input[name="sl-order-type"][value="${s.sl_order_type || s.sl_order_mode || 'limit'}"]`).checked = true;
                 document.getElementById('risk-leave-runner').checked = !!s.leave_runner_enabled;
                 document.getElementById('risk-runner-size').value = s.leave_runner_size_pct || 25;
                 document.getElementById('risk-dynamic-sl').checked = !!s.dynamic_sl_escalation_enabled;
@@ -1173,7 +1173,7 @@ document.addEventListener('DOMContentLoaded', function() {
             trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
             trailing_activation_pct: parseFloat(document.getElementById('risk-trailing-activation').value) || 15,
             trim_order_type: document.querySelector('input[name="trim-order-type"]:checked').value,
-            sl_order_mode: document.querySelector('input[name="sl-order-type"]:checked').value,
+            sl_order_type: document.querySelector('input[name="sl-order-type"]:checked').value,
             leave_runner_enabled: document.getElementById('risk-leave-runner').checked ? 1 : 0,
             leave_runner_size_pct: parseFloat(document.getElementById('risk-runner-size').value) || 25,
             dynamic_sl_escalation_enabled: document.getElementById('risk-dynamic-sl').checked ? 1 : 0,

@@ -1916,6 +1916,33 @@ def register_routes(app):
     def api_update_channel(channel_id):
         """Update a channel with save-and-verify for critical settings"""
         data = request.json
+        if not data or not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'Invalid request body'}), 400
+        
+        VALID_ORDER_MODES = {'market', 'limit'}
+        NUMERIC_FIELDS = {
+            'stop_loss_pct': (0, 100), 'trailing_stop_pct': (0, 100), 'trailing_activation_pct': (0, 100),
+            'profit_target_1_pct': (0, 1000), 'profit_target_2_pct': (0, 1000),
+            'profit_target_3_pct': (0, 1000), 'profit_target_4_pct': (0, 1000),
+            'position_size_pct': (0, 100), 'leave_runner_pct': (1, 100),
+            'sl_limit_offset': (0, 1), 'giveback_allowed_pct': (0, 100),
+        }
+        ORDER_MODE_FIELDS = ['entry_order_mode', 'trim_order_mode', 'sl_order_mode']
+        
+        validation_errors = []
+        for field in ORDER_MODE_FIELDS:
+            if field in data and data[field] not in VALID_ORDER_MODES:
+                validation_errors.append(f"{field} must be 'market' or 'limit'")
+        for field, (min_val, max_val) in NUMERIC_FIELDS.items():
+            if field in data and data[field] is not None:
+                try:
+                    val = float(data[field])
+                    if val < min_val or val > max_val:
+                        validation_errors.append(f"{field} must be between {min_val} and {max_val}")
+                except (ValueError, TypeError):
+                    validation_errors.append(f"{field} must be a number")
+        if validation_errors:
+            return jsonify({'success': False, 'errors': validation_errors}), 400
         
         # Mutual exclusivity enforcement: Early Trailing vs Legacy Trailing Stop
         # Load current channel state to properly enforce exclusivity
@@ -2357,6 +2384,7 @@ def register_routes(app):
                     'trailing_stop_pct': mapping.get('trailing_stop_pct', 0),
                     'trailing_activation_pct': mapping.get('trailing_activation_pct', 15),
                     'trim_order_type': mapping.get('trim_order_type', 'market'),
+                    'sl_order_type': mapping.get('sl_order_type', 'limit'),
                     'leave_runner_enabled': mapping.get('leave_runner_enabled', 0),
                     'leave_runner_size_pct': mapping.get('leave_runner_size_pct', 25),
                     'dynamic_sl_escalation_enabled': mapping.get('dynamic_sl_escalation_enabled', 0),
@@ -2376,7 +2404,8 @@ def register_routes(app):
                     'pt1_pct': 15, 'pt2_pct': 25, 'pt3_pct': 35, 'pt4_pct': 55,
                     'pt1_qty': None, 'pt2_qty': None, 'pt3_qty': None, 'pt4_qty': None,
                     'stop_loss_pct': 25, 'trailing_stop_pct': 0, 'trailing_activation_pct': 15,
-                    'trim_order_type': 'market', 'leave_runner_enabled': 0, 'leave_runner_size_pct': 25,
+                    'trim_order_type': 'market', 'sl_order_type': 'limit',
+                    'leave_runner_enabled': 0, 'leave_runner_size_pct': 25,
                     'dynamic_sl_escalation_enabled': 0, 'sl_escalation_profile': 'standard',
                     'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30,
                     'exit_strategy_mode': 'risk',
@@ -2419,6 +2448,7 @@ def register_routes(app):
                 trailing_stop_pct=data.get('trailing_stop_pct', 0),
                 trailing_activation_pct=data.get('trailing_activation_pct', 15),
                 trim_order_type=data.get('trim_order_type', 'market'),
+                sl_order_type=data.get('sl_order_type') or data.get('sl_order_mode', 'limit'),
                 leave_runner_enabled=data.get('leave_runner_enabled', 0),
                 leave_runner_size_pct=data.get('leave_runner_size_pct', 25),
                 dynamic_sl_escalation_enabled=data.get('dynamic_sl_escalation_enabled', 0),
