@@ -1421,183 +1421,204 @@ class RiskManager:
         if _force_refresh:
             self._force_rest_refresh = False
             _REST_CACHE_TTL = 0
-        
-        if webull_snapshots is None:
+
+        async def _fetch_webull_rest():
+            if webull_snapshots is not None:
+                return []
             cache_age = _time.time() - getattr(self, '_webull_cache_ts', 0)
             if hasattr(self, '_last_webull_positions') and self._last_webull_positions is not None and cache_age < _REST_CACHE_TTL:
-                positions.extend(self._last_webull_positions)
-            elif rate_manager:
+                return list(self._last_webull_positions)
+            if rate_manager:
                 can_proceed, wait_time = rate_manager.can_make_request('webull')
                 if not can_proceed:
                     if hasattr(self, '_last_webull_positions') and self._last_webull_positions and cache_age < 120:
-                        positions.extend(self._last_webull_positions)
-                else:
-                    rate_manager.record_request('webull')
-                    webull_positions = await self.position_fetcher() or []
-                    webull_snapshots_rest = []
-                    for pos in webull_positions:
-                        pos['broker'] = 'Webull'
-                        webull_snapshots_rest.append(self._to_snapshot(pos))
-                    self._last_webull_positions = webull_snapshots_rest
-                    self._webull_cache_ts = _time.time()
-                    positions.extend(webull_snapshots_rest)
-            else:
-                webull_positions = await self.position_fetcher() or []
-                webull_snapshots_rest = []
-                for pos in webull_positions:
-                    pos['broker'] = 'Webull'
-                    webull_snapshots_rest.append(self._to_snapshot(pos))
-                self._last_webull_positions = webull_snapshots_rest
-                self._webull_cache_ts = _time.time()
-                positions.extend(webull_snapshots_rest)
-        
-        if self.alpaca_broker and getattr(self.alpaca_broker, 'connected', False):
+                        return list(self._last_webull_positions)
+                    return []
+                rate_manager.record_request('webull')
+            webull_positions = await self.position_fetcher() or []
+            webull_snapshots_rest = []
+            for pos in webull_positions:
+                pos['broker'] = 'Webull'
+                webull_snapshots_rest.append(self._to_snapshot(pos))
+            self._last_webull_positions = webull_snapshots_rest
+            self._webull_cache_ts = _time.time()
+            return webull_snapshots_rest
+
+        async def _fetch_alpaca_cached():
+            if not (self.alpaca_broker and getattr(self.alpaca_broker, 'connected', False)):
+                return []
             try:
                 alpaca_cache_age = _time.time() - getattr(self, '_alpaca_cache_ts', 0)
                 if hasattr(self, '_last_alpaca_positions') and self._last_alpaca_positions is not None and alpaca_cache_age < _REST_CACHE_TTL:
-                    positions.extend(self._last_alpaca_positions)
-                elif rate_manager:
+                    return list(self._last_alpaca_positions)
+                if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('alpaca')
                     if not can_proceed:
                         if hasattr(self, '_last_alpaca_positions') and self._last_alpaca_positions and alpaca_cache_age < 120:
-                            positions.extend(self._last_alpaca_positions)
-                    else:
-                        rate_manager.record_request('alpaca')
-                        alpaca_positions = await self._fetch_alpaca_positions()
-                        self._last_alpaca_positions = alpaca_positions
-                        self._alpaca_cache_ts = _time.time()
-                        positions.extend(alpaca_positions)
-                else:
-                    alpaca_positions = await self._fetch_alpaca_positions()
-                    self._last_alpaca_positions = alpaca_positions
-                    self._alpaca_cache_ts = _time.time()
-                    positions.extend(alpaca_positions)
+                            return list(self._last_alpaca_positions)
+                        return []
+                    rate_manager.record_request('alpaca')
+                alpaca_positions = await self._fetch_alpaca_positions()
+                self._last_alpaca_positions = alpaca_positions
+                self._alpaca_cache_ts = _time.time()
+                return alpaca_positions
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Alpaca positions: {e}")
                 if hasattr(self, '_last_alpaca_positions') and self._last_alpaca_positions:
-                    alpaca_cache_age = _time.time() - getattr(self, '_alpaca_cache_ts', 0)
-                    if alpaca_cache_age < 30:
-                        positions.extend(self._last_alpaca_positions)
-        
-        if self.schwab_broker:
+                    if (_time.time() - getattr(self, '_alpaca_cache_ts', 0)) < 30:
+                        return list(self._last_alpaca_positions)
+                return []
+
+        async def _fetch_schwab_cached():
+            if not self.schwab_broker:
+                return []
             try:
                 schwab_cache_age = _time.time() - getattr(self, '_schwab_cache_ts', 0)
                 if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
-                    positions.extend(self._last_schwab_positions)
-                elif rate_manager:
+                    return list(self._last_schwab_positions)
+                try:
+                    from src.services.schwab_data_hub import get_schwab_data_hub
+                    schwab_hub = get_schwab_data_hub()
+                    hub_pos = schwab_hub.get_positions(detailed=True)
+                    if hub_pos is not None:
+                        schwab_positions = []
+                        for pos in hub_pos:
+                            schwab_positions.append(PositionSnapshot(
+                                symbol=pos.get('symbol', ''),
+                                quantity=abs(float(pos.get('quantity', 0))),
+                                avg_cost=float(pos.get('avg_cost', 0)),
+                                current_price=float(pos.get('current_price', 0)),
+                                asset=pos.get('asset', 'stock'),
+                                broker='SCHWAB',
+                                strike=pos.get('strike'),
+                                expiry=pos.get('expiry'),
+                                direction=pos.get('direction'),
+                                raw_symbol=pos.get('raw_symbol')
+                            ))
+                        self._last_schwab_positions = schwab_positions
+                        self._schwab_cache_ts = _time.time()
+                        return schwab_positions
+                except (ImportError, Exception):
+                    pass
+                if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('schwab')
                     if not can_proceed:
                         if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions and schwab_cache_age < 120:
-                            positions.extend(self._last_schwab_positions)
-                    else:
-                        is_auth = self.schwab_broker.is_authenticated()
-                        if is_auth:
-                            rate_manager.record_request('schwab')
-                            schwab_positions = await self._fetch_schwab_positions()
-                            self._last_schwab_positions = schwab_positions
-                            self._schwab_cache_ts = _time.time()
-                            positions.extend(schwab_positions)
+                            return list(self._last_schwab_positions)
+                        return []
+                    is_auth = self.schwab_broker.is_authenticated()
+                    if not is_auth:
+                        return []
+                    rate_manager.record_request('schwab')
                 else:
                     is_auth = self.schwab_broker.is_authenticated()
-                    if is_auth:
-                        schwab_positions = await self._fetch_schwab_positions()
-                        self._last_schwab_positions = schwab_positions
-                        self._schwab_cache_ts = _time.time()
-                        positions.extend(schwab_positions)
+                    if not is_auth:
+                        return []
+                schwab_positions = await self._fetch_schwab_positions()
+                self._last_schwab_positions = schwab_positions
+                self._schwab_cache_ts = _time.time()
+                return schwab_positions
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Schwab positions: {e}")
                 if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions:
-                    schwab_cache_age = _time.time() - getattr(self, '_schwab_cache_ts', 0)
-                    if schwab_cache_age < 30:
-                        positions.extend(self._last_schwab_positions)
-        
-        if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
+                    if (_time.time() - getattr(self, '_schwab_cache_ts', 0)) < 30:
+                        return list(self._last_schwab_positions)
+                return []
+
+        async def _fetch_ibkr_cached():
+            if not (self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False)):
+                return []
             try:
                 ibkr_cache_age = _time.time() - getattr(self, '_ibkr_cache_ts', 0)
                 if hasattr(self, '_last_ibkr_positions') and self._last_ibkr_positions is not None and ibkr_cache_age < _REST_CACHE_TTL:
-                    positions.extend(self._last_ibkr_positions)
-                elif rate_manager:
+                    return list(self._last_ibkr_positions)
+                if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('ibkr')
                     if not can_proceed:
                         if hasattr(self, '_last_ibkr_positions') and self._last_ibkr_positions and ibkr_cache_age < 120:
-                            positions.extend(self._last_ibkr_positions)
-                    else:
-                        rate_manager.record_request('ibkr')
-                        ibkr_positions = await self._fetch_ibkr_positions()
-                        self._last_ibkr_positions = ibkr_positions
-                        self._ibkr_cache_ts = _time.time()
-                        positions.extend(ibkr_positions)
-                else:
-                    ibkr_positions = await self._fetch_ibkr_positions()
-                    self._last_ibkr_positions = ibkr_positions
-                    self._ibkr_cache_ts = _time.time()
-                    positions.extend(ibkr_positions)
+                            return list(self._last_ibkr_positions)
+                        return []
+                    rate_manager.record_request('ibkr')
+                ibkr_positions = await self._fetch_ibkr_positions()
+                self._last_ibkr_positions = ibkr_positions
+                self._ibkr_cache_ts = _time.time()
+                return ibkr_positions
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch IBKR positions: {e}")
                 if hasattr(self, '_last_ibkr_positions') and self._last_ibkr_positions:
-                    ibkr_cache_age = _time.time() - getattr(self, '_ibkr_cache_ts', 0)
-                    if ibkr_cache_age < 30:
-                        positions.extend(self._last_ibkr_positions)
-        
-        if self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False):
+                    if (_time.time() - getattr(self, '_ibkr_cache_ts', 0)) < 30:
+                        return list(self._last_ibkr_positions)
+                return []
+
+        async def _fetch_tastytrade_cached():
+            if not (self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False)):
+                return []
             try:
                 tt_cache_age = _time.time() - getattr(self, '_tastytrade_cache_ts', 0)
                 if hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions is not None and tt_cache_age < _REST_CACHE_TTL:
-                    positions.extend(self._last_tastytrade_positions)
-                elif rate_manager:
+                    return list(self._last_tastytrade_positions)
+                if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('tastytrade')
                     if not can_proceed:
                         if hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions and tt_cache_age < 120:
-                            positions.extend(self._last_tastytrade_positions)
-                    else:
-                        rate_manager.record_request('tastytrade')
-                        tastytrade_positions = await self._fetch_tastytrade_positions()
-                        self._last_tastytrade_positions = tastytrade_positions
-                        self._tastytrade_cache_ts = _time.time()
-                        positions.extend(tastytrade_positions)
-                else:
-                    tastytrade_positions = await self._fetch_tastytrade_positions()
-                    self._last_tastytrade_positions = tastytrade_positions
-                    self._tastytrade_cache_ts = _time.time()
-                    positions.extend(tastytrade_positions)
+                            return list(self._last_tastytrade_positions)
+                        return []
+                    rate_manager.record_request('tastytrade')
+                tastytrade_positions = await self._fetch_tastytrade_positions()
+                self._last_tastytrade_positions = tastytrade_positions
+                self._tastytrade_cache_ts = _time.time()
+                return tastytrade_positions
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Tastytrade positions: {e}")
                 if hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions:
-                    tt_cache_age = _time.time() - getattr(self, '_tastytrade_cache_ts', 0)
-                    if tt_cache_age < 30:
-                        positions.extend(self._last_tastytrade_positions)
-        
-        if self.robinhood_broker:
+                    if (_time.time() - getattr(self, '_tastytrade_cache_ts', 0)) < 30:
+                        return list(self._last_tastytrade_positions)
+                return []
+
+        async def _fetch_robinhood_cached():
+            if not self.robinhood_broker:
+                return []
             rh_connected = getattr(self.robinhood_broker, 'connected', None)
             rh_logged_in = getattr(self.robinhood_broker, '_logged_in', None)
             rh_ready = rh_connected or rh_logged_in or (rh_connected is None and rh_logged_in is None)
-            if rh_ready:
-                try:
-                    rh_cache_age = _time.time() - getattr(self, '_robinhood_cache_ts', 0)
-                    if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions is not None and rh_cache_age < _REST_CACHE_TTL:
-                        positions.extend(self._last_robinhood_positions)
-                    elif rate_manager:
-                        can_proceed, wait_time = rate_manager.can_make_request('robinhood')
-                        if not can_proceed:
-                            if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions and rh_cache_age < 120:
-                                positions.extend(self._last_robinhood_positions)
-                        else:
-                            rate_manager.record_request('robinhood')
-                            robinhood_positions = await self._fetch_robinhood_positions()
-                            self._last_robinhood_positions = robinhood_positions
-                            self._robinhood_cache_ts = _time.time()
-                            positions.extend(robinhood_positions)
-                    else:
-                        robinhood_positions = await self._fetch_robinhood_positions()
-                        self._last_robinhood_positions = robinhood_positions
-                        self._robinhood_cache_ts = _time.time()
-                        positions.extend(robinhood_positions)
-                except Exception as e:
-                    print(f"[RISK] Warning: Could not fetch Robinhood positions: {e}")
-                    if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions:
-                        rh_cache_age = _time.time() - getattr(self, '_robinhood_cache_ts', 0)
-                        if rh_cache_age < 30:
-                            positions.extend(self._last_robinhood_positions)
+            if not rh_ready:
+                return []
+            try:
+                rh_cache_age = _time.time() - getattr(self, '_robinhood_cache_ts', 0)
+                if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions is not None and rh_cache_age < _REST_CACHE_TTL:
+                    return list(self._last_robinhood_positions)
+                if rate_manager:
+                    can_proceed, wait_time = rate_manager.can_make_request('robinhood')
+                    if not can_proceed:
+                        if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions and rh_cache_age < 120:
+                            return list(self._last_robinhood_positions)
+                        return []
+                    rate_manager.record_request('robinhood')
+                robinhood_positions = await self._fetch_robinhood_positions()
+                self._last_robinhood_positions = robinhood_positions
+                self._robinhood_cache_ts = _time.time()
+                return robinhood_positions
+            except Exception as e:
+                print(f"[RISK] Warning: Could not fetch Robinhood positions: {e}")
+                if hasattr(self, '_last_robinhood_positions') and self._last_robinhood_positions:
+                    if (_time.time() - getattr(self, '_robinhood_cache_ts', 0)) < 30:
+                        return list(self._last_robinhood_positions)
+                return []
+
+        results = await asyncio.gather(
+            _fetch_webull_rest(),
+            _fetch_alpaca_cached(),
+            _fetch_schwab_cached(),
+            _fetch_ibkr_cached(),
+            _fetch_tastytrade_cached(),
+            _fetch_robinhood_cached(),
+            return_exceptions=True
+        )
+        for r in results:
+            if isinstance(r, list):
+                positions.extend(r)
+            elif isinstance(r, Exception):
+                print(f"[RISK] ⚠️ Parallel fetch error: {r}")
         
         return positions
     
@@ -3181,13 +3202,42 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] ⚠️ Schwab hub price update error: {e}")
         
-        total = webull_updated + schwab_updated
+        cross_updated = 0
+        _streaming_prefixes = ('WEBULL', 'SCHWAB')
+        for pos in positions:
+            if pos.broker.upper().startswith(_streaming_prefixes):
+                continue
+            if pos.asset == 'option':
+                continue
+            price = None
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                wb_hub = get_webull_data_hub()
+                if wb_hub.is_streaming():
+                    price = wb_hub.get_quote_price(pos.symbol)
+            except Exception:
+                pass
+            if not price:
+                try:
+                    from src.services.schwab_data_hub import get_schwab_data_hub
+                    sc_hub = get_schwab_data_hub()
+                    if sc_hub.is_streaming():
+                        price = sc_hub.get_quote_price(pos.symbol)
+                except Exception:
+                    pass
+            if price and price > 0:
+                pos.current_price = price
+                cross_updated += 1
+
+        total = webull_updated + schwab_updated + cross_updated
         if total > 0 and not hasattr(self, '_hub_update_logged'):
             parts = []
             if webull_updated > 0:
                 parts.append(f"Webull({webull_updated})")
             if schwab_updated > 0:
                 parts.append(f"Schwab({schwab_updated})")
+            if cross_updated > 0:
+                parts.append(f"CrossBroker({cross_updated})")
             print(f"[RISK] ✓ Streaming hub: updated {total} position prices [{', '.join(parts)}]")
             self._hub_update_logged = True
 
