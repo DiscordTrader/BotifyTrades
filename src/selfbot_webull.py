@@ -6439,6 +6439,33 @@ def format_trade_idea_as_bto_stc(parsed: dict) -> str:
         return msg.strip()
 
 
+class _PriorityOrderQueue:
+    _PRIORITY_RISK = 0
+    _PRIORITY_NORMAL = 1
+
+    def __init__(self):
+        self._pq = asyncio.PriorityQueue()
+        self._seq = 0
+
+    async def put(self, signal):
+        priority = self._PRIORITY_RISK if (isinstance(signal, dict) and signal.get('_risk_management_order')) else self._PRIORITY_NORMAL
+        self._seq += 1
+        await self._pq.put((priority, self._seq, signal))
+
+    async def get(self):
+        _, _, signal = await self._pq.get()
+        return signal
+
+    def qsize(self):
+        return self._pq.qsize()
+
+    def task_done(self):
+        self._pq.task_done()
+
+    def empty(self):
+        return self._pq.empty()
+
+
 # ------------------------------ DISCORD SELF-BOT -------------------------------------
 class SelfClient(discord.Client):
     def __init__(self, **kwargs):
@@ -6908,7 +6935,7 @@ class SelfClient(discord.Client):
 
     async def setup(self):
         # Create async objects NOW when event loop is properly set up (fixes Windows "different loop" error)
-        self.order_queue = asyncio.Queue()
+        self.order_queue = _PriorityOrderQueue()
         self.broker_ready = asyncio.Event()
         self.sync_ready = asyncio.Event()  # Set after first broker sync - prevents conditional order race condition
         self.processing_ready = asyncio.Event()

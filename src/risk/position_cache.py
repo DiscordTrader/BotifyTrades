@@ -37,6 +37,7 @@ class PositionCache:
         self.cache_file = cache_file or Path.cwd() / '.position_cache.json'
         self._cache: Dict[str, PositionCacheEntry] = {}
         self._trade_id_map: Dict[str, int] = {}  # position_key -> trade_id for database persistence
+        self._cache_lock = threading.RLock()
         self._persist_lock = threading.Lock()  # Concurrency safety for DB writes
         self._last_entry_prices: Dict[str, list] = {}
         self._locked_entry_prices: Dict[str, float] = {}
@@ -826,7 +827,9 @@ class PositionCache:
         """Export all monitored position risk states for the UI dashboard.
         Returns a dict keyed by trade_id (or pos_key fallback) with risk state details."""
         result = {}
-        for pos_key, entry in self._cache.items():
+        with self._cache_lock:
+            cache_snapshot = dict(self._cache)
+        for pos_key, entry in cache_snapshot.items():
             trade_id = self._trade_id_map.get(pos_key)
             state_key = str(trade_id) if trade_id else pos_key
             
@@ -1002,14 +1005,15 @@ class PositionCache:
             Number of cache entries invalidated.
         """
         count = 0
-        for pos_key, entry in list(self._cache.items()):
-            if entry.channel_settings is not None:
-                if channel_id is None:
-                    entry.channel_settings = None
-                    count += 1
-                elif entry.channel_settings.channel_id and str(entry.channel_settings.channel_id) == str(channel_id):
-                    entry.channel_settings = None
-                    count += 1
+        with self._cache_lock:
+            for pos_key, entry in list(self._cache.items()):
+                if entry.channel_settings is not None:
+                    if channel_id is None:
+                        entry.channel_settings = None
+                        count += 1
+                    elif entry.channel_settings.channel_id and str(entry.channel_settings.channel_id) == str(channel_id):
+                        entry.channel_settings = None
+                        count += 1
         
         if count > 0:
             print(f"[RISK] Invalidated channel settings cache for {count} positions")
@@ -1017,19 +1021,21 @@ class PositionCache:
     
     def remove(self, position_key: str) -> None:
         """Remove a position from cache and clean up stale trade_id mapping."""
-        self._cache.pop(position_key, None)
+        with self._cache_lock:
+            self._cache.pop(position_key, None)
         old_trade_id = self._trade_id_map.pop(position_key, None)
         if old_trade_id:
             print(f"[RISK] ✓ Cleaned trade_id mapping: {position_key} (trade #{old_trade_id})")
     
     def cleanup_stale(self, active_keys: set) -> int:
         """Remove cache entries not in active positions. Returns count removed."""
-        stale = [k for k in self._cache.keys() if k not in active_keys]
-        for key in stale:
-            del self._cache[key]
-            old_trade_id = self._trade_id_map.pop(key, None)
-            if old_trade_id:
-                print(f"[RISK] ✓ Cleaned stale trade_id mapping: {key} (trade #{old_trade_id})")
+        with self._cache_lock:
+            stale = [k for k in self._cache.keys() if k not in active_keys]
+            for key in stale:
+                del self._cache[key]
+                old_trade_id = self._trade_id_map.pop(key, None)
+                if old_trade_id:
+                    print(f"[RISK] ✓ Cleaned stale trade_id mapping: {key} (trade #{old_trade_id})")
         return len(stale)
     
     def __len__(self) -> int:

@@ -257,6 +257,9 @@ class PositionLedger:
         self.exit_arbiter = ExitArbiter()
         self._init_tables()
     
+    _MAX_DB_RETRIES = 3
+    _DB_RETRY_BASE_DELAY = 0.1
+
     def _get_conn(self) -> sqlite3.Connection:
         """Get database connection with row factory, WAL mode, and busy timeout."""
         conn = sqlite3.connect(self.db_path, timeout=10)
@@ -264,6 +267,24 @@ class PositionLedger:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         return conn
+
+    def _execute_with_retry(self, conn, sql, params=None, commit=False):
+        """Execute SQL with retry on OperationalError (database locked)."""
+        import time as _t
+        import random as _r
+        for attempt in range(self._MAX_DB_RETRIES):
+            try:
+                cursor = conn.execute(sql, params or ())
+                if commit:
+                    conn.commit()
+                return cursor
+            except sqlite3.OperationalError as e:
+                if 'locked' in str(e).lower() and attempt < self._MAX_DB_RETRIES - 1:
+                    delay = self._DB_RETRY_BASE_DELAY * (2 ** attempt) + _r.uniform(0, 0.05)
+                    print(f"[LEDGER] ⚠️ DB locked (attempt {attempt+1}/{self._MAX_DB_RETRIES}), retrying in {delay:.2f}s...")
+                    _t.sleep(delay)
+                else:
+                    raise
     
     def _init_tables(self):
         """Initialize ledger tables if they don't exist."""
@@ -336,6 +357,14 @@ class PositionLedger:
             # ===== UNIQUE INDEX FOR EXIT IDEMPOTENCY =====
             # Prevents race condition where two concurrent exits insert before either commits
             # message_id stores the dedupe_key (position_id:exit_reason:exit_qty hash)
+            try:
+                conn.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_routing_unique
+                    ON position_ledger(option_key, broker_id, account_id, routing_mapping_id)
+                """)
+            except Exception:
+                pass
+            
             conn.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_partial_exits_dedupe
                 ON partial_exits(position_id, message_id)
@@ -740,7 +769,7 @@ class PositionLedger:
             # ===== RACE-SAFE INSERT WITH UNIQUE CONSTRAINT =====
             # If unique index violation occurs, another thread already inserted
             try:
-                cursor = conn.execute("""
+                cursor = self._execute_with_retry(conn, """
                     INSERT INTO partial_exits (
                         position_id, exit_qty, exit_price, exit_reason,
                         exit_pnl_dollar, exit_pnl_pct, exit_time, message_id
@@ -760,7 +789,7 @@ class PositionLedger:
             new_status = "closed" if new_remaining <= 0 else "partially_closed"
             close_time = now if new_remaining <= 0 else None
             
-            conn.execute("""
+            self._execute_with_retry(conn, """
                 UPDATE position_ledger SET
                     remaining_qty = ?,
                     realized_pnl = ?,
@@ -768,9 +797,8 @@ class PositionLedger:
                     last_exit_time = ?,
                     close_time = ?
                 WHERE id = ?
-            """, (new_remaining, new_realized, new_status, now, close_time, position_id))
-            
-            conn.commit()
+            """, (new_remaining, new_realized, new_status, now, close_time, position_id),
+                commit=True)
             
             print(f"[LEDGER] ✓ Exit recorded: {actual_exit_qty} @ ${exit_price:.2f} ({exit_reason}) "
                   f"P&L: ${exit_pnl_dollar:.2f} ({exit_pnl_pct:.1f}%)")
