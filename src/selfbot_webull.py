@@ -16670,6 +16670,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         _original_print(f"[RISK] ✅ Tastytrade exit order placed: {result}")
                                         resp = {'success': True, 'orderId': result.order_id, 'broker': broker_label}
                                         order_success = True
+                                        if DATABASE_MODULE_AVAILABLE and signal.get('channel_id'):
+                                            try:
+                                                from gui_app.lot_matcher import get_matcher
+                                                from gui_app.database import record_execution_closure_atomic, map_risk_trigger_to_exit_source
+                                                from datetime import datetime
+                                                _tt_matcher = get_matcher()
+                                                _tt_lot_signal = {
+                                                    'action': 'STC', 'symbol': signal['symbol'],
+                                                    'asset': signal.get('asset', 'stock'), 'qty': signal['qty'],
+                                                    'price': signal.get('price'), 'strike': signal.get('strike'),
+                                                    'expiry': signal.get('expiry'), 'opt_type': signal.get('opt_type'),
+                                                    'channel_id': signal['channel_id'], 'received_at': datetime.now(),
+                                                    'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
+                                                }
+                                                _tt_lot_result = _tt_matcher.process_signal(_tt_lot_signal)
+                                                if _tt_lot_result:
+                                                    _original_print(f"[RISK] ✓ Closed {len(_tt_lot_result)} lot(s) for Signal P&L (Tastytrade)")
+                                                _tt_exit_source = map_risk_trigger_to_exit_source(signal.get('risk_trigger', ''), signal.get('_tier_to_mark'))
+                                                _tt_cid, _tt_pnl = record_execution_closure_atomic(
+                                                    broker=broker_label, symbol=signal['symbol'],
+                                                    asset_type=signal.get('asset', 'stock'), closed_qty=signal['qty'],
+                                                    fill_price=signal.get('price', 0), filled_at=datetime.now().isoformat(),
+                                                    exit_source=_tt_exit_source, strike=signal.get('strike'),
+                                                    expiry=signal.get('expiry'), call_put=signal.get('opt_type'),
+                                                    broker_order_id=str(result.order_id) if result.order_id else None,
+                                                    channel_id=str(signal['channel_id'])
+                                                )
+                                                if _tt_cid:
+                                                    _original_print(f"[RISK] ✓ Execution P&L closure #{_tt_cid} recorded (Tastytrade)")
+                                            except Exception as _tt_err:
+                                                _original_print(f"[RISK] ⚠️ P&L recording warning (Tastytrade): {_tt_err}")
                                     else:
                                         _original_print(f"[RISK] ❌ Tastytrade exit order failed: {result}")
                                         resp = {'success': False, 'msg': str(result.message if result else 'Unknown error')}
@@ -17729,6 +17760,58 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _original_print(f"[RISK] ✓ Tier {tier_to_mark} marked as hit (immediate fill)")
                         except Exception as e:
                             _original_print(f"[RISK] ⚠️ Could not track pending order: {e}")
+                    
+                    if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL') and signal.get('channel_id'):
+                        _risk_broker_used = (broker_name_used if broker_name_used else None) or signal.get('broker', '') or ''
+                        if 'alpaca' not in _risk_broker_used.lower():
+                            try:
+                                from gui_app.lot_matcher import get_matcher
+                                from gui_app.database import record_execution_closure_atomic, map_risk_trigger_to_exit_source
+                                from datetime import datetime
+                                _rm_matcher = get_matcher()
+                                _rm_lot_signal = {
+                                    'action': 'STC',
+                                    'symbol': signal['symbol'],
+                                    'asset': signal.get('asset', 'stock'),
+                                    'qty': signal['qty'],
+                                    'price': signal.get('price'),
+                                    'strike': signal.get('strike'),
+                                    'expiry': signal.get('expiry'),
+                                    'opt_type': signal.get('opt_type'),
+                                    'channel_id': signal['channel_id'],
+                                    'received_at': datetime.now(),
+                                    'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
+                                }
+                                _rm_lot_result = _rm_matcher.process_signal(_rm_lot_signal)
+                                if _rm_lot_result:
+                                    _original_print(f"[RISK] ✓ Closed {len(_rm_lot_result)} lot(s) for Signal P&L ({_risk_broker_used})")
+
+                                _rm_risk_trigger = signal.get('risk_trigger', '')
+                                _rm_tier = signal.get('_tier_to_mark')
+                                _rm_exit_source = map_risk_trigger_to_exit_source(_rm_risk_trigger, _rm_tier)
+                                _rm_order_id = None
+                                if isinstance(resp, dict):
+                                    _rm_order_id = resp.get('orderId') or resp.get('order_id')
+                                elif hasattr(resp, 'order_id'):
+                                    _rm_order_id = resp.order_id
+                                _rm_closure_id, _rm_pnl = record_execution_closure_atomic(
+                                    broker=_risk_broker_used.upper() if _risk_broker_used else 'UNKNOWN',
+                                    symbol=signal['symbol'],
+                                    asset_type=signal.get('asset', 'stock'),
+                                    closed_qty=signal['qty'],
+                                    fill_price=signal.get('price', 0),
+                                    filled_at=datetime.now().isoformat(),
+                                    exit_source=_rm_exit_source,
+                                    strike=signal.get('strike'),
+                                    expiry=signal.get('expiry'),
+                                    call_put=signal.get('opt_type'),
+                                    broker_order_id=str(_rm_order_id) if _rm_order_id else None,
+                                    channel_id=str(signal['channel_id'])
+                                )
+                                if _rm_closure_id:
+                                    _original_print(f"[RISK] ✓ Execution P&L closure #{_rm_closure_id} recorded (exit_source={_rm_exit_source}, broker={_risk_broker_used})")
+                            except Exception as _rm_pnl_err:
+                                _original_print(f"[RISK] ⚠️ P&L recording warning ({_risk_broker_used}): {_rm_pnl_err}")
                     
                     # 1. Send notification to Discord channel (check settings first)
                     try:
