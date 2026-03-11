@@ -69,10 +69,15 @@ def calculate_tier_exit_qty(
     if channel_settings.profit_target_4_pct > 0:
         active_tiers.append(4)
     
-    # Small positions: close all at first target (but respect runner if enabled)
+    # Small positions handling
     if current_qty <= 2:
         if runner_qty > 0 and current_qty > runner_qty:
             return current_qty - runner_qty, True
+        remaining_tiers = [t for t in active_tiers if t >= tier and not getattr(cache, f'tier{t}_hit', False)]
+        if current_qty == 2 and len(remaining_tiers) >= 2:
+            return 1, True
+        if current_qty == 1:
+            return 1, False
         return current_qty, False
     
     # For larger positions, calculate based on remaining tiers
@@ -102,7 +107,8 @@ def evaluate_tiered_targets(
     Evaluate tiered profit targets for a position (supports up to 4 tiers).
     
     Rules:
-    - For small positions (1-2 contracts): Close all at first target hit
+    - For 2-contract positions with 2+ active tiers: Split 1 per tier (partial at T1, close at T2)
+    - For 1-contract positions: Close at first target hit
     - For larger positions: Use custom quantities per tier or equal splits
     - Leave runner: Keep configured % after last tier hit
     - Trim order mode: 'market' or 'limit' (limit uses offset for better fills)
