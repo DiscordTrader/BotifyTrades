@@ -2154,9 +2154,18 @@ async function updateEscalationOnlyMode(channelId, enabled) {
         });
         if (response.ok) {
             updateLocalChannel(channelId, { escalation_only_mode: enabled ? 1 : 0 });
-            showNotification(enabled ?
-                'SL Escalation Only enabled — targets escalate SL, no partial sells' :
-                'SL Escalation Only disabled — normal tiered profit taking active');
+            if (enabled) {
+                const ch = channelsData.find(c => c.id === channelId);
+                const hasDynSL = ch && ch.enable_dynamic_sl;
+                const hasEarlyTrail = ch && ch.enable_early_trailing;
+                if (!hasDynSL && !hasEarlyTrail) {
+                    showNotification('SL Escalation Only enabled — WARNING: Enable Dynamic SL or Early Trailing for SL to actually escalate', 'warning');
+                } else {
+                    showNotification('SL Escalation Only enabled — targets escalate SL, no partial sells');
+                }
+            } else {
+                showNotification('SL Escalation Only disabled — normal tiered profit taking active');
+            }
         } else {
             showNotification('Error updating SL Escalation Only mode', 'error');
         }

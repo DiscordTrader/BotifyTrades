@@ -2162,6 +2162,7 @@ class RiskManager:
                     4: channel_settings.profit_target_4_pct
                 }
                 pnl_pct = position.pct_change if hasattr(position, 'pct_change') else 0
+                has_sl_mechanism = channel_settings.enable_dynamic_sl or channel_settings.enable_early_trailing
                 for tier in [1, 2, 3, 4]:
                     threshold = tier_thresholds.get(tier, 0)
                     if threshold <= 0:
@@ -2170,7 +2171,10 @@ class RiskManager:
                     already_hit = getattr(cache, tier_attr, False)
                     if not already_hit and pnl_pct >= threshold:
                         setattr(cache, tier_attr, True)
-                        print(f"[RISK] ESCALATION ONLY: T{tier} hit ({pnl_pct:.1f}% >= {threshold}%) — SL escalated, NO partial sell")
+                        if has_sl_mechanism:
+                            print(f"[RISK] ESCALATION ONLY: T{tier} hit ({pnl_pct:.1f}% >= {threshold}%) — tier marked for SL escalation, NO partial sell")
+                        else:
+                            print(f"[RISK] ⚠️ ESCALATION ONLY: T{tier} hit ({pnl_pct:.1f}% >= {threshold}%) — WARNING: Dynamic SL and Early Trailing are both disabled, SL will NOT escalate")
             else:
                 decision = evaluate_tiered_targets(position, cache, channel_settings)
                 if decision.should_exit:
