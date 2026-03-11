@@ -32,6 +32,37 @@ class IBKRBroker(BrokerInterface):
         self.port = config.get('port', 7497 if self.paper_trade else 7496)
         self.client_id = config.get('client_id', 1)
     
+    @staticmethod
+    def _normalize_expiry_yyyymmdd(expiry: str) -> str:
+        """Convert any expiry format to YYYYMMDD for IB contract construction.
+        
+        Supported: MM/DD, MM/DD/YY, MM/DD/YYYY, YYYY-MM-DD, YYYYMMDD
+        """
+        from datetime import datetime
+        if '/' in expiry:
+            parts = expiry.split('/')
+            if len(parts) == 2:
+                m, d = parts
+                y = datetime.now().year
+                return f"{y}{int(m):02d}{int(d):02d}"
+            elif len(parts) == 3:
+                p0, p1, p2 = parts
+                if len(p0) == 4:
+                    y, m, d = p0, p1, p2
+                else:
+                    m, d, y = p0, p1, p2
+                    if len(y) == 2:
+                        y = f"20{y}"
+                return f"{int(y)}{int(m):02d}{int(d):02d}"
+            raise ValueError(f"Invalid expiry format: {expiry}")
+        elif '-' in expiry:
+            parts = expiry.split('-')
+            if len(parts) == 3:
+                y, m, d = parts
+                return f"{y}{m.zfill(2)}{d.zfill(2)}"
+            raise ValueError(f"Invalid expiry format: {expiry}")
+        return expiry
+
     async def connect(self) -> bool:
         """Connect to Interactive Brokers TWS/Gateway"""
         try:
@@ -226,18 +257,8 @@ class IBKRBroker(BrokerInterface):
     ) -> OrderResult:
         """Place an options order"""
         try:
-            # Parse expiry date to YYYYMMDD format
-            if '/' in expiry or '-' in expiry:
-                from datetime import datetime
-                sep = '/' if '/' in expiry else '-'
-                parts = expiry.split(sep)
-                if len(parts) == 3:
-                    year, month, day = parts
-                    expiry_formatted = f"{year}{month.zfill(2)}{day.zfill(2)}"
-                else:
-                    raise ValueError(f"Invalid expiry format: {expiry}")
-            else:
-                expiry_formatted = expiry
+            from datetime import datetime
+            expiry_formatted = self._normalize_expiry_yyyymmdd(expiry)
             
             # Create option contract
             right = 'C' if option_type.lower() in ['c', 'call'] else 'P'
