@@ -281,16 +281,14 @@ class BrokerSyncService:
         
         print(f"[SYNC] Syncing {len(brokers_to_sync)} broker(s): {[b[0] for b in brokers_to_sync]}")
         
-        _sync_interrupted = False
-        _synced_count = 0
-        for broker_name, broker_instance in brokers_to_sync:
-            if not self._order_in_progress.is_set():
-                _remaining = [b[0] for b in brokers_to_sync[_synced_count:]]
-                print(f"[SYNC] ⚡ Order incoming — interrupting sync (skipping: {_remaining})", flush=True)
-                _sync_interrupted = True
-                await asyncio.sleep(0)
-                break
-            
+        if not self._order_in_progress.is_set():
+            print(f"[SYNC] ⚡ Order incoming — skipping sync cycle", flush=True)
+            return
+
+        import time as _sync_timer
+        _parallel_start = _sync_timer.monotonic()
+
+        async def _sync_one(broker_name, broker_instance):
             try:
                 await asyncio.wait_for(
                     self._sync_broker(broker_name, broker_instance),
@@ -311,12 +309,14 @@ class BrokerSyncService:
                     print(f"[SYNC] ⏳ Transient error syncing {broker_name}: {e}")
                 else:
                     print(f"[SYNC] Error syncing {broker_name}: {e}")
-            _synced_count += 1
-        
-        if _sync_interrupted:
-            print(f"[SYNC] ✓ Sync cycle interrupted for order priority ({_synced_count}/{len(brokers_to_sync)} brokers)", flush=True)
-        else:
-            print(f"[SYNC] ✓ Sync cycle complete ({len(brokers_to_sync)} brokers)", flush=True)
+
+        await asyncio.gather(
+            *[_sync_one(name, inst) for name, inst in brokers_to_sync],
+            return_exceptions=True
+        )
+
+        _parallel_elapsed = (_sync_timer.monotonic() - _parallel_start) * 1000
+        print(f"[SYNC] ✓ Sync cycle complete ({len(brokers_to_sync)} brokers, {_parallel_elapsed:.0f}ms)", flush=True)
         
         # Fire first sync callback (signals sync_ready event to worker)
         if not self._first_sync_done and self._first_sync_callback:

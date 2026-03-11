@@ -1077,8 +1077,8 @@ class RiskManager:
                         print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms")
                     interval = self._get_adaptive_interval()
                     _wake_chunk = min(0.1, interval)
-                    elapsed = 0.0
-                    while elapsed < interval:
+                    _sleep_start = _cycle_t.monotonic()
+                    while (_cycle_t.monotonic() - _sleep_start) < interval:
                         try:
                             from src.services.webull_data_hub import get_webull_data_hub
                             if get_webull_data_hub().check_risk_eval_requested():
@@ -1095,8 +1095,10 @@ class RiskManager:
                                 break
                         except Exception:
                             pass
-                        await asyncio.sleep(min(_wake_chunk, interval - elapsed))
-                        elapsed += _wake_chunk
+                        _remaining = interval - (_cycle_t.monotonic() - _sleep_start)
+                        if _remaining <= 0:
+                            break
+                        await asyncio.sleep(min(_wake_chunk, _remaining))
                 else:
                     if not self._standby_mode:
                         print("[RISK] ⏸️ Entering standby mode - no risk settings enabled (zero API calls)")
