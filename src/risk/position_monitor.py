@@ -1167,7 +1167,8 @@ class RiskManager:
                     continue
                 try:
                     pos_key = position.position_key
-                    if pos_key in self._permanent_failure_keys:
+                    pos_key_upper = pos_key.upper()
+                    if pos_key in self._permanent_failure_keys or pos_key_upper in {k.upper() for k in self._permanent_failure_keys}:
                         continue
                     await self._evaluate_position(position, risk_settings, broker_position_keys)
                     evaluated += 1
@@ -1445,10 +1446,11 @@ class RiskManager:
         if not hasattr(self, '_permanent_failure_keys'):
             self._permanent_failure_keys = self._load_permanent_failures()
         
+        _pf_upper = {k.upper() for k in self._permanent_failure_keys}
         for position in positions:
             try:
                 pos_key = position.position_key
-                if pos_key in self._permanent_failure_keys:
+                if pos_key in self._permanent_failure_keys or pos_key.upper() in _pf_upper:
                     continue
                 await self._evaluate_position(position, risk_settings, broker_position_keys)
             except Exception as e:

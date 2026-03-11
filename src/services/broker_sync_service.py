@@ -447,7 +447,9 @@ class BrokerSyncService:
             if broker_name in ('Webull', 'WEBULL_PAPER'):
                 # Get positions using detailed method (supports options)
                 if hasattr(broker_instance, 'get_positions_detailed'):
+                    print(f"[SYNC] [DEBUG] Calling get_positions_detailed for {broker_name}, type={type(broker_instance).__name__}", flush=True)
                     positions = await broker_instance.get_positions_detailed() or []
+                    print(f"[SYNC] [DEBUG] get_positions_detailed returned {len(positions)} positions for {broker_name}", flush=True)
                     
                     for pos in positions:
                         result['positions'].append({
@@ -1760,6 +1762,46 @@ class BrokerSyncService:
             if t.get('channel_id')
         ]
         
+        # Build broker_override lookup (needed for orphan recovery AND find_origin_channel)
+        broker_to_channels = {}
+        all_channels = []
+        try:
+            all_channels = self.db.get_channels()
+            for ch in all_channels:
+                ch_broker = (ch.get('broker_override') or '').lower().strip()
+                if ch_broker:
+                    if 'webull' in ch_broker:
+                        ch_broker = 'webull'
+                    elif 'alpaca' in ch_broker:
+                        ch_broker = 'alpaca_paper' if 'paper' in ch_broker else 'alpaca'
+                    
+                    if ch_broker not in broker_to_channels:
+                        broker_to_channels[ch_broker] = []
+                    broker_to_channels[ch_broker].append({
+                        'discord_id': ch.get('discord_channel_id'),
+                        'db_id': ch.get('id'),
+                        'name': ch.get('channel_name', 'Unknown')
+                    })
+        except Exception as e:
+            print(f"[SYNC] Warning: Could not load broker_override mappings: {e}")
+
+        def _channel_has_broker_enabled(channel_id: str, target_broker: str) -> bool:
+            """Check if a channel actually has this broker in its enabled_brokers list."""
+            try:
+                for ch in all_channels:
+                    if str(ch.get('discord_channel_id')) == str(channel_id):
+                        enabled_raw = ch.get('enabled_brokers') or '[]'
+                        if isinstance(enabled_raw, str):
+                            import json as _json_check
+                            enabled_list = _json_check.loads(enabled_raw)
+                        else:
+                            enabled_list = enabled_raw
+                        enabled_upper = [b.upper() for b in enabled_list]
+                        return target_broker.upper() in enabled_upper
+            except Exception:
+                pass
+            return False
+
         # RECOVERY: Try to repair orphaned trades by linking them to matching Discord signals or routing ledger
         if orphaned_trades_by_key:
             print(f"[SYNC] 🔧 Found {len(orphaned_trades_by_key)} orphaned {broker_name} trades - attempting recovery...")
@@ -1775,11 +1817,15 @@ class BrokerSyncService:
                         discord_trade.get('call_put')
                     )
                     if discord_key == orphan_key and discord_trade.get('channel_id'):
+                        if not self._is_broker_match(broker_name, discord_trade.get('broker', '')):
+                            continue
+                        ch_id = discord_trade.get('channel_id')
+                        if not _channel_has_broker_enabled(ch_id, broker_name):
+                            continue
                         orphan_id = orphan_trade.get('id')
-                        channel_id = discord_trade.get('channel_id')
-                        print(f"[SYNC] ✓ Recovered orphan #{orphan_id} ({orphan_trade['symbol']}) → channel_id={channel_id}")
+                        print(f"[SYNC] ✓ Recovered orphan #{orphan_id} ({orphan_trade['symbol']}) → channel_id={ch_id}")
                         try:
-                            self.db.update_trade(orphan_id, channel_id=channel_id, source='sync_discord', hide_in_ui=0)
+                            self.db.update_trade(orphan_id, channel_id=ch_id, source='sync_discord', hide_in_ui=0)
                         except Exception as e:
                             print(f"[SYNC] ⚠️ Failed to update orphan #{orphan_id}: {e}")
                         recovered = True
@@ -1816,48 +1862,6 @@ class BrokerSyncService:
                     except Exception as e:
                         print(f"[SYNC] ⚠️ Routing ledger orphan recovery failed: {e}")
         
-        # Build broker_override lookup for Pass 3 fallback
-        # Maps broker_name -> [(channel_discord_id, channel_db_id), ...]
-        broker_to_channels = {}
-        all_channels = []
-        try:
-            all_channels = self.db.get_channels()
-            for ch in all_channels:
-                ch_broker = (ch.get('broker_override') or '').lower().strip()
-                if ch_broker:
-                    # Normalize broker names for comparison
-                    if 'webull' in ch_broker:
-                        ch_broker = 'webull'
-                    elif 'alpaca' in ch_broker:
-                        ch_broker = 'alpaca_paper' if 'paper' in ch_broker else 'alpaca'
-                    
-                    if ch_broker not in broker_to_channels:
-                        broker_to_channels[ch_broker] = []
-                    broker_to_channels[ch_broker].append({
-                        'discord_id': ch.get('discord_channel_id'),
-                        'db_id': ch.get('id'),
-                        'name': ch.get('channel_name', 'Unknown')
-                    })
-        except Exception as e:
-            print(f"[SYNC] Warning: Could not load broker_override mappings: {e}")
-        
-        def _channel_has_broker_enabled(channel_id: str, target_broker: str) -> bool:
-            """Check if a channel actually has this broker in its enabled_brokers list."""
-            try:
-                for ch in all_channels:
-                    if str(ch.get('discord_channel_id')) == str(channel_id):
-                        enabled_raw = ch.get('enabled_brokers') or '[]'
-                        if isinstance(enabled_raw, str):
-                            import json as _json_check
-                            enabled_list = _json_check.loads(enabled_raw)
-                        else:
-                            enabled_list = enabled_raw
-                        enabled_upper = [b.upper() for b in enabled_list]
-                        return target_broker.upper() in enabled_upper
-            except Exception:
-                pass
-            return False
-
         def find_origin_channel(position: Dict) -> str:
             """Find the origin channel_id for a broker position using multi-pass matching.
             
@@ -1961,19 +1965,25 @@ class BrokerSyncService:
                 # (prevents re-import loop for positions that can never be closed via API)
                 try:
                     full_pos_key = f"{broker_name}_{pos_key}"
+                    full_pos_key_upper = full_pos_key.upper()
+                    blocked = False
                     from src.risk.position_monitor import risk_manager_instance
                     if risk_manager_instance and hasattr(risk_manager_instance, '_permanent_failure_keys'):
-                        if full_pos_key in risk_manager_instance._permanent_failure_keys:
-                            continue
-                    else:
+                        pf_upper = {k.upper() for k in risk_manager_instance._permanent_failure_keys}
+                        if full_pos_key_upper in pf_upper:
+                            blocked = True
+                    if not blocked:
                         from pathlib import Path
                         import json as _json
                         _pf_file = Path.cwd() / '.permanent_failures.json'
                         if _pf_file.exists():
                             with open(_pf_file, 'r') as _f:
-                                _pf_keys = set(_json.load(_f))
-                            if full_pos_key in _pf_keys:
-                                continue
+                                _pf_keys = {k.upper() for k in _json.load(_f)}
+                            if full_pos_key_upper in _pf_keys:
+                                blocked = True
+                    if blocked:
+                        print(f"[SYNC] 🛑 Skipping blocklisted position: {full_pos_key}")
+                        continue
                 except Exception:
                     pass
                 # Try to find origin channel_id using multi-pass matching

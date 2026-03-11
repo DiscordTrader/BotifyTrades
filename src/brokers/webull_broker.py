@@ -57,6 +57,12 @@ class WebullBroker(BrokerInterface):
                 if did:
                     self.wb.did = did
                 
+                acct_id = await asyncio.to_thread(self.wb.get_account_id)
+                if acct_id:
+                    print(f"[{self.name}] ✓ Account ID resolved: {acct_id} ({'paper' if self.paper_trade else 'live'})")
+                else:
+                    print(f"[{self.name}] ⚠️ Could not resolve account ID — positions may be unreliable")
+                
                 account = await asyncio.to_thread(self.wb.get_account)
                 if account:
                     self.connected = True
@@ -493,17 +499,25 @@ class WebullBroker(BrokerInterface):
             return {}
     
     async def get_positions_detailed(self) -> list:
-        """Get detailed positions with full information. Uses hub cache when fresh."""
+        """Get detailed positions with full information.
+        
+        IMPORTANT: Always fetch directly from REST API (not hub cache) to prevent
+        live/paper position cross-contamination. The WebullDataHub is a singleton
+        shared by both live and paper brokers — using its cache means the live
+        broker can receive paper positions (and vice versa).
+        """
         try:
             positions_raw = None
             _from_rest = False
-            if self._data_hub:
-                cached = self._data_hub.get_positions(max_age_seconds=45)
-                if cached is not None:
-                    positions_raw = cached
-            if positions_raw is None:
-                positions_raw = await self._retry_on_busy(self.wb.get_positions, 'get_positions')
-                _from_rest = True
+            acct_id = getattr(self.wb, '_account_id', 'UNKNOWN')
+            print(f"[{self.name}] get_positions_detailed: account_id={acct_id}, paper={self.paper_trade}", flush=True)
+            positions_raw = await self._retry_on_busy(self.wb.get_positions, 'get_positions')
+            _from_rest = True
+            if positions_raw:
+                syms = [p.get('ticker', {}).get('symbol', '?') for p in positions_raw[:5]]
+                print(f"[{self.name}] REST positions ({len(positions_raw)}): {syms}", flush=True)
+            else:
+                print(f"[{self.name}] REST positions: EMPTY/None", flush=True)
             positions = []
             
             for pos in positions_raw:
@@ -969,6 +983,27 @@ class WebullBroker(BrokerInterface):
                 error_code = response.get('code', '') if response else ''
                 if error_code:
                     error_msg = f"{error_msg} (code: {error_code})"
+                
+                full_error = f"{error_msg} {error_code}".upper()
+                if 'GENERATE_NEW_SHORT_POSITION' in full_error or ('SHORT' in full_error and 'POSITION' in full_error):
+                    print(f"[{self.name}] 🛑 SHORT POSITION error for {symbol} - adding to permanent blocklist")
+                    try:
+                        from pathlib import Path
+                        import json as _json
+                        _pf_file = Path.cwd() / '.permanent_failures.json'
+                        existing = []
+                        if _pf_file.exists():
+                            with open(_pf_file, 'r') as _f:
+                                existing = _json.load(_f)
+                        for key_variant in [f"{self.name}_{symbol}_stock", f"{self.name.upper()}_{symbol}_stock"]:
+                            if key_variant not in existing:
+                                existing.append(key_variant)
+                        with open(_pf_file, 'w') as _f:
+                            _json.dump(existing, _f, indent=2)
+                        print(f"[{self.name}] 🛑 {symbol} added to permanent failure blocklist")
+                    except Exception as bf_err:
+                        print(f"[{self.name}] ⚠️ Failed to update blocklist: {bf_err}")
+                
                 return OrderResult(
                     success=False,
                     message=f"Order failed: {error_msg}",
