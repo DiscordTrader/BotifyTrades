@@ -12759,6 +12759,96 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as e:
                     print(f"[PROTRADER] ❌ Cancel error: {e}")
                 return
+            elif registry_result and registry_result.get('action') == 'SL_UPDATE':
+                sl_symbol = registry_result.get('symbol')
+                channel_id_str = str(message.channel.id)
+                sl_type = registry_result.get('sl_update_type', 'price')
+                print(f"[PHOENIX SL] ✓ SL update signal: type={sl_type}, symbol={sl_symbol}")
+                try:
+                    conn = db.get_connection()
+                    cursor = conn.cursor()
+                    if sl_symbol:
+                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, qty 
+                                         FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?) 
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                                         ORDER BY id DESC LIMIT 1''', (channel_id_str, sl_symbol))
+                    else:
+                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, qty 
+                                         FROM trades WHERE channel_id = ? 
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                                         ORDER BY id DESC LIMIT 1''', (channel_id_str,))
+                    trade = cursor.fetchone()
+                    if trade:
+                        trade_id, t_sym, entry_price, old_sl, t_broker, t_qty = trade
+                        new_sl = None
+                        if sl_type == 'breakeven' and entry_price:
+                            new_sl = float(entry_price)
+                            print(f"[PHOENIX SL] ✓ {t_sym} → SL to breakeven @ ${new_sl:.4f} (entry price)")
+                        elif sl_type == 'price':
+                            new_sl = registry_result.get('new_stop_loss')
+                            print(f"[PHOENIX SL] ✓ {t_sym} → SL to ${new_sl:.4f}")
+                        elif sl_type == 'percent' and entry_price:
+                            sl_pct = registry_result.get('new_stop_loss_pct', 0)
+                            new_sl = round(float(entry_price) * (1 - sl_pct / 100.0), 4)
+                            print(f"[PHOENIX SL] ✓ {t_sym} → SL to {sl_pct}% below entry = ${new_sl:.4f}")
+                        if new_sl and new_sl > 0:
+                            cursor.execute('UPDATE trades SET stop_loss_price = ? WHERE id = ?', (new_sl, trade_id))
+                            conn.commit()
+                            print(f"[PHOENIX SL] ✓ Trade #{trade_id} {t_sym}: SL updated ${old_sl} → ${new_sl:.4f}")
+                            try:
+                                if hasattr(self, 'risk_monitor') and self.risk_monitor:
+                                    cache_key = f"{t_sym}_{t_broker}"
+                                    if cache_key in self.risk_monitor._position_cache:
+                                        self.risk_monitor._position_cache[cache_key]['manual_sl_override'] = new_sl
+                                        print(f"[PHOENIX SL] ✓ Risk cache updated for {cache_key}")
+                            except Exception as cache_err:
+                                print(f"[PHOENIX SL] Cache update warning: {cache_err}")
+                        else:
+                            print(f"[PHOENIX SL] ⚠️ Could not determine new SL price")
+                    else:
+                        print(f"[PHOENIX SL] ⚠️ No open trade found for {sl_symbol or 'channel'} in channel {channel_id_str}")
+                except Exception as sl_err:
+                    print(f"[PHOENIX SL] ❌ SL update error: {sl_err}")
+                    import traceback; traceback.print_exc()
+                return
+            elif registry_result and registry_result.get('action') == 'TARGET_UPDATE':
+                tgt_symbol = registry_result.get('symbol')
+                channel_id_str = str(message.channel.id)
+                tgt_tier = registry_result.get('target_tier', 1)
+                tgt_price = registry_result.get('target_price')
+                print(f"[PHOENIX TGT] ✓ Target update: tier={tgt_tier}, symbol={tgt_symbol}, price=${tgt_price}")
+                try:
+                    conn = db.get_connection()
+                    cursor = conn.cursor()
+                    if tgt_symbol:
+                        cursor.execute('''SELECT id, symbol, profit_target_price, broker 
+                                         FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?) 
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                                         ORDER BY id DESC LIMIT 1''', (channel_id_str, tgt_symbol))
+                    else:
+                        cursor.execute('''SELECT id, symbol, profit_target_price, broker 
+                                         FROM trades WHERE channel_id = ? 
+                                         AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
+                                         ORDER BY id DESC LIMIT 1''', (channel_id_str,))
+                    trade = cursor.fetchone()
+                    if trade:
+                        trade_id, t_sym, old_pt, t_broker = trade
+                        if tgt_price and tgt_price > 0:
+                            if tgt_tier == 1 or not old_pt:
+                                cursor.execute('UPDATE trades SET profit_target_price = ? WHERE id = ?', (tgt_price, trade_id))
+                                conn.commit()
+                                print(f"[PHOENIX TGT] ✓ Trade #{trade_id} {t_sym}: PT updated ${old_pt} → ${tgt_price:.4f} (tier {tgt_tier})")
+                            else:
+                                print(f"[PHOENIX TGT] ℹ️ Trade #{trade_id} {t_sym}: Tier {tgt_tier} target ${tgt_price:.4f} (PT1 already set: ${old_pt})")
+                    else:
+                        print(f"[PHOENIX TGT] ⚠️ No open trade found for {tgt_symbol or 'channel'}")
+                except Exception as tgt_err:
+                    print(f"[PHOENIX TGT] ❌ Target update error: {tgt_err}")
+                return
+            elif registry_result and registry_result.get('_phoenix_add_to_position'):
+                add_sym = registry_result.get('symbol')
+                print(f"[PHOENIX ADD] ✓ Add-to-position signal for {add_sym} (treating as new BTO)")
+                opt = registry_result
         except Exception as reg_err:
             print(f"[REGISTRY] Error checking format registry: {reg_err}")
 

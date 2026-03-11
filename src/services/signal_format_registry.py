@@ -736,6 +736,190 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
         
+        # Phoenix SL update: moving (my) SL to (my) entry for (the remaining) SYMBOL
+        self.register(
+            name="phoenix_sl_to_entry",
+            description="Phoenix SL update - moving SL to entry (breakeven)",
+            priority=55,
+            pattern=r'moving\s+(?:my\s+)?SL\s+to\s+(?:my\s+)?entry\s+(?:fro?m?\s+)?(?:for\s+)?(?:(?:the\s+)?(?:re?ma(?:in)?(?:ing|aning|ining|ning)\s+)?(?:shares?\s+)?)?(?:\$?([A-Z]{2,5})(?![a-z]))?',
+            parser=self._parse_phoenix_sl_to_entry,
+            examples=["moving my SL to my entry for AIFF", "moving SL to my entry for the remaining ACXP",
+                       "moving my SL to my entry for the remaning shares AEHL", "moving SL to my entry fro remaning shares KNRX",
+                       "moving my SL to my entry for the remaining"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix SL update: moving SL for SYMBOL (to/at) PRICE
+        self.register(
+            name="phoenix_sl_move_price_for",
+            description="Phoenix SL update - moving SL for SYMBOL to PRICE",
+            priority=55,
+            pattern=r'moving\s+(?:my\s+)?SL\s+(?:for\s+)\$?([A-Z]{1,5})\s+(?:to\s+|at\s+)?\$?([\d.]+)',
+            parser=self._parse_phoenix_sl_move_price,
+            examples=["moving SL for TPET 2.13", "moving SL for CDIo to 6.90", "moving SL for IONQ at 39.20",
+                       "moving SL for PYPG  5.60", "moving my SL for CHOW at 0.86"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix SL update: moving SL to PRICE (for SYMBOL)
+        self.register(
+            name="phoenix_sl_move_price_to",
+            description="Phoenix SL update - moving SL to specific price",
+            priority=55,
+            pattern=r'moving\s+(?:my\s+)?SL\s+to\s+\$?([\d.]+)\s*(?:for\s+\$?([A-Z]{1,5}))?',
+            parser=self._parse_phoenix_sl_move_price_to,
+            examples=["moving SL to 0.41", "moving SL to 0.73", "moving SL to 4.98 for CATX",
+                       "moving my SL to 1.88 just below VWAP"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix SL update: moving SL to X%
+        self.register(
+            name="phoenix_sl_move_pct",
+            description="Phoenix SL update - moving SL to percentage",
+            priority=55,
+            pattern=r'moving\s+(?:my\s+)?SL\s+to\s+(\d+)%',
+            parser=self._parse_phoenix_sl_move_pct,
+            examples=["moving SL to 8%"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix target update: first/second/next target (for SYMBOL) PRICE(-PRICE)
+        self.register(
+            name="phoenix_target_update_sym",
+            description="Phoenix target update with symbol",
+            priority=56,
+            pattern=r'(?:first|second|third|next)\s+target(?:r|s)?\s+(?:for\s+)?\$?([A-Z]{1,5})\s+\$?([\d.]+)(?:\s*[-–—]\s*\$?([\d.]+))?',
+            parser=self._parse_phoenix_target_update,
+            examples=["first target for QCLS 4.25-4.35", "targets for NXPL 0.76-0.80",
+                       "second target LGVN 0.72-0.75", "first target KLTO 0.77"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix target update: first/second/next target PRICE(-PRICE) (for SYMBOL)
+        self.register(
+            name="phoenix_target_update_price",
+            description="Phoenix target update price first",
+            priority=56,
+            pattern=r'(?:first|second|third|next)\s+target(?:r|s)?\s+\$?([\d.]+)(?:\s*[-–—]\s*\$?([\d.]+))?\s*(?:for\s+\$?([A-Z]{1,5}))?',
+            parser=self._parse_phoenix_target_update_price_first,
+            examples=["first target 5.85-6", "second target 0.68-0.72", "first target 0.49-0.52",
+                       "first target 2.5", "first target 3.20-3.30 for NCI"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix target update: targets (for SYMBOL) PRICE(-PRICE)
+        self.register(
+            name="phoenix_targets_price",
+            description="Phoenix targets update",
+            priority=56,
+            pattern=r'targets?\s+(?:for\s+\$?([A-Z]{2,5})\s+)?\$?([\d.]+)(?:\s*[-–—]\s*\$?([\d.]+))?(?:\s|$)',
+            parser=self._parse_phoenix_targets_generic,
+            examples=["targets 1.04", "targets 3.25-3.50", "targets for NXPL 0.76-0.80"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix full exit: (Im/I'm) selling SYMBOL (here) — no percentage = 100%
+        self.register(
+            name="phoenix_selling_full",
+            description="Phoenix full exit - selling SYMBOL (no percentage)",
+            priority=66,
+            pattern=r"(?:i['\u2019]?m\s+)?selling\s+\$?((?!HERE|NOW|MORE|SOON|MOST|HALF)[A-Z]{1,5})(?:\s+here)?(?:\s|$|[.,!])",
+            parser=self._parse_phoenix_selling_full,
+            examples=["selling TPET", "Im selling MOBX here", "selling CHOW",
+                       "im selling LIMN", "im selling now AGAE", "selling ABP"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix exit: selling here SYMBOL (no percentage = 100%)
+        self.register(
+            name="phoenix_selling_here_sym",
+            description="Phoenix full exit - selling here SYMBOL",
+            priority=66,
+            pattern=r'selling\s+(?:here\s+)\$?((?!AT|NOW|MORE)[A-Z]{1,5})(?![a-z])',
+            parser=self._parse_phoenix_selling_full,
+            examples=["selling here  SYNX"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix trim: selling SYMBOL X% (reversed order)
+        self.register(
+            name="phoenix_trim_reversed",
+            description="Phoenix trim - selling SYMBOL X% (reversed)",
+            priority=65,
+            pattern=r'(?:selling|sold)\s+\$?((?!HERE|MORE|NOW)[A-Z]{1,5})\s+(?:here\s+)?(\d+)%',
+            parser=self._parse_phoenix_trim_reversed,
+            examples=["selling SUNE 70%", "selling FUSE 70%", "selling GXAI here 80%"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix trim: selling here X% SYMBOL
+        self.register(
+            name="phoenix_trim_here_before_pct",
+            description="Phoenix trim - selling here X% SYMBOL",
+            priority=64,
+            pattern=r'(?:selling|sold)\s+here\s+(\d+)%\s+\$?([A-Z]{1,5})(?![a-z])',
+            parser=self._parse_phoenix_trim,
+            examples=["selling here 80%  FATBB"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix trim: selling another X% (like "more")
+        self.register(
+            name="phoenix_trim_another",
+            description="Phoenix trim - selling another X%",
+            priority=64,
+            pattern=r'(?:selling|sold)\s+another\s+(\d+)%\s*(?:\$?([A-Z]{1,5})(?![a-z]))?',
+            parser=self._parse_phoenix_trim_another,
+            examples=["selling another 10%", "selling another 10% ACXP"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix trim: selling X%here (no space typo)
+        self.register(
+            name="phoenix_trim_nospace",
+            description="Phoenix trim with no space before 'here'",
+            priority=63,
+            pattern=r'(?:selling|sold)\s+(\d+)%here(?:\s+\$?([A-Z]{1,5})(?![a-z]))?',
+            parser=self._parse_phoenix_trim_nospace,
+            examples=["selling 90%here", "selling 90%here SWVL"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix exit: knifed with/out of SYMBOL
+        self.register(
+            name="phoenix_knifed_sym",
+            description="Phoenix knifed exit with symbol",
+            priority=69,
+            pattern=r'(?:(?:^|\s)\$?((?!ANOTHER|JUST|ALSO|BIG|THE|AND|BUT|OTHER)[A-Z]{2,5})\s+)?(?:knifed|kinfe)\s*(?:out\s+(?:of\s+)?(?:my\s+)?(?:position\s+)?)?(?:with\s+)?(?:(?:the\s+)?(?:remaining\s+)?)?(?:\$?((?!TIME|HERE|BIG|ROUGH|MISSED|MY|OUT)[A-Z]{2,5})(?![a-z]))?',
+            parser=self._parse_phoenix_knifed,
+            examples=["CDIO Knifed missed my goal", "knifed", "AUST knifed out of my position",
+                       "another knifed with FUSE", "SGN knifed big time"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix exit: selling SYMBOL here at PRICE (full exit with price)
+        self.register(
+            name="phoenix_selling_at_price",
+            description="Phoenix selling at specific price",
+            priority=65,
+            pattern=r'selling\s+(?:here\s+)?(?:at\s+)?\$?([\d.]+)\s*(?:dont|don)',
+            parser=self._parse_phoenix_selling_at_price,
+            examples=["selling here at 1.98 dont like it breaking even"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix add to position: adding (here/more) SYMBOL (at PRICE)
+        self.register(
+            name="phoenix_adding",
+            description="Phoenix adding to position",
+            priority=67,
+            pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?(?:\$?((?!HERE|MORE|AT|SHARES)[A-Z]{2,5}))(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
+            parser=self._parse_phoenix_adding_v2,
+            examples=["adding here SMX at 11.50", "adding more PHOE shares", "buying more shares JBDI"],
+            flags=re.IGNORECASE
+        )
+
         # =====================================================================
         # PROTRADER FORMAT (Stock conditional orders with entry ranges, SL, targets)
         # =====================================================================
@@ -1655,6 +1839,451 @@ class SignalFormatRegistry:
             "_phoenix_exit": True
         }
     
+    def _parse_phoenix_sl_to_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix SL update: moving SL to entry (breakeven)"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups and groups[0] else None
+
+        result = {
+            "asset": "stock",
+            "action": "SL_UPDATE",
+            "symbol": symbol,
+            "sl_update_type": "breakeven",
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "confidence": 0.95,
+            "_phoenix_sl_update": True,
+            "_sl_to_entry": True,
+        }
+        if not symbol:
+            result["_needs_position_context"] = True
+        return result
+
+    def _parse_phoenix_sl_move_price(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix SL update: moving SL for SYMBOL to PRICE"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups and groups[0] else None
+        try:
+            new_sl = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        except (ValueError, TypeError):
+            new_sl = None
+
+        if not symbol or not new_sl:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "SL_UPDATE",
+            "symbol": symbol,
+            "sl_update_type": "price",
+            "new_stop_loss": new_sl,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "confidence": 0.95,
+            "_phoenix_sl_update": True,
+        }
+
+    def _parse_phoenix_sl_move_price_to(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix SL update: moving SL to PRICE (for SYMBOL)"""
+        groups = match.groups()
+        try:
+            new_sl = float(groups[0]) if groups and groups[0] else None
+        except (ValueError, TypeError):
+            new_sl = None
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+
+        if not new_sl:
+            return None
+
+        result = {
+            "asset": "stock",
+            "action": "SL_UPDATE",
+            "symbol": symbol,
+            "sl_update_type": "price",
+            "new_stop_loss": new_sl,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "confidence": 0.95,
+            "_phoenix_sl_update": True,
+        }
+        if not symbol:
+            result["_needs_position_context"] = True
+        return result
+
+    def _parse_phoenix_sl_move_pct(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix SL update: moving SL to X%"""
+        groups = match.groups()
+        try:
+            sl_pct = float(groups[0]) if groups and groups[0] else None
+        except (ValueError, TypeError):
+            sl_pct = None
+
+        if not sl_pct:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "SL_UPDATE",
+            "sl_update_type": "percent",
+            "new_stop_loss_pct": sl_pct,
+            "symbol": None,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "confidence": 0.90,
+            "_phoenix_sl_update": True,
+            "_needs_position_context": True,
+        }
+
+    def _parse_phoenix_target_update(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix target update: first/second target for SYMBOL PRICE-PRICE"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups and groups[0] else None
+        try:
+            target_low = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        except (ValueError, TypeError):
+            target_low = None
+        try:
+            target_high = float(groups[2]) if len(groups) > 2 and groups[2] else None
+        except (ValueError, TypeError):
+            target_high = None
+
+        if not symbol or not target_low:
+            return None
+
+        target_num_match = re.search(r'(first|second|third|next)', text, re.IGNORECASE)
+        target_tier = {'first': 1, 'second': 2, 'third': 3, 'next': 2}.get(
+            target_num_match.group(1).lower() if target_num_match else 'first', 1
+        )
+
+        return {
+            "asset": "stock",
+            "action": "TARGET_UPDATE",
+            "symbol": symbol,
+            "target_tier": target_tier,
+            "target_price": target_high or target_low,
+            "target_low": target_low,
+            "target_high": target_high,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "confidence": 0.85,
+            "_phoenix_target_update": True,
+        }
+
+    def _parse_phoenix_target_update_price_first(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix target update: first target PRICE-PRICE (for SYMBOL)"""
+        groups = match.groups()
+        try:
+            target_low = float(groups[0]) if groups and groups[0] else None
+        except (ValueError, TypeError):
+            target_low = None
+        try:
+            target_high = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        except (ValueError, TypeError):
+            target_high = None
+        symbol = groups[2].upper() if len(groups) > 2 and groups[2] else None
+
+        if not target_low:
+            return None
+
+        target_num_match = re.search(r'(first|second|third|next)', text, re.IGNORECASE)
+        target_tier = {'first': 1, 'second': 2, 'third': 3, 'next': 2}.get(
+            target_num_match.group(1).lower() if target_num_match else 'first', 1
+        )
+
+        result = {
+            "asset": "stock",
+            "action": "TARGET_UPDATE",
+            "symbol": symbol,
+            "target_tier": target_tier,
+            "target_price": target_high or target_low,
+            "target_low": target_low,
+            "target_high": target_high,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "confidence": 0.85,
+            "_phoenix_target_update": True,
+        }
+        if not symbol:
+            result["_needs_position_context"] = True
+        return result
+
+    def _parse_phoenix_targets_generic(self, match: re.Match, text: str) -> Optional[Dict]:
+        groups = match.groups()
+        symbol = groups[0].upper() if groups[0] else None
+        try:
+            target_low = float(groups[1]) if groups[1] else None
+        except (ValueError, TypeError):
+            target_low = None
+        try:
+            target_high = float(groups[2]) if len(groups) > 2 and groups[2] else None
+        except (ValueError, TypeError):
+            target_high = None
+
+        if not target_low:
+            return None
+
+        target_num_match = re.search(r'(first|second|third|next)', text, re.IGNORECASE)
+        target_tier = {'first': 1, 'second': 2, 'third': 3, 'next': 2}.get(
+            target_num_match.group(1).lower() if target_num_match else 'first', 1
+        )
+
+        result = {
+            "asset": "stock",
+            "action": "TARGET_UPDATE",
+            "symbol": symbol,
+            "target_tier": target_tier,
+            "target_price": target_high or target_low,
+            "target_low": target_low,
+            "target_high": target_high,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "confidence": 0.85,
+            "_phoenix_target_update": True,
+        }
+        if not symbol:
+            result["_needs_position_context"] = True
+        return result
+
+    def _parse_phoenix_selling_full(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix full exit: selling SYMBOL (no percentage = 100%)"""
+        groups = match.groups()
+        symbol = None
+        for g in groups:
+            if g and re.match(r'^[A-Z]{1,5}$', g, re.IGNORECASE):
+                symbol = g.upper()
+                break
+
+        if not symbol:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "confidence": 0.90,
+            "_phoenix_exit": True
+        }
+
+    def _parse_phoenix_trim_reversed(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trim reversed: selling SYMBOL X%"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups and groups[0] else None
+        try:
+            percentage = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        except (ValueError, TypeError):
+            percentage = None
+
+        if not symbol or not percentage:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "trim_percentage": percentage,
+            "is_full_exit": percentage >= 100,
+            "confidence": 0.95,
+            "_phoenix_trim": True,
+        }
+
+    def _parse_phoenix_trim_another(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trim: selling another X% (like 'more')"""
+        groups = match.groups()
+        try:
+            percentage = float(groups[0]) if groups and groups[0] else None
+        except (ValueError, TypeError):
+            percentage = None
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+
+        if not percentage:
+            return None
+
+        result = {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "trim_percentage": percentage,
+            "is_full_exit": False,
+            "confidence": 0.90,
+            "_phoenix_trim": True,
+        }
+        if not symbol:
+            result["_needs_position_context"] = True
+        return result
+
+    def _parse_phoenix_trim_nospace(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trim with no space: selling 90%here"""
+        groups = match.groups()
+        try:
+            percentage = float(groups[0]) if groups and groups[0] else None
+        except (ValueError, TypeError):
+            percentage = None
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+
+        if not percentage:
+            return None
+
+        result = {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "trim_percentage": percentage,
+            "is_full_exit": percentage >= 100,
+            "confidence": 0.90,
+            "_phoenix_trim": True,
+        }
+        if not symbol:
+            result["_needs_position_context"] = True
+        return result
+
+    def _parse_phoenix_knifed(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix knifed exit: SYMBOL knifed / knifed with SYMBOL"""
+        groups = match.groups()
+        symbol = None
+        for g in groups:
+            if g and re.match(r'^[A-Z]{1,5}$', g, re.IGNORECASE):
+                symbol = g.upper()
+                break
+
+        result = {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "stop_loss_hit": True,
+            "confidence": 0.80,
+            "_phoenix_exit": True,
+            "_phoenix_knifed": True,
+        }
+        if not symbol:
+            result["_needs_position_context"] = True
+        return result
+
+    def _parse_phoenix_selling_at_price(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix selling at price: selling here at 1.98"""
+        groups = match.groups()
+        try:
+            price = float(groups[0]) if groups and groups[0] else None
+        except (ValueError, TypeError):
+            price = None
+
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": None,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": False if price else True,
+            "is_full_exit": True,
+            "confidence": 0.85,
+            "_phoenix_exit": True,
+            "_needs_position_context": True,
+        }
+
+    def _parse_phoenix_adding(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix adding to position: adding more SYMBOL shares"""
+        groups = match.groups()
+        symbol = None
+        price = None
+        for g in groups:
+            if g and re.match(r'^[A-Z]{1,5}$', g, re.IGNORECASE):
+                symbol = g.upper()
+            elif g and re.match(r'^[\d.]+$', g):
+                try:
+                    price = float(g)
+                except (ValueError, TypeError):
+                    pass
+
+        if not symbol:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "symbol": symbol,
+            "price": price,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "is_market_order": True if not price else False,
+            "confidence": 0.80,
+            "_phoenix_entry": True,
+            "_phoenix_add_to_position": True,
+        }
+
+    def _parse_phoenix_adding_v2(self, match: re.Match, text: str) -> Optional[Dict]:
+        groups = match.groups()
+        symbol = groups[0].upper() if groups[0] else None
+        price = None
+        try:
+            price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        except (ValueError, TypeError):
+            pass
+
+        if not symbol:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "symbol": symbol,
+            "price": price,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "is_market_order": True if not price else False,
+            "confidence": 0.80,
+            "_phoenix_entry": True,
+            "_phoenix_add_to_position": True,
+        }
+
     def _extract_protrader_sl(self, text: str) -> Optional[float]:
         """Extract stop loss price from protrader text."""
         sl_match = re.search(r'SL\s+(?:below\s*:?\s*)\$?([\d.]+)', text, re.IGNORECASE)
