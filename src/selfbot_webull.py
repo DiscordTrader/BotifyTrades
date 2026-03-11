@@ -3669,48 +3669,67 @@ class WebullBroker:
                     net_liq = 0.0
                     bp_source = 'unknown'
                     
-                    cached_info = None
-                    try:
-                        from src.services.broker_health_monitor import get_health_monitor
-                        _hm = get_health_monitor()
-                        cached_info = _hm.get_cached_account_info(self.name)
-                    except Exception:
-                        pass
-                    
-                    if cached_info:
-                        options_bp = float(cached_info.get('options_buying_power', 0) or 0)
-                        buying_power = float(cached_info.get('buying_power', 0) or 0)
-                        net_liq = float(cached_info.get('portfolio_value', 0) or 0)
-                        bp_source = 'cached'
-                        effective_bp = options_bp if options_bp > 0 else buying_power
-                        print(f"[FUNDS] ⚡ Using cached BP (0ms): Options=${options_bp:.2f}, Stock=${buying_power:.2f}, Using=${effective_bp:.2f}")
-                    else:
-                        print(f"[FUNDS] Cache miss — falling back to live API for options BP")
-                        account_info = wb.get_account()
-                        account_members = account_info.get('accountMembers', [])
-                        
-                        account_data = {}
-                        if account_members:
-                            for item in account_members:
-                                if isinstance(item, dict) and 'key' in item and 'value' in item:
-                                    account_data[item['key']] = item['value']
-                        
+                    _inner_sizing_mode = kwargs.get('_sizing_mode', 'live')
+                    _sod_bp_used = False
+                    if _inner_sizing_mode in ('start_of_day', 'pre_market'):
                         try:
-                            options_bp = float(account_data.get('optionBuyingPower', 0))
-                        except (ValueError, TypeError):
+                            from src.services.sod_balance_cache import get_sod_cache
+                            _sod = get_sod_cache()
+                            _sod_snap = _sod.get_snapshot(self.name, snapshot_type=_inner_sizing_mode)
+                            if _sod_snap:
+                                options_bp = float(_sod_snap.get('options_buying_power', 0) or 0)
+                                buying_power = float(_sod_snap.get('buying_power', 0) or 0)
+                                net_liq = float(_sod_snap.get('portfolio_value', 0) or 0)
+                                bp_source = 'PRE-MARKET 4AM' if _inner_sizing_mode == 'pre_market' else 'START-OF-DAY'
+                                effective_bp = options_bp if options_bp > 0 else buying_power
+                                _sod_bp_used = True
+                                print(f"[FUNDS] 📸 Using {bp_source} snapshot: Options=${options_bp:.2f}, Stock=${buying_power:.2f}, Using=${effective_bp:.2f}")
+                        except Exception as _sod_e:
+                            print(f"[FUNDS] SOD snapshot error: {_sod_e} — falling back to live")
+                    
+                    if not _sod_bp_used:
+                        cached_info = None
+                        try:
+                            from src.services.broker_health_monitor import get_health_monitor
+                            _hm = get_health_monitor()
+                            cached_info = _hm.get_cached_account_info(self.name)
+                        except Exception:
                             pass
-                        for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower']:
-                            if field in account_data:
-                                try:
-                                    buying_power = float(account_data[field])
-                                    if buying_power > 0:
-                                        bp_source = field
-                                        break
-                                except (ValueError, TypeError):
-                                    continue
-                        effective_bp = options_bp if options_bp > 0 else buying_power
-                        net_liq = float(account_data.get('netLiquidation', 0))
-                        print(f"[FUNDS] Options BP: ${options_bp:.2f}, Cash BP: ${buying_power:.2f} (from '{bp_source}'), Using: ${effective_bp:.2f}")
+                        
+                        if cached_info:
+                            options_bp = float(cached_info.get('options_buying_power', 0) or 0)
+                            buying_power = float(cached_info.get('buying_power', 0) or 0)
+                            net_liq = float(cached_info.get('portfolio_value', 0) or 0)
+                            bp_source = 'cached'
+                            effective_bp = options_bp if options_bp > 0 else buying_power
+                            print(f"[FUNDS] ⚡ Using cached BP (0ms): Options=${options_bp:.2f}, Stock=${buying_power:.2f}, Using=${effective_bp:.2f}")
+                        else:
+                            print(f"[FUNDS] Cache miss — falling back to live API for options BP")
+                            account_info = wb.get_account()
+                            account_members = account_info.get('accountMembers', [])
+                            
+                            account_data = {}
+                            if account_members:
+                                for item in account_members:
+                                    if isinstance(item, dict) and 'key' in item and 'value' in item:
+                                        account_data[item['key']] = item['value']
+                            
+                            try:
+                                options_bp = float(account_data.get('optionBuyingPower', 0))
+                            except (ValueError, TypeError):
+                                pass
+                            for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower']:
+                                if field in account_data:
+                                    try:
+                                        buying_power = float(account_data[field])
+                                        if buying_power > 0:
+                                            bp_source = field
+                                            break
+                                    except (ValueError, TypeError):
+                                        continue
+                            effective_bp = options_bp if options_bp > 0 else buying_power
+                            net_liq = float(account_data.get('netLiquidation', 0))
+                            print(f"[FUNDS] Options BP: ${options_bp:.2f}, Cash BP: ${buying_power:.2f} (from '{bp_source}'), Using: ${effective_bp:.2f}")
                     
                     order_cost = qty * effective_price * 100
                     
@@ -4402,16 +4421,33 @@ class WebullBroker:
                     account_data = {}
                     account_info = {}
                     
-                    try:
-                        from src.services.broker_health_monitor import get_health_monitor
-                        _hm = get_health_monitor()
-                        _cached = _hm.get_cached_account_info(self.name)
-                        if _cached:
-                            buying_power = float(_cached.get('buying_power', 0) or 0)
-                            _bp_cached = True
-                            print(f"[FUNDS] ⚡ Stock BP from cache (0ms): ${buying_power:.2f}")
-                    except Exception:
-                        pass
+                    _inner_sizing_mode = kwargs.get('_sizing_mode', 'live')
+                    _sod_bp_used = False
+                    if _inner_sizing_mode in ('start_of_day', 'pre_market'):
+                        try:
+                            from src.services.sod_balance_cache import get_sod_cache
+                            _sod = get_sod_cache()
+                            _sod_snap = _sod.get_snapshot(self.name, snapshot_type=_inner_sizing_mode)
+                            if _sod_snap:
+                                buying_power = float(_sod_snap.get('buying_power', 0) or 0)
+                                _bp_cached = True
+                                _sod_bp_used = True
+                                _sod_label = 'PRE-MARKET 4AM' if _inner_sizing_mode == 'pre_market' else 'START-OF-DAY'
+                                print(f"[FUNDS] 📸 Stock BP from {_sod_label} snapshot: ${buying_power:.2f}")
+                        except Exception as _sod_e:
+                            print(f"[FUNDS] SOD snapshot error: {_sod_e} — falling back to live")
+                    
+                    if not _sod_bp_used:
+                        try:
+                            from src.services.broker_health_monitor import get_health_monitor
+                            _hm = get_health_monitor()
+                            _cached = _hm.get_cached_account_info(self.name)
+                            if _cached:
+                                buying_power = float(_cached.get('buying_power', 0) or 0)
+                                _bp_cached = True
+                                print(f"[FUNDS] ⚡ Stock BP from cache (0ms): ${buying_power:.2f}")
+                        except Exception:
+                            pass
                     
                     if not _bp_cached:
                         print(f"[FUNDS] Cache miss — falling back to live API for stock BP")
@@ -15092,6 +15128,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _option_kwargs['_trigger_price'] = signal.get('_trigger_price')
                         _option_kwargs['_qot_price'] = signal.get('_qot_price')
                         _option_kwargs['_is_market_order'] = signal.get('is_market_order', False)
+                        if signal.get('_sizing_mode') in ('start_of_day', 'pre_market'):
+                            _option_kwargs['_sizing_mode'] = signal['_sizing_mode']
                         if _signal_price_fallback:
                             _option_kwargs['_signal_price_fallback'] = _signal_price_fallback
                         if _skip_retry:
@@ -15318,6 +15356,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _stk_kwargs['_conditional_order_id'] = signal.get('_conditional_order_id')
                         _stk_kwargs['_conditional_expires_at'] = signal.get('_conditional_expires_at')
                         _stk_kwargs['channel_id'] = signal.get('channel_id')
+                    if signal.get('_sizing_mode') in ('start_of_day', 'pre_market'):
+                        _stk_kwargs['_sizing_mode'] = signal['_sizing_mode']
                     result = await broker_instance.place_stock_order(**_stk_kwargs)
                 else:
                     result = await broker_instance.place_stock_order(
