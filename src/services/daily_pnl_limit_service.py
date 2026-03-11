@@ -38,6 +38,7 @@ class DailyPnLLimitService:
         self._states = {}
         self._warned = set()
         self._last_reset_date = None
+        self._last_tracking_log_ts = {}
         self._load_from_db()
 
     def _load_from_db(self):
@@ -103,12 +104,25 @@ class DailyPnLLimitService:
         from src.services.sod_balance_cache import get_sod_cache
         sod_cache = get_sod_cache()
         snapshot = sod_cache.get_snapshot(normalized, snapshot_type=snapshot_type)
+
+        if not snapshot and snapshot_type == 'start_of_day':
+            snapshot = sod_cache.get_snapshot(normalized, snapshot_type='pre_market')
+            if snapshot:
+                print(f"[DAILY P&L] {normalized}: SOD snapshot not yet available, using pre-market snapshot as fallback")
+
         if not snapshot:
             return
 
         sod_equity = snapshot.get('portfolio_value', 0)
         if sod_equity <= 0:
             return
+
+        if snapshot_type == 'start_of_day':
+            pre_market_snap = sod_cache.get_snapshot(normalized, snapshot_type='pre_market')
+            if pre_market_snap:
+                pre_market_equity = pre_market_snap.get('portfolio_value', 0)
+                if pre_market_equity > sod_equity > 0:
+                    sod_equity = pre_market_equity
 
         current_val = float(current_portfolio_value or 0)
         if current_val <= 0:
@@ -117,6 +131,13 @@ class DailyPnLLimitService:
         daily_pnl = current_val - sod_equity
         daily_pnl_pct = (daily_pnl / sod_equity) * 100.0
         today = self._today_str()
+
+        import time as _time
+        _now_ts = _time.monotonic()
+        _last_log = self._last_tracking_log_ts.get(normalized, 0)
+        if _now_ts - _last_log >= 300:
+            print(f"[DAILY P&L] {normalized}: SOD=${sod_equity:,.2f} → Now=${current_val:,.2f} | P&L: ${daily_pnl:+,.2f} ({daily_pnl_pct:+.1f}%)")
+            self._last_tracking_log_ts[normalized] = _now_ts
 
         with self._lock:
             state = self._states.get(normalized, {})

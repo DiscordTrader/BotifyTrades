@@ -1512,7 +1512,30 @@ class BaseConditionalOrderService(ABC):
             pass  # Circuit breaker not available, continue with execution
         except Exception as cb_err:
             self._log(f"Circuit breaker check error: {cb_err}")
-        
+
+        try:
+            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+            pnl_service = get_daily_pnl_service()
+            broker_primary = order.get('broker_primary', '')
+            if broker_primary:
+                pnl_check = pnl_service.check_broker_locked(broker_primary)
+                if pnl_check.get('locked'):
+                    lock_type = pnl_check.get('lock_type', 'unknown')
+                    pnl = pnl_check.get('daily_pnl', 0)
+                    pnl_pct = pnl_check.get('daily_pnl_pct', 0)
+                    self._log(f"⛔ BLOCKED #{order_id} {symbol}: Daily P&L {lock_type} limit reached — P&L: ${pnl:+,.2f} ({pnl_pct:+.1f}%)")
+                    update_conditional_order_status(
+                        order_id,
+                        'PENDING_MONITOR',
+                        event='DAILY_PNL_BLOCK',
+                        details=f"Daily P&L {lock_type} limit reached: ${pnl:+,.2f} ({pnl_pct:+.1f}%)"
+                    )
+                    return
+        except ImportError:
+            pass
+        except Exception as dpnl_err:
+            self._log(f"Daily P&L check error: {dpnl_err}")
+
         slippage_enabled = order.get('slippage_protection_enabled', 0)
         slippage_max_pct = order.get('slippage_max_pct', 0.0) or 0.0
         original_trigger = order.get('trigger_price', 0)

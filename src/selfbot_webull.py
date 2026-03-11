@@ -1676,6 +1676,33 @@ if ENABLE_RISK_MGMT:
 else:
     print(f"[CONFIG] Risk management DISABLED")
 
+try:
+    from gui_app.database import get_global_risk_settings as _get_grs
+    _grs = _get_grs()
+    _dpnl_enabled = bool(_grs.get('daily_pnl_limit_enabled'))
+    if _dpnl_enabled:
+        _loss_d = float(_grs.get('daily_loss_limit_dollar', 0) or _grs.get('global_daily_loss_limit', 0))
+        _loss_p = float(_grs.get('daily_loss_limit_pct', 0))
+        _prof_d = float(_grs.get('daily_profit_limit', 0))
+        _prof_p = float(_grs.get('daily_profit_limit_pct', 0))
+        _reset_t = _grs.get('daily_pnl_reset_time', '09:30')
+        _warn_p = float(_grs.get('daily_pnl_warning_pct', 80))
+        _limits_parts = []
+        if _loss_d > 0:
+            _limits_parts.append(f"Loss: ${_loss_d:,.2f}")
+        if _loss_p > 0:
+            _limits_parts.append(f"Loss: {_loss_p:.1f}%")
+        if _prof_d > 0:
+            _limits_parts.append(f"Profit: ${_prof_d:,.2f}")
+        if _prof_p > 0:
+            _limits_parts.append(f"Profit: {_prof_p:.1f}%")
+        _limits_str = ', '.join(_limits_parts) if _limits_parts else 'No limits configured'
+        print(f"[CONFIG] ✓ Daily P&L Limits ENABLED — Limits: [{_limits_str}] | Reset: {_reset_t} | Warning: {_warn_p:.0f}%")
+    else:
+        print(f"[CONFIG] Daily P&L Limits DISABLED")
+except Exception as _dpnl_cfg_err:
+    print(f"[CONFIG] Daily P&L Limits: Could not load settings ({_dpnl_cfg_err})")
+
 # AI Analysis - Post-trade analysis and sentiment tracking
 print("[CONFIG] Loading AI analysis settings...")
 
