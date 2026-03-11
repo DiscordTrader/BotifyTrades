@@ -1819,6 +1819,7 @@ class BrokerSyncService:
         # Build broker_override lookup for Pass 3 fallback
         # Maps broker_name -> [(channel_discord_id, channel_db_id), ...]
         broker_to_channels = {}
+        all_channels = []
         try:
             all_channels = self.db.get_channels()
             for ch in all_channels:
@@ -1840,8 +1841,30 @@ class BrokerSyncService:
         except Exception as e:
             print(f"[SYNC] Warning: Could not load broker_override mappings: {e}")
         
+        def _channel_has_broker_enabled(channel_id: str, target_broker: str) -> bool:
+            """Check if a channel actually has this broker in its enabled_brokers list."""
+            try:
+                for ch in all_channels:
+                    if str(ch.get('discord_channel_id')) == str(channel_id):
+                        enabled_raw = ch.get('enabled_brokers') or '[]'
+                        if isinstance(enabled_raw, str):
+                            import json as _json_check
+                            enabled_list = _json_check.loads(enabled_raw)
+                        else:
+                            enabled_list = enabled_raw
+                        enabled_upper = [b.upper() for b in enabled_list]
+                        return target_broker.upper() in enabled_upper
+            except Exception:
+                pass
+            return False
+
         def find_origin_channel(position: Dict) -> str:
-            """Find the origin channel_id for a broker position using multi-pass matching"""
+            """Find the origin channel_id for a broker position using multi-pass matching.
+            
+            IMPORTANT: Only inherits channel_id if that channel actually has this broker
+            in its enabled_brokers list. Prevents cross-broker channel attribution
+            (e.g. WEBULL_PAPER positions inheriting phoenix channel which only uses WEBULL/SCHWAB).
+            """
             pos_key = self._build_position_key(
                 position['symbol'],
                 position.get('asset_type', 'stock'),
@@ -1855,7 +1878,9 @@ class BrokerSyncService:
             if pos_order_id:
                 for t in discord_trades_with_channel:
                     if t.get('order_id') == pos_order_id:
-                        return t.get('channel_id')
+                        ch_id = t.get('channel_id')
+                        if ch_id and _channel_has_broker_enabled(ch_id, broker_name):
+                            return ch_id
             
             # Pass 2: Match by position key (symbol + option details) with quantity consideration
             pos_qty = float(position.get('quantity', 0))
@@ -1868,26 +1893,18 @@ class BrokerSyncService:
                     t.get('expiry'),
                     t.get('call_put')
                 )
-                if trade_key == pos_key:
+                if trade_key == pos_key and self._is_broker_match(broker_name, t.get('broker', '')):
                     matching_trades.append(t)
             
             if matching_trades:
-                # Prefer trades with matching or similar quantity (within 20%)
                 for t in matching_trades:
                     trade_qty = float(t.get('quantity', 0))
                     if trade_qty > 0 and abs(trade_qty - pos_qty) / trade_qty <= 0.2:
                         return t.get('channel_id')
                 
-                # Fallback: most recent trade with matching key
                 return matching_trades[0].get('channel_id')
             
-            # Pass 3: DISABLED - Do NOT auto-assign based on broker_override
-            # Manual trades should NOT inherit channel attribution just because
-            # they use the same broker as a channel. This caused incorrect
-            # "member-alerts" attribution for manually executed Robinhood trades.
-            # If there's no order_id or position key match, the trade is truly manual.
-            
-            return None  # No match found - this is a manual trade
+            return None
         
         # Build set of position keys that already have pending SELL/STC orders
         # (exit order is in-flight; re-importing would create a new trade and trigger duplicate STC)
