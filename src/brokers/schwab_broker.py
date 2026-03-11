@@ -57,6 +57,8 @@ class SchwabBroker(BrokerInterface):
         self._last_valid_positions = []
         self._last_valid_positions_time = 0
         self._position_cache_ttl = 60
+        self._consecutive_zero_positions = 0
+        self._position_cache_invalidated = False
         
         self._global_429_until = 0
         self._consecutive_429s = 0
@@ -839,7 +841,9 @@ class SchwabBroker(BrokerInterface):
                 if len(result) > 0 or not self._last_valid_positions:
                     self._last_positions_simple = dict(result)
                 elif len(result) == 0 and hasattr(self, '_last_positions_simple') and self._last_positions_simple:
-                    if (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                    if self._position_cache_invalidated or self._consecutive_zero_positions >= 2:
+                        self._last_positions_simple = {}
+                    elif (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                         print(f"[{self.name}] ⚠️ get_positions returned 0 but cache exists - using cached")
                         return dict(self._last_positions_simple)
                 return result
@@ -935,6 +939,9 @@ class SchwabBroker(BrokerInterface):
                 order_id = response.headers.get('Location', '').split('/')[-1]
                 if self._data_hub:
                     self._data_hub.invalidate_all()
+                if is_exit:
+                    self._position_cache_invalidated = True
+                    self._consecutive_zero_positions = 0
                 return OrderResult(
                     success=True,
                     order_id=order_id,
@@ -1159,6 +1166,9 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] ✅ Order accepted by Schwab (order_id={order_id})")
                 if self._data_hub:
                     self._data_hub.invalidate_all()
+                if is_exit:
+                    self._position_cache_invalidated = True
+                    self._consecutive_zero_positions = 0
 
                 _pos_key = kwargs.get('position_key') or kwargs.get('_exit_marker_key')
                 try:
@@ -1691,14 +1701,29 @@ class SchwabBroker(BrokerInterface):
                 if len(result) > 0:
                     self._last_valid_positions = list(result)
                     self._last_valid_positions_time = time.time()
+                    self._consecutive_zero_positions = 0
+                    self._position_cache_invalidated = False
                     if self._data_hub:
                         try:
                             self._data_hub.update_positions(result, detailed=True, source="rest")
                         except Exception:
                             pass
-                elif len(result) == 0 and self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
-                    print(f"[{self.name}] ⚠️ API returned 0 positions but cache has {len(self._last_valid_positions)} - returning cached data")
-                    return list(self._last_valid_positions)
+                elif len(result) == 0 and self._last_valid_positions:
+                    self._consecutive_zero_positions += 1
+                    if self._position_cache_invalidated or self._consecutive_zero_positions >= 2:
+                        print(f"[{self.name}] ✓ Accepting 0 positions (consecutive={self._consecutive_zero_positions}, invalidated={self._position_cache_invalidated})")
+                        self._last_valid_positions = []
+                        self._last_valid_positions_time = 0
+                        if hasattr(self, '_last_positions_simple'):
+                            self._last_positions_simple = {}
+                        if self._data_hub:
+                            try:
+                                self._data_hub.update_positions([], detailed=True, source="rest_cleared")
+                            except Exception:
+                                pass
+                    elif (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
+                        print(f"[{self.name}] ⚠️ API returned 0 positions but cache has {len(self._last_valid_positions)} - returning cached data (consecutive={self._consecutive_zero_positions})")
+                        return list(self._last_valid_positions)
                 
                 return result
                     

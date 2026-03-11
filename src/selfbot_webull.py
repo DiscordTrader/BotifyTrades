@@ -17762,7 +17762,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[RISK] ⚠️ Could not track pending order: {e}")
                     
                     if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL') and signal.get('channel_id'):
-                        _risk_broker_used = (broker_name_used if broker_name_used else None) or signal.get('broker', '') or ''
+                        try:
+                            _risk_broker_used = broker_name_used or ''
+                        except (NameError, UnboundLocalError):
+                            _risk_broker_used = ''
+                        if not _risk_broker_used:
+                            _risk_broker_used = signal.get('broker', '') or ''
                         if 'alpaca' not in _risk_broker_used.lower():
                             try:
                                 from gui_app.lot_matcher import get_matcher
