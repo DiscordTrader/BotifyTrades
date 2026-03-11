@@ -997,10 +997,13 @@ class BrokerSyncService:
         """
         Reconcile normalized broker data with database trades
         
-        Two-stage process:
+        Three-stage process:
+        0. Pre-enrich option positions with missing metadata from DB trades
         1. Update existing database trades (PENDING→OPEN→CLOSED)
         2. Import broker-only positions as synthetic trades
         """
+        
+        self._pre_enrich_option_positions(broker_name, normalized_data)
         
         # Stage 1: Update existing database trades
         await self._update_existing_trades(broker_name, normalized_data)
@@ -1008,6 +1011,52 @@ class BrokerSyncService:
         # Stage 2: Import manual trades (positions not tracked by bot)
         await self._import_manual_trades(broker_name, normalized_data)
     
+    def _pre_enrich_option_positions(self, broker_name: str, normalized_data: Dict[str, Any]):
+        """Pre-enrich option positions that have missing strike/expiry/call_put.
+        
+        Runs BEFORE Stage 1 so that _update_existing_trades builds correct
+        position keys and doesn't falsely cancel tracked trades due to
+        key mismatches (e.g. SPY_stock vs SPY_677.0_2026-03-10_P).
+        """
+        positions = normalized_data.get('positions', [])
+        if not positions:
+            return
+        
+        recovery_trades = None
+        
+        for position in positions:
+            asset_type = position.get('asset_type', 'stock')
+            if asset_type != 'option':
+                continue
+            
+            strike = position.get('strike')
+            expiry = position.get('expiry')
+            call_put = position.get('call_put')
+            
+            if strike and float(strike) != 0 and expiry and call_put:
+                continue
+            
+            symbol = (position.get('symbol') or '').upper()
+            if not symbol:
+                continue
+            
+            if recovery_trades is None:
+                recovery_trades = self.db.get_trades(status='OPEN', limit=500) + self.db.get_trades(status='PENDING', limit=500)
+            
+            for t in recovery_trades:
+                if (t.get('symbol', '').upper() == symbol and
+                    self._is_broker_match(broker_name, t.get('broker', '')) and
+                    t.get('direction', '').upper() == 'BTO'):
+                    t_strike = t.get('strike')
+                    t_expiry = t.get('expiry')
+                    t_cp = t.get('call_put') or t.get('opt_type')
+                    if t_strike and float(t_strike) > 0 and t_expiry and t_cp:
+                        position['strike'] = t_strike
+                        position['expiry'] = t_expiry
+                        position['call_put'] = t_cp
+                        print(f"[SYNC] 💡 Pre-enriched {symbol} option metadata from trade #{t.get('id')}: strike={t_strike}, expiry={t_expiry}, cp={t_cp}")
+                        break
+
     def _is_broker_match(self, broker_name: str, trade_broker_raw: str) -> bool:
         """Check if a trade's broker matches the sync broker name.
         

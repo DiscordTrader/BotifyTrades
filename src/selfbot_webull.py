@@ -4640,13 +4640,36 @@ class WebullBroker:
                         )
                         
                         if is_option:
-                            ticker_id = pos.get('tickerId', 0)
+                            ticker_id = pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
                             symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
                             
-                            strike = float(pos.get('strikePrice', 0))
+                            strike = float(pos.get('strikePrice', 0) or pos.get('optionExercisePrice', 0) or pos.get('strike', 0) or 0)
                             option_id = pos.get('optionId', ticker_id)
-                            raw_direction = (pos.get('direction', '') or '').lower()
-                            direction = 'C' if raw_direction == 'call' else ('P' if raw_direction == 'put' else '')
+                            raw_direction = (pos.get('direction', '') or pos.get('optionType', '') or pos.get('callPut', '') or pos.get('right', '') or '').upper()
+                            if raw_direction in ('CALL', 'C'):
+                                direction = 'C'
+                            elif raw_direction in ('PUT', 'P'):
+                                direction = 'P'
+                            else:
+                                direction = raw_direction[:1] if raw_direction else ''
+                            
+                            if (not strike or strike == 0.0) and (option_id or ticker_id):
+                                try:
+                                    import time as _t
+                                    search_id = str(option_id or ticker_id)
+                                    for _ck, _cv in list(self._option_id_cache.items()):
+                                        if str(_cv.get('option_id')) == search_id:
+                                            ttl = 28800 if _cv.get('prewarm') else self._option_id_cache_ttl
+                                            if (_t.time() - _cv['cached_at']) < ttl:
+                                                parts = _ck.rsplit('_', 3)
+                                                if len(parts) == 4:
+                                                    strike = float(parts[1])
+                                                    pos['expireDate'] = parts[2]
+                                                    direction = parts[3]
+                                                    print(f"[{self.name}] ✓ Reverse cache enriched position: {symbol} {strike} {direction} {parts[2]}")
+                                            break
+                                except Exception:
+                                    pass
                             
                             raw_expiry = pos.get('expireDate', '')
                             expiry = ''
