@@ -1008,7 +1008,7 @@ class BaseConditionalOrderService(ABC):
         trigger_type = parsed_signal.get('trigger_type', 'over')
         
         # ADJUST OFFSET: Apply channel-level trigger offset if configured
-        # Supports both percentage and dollar-value modes
+        # Falls back to global conditional order settings if channel has no offset
         from gui_app.database import compute_adjusted_trigger
         
         offset_mode = channel_settings.get('trigger_offset_mode', 'percent') or 'percent'
@@ -1017,7 +1017,32 @@ class BaseConditionalOrderService(ABC):
         else:
             offset_value = channel_settings.get('trigger_offset_percent', 0.0) or 0.0
         
-        print(f"[CONDITIONAL] Channel {channel_id} trigger offset: {offset_value} ({offset_mode})", flush=True)
+        if offset_value == 0:
+            try:
+                from gui_app.database import get_connection
+                _g_conn = get_connection()
+                _g_cursor = _g_conn.cursor()
+                _g_cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'conditional_order_trigger_offset_%'")
+                global_offset_settings = {r['key']: r['value'] for r in _g_cursor.fetchall()}
+                global_mode = global_offset_settings.get('conditional_order_trigger_offset_mode', 'percent') or 'percent'
+                if global_mode == 'dollar':
+                    global_val = global_offset_settings.get('conditional_order_trigger_offset_value', '0')
+                else:
+                    global_val = global_offset_settings.get('conditional_order_trigger_offset_percent', '0')
+                try:
+                    global_val_float = float(global_val)
+                except (ValueError, TypeError):
+                    global_val_float = 0.0
+                if global_val_float != 0:
+                    offset_mode = global_mode
+                    offset_value = global_val_float
+                    print(f"[CONDITIONAL] Channel {channel_id} trigger offset: {offset_value} ({offset_mode}) [from global settings]", flush=True)
+                else:
+                    print(f"[CONDITIONAL] Channel {channel_id} trigger offset: {offset_value} ({offset_mode})", flush=True)
+            except Exception as _g_err:
+                print(f"[CONDITIONAL] Channel {channel_id} trigger offset: {offset_value} ({offset_mode}) [global fallback error: {_g_err}]", flush=True)
+        else:
+            print(f"[CONDITIONAL] Channel {channel_id} trigger offset: {offset_value} ({offset_mode})", flush=True)
         
         if offset_value != 0:
             adjusted_price = compute_adjusted_trigger(trigger_price, trigger_type, offset_mode, offset_value)

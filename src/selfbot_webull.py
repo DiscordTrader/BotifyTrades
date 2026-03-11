@@ -4399,6 +4399,8 @@ class WebullBroker:
                 try:
                     buying_power = 0.0
                     _bp_cached = False
+                    account_data = {}
+                    account_info = {}
                     
                     try:
                         from src.services.broker_health_monitor import get_health_monitor
