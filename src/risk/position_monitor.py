@@ -1101,12 +1101,32 @@ class RiskManager:
 
     def _update_monitored_symbols(self, positions):
         symbols = set()
+        non_streaming_symbols = set()
         for p in positions:
-            symbols.add(p.symbol.upper())
+            sym = p.symbol.upper()
+            symbols.add(sym)
             if hasattr(p, 'raw_symbol') and p.raw_symbol:
                 symbols.add(p.raw_symbol.upper())
+            broker_upper = (p.broker or '').upper()
+            if 'WEBULL' not in broker_upper and broker_upper != 'SCHWAB':
+                if p.asset != 'option':
+                    non_streaming_symbols.add(sym)
         with self._monitored_symbols_lock:
             self._monitored_symbols = symbols
+        if non_streaming_symbols:
+            self._request_cross_broker_subscriptions(non_streaming_symbols)
+
+    def _request_cross_broker_subscriptions(self, symbols):
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            if hub.is_streaming():
+                already = hub.get_subscribed_symbols()
+                needed = symbols - already
+                if needed:
+                    hub.request_subscribe_equities(needed)
+        except Exception:
+            pass
 
     async def _run_incremental_eval(self):
         if self._incremental_cycle_lock.locked():

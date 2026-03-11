@@ -6951,14 +6951,32 @@ def register_routes(app):
     @login_required
     def api_streaming_quotes():
         """Lightweight endpoint returning only streaming quote data for active positions.
+        Reads FRESH prices from streaming hubs on each call (not stale snapshot).
         Designed for fast 1-2s polling from the frontend to update prices in-place.
         """
         try:
             from gui_app.live_snapshot import get_live_snapshot
             snapshot = get_live_snapshot()
             positions = snapshot.get('positions', [])
-            streaming = snapshot.get('streaming', {})
 
+            wb_hub = None
+            wb_streaming = False
+            sch_hub = None
+            sch_streaming = False
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                wb_hub = get_webull_data_hub()
+                wb_streaming = wb_hub.is_streaming()
+            except Exception:
+                pass
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                sch_hub = get_schwab_data_hub()
+                sch_streaming = sch_hub.is_streaming()
+            except Exception:
+                pass
+
+            now = time.time()
             quotes = {}
             for pos in positions:
                 pid = pos.get('id')
@@ -6966,26 +6984,70 @@ def register_routes(app):
                     pid = f"{pos.get('broker','')}__{pos.get('symbol','')}"
                     if pid == '__':
                         continue
-                source_info = streaming.get('sources', {}).get(str(pid), {})
+                symbol = pos.get('symbol', '')
+                broker = (pos.get('broker') or '').upper()
+                entry = pos.get('entry_price', 0)
+                qty = pos.get('quantity', 0)
+                is_option = pos.get('asset_type') == 'option'
+
+                last = pos.get('last', pos.get('current_price', 0))
+                bid = pos.get('bid', 0)
+                ask = pos.get('ask', 0)
+                source = 'rest'
+                age = -1
+
+                fresh_quote = None
+                if symbol and not is_option:
+                    if 'WEBULL' in broker and wb_hub and wb_streaming:
+                        fresh_quote = wb_hub.get_quote_detailed(symbol)
+                        if fresh_quote and fresh_quote.get('last', 0) > 0:
+                            source = 'stream'
+                    elif broker == 'SCHWAB' and sch_hub and sch_streaming:
+                        fresh_quote = sch_hub.get_quote_detailed(symbol)
+                        if fresh_quote and fresh_quote.get('last', 0) > 0:
+                            source = 'stream'
+                    else:
+                        if wb_hub and wb_streaming:
+                            fresh_quote = wb_hub.get_quote_detailed(symbol)
+                            if fresh_quote and fresh_quote.get('last', 0) > 0:
+                                source = 'stream_cross'
+                        if (not fresh_quote or fresh_quote.get('last', 0) <= 0) and sch_hub and sch_streaming:
+                            fresh_quote = sch_hub.get_quote_detailed(symbol)
+                            if fresh_quote and fresh_quote.get('last', 0) > 0:
+                                source = 'stream_cross'
+
+                if fresh_quote and fresh_quote.get('last', 0) > 0:
+                    last = fresh_quote['last']
+                    bid = fresh_quote.get('bid', 0) or bid
+                    ask = fresh_quote.get('ask', 0) or ask
+                    age = round(now - fresh_quote.get('timestamp', 0), 1)
+
+                mid = round((bid + ask) / 2, 4) if bid > 0 and ask > 0 else 0
+                pnl_pct = pos.get('pnl_pct', 0)
+                unrealized = pos.get('unrealized_pnl', 0)
+                if entry > 0 and last > 0 and source != 'rest':
+                    pnl_pct = round(((last - entry) / entry) * 100, 2)
+                    unrealized = round((last - entry) * qty * (100 if is_option else 1), 2)
+
                 quotes[str(pid)] = {
-                    'last': pos.get('last', pos.get('current_price', 0)),
-                    'bid': pos.get('bid', 0),
-                    'ask': pos.get('ask', 0),
-                    'mid': pos.get('mid', 0),
-                    'pnl_pct': pos.get('pnl_pct', 0),
-                    'unrealized_pnl': pos.get('unrealized_pnl', 0),
-                    'source': source_info.get('source', 'rest'),
-                    'age': source_info.get('age', -1),
+                    'last': last,
+                    'bid': bid,
+                    'ask': ask,
+                    'mid': mid,
+                    'pnl_pct': pnl_pct,
+                    'unrealized_pnl': unrealized,
+                    'source': source,
+                    'age': age,
                 }
 
             return jsonify({
                 'success': True,
                 'quotes': quotes,
                 'streaming_status': {
-                    'webull': streaming.get('webull', False),
-                    'schwab': streaming.get('schwab', False),
+                    'webull': wb_streaming,
+                    'schwab': sch_streaming,
                 },
-                'snapshot_age': round(time.time() - snapshot.get('last_updated', 0), 1),
+                'snapshot_age': round(now - snapshot.get('last_updated', 0), 1),
             })
         except Exception as e:
             return jsonify({'success': False, 'quotes': {}, 'error': str(e)})

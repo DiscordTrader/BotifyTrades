@@ -83,6 +83,8 @@ class SchwabDataHub:
 
         self._streaming_active = False
         self._subscribed_symbols: Set[str] = set()
+        self._pending_equity_subs: Set[str] = set()
+        self._pending_subs_lock = threading.Lock()
         self._risk_eval_requested = threading.Event()
 
         self.POSITION_CACHE_TTL = 15
@@ -269,14 +271,29 @@ class SchwabDataHub:
             return True
         return False
 
+    def request_subscribe_equities(self, symbols: Set[str]):
+        with self._pending_subs_lock:
+            new = symbols - self._subscribed_symbols
+            if new:
+                self._pending_equity_subs |= new
+
+    def drain_pending_subscriptions(self) -> Set[str]:
+        with self._pending_subs_lock:
+            pending = self._pending_equity_subs - self._subscribed_symbols
+            self._pending_equity_subs.clear()
+        return pending
+
     def add_subscribed_symbols(self, symbols: Set[str]):
-        self._subscribed_symbols = self._subscribed_symbols | symbols
+        with self._pending_subs_lock:
+            self._subscribed_symbols = self._subscribed_symbols | symbols
 
     def remove_subscribed_symbols(self, symbols: Set[str]):
-        self._subscribed_symbols = self._subscribed_symbols - symbols
+        with self._pending_subs_lock:
+            self._subscribed_symbols = self._subscribed_symbols - symbols
 
     def get_subscribed_symbols(self) -> Set[str]:
-        return set(self._subscribed_symbols)
+        with self._pending_subs_lock:
+            return set(self._subscribed_symbols)
 
     def invalidate_positions(self):
         self._positions_time = 0

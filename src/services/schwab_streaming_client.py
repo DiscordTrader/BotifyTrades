@@ -73,6 +73,7 @@ class SchwabStreamingClient:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._last_heartbeat = time.time()
+        self._last_pending_drain = 0.0
 
         print(f"[SCHWAB_STREAM] Streaming client created for {broker_instance.name}")
 
@@ -404,6 +405,19 @@ class SchwabStreamingClient:
                         if now - self._last_heartbeat > 180:
                             print("[SCHWAB_STREAM] ⚠️ No heartbeat for 180s, reconnecting...")
                             break
+
+                        if now - self._last_pending_drain >= 10:
+                            self._last_pending_drain = now
+                            pending = set()
+                            try:
+                                if self._hub:
+                                    pending = self._hub.drain_pending_subscriptions()
+                                    if pending:
+                                        await self.subscribe_equities(list(pending))
+                                        print(f"[SCHWAB_STREAM] ✓ Cross-broker subscribe: {', '.join(sorted(pending))}")
+                            except Exception:
+                                if pending and self._hub:
+                                    self._hub.request_subscribe_equities(pending)
 
             except asyncio.CancelledError:
                 break
