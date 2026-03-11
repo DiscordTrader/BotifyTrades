@@ -12838,6 +12838,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 cursor.execute('UPDATE trades SET profit_target_price = ? WHERE id = ?', (tgt_price, trade_id))
                                 conn.commit()
                                 print(f"[PHOENIX TGT] ✓ Trade #{trade_id} {t_sym}: PT updated ${old_pt} → ${tgt_price:.4f} (tier {tgt_tier})")
+                                try:
+                                    if hasattr(self, 'risk_monitor') and self.risk_monitor:
+                                        cache_key = f"{t_sym}_{t_broker}"
+                                        if cache_key in self.risk_monitor._position_cache:
+                                            self.risk_monitor._position_cache[cache_key]['manual_pt_override'] = tgt_price
+                                            print(f"[PHOENIX TGT] ✓ Risk cache updated for {cache_key}")
+                                except Exception as cache_err:
+                                    print(f"[PHOENIX TGT] Cache update warning: {cache_err}")
                             else:
                                 print(f"[PHOENIX TGT] ℹ️ Trade #{trade_id} {t_sym}: Tier {tgt_tier} target ${tgt_price:.4f} (PT1 already set: ${old_pt})")
                     else:

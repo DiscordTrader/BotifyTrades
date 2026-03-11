@@ -741,7 +741,7 @@ class SignalFormatRegistry:
             name="phoenix_sl_to_entry",
             description="Phoenix SL update - moving SL to entry (breakeven)",
             priority=55,
-            pattern=r'moving\s+(?:my\s+)?SL\s+to\s+(?:my\s+)?entry\s+(?:fro?m?\s+)?(?:for\s+)?(?:(?:the\s+)?(?:re?ma(?:in)?(?:ing|aning|ining|ning)\s+)?(?:shares?\s+)?)?(?:\$?([A-Z]{2,5})(?![a-z]))?',
+            pattern=r'mov(?:ing|e)\s+(?:my\s+)?SL\s+to\s+(?:my\s+)?entry\s*,?\s*(?:fro?m?\s+)?(?:for\s+)?(?:(?:the\s+)?(?:re?ma(?:in)?(?:ing|aning|ining|ning)\s+)?(?:shares?\s+)?)?(?:\$?((?!IF|IT|THIS|THE|AND|BUT|FOR)[A-Z]{2,5})(?![a-z]))?',
             parser=self._parse_phoenix_sl_to_entry,
             examples=["moving my SL to my entry for AIFF", "moving SL to my entry for the remaining ACXP",
                        "moving my SL to my entry for the remaning shares AEHL", "moving SL to my entry fro remaning shares KNRX",
@@ -761,26 +761,26 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
 
-        # Phoenix SL update: moving SL to PRICE (for SYMBOL)
+        # Phoenix SL update: moving SL to X% (must check BEFORE price parser)
+        self.register(
+            name="phoenix_sl_move_pct",
+            description="Phoenix SL update - moving SL to percentage",
+            priority=54,
+            pattern=r'mov(?:ing|e)\s+(?:my\s+)?SL\s+to\s+(\d+)%',
+            parser=self._parse_phoenix_sl_move_pct,
+            examples=["moving SL to 8%", "move SL to 9%"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix SL update: moving SL to PRICE (for SYMBOL) — excludes percent
         self.register(
             name="phoenix_sl_move_price_to",
             description="Phoenix SL update - moving SL to specific price",
             priority=55,
-            pattern=r'moving\s+(?:my\s+)?SL\s+to\s+\$?([\d.]+)\s*(?:for\s+\$?([A-Z]{1,5}))?',
+            pattern=r'mov(?:ing|e)\s+(?:my\s+)?SL\s+to\s+\$?([\d.]+)(?!%)\s*(?:for\s+\$?([A-Z]{2,5}))?',
             parser=self._parse_phoenix_sl_move_price_to,
             examples=["moving SL to 0.41", "moving SL to 0.73", "moving SL to 4.98 for CATX",
                        "moving my SL to 1.88 just below VWAP"],
-            flags=re.IGNORECASE
-        )
-
-        # Phoenix SL update: moving SL to X%
-        self.register(
-            name="phoenix_sl_move_pct",
-            description="Phoenix SL update - moving SL to percentage",
-            priority=55,
-            pattern=r'moving\s+(?:my\s+)?SL\s+to\s+(\d+)%',
-            parser=self._parse_phoenix_sl_move_pct,
-            examples=["moving SL to 8%"],
             flags=re.IGNORECASE
         )
 
@@ -789,7 +789,7 @@ class SignalFormatRegistry:
             name="phoenix_target_update_sym",
             description="Phoenix target update with symbol",
             priority=56,
-            pattern=r'(?:first|second|third|next)\s+target(?:r|s)?\s+(?:for\s+)?\$?([A-Z]{1,5})\s+\$?([\d.]+)(?:\s*[-–—]\s*\$?([\d.]+))?',
+            pattern=r'(?:first|second|third|next)\s+targ(?:et|ets|ert|er)s?\s+(?:for\s+)?\$?((?!AT|FOR|MY|THE|IS|IT|OF)[A-Z]{2,5})\s+\$?([\d.]+)(?:\s*[-–—]\s*\$?([\d.]+))?',
             parser=self._parse_phoenix_target_update,
             examples=["first target for QCLS 4.25-4.35", "targets for NXPL 0.76-0.80",
                        "second target LGVN 0.72-0.75", "first target KLTO 0.77"],
@@ -801,7 +801,7 @@ class SignalFormatRegistry:
             name="phoenix_target_update_price",
             description="Phoenix target update price first",
             priority=56,
-            pattern=r'(?:first|second|third|next)\s+target(?:r|s)?\s+\$?([\d.]+)(?:\s*[-–—]\s*\$?([\d.]+))?\s*(?:for\s+\$?([A-Z]{1,5}))?',
+            pattern=r'(?:first|second|third|next)\s+targ(?:et|ets|ert|er)s?\s+\$?([\d.]+)(?:\s*[-–—]\s*\$?([\d.]+))?\s*(?:for\s+\$?([A-Z]{2,5}))?',
             parser=self._parse_phoenix_target_update_price_first,
             examples=["first target 5.85-6", "second target 0.68-0.72", "first target 0.49-0.52",
                        "first target 2.5", "first target 3.20-3.30 for NCI"],
