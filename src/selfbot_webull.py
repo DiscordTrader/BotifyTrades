@@ -12619,6 +12619,84 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 opt = parse_option_signal(normalized_content)
         
         
+        # Check for format registry conditional orders (ProTrader, etc.)
+        try:
+            from src.services.signal_format_registry import parse_with_registry
+            registry_result = parse_with_registry(normalized_content)
+            if registry_result and registry_result.get('_conditional_order'):
+                fmt_name = registry_result.get('format', 'REGISTRY')
+                print(f"[{fmt_name}] ✓ Detected conditional stock signal: {registry_result.get('symbol')} trigger={registry_result.get('trigger_type')} @ ${registry_result.get('trigger_price')}")
+                if registry_result.get('stop_loss_value'):
+                    print(f"[{fmt_name}]   SL: ${registry_result['stop_loss_value']}")
+                if registry_result.get('profit_targets'):
+                    print(f"[{fmt_name}]   Targets: {', '.join(f'${t}' for t in registry_result['profit_targets'])}")
+                if registry_result.get('fixed_qty'):
+                    print(f"[{fmt_name}]   Shares: {registry_result['fixed_qty']}")
+                try:
+                    from src.services.conditional_orders.router import conditional_order_router
+                    if conditional_order_router.is_enabled():
+                        registry_result['message_id'] = str(message.id)
+                        registry_result['author_id'] = str(message.author.id)
+                        registry_result['author_name'] = str(message.author)
+                        
+                        cond_broker = None
+                        if channel_info:
+                            if channel_info.get('enabled_brokers'):
+                                try:
+                                    import json
+                                    enabled = channel_info.get('enabled_brokers')
+                                    if isinstance(enabled, str):
+                                        enabled = json.loads(enabled)
+                                    if enabled and len(enabled) > 0:
+                                        broker_map = {
+                                            'WEBULL': 'Webull', 'ALPACA': 'ALPACA_PAPER',
+                                            'ALPACA_PAPER': 'ALPACA_PAPER', 'TASTYTRADE': 'TASTYTRADE',
+                                            'IBKR': 'IBKR', 'SCHWAB': 'SCHWAB',
+                                            'ROBINHOOD': 'ROBINHOOD',
+                                        }
+                                        cond_broker = broker_map.get(enabled[0].upper(), enabled[0].upper())
+                                except Exception:
+                                    pass
+                            if not cond_broker and channel_info.get('broker_override'):
+                                cond_broker = channel_info.get('broker_override')
+                        
+                        if not cond_broker:
+                            print(f"[{fmt_name}] ❌ REJECTED: No broker configured for channel {message.channel.id}")
+                            return
+                        
+                        order_id = conditional_order_router.create_order(
+                            channel_id=str(message.channel.id),
+                            parsed_signal=registry_result,
+                            broker=cond_broker
+                        )
+                        if order_id:
+                            print(f"[{fmt_name}] ✓ Created conditional order #{order_id} [{cond_broker}] - monitoring started")
+                        else:
+                            print(f"[{fmt_name}] ⚠️ Failed to create conditional order")
+                    else:
+                        print(f"[{fmt_name}] ⚠️ Conditional order service disabled")
+                except ImportError as e:
+                    print(f"[{fmt_name}] ⚠️ Conditional order service not available: {e}")
+                except Exception as e:
+                    print(f"[{fmt_name}] ❌ Error creating conditional order: {e}")
+                return
+            elif registry_result and registry_result.get('_protrader_cancel'):
+                cancel_sym = registry_result.get('symbol')
+                print(f"[PROTRADER] ✓ Cancel signal for {cancel_sym}")
+                try:
+                    from src.services.conditional_orders.router import conditional_order_router
+                    if conditional_order_router.is_enabled():
+                        cancelled = conditional_order_router.cancel_order_by_symbol(str(message.channel.id), cancel_sym)
+                        if cancelled:
+                            print(f"[PROTRADER] ✓ Cancelled pending orders for {cancel_sym}")
+                        else:
+                            print(f"[PROTRADER] No pending orders found for {cancel_sym}")
+                except Exception as e:
+                    print(f"[PROTRADER] ❌ Cancel error: {e}")
+                return
+        except Exception as reg_err:
+            print(f"[REGISTRY] Error checking format registry: {reg_err}")
+
         # Check for bracket order signal (stock with targets and stop loss)
         bracket_signal = None
         from src.signals.parser import is_bracket_order_signal, parse_bracket_order_signal, is_jacob_signal, parse_jacob_signal, is_conditional_order_signal, parse_conditional_order_signal

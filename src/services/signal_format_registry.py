@@ -736,6 +736,55 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
         
+        # =====================================================================
+        # PROTRADER FORMAT (Stock conditional orders with entry ranges, SL, targets)
+        # =====================================================================
+        
+        self.register(
+            name="protrader_structured",
+            description="ProTrader structured: Ticker/Entey range/SL/Targs",
+            priority=73,
+            pattern=r'Ticker\s*:\s*\$?([A-Z]{1,5})\s*\n\s*Ent(?:e|r)y\s+range\s*:\s*(.+)',
+            parser=self._parse_protrader_structured,
+            examples=[
+                "Ticker: VCIG\nEntey range: 15.50-15.25\nSL below 15.00\nTargs:15.75-16.00-16.25-16.50+",
+                "Ticker: TTD\nEntey range: Break 31.71\nSL below manage your SL\nTargs:31.91-32.00-32.30-32.50-32.75",
+            ]
+        )
+
+        self.register(
+            name="protrader_inline_buying",
+            description="ProTrader inline: SYMBOL - Buying X-Y / SL below Z - Targs",
+            priority=58,
+            pattern=r'(?:^|\n)\s*\$?([A-Z]{1,5})\s*[-–—]\s*(?:Swing\s*[-–—]?\s*)?(?:Buying\s+(?:support\s+)?|Buy\s+)([\d.]+)\s*[-–—]\s*([\d.]+)',
+            parser=self._parse_protrader_inline,
+            examples=[
+                "RIME - Buying 3.37-3.20- SL below 3.10- Targs : 3.50-3.60-3.75+",
+                "EZRA - Buying 0.3044-0.26/ SL below 0.24- Targs : 0.33-0.35-0.37-0.40+",
+            ]
+        )
+
+        self.register(
+            name="protrader_breakout",
+            description="ProTrader breakout: SYMBOL - Buying break of X for a move to Y-Z",
+            priority=75,
+            pattern=r'(?:^|\n)\s*\$?([A-Z]{1,5})\s*[-–—_\s]+(?:Buying\s+)?[Bb](?:uy(?:ing)?)\s+break\s+of\s+([\d.]+)\s+for\s+a\s+move\s+to\s+([\d.]+(?:\s*[-–—]\s*[\d.]+)*)',
+            parser=self._parse_protrader_breakout,
+            examples=[
+                "AEHL - Buying break of 1.04 for a move to 1.10-1.15-1.17",
+                "RRGB - Buying break of 4.41 for a move to 4.45-4.50-4.52",
+            ]
+        )
+
+        self.register(
+            name="protrader_cancel",
+            description="ProTrader cancel alert",
+            priority=72,
+            pattern=r'[Cc]ancel\s+the\s+\$?([A-Z]{1,5})\s+alert',
+            parser=self._parse_protrader_cancel,
+            examples=["Cancel the AZI alert"]
+        )
+
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
@@ -1606,6 +1655,179 @@ class SignalFormatRegistry:
             "_phoenix_exit": True
         }
     
+    def _extract_protrader_sl(self, text: str) -> Optional[float]:
+        """Extract stop loss price from protrader text."""
+        sl_match = re.search(r'SL\s+(?:below\s*:?\s*)\$?([\d.]+)', text, re.IGNORECASE)
+        if sl_match:
+            try:
+                return float(sl_match.group(1))
+            except ValueError:
+                pass
+        return None
+
+    def _extract_protrader_targets(self, text: str) -> list:
+        """Extract profit targets from protrader text."""
+        targets = []
+        targ_match = re.search(r'Targs?\s*:?\s*([\d.,\s\-–—+]+)', text, re.IGNORECASE)
+        if targ_match:
+            raw = targ_match.group(1)
+            for val in re.findall(r'([\d.]+)', raw):
+                try:
+                    targets.append(float(val))
+                except ValueError:
+                    pass
+        if not targets:
+            move_match = re.search(r'for\s+a\s+move\s+to\s+([\d.,\s\-–—+]+)', text, re.IGNORECASE)
+            if move_match:
+                raw = move_match.group(1)
+                for val in re.findall(r'([\d.]+)', raw):
+                    try:
+                        targets.append(float(val))
+                    except ValueError:
+                        pass
+        return targets
+
+    def _extract_protrader_shares(self, text: str) -> Optional[int]:
+        """Extract share size from protrader text."""
+        share_match = re.search(r'(?:share\s+size\s*:\s*|[Bb]uying\s+(?:total\s+)?)(\d+)\s+[Ss]hares?', text)
+        if share_match:
+            try:
+                return int(share_match.group(1))
+            except ValueError:
+                pass
+        qty_match = re.search(r'(\d+)\s+[Ss]hares?\s+(?:for|in|total)', text)
+        if qty_match:
+            try:
+                return int(qty_match.group(1))
+            except ValueError:
+                pass
+        return None
+
+    def _protrader_result(self, symbol: str, entry_high: float, entry_low: Optional[float],
+                          stop_loss: Optional[float], targets: list, shares: Optional[int],
+                          is_breakout: bool = False) -> Dict:
+        """Build a conditional order result dict for protrader signals."""
+        trigger_price = entry_high
+        trigger_type = 'over' if is_breakout else 'under'
+
+        result = {
+            'format': 'PROTRADER',
+            'is_conditional': True,
+            '_conditional_order': True,
+            '_protrader': True,
+            'asset': 'stock',
+            'asset_type': 'stock',
+            'action': 'BTO',
+            'ticker': symbol,
+            'symbol': symbol,
+            'trigger_type': trigger_type,
+            'trigger_price': trigger_price,
+            'entry_high': entry_high,
+            'entry_low': entry_low,
+            'stop_loss_type': 'fixed' if stop_loss else None,
+            'stop_loss_value': stop_loss,
+            'stop_loss_fixed': stop_loss,
+            'stop_loss_pct': None,
+            'profit_targets': targets,
+            'target_ranges': [],
+            'position_size_pct': None,
+            'fixed_qty': shares,
+            'size_mode': 'fixed_qty' if shares else None,
+            'qty': shares or 1,
+            'qty_specified': shares is not None,
+            'price': entry_high,
+            'confidence': 1.0,
+        }
+        return result
+
+    def _parse_protrader_structured(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse structured protrader: Ticker: VCIG / Entey range: 15.50-15.25 / SL / Targs"""
+        symbol = match.group(1).upper()
+        entry_text = match.group(2).strip()
+
+        is_breakout = False
+        entry_high = None
+        entry_low = None
+
+        breakout_match = re.match(r'[Bb]reak\s+([\d.]+)', entry_text)
+        if breakout_match:
+            entry_high = float(breakout_match.group(1))
+            is_breakout = True
+        else:
+            prices = re.findall(r'([\d.]+)', entry_text)
+            if len(prices) >= 2:
+                p1, p2 = float(prices[0]), float(prices[1])
+                entry_high = max(p1, p2)
+                entry_low = min(p1, p2)
+            elif len(prices) == 1:
+                entry_high = float(prices[0])
+
+        if not entry_high:
+            return None
+
+        stop_loss = self._extract_protrader_sl(text)
+        targets = self._extract_protrader_targets(text)
+        shares = self._extract_protrader_shares(text)
+
+        return self._protrader_result(symbol, entry_high, entry_low, stop_loss, targets, shares, is_breakout)
+
+    def _parse_protrader_inline(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse inline protrader: RIME - Buying 3.37-3.20- SL below 3.10- Targs : 3.50-3.60"""
+        text_upper = text.upper()
+        has_sl = 'SL' in text_upper and 'BELOW' in text_upper
+        has_targs = bool(re.search(r'TARGS?\s*:', text_upper))
+        if not has_sl and not has_targs:
+            return None
+
+        symbol = match.group(1).upper()
+        p1 = float(match.group(2))
+        p2 = float(match.group(3))
+        entry_high = max(p1, p2)
+        entry_low = min(p1, p2)
+
+        stop_loss = self._extract_protrader_sl(text)
+        targets = self._extract_protrader_targets(text)
+        shares = self._extract_protrader_shares(text)
+
+        return self._protrader_result(symbol, entry_high, entry_low, stop_loss, targets, shares)
+
+    def _parse_protrader_breakout(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse breakout protrader: AEHL - Buying break of 1.04 for a move to 1.10-1.15"""
+        symbol = match.group(1).upper()
+        breakout_price = float(match.group(2))
+        targets_raw = match.group(3)
+
+        targets = []
+        for val in re.findall(r'([\d.]+)', targets_raw):
+            try:
+                targets.append(float(val))
+            except ValueError:
+                pass
+
+        extended_targets = self._extract_protrader_targets(text)
+        if len(extended_targets) > len(targets):
+            targets = extended_targets
+
+        stop_loss = self._extract_protrader_sl(text)
+        shares = self._extract_protrader_shares(text)
+
+        return self._protrader_result(symbol, breakout_price, None, stop_loss, targets, shares, is_breakout=True)
+
+    def _parse_protrader_cancel(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse protrader cancel: Cancel the AZI alert"""
+        symbol = match.group(1).upper()
+        return {
+            'format': 'PROTRADER',
+            'asset': 'stock',
+            'asset_type': 'stock',
+            'action': 'CANCEL',
+            'symbol': symbol,
+            'ticker': symbol,
+            '_protrader': True,
+            '_protrader_cancel': True,
+            'confidence': 1.0,
+        }
+
     def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
         """Parse signals using learned patterns with database metadata."""
         import re as _re
