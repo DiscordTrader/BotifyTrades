@@ -1008,6 +1008,17 @@ class RiskManager:
         import threading as _threading
         self._exit_executed_lock = _threading.Lock()
         self._exit_executed_keys = set()
+
+        self._dirty_symbols = {}
+        self._dirty_lock = _threading.Lock()
+        self._price_wake_event = asyncio.Event()
+        self._monitored_symbols = set()
+        self._monitored_symbols_lock = _threading.Lock()
+        self._hub_subscribed = False
+        self._incremental_cycle_lock = asyncio.Lock()
+        self._last_positions_snapshot = []
+        self._tick_eval_count = 0
+        self._tick_eval_total_latency_ms = 0.0
     
     _PERMANENT_FAILURES_FILE = Path.cwd() / '.permanent_failures.json'
     
@@ -1033,6 +1044,127 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] ⚠️ Failed to save permanent failures file: {e}")
     
+    def _subscribe_to_price_streams(self):
+        if self._hub_subscribed:
+            return
+        _any_subscribed = False
+
+        def _on_quote_update(data):
+            if not data or not isinstance(data, dict):
+                return
+            symbol = data.get('symbol', '')
+            if not symbol:
+                q = data.get('quote')
+                if q:
+                    symbol = getattr(q, 'symbol', '') if hasattr(q, 'symbol') else (q.get('symbol', '') if isinstance(q, dict) else '')
+            if not symbol:
+                return
+            symbol = symbol.upper()
+            with self._monitored_symbols_lock:
+                if symbol not in self._monitored_symbols:
+                    return
+            import time as _t
+            tick_ts = _t.monotonic()
+            with self._dirty_lock:
+                if symbol not in self._dirty_symbols or tick_ts < self._dirty_symbols[symbol]:
+                    self._dirty_symbols[symbol] = tick_ts
+            try:
+                self.loop.call_soon_threadsafe(self._price_wake_event.set)
+            except RuntimeError:
+                pass
+
+        self._quote_handler = _on_quote_update
+
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            hub.on('quote_updated', _on_quote_update)
+            _any_subscribed = True
+            print("[RISK] ✓ Subscribed to Webull streaming prices (event-driven risk)")
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ Webull hub subscription error: {e}")
+
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            schwab_hub = get_schwab_data_hub()
+            schwab_hub.on('quote_updated', _on_quote_update)
+            _any_subscribed = True
+            print("[RISK] ✓ Subscribed to Schwab streaming prices (event-driven risk)")
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ Schwab hub subscription error: {e}")
+
+        self._hub_subscribed = _any_subscribed
+
+    def _update_monitored_symbols(self, positions):
+        symbols = set()
+        for p in positions:
+            symbols.add(p.symbol.upper())
+            if hasattr(p, 'raw_symbol') and p.raw_symbol:
+                symbols.add(p.raw_symbol.upper())
+        with self._monitored_symbols_lock:
+            self._monitored_symbols = symbols
+
+    async def _run_incremental_eval(self):
+        if self._incremental_cycle_lock.locked():
+            return
+        async with self._incremental_cycle_lock:
+            import time as _t
+            eval_start = _t.monotonic()
+
+            with self._dirty_lock:
+                dirty = dict(self._dirty_symbols)
+                self._dirty_symbols.clear()
+
+            if not dirty:
+                return
+
+            dirty_symbol_names = set(dirty.keys())
+            earliest_tick = min(dirty.values())
+
+            positions = self._last_positions_snapshot
+            if not positions:
+                return
+
+            self._update_prices_from_hub(positions)
+
+            risk_settings = self._get_risk_settings()
+            if not risk_settings.enabled:
+                channel_count = self.db_adapter.count_channels_with_risk()
+                if channel_count == 0:
+                    return
+
+            evaluated = 0
+            broker_position_keys = set()
+            for position in positions:
+                sym_match = (position.symbol.upper() in dirty_symbol_names)
+                if not sym_match and hasattr(position, 'raw_symbol') and position.raw_symbol:
+                    sym_match = position.raw_symbol.upper() in dirty_symbol_names
+                if not sym_match:
+                    continue
+                try:
+                    pos_key = position.position_key
+                    if pos_key in self._permanent_failure_keys:
+                        continue
+                    await self._evaluate_position(position, risk_settings, broker_position_keys)
+                    evaluated += 1
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Incremental eval error {position.symbol}: {e}")
+
+            eval_elapsed_ms = (_t.monotonic() - eval_start) * 1000
+            tick_to_eval_ms = (_t.monotonic() - earliest_tick) * 1000
+
+            self._tick_eval_count += 1
+            self._tick_eval_total_latency_ms += tick_to_eval_ms
+
+            if self._tick_eval_count <= 3 or self._tick_eval_count % 500 == 0:
+                avg_latency = self._tick_eval_total_latency_ms / self._tick_eval_count
+                print(f"[RISK] ⚡ Tick eval #{self._tick_eval_count}: {evaluated} positions in {eval_elapsed_ms:.1f}ms | "
+                      f"tick→eval: {tick_to_eval_ms:.1f}ms | avg: {avg_latency:.1f}ms")
+
     async def start_monitoring(self) -> None:
         """Start the position monitoring loop with enable gate and standby support."""
         cached_count = self.cache.load()
@@ -1057,6 +1189,8 @@ class RiskManager:
         if not hasattr(self, '_heartbeat_counter'):
             self._heartbeat_counter = 0
         
+        self._subscribe_to_price_streams()
+        
         while self._running:
             try:
                 is_enabled = self._check_service_enabled()
@@ -1076,14 +1210,18 @@ class RiskManager:
                     if self._cycle_timing_log_counter <= 5 or self._cycle_timing_log_counter % 60 == 0 or _cycle_elapsed_ms > 2000:
                         print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms")
                     interval = self._get_adaptive_interval()
-                    _wake_chunk = min(0.1, interval)
                     _sleep_start = _cycle_t.monotonic()
-                    while (_cycle_t.monotonic() - _sleep_start) < interval:
+                    _order_event_woke = False
+                    while True:
+                        _remaining = interval - (_cycle_t.monotonic() - _sleep_start)
+                        if _remaining <= 0:
+                            break
                         try:
                             from src.services.webull_data_hub import get_webull_data_hub
                             if get_webull_data_hub().check_risk_eval_requested():
                                 print("[RISK] ⚡ Early wake: order event from Webull stream")
                                 self._force_rest_refresh = True
+                                _order_event_woke = True
                                 break
                         except Exception:
                             pass
@@ -1092,13 +1230,20 @@ class RiskManager:
                             if get_schwab_data_hub().check_risk_eval_requested():
                                 print("[RISK] ⚡ Early wake: order event from Schwab stream")
                                 self._force_rest_refresh = True
+                                _order_event_woke = True
                                 break
                         except Exception:
                             pass
-                        _remaining = interval - (_cycle_t.monotonic() - _sleep_start)
-                        if _remaining <= 0:
-                            break
-                        await asyncio.sleep(min(_wake_chunk, _remaining))
+                        try:
+                            await asyncio.wait_for(
+                                self._price_wake_event.wait(),
+                                timeout=min(0.05, _remaining)
+                            )
+                            self._price_wake_event.clear()
+                            await asyncio.sleep(0.02)
+                            await self._run_incremental_eval()
+                        except asyncio.TimeoutError:
+                            pass
                 else:
                     if not self._standby_mode:
                         print("[RISK] ⏸️ Entering standby mode - no risk settings enabled (zero API calls)")
@@ -1227,10 +1372,14 @@ class RiskManager:
             if not hasattr(self, '_empty_pos_logged') or not self._empty_pos_logged:
                 print("[RISK] No open positions found across brokers — monitoring idle")
                 self._empty_pos_logged = True
+            self._last_positions_snapshot = []
+            self._update_monitored_symbols([])
             return
         self._empty_pos_logged = False
         
         self._update_prices_from_hub(positions)
+        self._last_positions_snapshot = positions
+        self._update_monitored_symbols(positions)
         
         if positions:
             current_keys = {p.position_key for p in positions}
