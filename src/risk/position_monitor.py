@@ -1019,6 +1019,26 @@ class RiskManager:
         self._last_positions_snapshot = []
         self._tick_eval_count = 0
         self._tick_eval_total_latency_ms = 0.0
+
+    def release_exit_marker(self, pos_key: str):
+        """Clear the exit-executed marker for a position key.
+        
+        Must be called when:
+        - A risk STC order succeeds (position sold)
+        - A position closes (cleanup)
+        - An exit lease expires and the closing flag resets for retry
+        This prevents stale markers from blocking future exits on
+        re-opened positions with the same key.
+        """
+        with self._exit_executed_lock:
+            if pos_key in self._exit_executed_keys:
+                self._exit_executed_keys.discard(pos_key)
+                print(f"[RISK] ✓ Released exit marker for {pos_key}")
+        try:
+            from src.risk.exit_lease_manager import get_exit_lease_manager
+            get_exit_lease_manager().force_release(pos_key)
+        except Exception:
+            pass
     
     _PERMANENT_FAILURES_FILE = Path.cwd() / '.permanent_failures.json'
     
@@ -2894,10 +2914,12 @@ class RiskManager:
                     pass
             else:
                 print(f"[RISK] [DIRECT-EXIT] ⚠️ {pos_key} result: {result}")
+            self.release_exit_marker(pos_key)
         except Exception as e:
             print(f"[RISK] [DIRECT-EXIT] ✗ {pos_key} execution failed: {e}")
             import traceback
             traceback.print_exc()
+            self.release_exit_marker(pos_key)
 
     def _get_streaming_bid_ask(self, position: PositionSnapshot) -> Dict[str, float]:
         """Get real-time bid/ask from streaming hubs for accurate exit pricing.

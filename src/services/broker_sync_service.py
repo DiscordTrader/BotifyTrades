@@ -2218,7 +2218,7 @@ class BrokerSyncService:
                         stc_channel_id = None
                         stc_asset_type = order.get('asset_type', 'stock')
                         try:
-                            from gui_app.database import find_open_bto_trade, map_risk_trigger_to_exit_source, get_pending_order_metadata, update_pending_order_status
+                            from gui_app.database import find_open_bto_trade, map_risk_trigger_to_exit_source, get_pending_order_metadata, update_pending_order_status, get_connection
                             
                             stc_meta = get_pending_order_metadata(broker=broker_name, broker_order_id=str(order.get('order_id', '')))
                             if stc_meta:

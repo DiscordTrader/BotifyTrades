@@ -557,6 +557,12 @@ class PositionCache:
                     print(f"[RISK] ⚠️ {position_key}: Position still exists after {elapsed:.0f}s "
                           f"closing — resetting closing flag")
                     entry.reset_closing()
+                    try:
+                        from src.risk.position_monitor import risk_manager_instance
+                        if risk_manager_instance:
+                            risk_manager_instance.release_exit_marker(position_key)
+                    except Exception:
+                        pass
                     return False
             else:
                 entry.closing_cycles += 1
@@ -1026,6 +1032,12 @@ class PositionCache:
         old_trade_id = self._trade_id_map.pop(position_key, None)
         if old_trade_id:
             print(f"[RISK] ✓ Cleaned trade_id mapping: {position_key} (trade #{old_trade_id})")
+        try:
+            from src.risk.position_monitor import risk_manager_instance
+            if risk_manager_instance:
+                risk_manager_instance.release_exit_marker(position_key)
+        except Exception:
+            pass
     
     def cleanup_stale(self, active_keys: set) -> int:
         """Remove cache entries not in active positions. Returns count removed."""
@@ -1036,6 +1048,13 @@ class PositionCache:
                 old_trade_id = self._trade_id_map.pop(key, None)
                 if old_trade_id:
                     print(f"[RISK] ✓ Cleaned stale trade_id mapping: {key} (trade #{old_trade_id})")
+        for key in stale:
+            try:
+                from src.risk.position_monitor import risk_manager_instance
+                if risk_manager_instance:
+                    risk_manager_instance.release_exit_marker(key)
+            except Exception:
+                pass
         return len(stale)
     
     def __len__(self) -> int:

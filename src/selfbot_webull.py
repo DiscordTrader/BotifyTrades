@@ -17854,13 +17854,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as e:
                             _original_print(f"[DATABASE] ⚠️ Could not update signal status: {e}")
                     
-                    # Reset retry state on successful risk order
+                    # Reset retry state and clear exit marker on successful risk order
                     if signal.get('_risk_management_order') and signal.get('_position_key'):
                         try:
                             from src.risk.position_monitor import risk_manager_instance
-                            if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
-                                risk_manager_instance.cache.reset_exit_retry_state(signal['_position_key'])
-                                _original_print(f"[RISK-RETRY] ✓ Reset retry state for {signal['_position_key']}", flush=True)
+                            if risk_manager_instance:
+                                if hasattr(risk_manager_instance, 'cache'):
+                                    risk_manager_instance.cache.reset_exit_retry_state(signal['_position_key'])
+                                risk_manager_instance.release_exit_marker(signal['_position_key'])
+                                _original_print(f"[RISK-RETRY] ✓ Reset retry state + exit marker for {signal['_position_key']}", flush=True)
                         except Exception as reset_err:
                             _original_print(f"[RISK-RETRY] Could not reset state: {reset_err}", flush=True)
                     
