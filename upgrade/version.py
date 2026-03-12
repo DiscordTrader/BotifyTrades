@@ -16,7 +16,7 @@ from typing import Optional, Tuple, Dict
 
 
 APP_VERSION = "6.2.4"
-BUILD_DATE = "2026-03-11"
+BUILD_DATE = "2026-03-12"
 
 
 def parse_version(version_str: str) -> Tuple[int, int, int]:
