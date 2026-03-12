@@ -473,3 +473,253 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 | Symbol not in instrument list | Skip with warning, attempt heuristic, fail gracefully |
 | Rate limit 429 received | Queue and retry after backoff, do NOT duplicate the order |
 | Market closed + market order | T212 queues until market opens (inform user) |
+
+---
+
+## API Rate Limit Consumption Analysis
+
+### Trading 212 Rate Limits (Hard Constraints)
+
+| Endpoint | Rate Limit | Per-Second Equivalent |
+|---|---|---|
+| POST /orders/market | 50 req/1min | 0.83 req/s |
+| POST /orders/limit | 1 req/2s | 0.50 req/s |
+| POST /orders/stop | 1 req/2s | 0.50 req/s |
+| POST /orders/stop_limit | 1 req/2s | 0.50 req/s |
+| DELETE /orders/{id} | 50 req/1min | 0.83 req/s |
+| GET /orders (all pending) | 1 req/5s | 0.20 req/s |
+| GET /orders/{id} | 1 req/1s | 1.00 req/s |
+| GET /portfolio (all positions) | 1 req/5s | 0.20 req/s |
+| GET /portfolio/{ticker} | 1 req/1s | 1.00 req/s |
+| GET /account/summary | 1 req/5s | 0.20 req/s |
+| GET /metadata/instruments | 1 req/5s | 0.20 req/s |
+| GET /history/orders | 1 req/5s | 0.20 req/s |
+
+### System Components That Make Broker API Calls
+
+#### 1. Risk Engine / Position Monitor
+- **Current behavior (Webull/Schwab):** Uses WebSocket streaming — ZERO API cost
+- **T212 behavior (no WebSocket):** Must poll GET /portfolio every cycle
+- **Cycle interval:** 1 second (default, configurable 0.2s–60s)
+- **Calls per cycle:** 1 (GET /portfolio fetches ALL positions in one batch)
+- **T212 rate limit for /portfolio:** 1 req/5s (0.20 req/s)
+
+| Scenario | Desired Rate | T212 Limit | BREACH? |
+|---|---|---|---|
+| Default 1s interval | 60 req/min | 12 req/min | YES — 5x OVER LIMIT |
+| Adjusted to 5s interval | 12 req/min | 12 req/min | EXACTLY AT LIMIT |
+| Adjusted to 10s interval | 6 req/min | 12 req/min | Safe |
+
+**VERDICT: WILL BREACH unless T212 risk monitor interval is forced to ≥5 seconds.**
+The default 1-second polling that works for Webull (zero-cost WebSocket) would hit 429 errors every second on T212.
+
+#### 2. Broker Sync Service
+- **Sync interval:** Every 30 seconds
+- **Calls per standard cycle:** 2 (GET /portfolio + GET /orders)
+- **Calls per health cycle (every 60s):** +1 (GET /account/summary)
+- **Calls per fill sync (every 150s):** +1 (GET /history/orders)
+
+| Cycle Type | Frequency | Endpoints Hit | Calls |
+|---|---|---|---|
+| Standard | Every 30s | /portfolio, /orders | 2 |
+| Health (every 2nd cycle) | Every 60s | + /account/summary | +1 |
+| Fill sync (every 5th cycle) | Every 150s | + /history/orders | +1 |
+
+**Average: ~4.5 calls/min across 4 endpoints**
+
+| Endpoint | Calls/min from Sync | T212 Limit/min | BREACH? |
+|---|---|---|---|
+| GET /portfolio | 2.0 | 12 | No |
+| GET /orders | 2.0 | 12 | No |
+| GET /account/summary | 1.0 | 12 | No |
+| GET /history/orders | 0.4 | 12 | No |
+
+**VERDICT: SAFE on its own. But shares /portfolio and /orders endpoints with other consumers.**
+
+#### 3. Price Monitor Service
+- **Current behavior (Webull/Schwab):** Auto-subscribes to streaming hubs — ZERO API cost
+- **T212 behavior (no WebSocket):** Must poll per position
+- **Polling pattern:** 1 call per position, 0.5s stagger between positions
+- **No batch endpoint** — T212 has GET /portfolio/{ticker} (1 req/1s) or GET /portfolio (1 req/5s)
+
+| Open Positions | Calls Using /portfolio/{ticker} | T212 Limit | BREACH? |
+|---|---|---|---|
+| 5 positions | 5 calls per cycle, ~40/min | 60 req/min (1/s) | No |
+| 10 positions | 10 calls per cycle, ~60/min | 60 req/min (1/s) | AT LIMIT |
+| 15+ positions | 15+ calls per cycle, ~60+/min | 60 req/min (1/s) | YES — BREACH |
+
+**Using GET /portfolio (all positions in one call) instead:**
+
+| Open Positions | Calls/min | T212 Limit | BREACH? |
+|---|---|---|---|
+| Any count | 12/min (1 per 5s) | 12 req/min | EXACTLY AT LIMIT |
+
+**VERDICT: WILL BREACH at 10+ positions if using per-ticker endpoint. Must use batch /portfolio and share cache.**
+
+#### 4. Live Snapshot Daemon
+- **Refresh interval:** Every 5 seconds
+- **Calls per refresh:** 1 (GET /portfolio) + optionally 1 (GET /account/summary)
+
+| Endpoint | Calls/min from Snapshot | T212 Limit/min | BREACH? |
+|---|---|---|---|
+| GET /portfolio | 12 | 12 | EXACTLY AT LIMIT |
+| GET /account/summary | 12 | 12 | EXACTLY AT LIMIT |
+
+**VERDICT: AT LIMIT on its own. Combined with any other consumer = BREACH.**
+
+#### 5. Unfilled Order Chaser
+- **Monitor interval:** Every 1 second
+- **Idle (tracking, not chasing):** 0 API calls (uses local timestamps)
+- **Active chase per order:**
+  - GET /orders (verify pending): 1 call
+  - GET /portfolio/{ticker} (quote for mid-price): 1 call
+  - DELETE /orders/{id} (cancel): 1 call
+  - POST /orders/limit (replace): 1 call
+  - **Total per chase event: 4 calls**
+- **Chase frequency:** Every 4 seconds per stale order (chase_timeout)
+
+| Orders Being Chased | Calls/min | Endpoints Hit | BREACH? |
+|---|---|---|---|
+| 1 order | ~60 (status checks) + 4 per chase | GET /orders at 12/min limit | YES |
+| 3 orders | ~180 + 12 per chase | GET /orders at 12/min limit | YES — SEVERE |
+
+**VERDICT: WILL BREACH IMMEDIATELY. The 1-second status check loop hits GET /orders (1 req/5s limit) at 60x the allowed rate.**
+
+#### 6. GUI Dashboard Polling
+- **Broker states (/api/v2/broker-states):** Every 30s → may trigger GET /account/summary
+- **Trades page (/api/trades):** Every 30s → reads from DB cache, no direct broker call
+- **Bot status (/api/status):** Every 10s → no broker API call
+
+**VERDICT: SAFE — dashboard reads from internal caches, not broker APIs directly.**
+
+#### 7. Order Placement (Signal Execution)
+- **Frequency:** On-demand (when signals arrive)
+- **Calls per trade:** 1 POST (/orders/market or /orders/limit)
+
+| Signal Volume | Order Type | Calls | T212 Limit | BREACH? |
+|---|---|---|---|---|
+| 1 signal | Market | 1 | 50/min | No |
+| 5 signals in 10s | Market | 5 | 50/min | No |
+| 3 signals in 6s | Limit | 3 in 6s | 1 per 2s | YES — needs queuing |
+| 10 signals in 1min | Market | 10 | 50/min | No |
+
+**VERDICT: Market orders SAFE. Limit orders WILL BREACH during signal bursts without queuing.**
+
+### Combined Load: The Real Problem
+
+The critical issue is that **multiple systems share the same endpoints** and T212 rate limits are per-account, not per-endpoint-consumer.
+
+#### GET /portfolio Endpoint (1 req/5s = 12 req/min MAX)
+
+| Consumer | Calls/min | Notes |
+|---|---|---|
+| Risk Engine (position monitor) | 12–60 | 12 if throttled to 5s; 60 at default 1s |
+| Broker Sync Service | 2 | Every 30s |
+| Live Snapshot Daemon | 12 | Every 5s |
+| Price Monitor Service | 12–60 | Depends on position count |
+| **TOTAL (best case)** | **38** | Even throttled, 3x over limit |
+| **TOTAL (worst case)** | **134** | 11x over limit |
+| **T212 LIMIT** | **12** | |
+
+**GET /portfolio is the #1 bottleneck. Every major system needs it.**
+
+#### GET /orders Endpoint (1 req/5s = 12 req/min MAX)
+
+| Consumer | Calls/min | Notes |
+|---|---|---|
+| Broker Sync Service | 2 | Every 30s |
+| Unfilled Order Chaser | 15–60 | 1/s per tracked order (or every 4s per chase) |
+| **TOTAL** | **17–62** | 1.4x to 5x over limit |
+| **T212 LIMIT** | **12** | |
+
+#### GET /account/summary Endpoint (1 req/5s = 12 req/min MAX)
+
+| Consumer | Calls/min | Notes |
+|---|---|---|
+| Broker Sync (health) | 1 | Every 60s |
+| Live Snapshot | 12 | Every 5s |
+| Dashboard polling | 2 | Every 30s |
+| **TOTAL** | **15** | 1.25x over limit |
+| **T212 LIMIT** | **12** | |
+
+#### POST /orders/limit Endpoint (1 req/2s = 30 req/min MAX)
+
+| Consumer | Calls/min | Notes |
+|---|---|---|
+| Signal execution | 0–5 | On-demand |
+| Order chaser (replacement) | 0–15 | Per chase event |
+| Risk engine (SL/PT orders) | 0–10 | On risk trigger |
+| **TOTAL (active trading)** | **5–30** | At limit during bursts |
+| **T212 LIMIT** | **30** | |
+
+### Summary: Breach Probability by Scenario
+
+| Scenario | GET /portfolio | GET /orders | POST /orders | Overall Breach? |
+|---|---|---|---|---|
+| **Idle (0 positions, no signals)** | 14/min (sync+snapshot) | 2/min | 0/min | YES — /portfolio over |
+| **Light (3 positions, occasional signals)** | 26/min | 2/min | 1/min | YES — /portfolio 2x over |
+| **Normal (5 positions, steady signals)** | 38/min | 17/min | 5/min | YES — /portfolio 3x, /orders 1.4x |
+| **Heavy (10+ positions, signal burst)** | 86/min | 62/min | 15/min | YES — everything breached |
+
+### Root Cause
+
+The existing system was designed for brokers with **WebSocket streaming** (Webull, Schwab) or **generous rate limits** (Alpaca: 200 req/min). Four separate systems (risk monitor, price monitor, sync service, snapshot daemon) each independently poll the same endpoints. This works when:
+- Webull/Schwab: Streaming hubs provide data at ZERO API cost
+- Alpaca: 200 req/min is generous enough for all consumers
+
+Trading 212's limits are 10–15x tighter than what the system currently demands.
+
+### Required Architecture Change: Trading212DataHub (Shared Polling Cache)
+
+The ONLY solution is a **centralized cache** that all consumers read from, with a single poller respecting rate limits:
+
+```
+                    Trading212DataHub
+                    (Single Poller)
+                         │
+          ┌──────────────┼──────────────┐
+          │              │              │
+    GET /portfolio  GET /orders  GET /account/summary
+    (every 5s)      (every 5s)   (every 5s)
+          │              │              │
+          ▼              ▼              ▼
+      positions_cache  orders_cache  account_cache
+          │              │              │
+    ┌─────┼─────┐   ┌───┼───┐     ┌───┼───┐
+    │     │     │   │       │     │       │
+  Risk  Price  Live Sync  Chaser Snapshot Dashboard
+  Engine Mon.  Snap Svc          Daemon
+```
+
+**All consumers read from cache. ZERO direct API calls.**
+
+| Endpoint | DataHub Poll Rate | T212 Limit | Status |
+|---|---|---|---|
+| GET /portfolio | 1 req/5s | 1 req/5s | AT LIMIT (safe) |
+| GET /orders | 1 req/5s | 1 req/5s | AT LIMIT (safe) |
+| GET /account/summary | 1 req/10s | 1 req/5s | UNDER LIMIT (safe) |
+| GET /history/orders | 1 req/30s | 1 req/5s | UNDER LIMIT (safe) |
+
+**Total with DataHub: ~30 req/min across all endpoints vs 12 req/min limit per endpoint**
+**Actual per-endpoint: within limits**
+
+### Remaining Risks After DataHub
+
+| Risk | Probability | Severity |
+|---|---|---|
+| 5-second stale data for risk decisions | 100% (by design) | MEDIUM — acceptable for stocks, dangerous for volatile penny stocks |
+| Limit order bursts during signal storms | Medium | HIGH — 1 req/2s means 3 simultaneous signals take 6 seconds |
+| Order chaser cancel+replace rate | Medium | HIGH — each chase needs DELETE + POST, both rate-limited |
+| Position monitor missing fast moves | Low-Medium | MEDIUM — a stock dropping 5% in 5 seconds won't trigger SL in time |
+
+### Recommended T212-Specific Configuration Defaults
+
+| Setting | Standard Brokers | T212 Value | Reason |
+|---|---|---|---|
+| risk_check_interval_seconds | 1s | 5s (minimum) | Match /portfolio rate limit |
+| price_monitor_interval | 0.5s per position | Disabled (use DataHub) | Cannot afford per-position polling |
+| snapshot_daemon_interval | 5s | Disabled (use DataHub) | Cannot afford independent polling |
+| sync_interval | 30s | 30s (keep) | Low enough call volume |
+| order_chase_timeout | 4s | 10s | Slower chase to stay within limits |
+| order_chase_max_attempts | 3 | 2 | Fewer chases to conserve API budget |
+| order_chase_status_poll | 1s | 5s | Match /orders rate limit |
