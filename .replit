@@ -24,8 +24,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PYTHONUNBUFFERED=1 python src/selfbot_webull.py"
-waitForPort = 5000
+args = "PYTHONUNBUFFERED=1 python -u src/selfbot_webull.py"
 
 [nix]
 channel = "stable-25_05"
