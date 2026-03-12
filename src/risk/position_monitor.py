@@ -3321,15 +3321,38 @@ class RiskManager:
             print(f"[RISK] Error cleaning terminal order cache: {e}")
             return 0
     
+    _HUB_PRICE_MAX_AGE = 30
+
+    def _get_fresh_hub_price(self, hub, symbol, max_age=None):
+        if max_age is None:
+            max_age = self._HUB_PRICE_MAX_AGE
+        import time as _t
+        quote = hub.get_quote(symbol)
+        if not quote:
+            return None
+        age = _t.time() - quote.timestamp
+        if age > max_age:
+            return None
+        price = quote.last if hasattr(quote, 'last') else None
+        if not price or price <= 0:
+            return None
+        return price
+
     def _update_prices_from_hub(self, positions: list):
         """Update position prices from streaming hubs if available.
         
         When streaming is active (Webull MQTT or Schwab WebSocket), position 
         prices from REST may be stale. This method updates current_price with 
         real-time streaming data from both hubs, providing zero-API-cost updates.
+        
+        STALENESS GUARD: Only overrides REST price if the streaming quote is
+        fresher than _HUB_PRICE_MAX_AGE seconds (default 30s). For low-volume
+        symbols where MQTT updates are infrequent, the REST position price
+        (refreshed every 10s) is kept instead of a stale streaming quote.
         """
         webull_updated = 0
         schwab_updated = 0
+        stale_skipped = 0
         
         try:
             from src.services.webull_data_hub import get_webull_data_hub
@@ -3342,11 +3365,17 @@ class RiskManager:
                         lookup_sym = pos.raw_symbol if pos.raw_symbol else None
                         if not lookup_sym:
                             continue
-                        price = hub.get_quote_price(lookup_sym)
+                        price = self._get_fresh_hub_price(hub, lookup_sym)
                         if not price:
+                            if hub.get_quote_price(lookup_sym):
+                                stale_skipped += 1
                             continue
                     else:
-                        price = hub.get_quote_price(pos.symbol)
+                        price = self._get_fresh_hub_price(hub, pos.symbol)
+                        if not price:
+                            if hub.get_quote_price(pos.symbol):
+                                stale_skipped += 1
+                            continue
                     if price and price > 0:
                         pos.current_price = price
                         webull_updated += 1
@@ -3366,11 +3395,17 @@ class RiskManager:
                         lookup_sym = pos.raw_symbol if pos.raw_symbol else None
                         if not lookup_sym:
                             continue
-                        price = schwab_hub.get_quote_price(lookup_sym)
+                        price = self._get_fresh_hub_price(schwab_hub, lookup_sym)
                         if not price:
+                            if schwab_hub.get_quote_price(lookup_sym):
+                                stale_skipped += 1
                             continue
                     else:
-                        price = schwab_hub.get_quote_price(pos.symbol)
+                        price = self._get_fresh_hub_price(schwab_hub, pos.symbol)
+                        if not price:
+                            if schwab_hub.get_quote_price(pos.symbol):
+                                stale_skipped += 1
+                            continue
                     if price and price > 0:
                         pos.current_price = price
                         schwab_updated += 1
@@ -3391,7 +3426,7 @@ class RiskManager:
                 from src.services.webull_data_hub import get_webull_data_hub
                 wb_hub = get_webull_data_hub()
                 if wb_hub.is_streaming():
-                    price = wb_hub.get_quote_price(pos.symbol)
+                    price = self._get_fresh_hub_price(wb_hub, pos.symbol)
             except Exception:
                 pass
             if not price:
@@ -3399,12 +3434,19 @@ class RiskManager:
                     from src.services.schwab_data_hub import get_schwab_data_hub
                     sc_hub = get_schwab_data_hub()
                     if sc_hub.is_streaming():
-                        price = sc_hub.get_quote_price(pos.symbol)
+                        price = self._get_fresh_hub_price(sc_hub, pos.symbol)
                 except Exception:
                     pass
             if price and price > 0:
                 pos.current_price = price
                 cross_updated += 1
+
+        if stale_skipped > 0:
+            if not hasattr(self, '_stale_skip_count'):
+                self._stale_skip_count = 0
+            self._stale_skip_count += stale_skipped
+            if self._stale_skip_count <= 3 or self._stale_skip_count % 60 == 0:
+                print(f"[RISK] ⚠️ Skipped {stale_skipped} stale streaming quote(s) (>{self._HUB_PRICE_MAX_AGE}s old) — using REST price instead")
 
         total = webull_updated + schwab_updated + cross_updated
         if total > 0 and not hasattr(self, '_hub_update_logged'):

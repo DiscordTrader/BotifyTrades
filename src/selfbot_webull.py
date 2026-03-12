@@ -8157,10 +8157,10 @@ class SelfClient(discord.Client):
 
                 if next_type == "pre_market":
                     _original_print("[SOD] Daily 4:00 AM ET — capturing pre-market balances...")
-                    await sod.capture_all_brokers(self, snapshot_type="pre_market")
+                    await sod.capture_all_brokers(self, snapshot_type="pre_market", force=True)
                 else:
                     _original_print("[SOD] Daily 9:30 AM ET — capturing start-of-day balances...")
-                    await sod.capture_all_brokers(self, snapshot_type="start_of_day")
+                    await sod.capture_all_brokers(self, snapshot_type="start_of_day", force=True)
 
             except asyncio.CancelledError:
                 break

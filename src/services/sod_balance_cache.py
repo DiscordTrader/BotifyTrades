@@ -1,4 +1,6 @@
 import threading
+import json
+import os
 from datetime import datetime
 
 _instance = None
@@ -21,6 +23,8 @@ _BROKER_NAME_MAP = {
     'ibkr_paper': 'IBKR',
     'questrade': 'QUESTRADE',
 }
+
+_PERSIST_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'sod_snapshots.json')
 
 
 def _normalize_broker_name(name):
@@ -45,8 +49,47 @@ class SODBalanceCache:
         self._cache = {}
         self._captured_date = {}
         self._lock = threading.Lock()
+        self._load_from_disk()
 
-    def capture_snapshot(self, broker_name, buying_power, options_buying_power, portfolio_value=None, snapshot_type="start_of_day"):
+    def _load_from_disk(self):
+        try:
+            if not os.path.exists(_PERSIST_PATH):
+                return
+            with open(_PERSIST_PATH, 'r') as f:
+                data = json.load(f)
+            try:
+                from zoneinfo import ZoneInfo
+            except ImportError:
+                from backports.zoneinfo import ZoneInfo
+            today_str = datetime.now(ZoneInfo('America/New_York')).strftime('%Y-%m-%d')
+            loaded = 0
+            for cache_key, entry in data.items():
+                stored_date = entry.get('_date')
+                if stored_date == today_str:
+                    snapshot = {k: v for k, v in entry.items() if k != '_date'}
+                    self._cache[cache_key] = snapshot
+                    self._captured_date[cache_key] = stored_date
+                    loaded += 1
+            if loaded > 0:
+                print(f"[SOD] ✓ Restored {loaded} snapshot(s) from disk (date={today_str})")
+        except Exception as e:
+            print(f"[SOD] ⚠️ Failed to load persisted snapshots: {e}")
+
+    def _persist_to_disk(self):
+        try:
+            persist_data = {}
+            for cache_key, snapshot in self._cache.items():
+                date_str = self._captured_date.get(cache_key)
+                if date_str:
+                    entry = dict(snapshot)
+                    entry['_date'] = date_str
+                    persist_data[cache_key] = entry
+            with open(_PERSIST_PATH, 'w') as f:
+                json.dump(persist_data, f, indent=2)
+        except Exception as e:
+            print(f"[SOD] ⚠️ Failed to persist snapshots: {e}")
+
+    def capture_snapshot(self, broker_name, buying_power, options_buying_power, portfolio_value=None, snapshot_type="start_of_day", force=False):
         try:
             from zoneinfo import ZoneInfo
         except ImportError:
@@ -58,6 +101,12 @@ class SODBalanceCache:
         cache_key = f"{normalized}_{snapshot_type}"
         label = "Pre-Market 4AM" if snapshot_type == "pre_market" else "SOD 9:30AM"
         with self._lock:
+            if not force and self._captured_date.get(cache_key) == today_str:
+                existing = self._cache.get(cache_key, {})
+                existing_pv = existing.get('portfolio_value', 0)
+                existing_at = existing.get('captured_at', 'unknown')
+                print(f"[SOD] [{label}] {normalized}: Already captured today (${existing_pv:,.2f} at {existing_at}) — skipping re-capture (current: ${pv:,.2f})")
+                return
             self._cache[cache_key] = {
                 'buying_power': float(buying_power or 0),
                 'options_buying_power': float(options_buying_power or 0),
@@ -66,6 +115,7 @@ class SODBalanceCache:
                 'snapshot_type': snapshot_type,
             }
             self._captured_date[cache_key] = today_str
+            self._persist_to_disk()
         print(f"[SOD] [{label}] Captured {normalized}: Stock BP=${buying_power:,.2f}, Options BP=${options_buying_power:,.2f}, Portfolio=${pv:,.2f}")
 
     def get_snapshot(self, broker_name, snapshot_type="start_of_day"):
@@ -102,8 +152,9 @@ class SODBalanceCache:
                 self._cache.clear()
                 self._captured_date.clear()
                 print("[SOD] Cache cleared (all types)")
+            self._persist_to_disk()
 
-    async def capture_all_brokers(self, bot_instance, snapshot_type="start_of_day"):
+    async def capture_all_brokers(self, bot_instance, snapshot_type="start_of_day", force=False):
         broker_attrs = [
             'broker', 'webull_paper_broker', 'paper_broker', 'schwab_broker',
             'tastytrade_broker', 'robinhood_broker', 'ibkr_broker', 'questrade_broker'
@@ -120,7 +171,7 @@ class SODBalanceCache:
 
         import asyncio
         label = "Pre-Market 4AM" if snapshot_type == "pre_market" else "SOD 9:30AM"
-        print(f"[SOD] [{label}] Capturing balances for {len(brokers_to_capture)} broker(s)...")
+        print(f"[SOD] [{label}] Capturing balances for {len(brokers_to_capture)} broker(s)...{' (FORCE)' if force else ''}")
 
         async def _capture_one(broker):
             try:
@@ -129,7 +180,7 @@ class SODBalanceCache:
                     bp = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
                     opts_bp = float(account_info.get('options_buying_power') or bp)
                     pv = float(account_info.get('net_liquidation') or account_info.get('portfolio_value') or account_info.get('total_equity') or bp)
-                    self.capture_snapshot(broker.name, bp, opts_bp, portfolio_value=pv, snapshot_type=snapshot_type)
+                    self.capture_snapshot(broker.name, bp, opts_bp, portfolio_value=pv, snapshot_type=snapshot_type, force=force)
                 else:
                     print(f"[SOD] {broker.name}: get_account_info returned empty")
             except asyncio.TimeoutError:
