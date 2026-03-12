@@ -1,88 +1,128 @@
-# BotifyTrades — macOS Setup Guide
+# BotifyTrades v6.2.6 — macOS Setup Guide
 
 Complete step-by-step instructions to install and run BotifyTrades on your Mac.
 No programming or coding knowledge required.
 
 ---
 
-## What's in Your Package
+## Which Download Do I Need?
 
-When you download or receive BotifyTrades, you should have:
-
-| File | What It Does |
+| Your Mac Type | Download File |
 |---|---|
-| `BotifyTrades` | The main application (run this!) |
-| `config.ini` | Trading settings configuration |
-| `GET_DISCORD_TOKEN.html` | Easy one-click Discord token extractor |
-| `GET_WEBULL_TOKENS.html` | Step-by-step Webull credential guide |
+| **Apple Silicon** (M1, M2, M3, M4) | `BotifyTrades-macOS-Silicon.tar.gz` |
+| **Intel-based Mac** | `BotifyTrades-macOS-Intel.tar.gz` |
+
+**Not sure which Mac you have?** Click the **Apple menu** (top-left corner) → **About This Mac**.
+- If it says **Apple M1/M2/M3/M4** → download the **Silicon** version
+- If it says **Intel** → download the **Intel** version
 
 ---
 
-## System Requirements
+## Step 1: Download
 
-- macOS 12 (Monterey) or later
-- Active internet connection
-- Discord account
-- At least one broker account (Webull, Alpaca, Schwab, Robinhood, IBKR, or Tastytrade)
-- ~500 MB free disk space
+Go to the BotifyTrades releases page and download the `.tar.gz` file for your Mac type.
+The file will appear in your **Downloads** folder.
 
 ---
 
-## Step 1: Extract the Files
+## Step 2: Extract the File
 
-1. Locate the downloaded BotifyTrades `.zip` file (usually in your **Downloads** folder)
-2. **Double-click** the `.zip` file to extract it
-3. A folder called `BotifyTrades` will appear
-4. **Drag this folder** to a permanent location — your **Desktop** or **Documents** folder works great
+### Option A: Double-Click (Easiest)
+
+1. Open **Finder** and go to your **Downloads** folder
+2. **Double-click** the `BotifyTrades-macOS-Silicon.tar.gz` (or `Intel.tar.gz`) file
+3. macOS will extract it automatically — a `BotifyTrades` file will appear in the same folder
+
+### Option B: Using Terminal
+
+1. Open **Terminal** (press `Cmd + Space`, type "Terminal", hit Enter)
+2. Run:
+
+```bash
+cd ~/Downloads
+tar -xzf BotifyTrades-macOS-Silicon.tar.gz
+```
+
+(Replace `Silicon` with `Intel` if you downloaded the Intel version)
 
 ---
 
-## Step 2: Allow the App to Run (macOS Security)
+## Step 3: Move to a Permanent Location
 
-macOS blocks apps from unidentified developers by default. You need to allow BotifyTrades to run:
+Drag the extracted `BotifyTrades` file (or folder) to a permanent location. We recommend creating a folder on your **Desktop**:
 
-### First Attempt
+1. On your Desktop, **right-click** → **New Folder** → name it `BotifyTrades`
+2. Move the extracted file into that folder
 
-1. Open the `BotifyTrades` folder
-2. **Right-click** (or Control-click) the `BotifyTrades` file
-3. Select **Open** from the menu
-4. A warning will appear — click **Open** to confirm
+---
 
-> If you double-click instead of right-clicking, macOS may block it with no "Open" option. Always **right-click → Open** the first time.
+## Step 4: Make It Executable and Allow It to Run
 
-### If You See "BotifyTrades cannot be opened"
+macOS requires two things before you can run a downloaded application: it needs permission to execute, and it needs to bypass the security check for unidentified developers.
 
-1. Open **System Settings** (click the Apple menu → System Settings)
-2. Go to **Privacy & Security**
-3. Scroll down — you will see a message like:
-   *"BotifyTrades was blocked from use because it is not from an identified developer"*
-4. Click **Open Anyway**
-5. Enter your Mac password when prompted
-6. Go back to the `BotifyTrades` folder and **double-click** the file again
-7. Click **Open** in the final confirmation dialog
+Open **Terminal** (press `Cmd + Space`, type "Terminal", hit Enter) and run these two commands:
 
-### Alternative: Remove Quarantine via Terminal
-
-If the above doesn't work, open **Terminal** (press `Cmd + Space`, type "Terminal", hit Enter) and run:
+```bash
+chmod +x ~/Desktop/BotifyTrades/BotifyTrades
+```
 
 ```bash
 xattr -rd com.apple.quarantine ~/Desktop/BotifyTrades/BotifyTrades
 ```
 
-(Adjust the path if you placed the folder somewhere else, e.g., replace `Desktop` with `Documents`)
+- The first command gives the file permission to run as a program
+- The second command removes the macOS quarantine flag so it won't be blocked
+
+> **Adjust the path** if you placed the file somewhere other than `~/Desktop/BotifyTrades/`
 
 ---
 
-## Step 3: First Run — License Activation
+## Step 5: Run BotifyTrades
 
-When you run BotifyTrades for the first time:
+Still in Terminal, start the bot:
 
-1. **Double-click** `BotifyTrades` (or right-click → Open)
-2. A Terminal window will open with the setup wizard
-3. Your **Machine ID** will be displayed — a 16-character code unique to your Mac
-4. **Copy your Machine ID** and send it to your bot provider to receive your license key
-5. Once you have your license key, paste it when prompted
-6. You will see a confirmation:
+```bash
+~/Desktop/BotifyTrades/BotifyTrades
+```
+
+You should see the bot start up:
+
+```
+============================================================
+BotifyTrades v6.2.6 — Automated Trading Platform
+============================================================
+[DATABASE] ✓ Database initialized
+[CONFIG]   ✓ All settings loaded successfully
+[GUI]      ✓ Web control panel started on port 5000
+[MAIN]     ✓ Discord bot is ready and connected
+```
+
+**Keep this Terminal window open** — closing it stops the bot.
+
+---
+
+## Step 6: If macOS Still Blocks It
+
+If you see a message like *"BotifyTrades can't be opened because Apple cannot check it for malicious software"*:
+
+1. Click the **Apple menu** (top-left corner) → **System Settings**
+2. Go to **Privacy & Security**
+3. Scroll down — you will see:
+   *"BotifyTrades was blocked from use because it is not from an identified developer"*
+4. Click **Open Anyway**
+5. Enter your Mac password when prompted
+6. Go back to Terminal and run the command from Step 5 again
+
+---
+
+## Step 7: First Run — License Activation
+
+On the first run, the setup wizard will appear:
+
+1. Your **Machine ID** will be displayed — a 16-character code unique to your Mac
+2. **Copy your Machine ID** and send it to your bot provider to receive your license key
+3. Once you have your license key, paste it when prompted
+4. You will see:
 
 ```
 ✅ LICENSE ACTIVATED SUCCESSFULLY!
@@ -94,21 +134,9 @@ When you run BotifyTrades for the first time:
 
 ---
 
-## Step 4: Get Your Discord Token
+## Step 8: Get Your Discord Token
 
-The setup wizard will ask for your Discord token. Here's how to get it:
-
-### Easy Method (Recommended)
-
-1. In your BotifyTrades folder, **double-click** `GET_DISCORD_TOKEN.html`
-2. It opens in your web browser with a green button
-3. **Drag the green button** to your browser's bookmarks bar
-4. Go to https://discord.com/app and log in
-5. **Click the bookmarklet** you just added to your bookmarks bar
-6. Your token is automatically copied to your clipboard
-7. Go back to the BotifyTrades setup wizard and **paste** it (`Cmd + V`)
-
-### Manual Method
+The setup wizard will ask for your Discord token:
 
 1. Open Discord in **Safari or Chrome** (not the desktop app): https://discord.com/app
 2. Log in to your account
@@ -120,36 +148,31 @@ The setup wizard will ask for your Discord token. Here's how to get it:
 (webpackChunkdiscord_app.push([[''],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken()
 ```
 
-6. A long token string appears — **copy it** (highlight and `Cmd + C`)
-7. Paste into the setup wizard
+6. A long token string appears — **copy it** (`Cmd + C`)
+7. Paste into the setup wizard (`Cmd + V`)
+
+> **Tip:** If a `GET_DISCORD_TOKEN.html` file was included in your download, you can double-click it for an even easier one-click method.
 
 ---
 
-## Step 5: Configure Webull Credentials
+## Step 9: Configure Webull Credentials
 
-The wizard will ask for your Webull credentials. You can use either method:
+The wizard will ask for your Webull credentials:
 
-### Option A: Token Authentication (Recommended)
+- **Access Token** — from Webull browser cookies
+- **Refresh Token** — from Webull browser cookies
+- **Device ID (DID)** — from Webull browser cookies
+- **6-digit Trading PIN** — your Webull PIN
 
-1. Open `GET_WEBULL_TOKENS.html` from your BotifyTrades folder
-2. Follow the visual step-by-step guide to extract:
-   - **Access Token**
-   - **Refresh Token**
-   - **Device ID (DID)**
-3. Enter your **6-digit Webull trading PIN**
-4. Paste each value into the setup wizard when prompted
-
-### Option B: Username & Password
-
-Simply enter your Webull email and password when the wizard asks.
+> **Tip:** If a `GET_WEBULL_TOKENS.html` file was included in your download, double-click it for a visual step-by-step guide on extracting these values.
 
 ---
 
-## Step 6: Disable AirPlay Receiver (Important!)
+## Step 10: Disable AirPlay Receiver (Important!)
 
-macOS uses **port 5000** for AirPlay Receiver, which conflicts with the BotifyTrades web dashboard. You must disable it:
+macOS Monterey and later uses **port 5000** for AirPlay Receiver, which conflicts with the BotifyTrades web dashboard.
 
-1. Click the **Apple menu** (top-left corner) → **System Settings**
+1. Click the **Apple menu** → **System Settings**
 2. Go to **General** → **AirDrop & Handoff**
 3. Turn **OFF** the **AirPlay Receiver** toggle
 
@@ -157,26 +180,7 @@ macOS uses **port 5000** for AirPlay Receiver, which conflicts with the BotifyTr
 
 ---
 
-## Step 7: Start Trading
-
-1. **Double-click** `BotifyTrades` to launch
-2. The bot will start and you will see:
-
-```
-============================================================
-BotifyTrades — Automated Trading Platform
-============================================================
-[DATABASE] ✓ Database initialized
-[CONFIG]   ✓ All settings loaded successfully
-[GUI]      ✓ Web control panel started on port 5000
-[MAIN]     ✓ Discord bot is ready and connected
-```
-
-3. **Keep the Terminal window open** — closing it stops the bot
-
----
-
-## Step 8: Open the Web Dashboard
+## Step 11: Open the Web Dashboard
 
 While the bot is running, open your web browser and go to:
 
@@ -191,11 +195,11 @@ From the dashboard you can:
 - Set up Discord channel monitoring
 - Configure risk management (stop-loss, profit targets, daily P&L limits)
 - View full trade history and performance analytics
-- Adjust all settings without editing files
+- Adjust all settings without editing any files
 
 ---
 
-## Step 9: Configure Additional Brokers (Optional)
+## Step 12: Configure Additional Brokers (Optional)
 
 In the web dashboard, click **Settings** to add more brokers:
 
@@ -214,48 +218,44 @@ In the web dashboard, click **Settings** to add more brokers:
 
 Every time you want to run the bot:
 
-1. Open the `BotifyTrades` folder
-2. **Double-click** `BotifyTrades`
+1. Open **Terminal** (`Cmd + Space`, type "Terminal", hit Enter)
+2. Run:
+
+```bash
+~/Desktop/BotifyTrades/BotifyTrades
+```
+
 3. Wait for the startup messages to appear
 4. Open `http://localhost:5000` in your browser to monitor
-5. **Leave the Terminal window open** while trading
+5. **Leave Terminal open** while trading
 
-To stop the bot: close the Terminal window, or press `Ctrl + C` in the Terminal.
+To stop the bot: press `Ctrl + C` in the Terminal, or close the Terminal window.
 
 ---
 
 ## Running the Bot in the Background
 
-If you want the bot to keep running even after closing the Terminal:
-
-1. Open **Terminal** (press `Cmd + Space`, type "Terminal", hit Enter)
-2. Navigate to your BotifyTrades folder:
+If you want the bot to keep running even after closing Terminal:
 
 ```bash
-cd ~/Desktop/BotifyTrades
+nohup ~/Desktop/BotifyTrades/BotifyTrades > ~/Desktop/BotifyTrades/bot_output.log 2>&1 &
 ```
 
-3. Start the bot in the background:
+You can now close Terminal — the bot keeps running.
 
-```bash
-nohup ./BotifyTrades > bot_output.log 2>&1 &
-```
-
-4. You can now close Terminal — the bot keeps running
-
-To check if it's still running:
+**Check if it's still running:**
 
 ```bash
 ps aux | grep BotifyTrades
 ```
 
-To stop it:
+**Stop the background bot:**
 
 ```bash
 pkill -f BotifyTrades
 ```
 
-To view the live log:
+**View the live log:**
 
 ```bash
 tail -f ~/Desktop/BotifyTrades/bot_output.log
@@ -263,36 +263,53 @@ tail -f ~/Desktop/BotifyTrades/bot_output.log
 
 ---
 
-## Updating BotifyTrades
+## Updating to a New Version
 
-When you receive a new version:
+When a new version is released:
 
-1. **Stop the bot** (close Terminal or press `Ctrl + C`)
-2. Replace the `BotifyTrades` file in your folder with the new one
-3. **Right-click → Open** the new file (macOS security step — first time only)
-4. Your settings, license, and credentials are preserved automatically
+1. **Stop the bot** (press `Ctrl + C` or run `pkill -f BotifyTrades`)
+2. Download the new `.tar.gz` file from the releases page
+3. Extract it (double-click or use `tar -xzf`)
+4. Replace the old `BotifyTrades` file with the new one
+5. Run the permission commands again:
+
+```bash
+chmod +x ~/Desktop/BotifyTrades/BotifyTrades
+xattr -rd com.apple.quarantine ~/Desktop/BotifyTrades/BotifyTrades
+```
+
+6. Start the bot — your settings, license, and credentials are preserved automatically
 
 ---
 
 ## Troubleshooting
 
 ### "BotifyTrades can't be opened because Apple cannot check it for malicious software"
-Right-click the file → click **Open** → click **Open** again. Or go to System Settings → Privacy & Security → click **Open Anyway**. See Step 2 for full instructions.
+Run these commands in Terminal:
+```bash
+chmod +x ~/Desktop/BotifyTrades/BotifyTrades
+xattr -rd com.apple.quarantine ~/Desktop/BotifyTrades/BotifyTrades
+```
+Then try running it again. If still blocked, go to System Settings → Privacy & Security → click **Open Anyway**.
 
-### "Permission denied" when trying to run
-Open Terminal and make the file executable:
+### "Permission denied"
 ```bash
 chmod +x ~/Desktop/BotifyTrades/BotifyTrades
 ```
 
+### "zsh: exec format error"
+You downloaded the wrong version for your Mac. Check which Mac you have (Apple menu → About This Mac) and download the correct one:
+- Apple M1/M2/M3/M4 → `BotifyTrades-macOS-Silicon.tar.gz`
+- Intel → `BotifyTrades-macOS-Intel.tar.gz`
+
 ### Web dashboard not loading at localhost:5000
-- Make sure the bot is running (Terminal window should be open with startup messages)
-- Disable AirPlay Receiver (see Step 6)
+- Make sure the bot is running (Terminal should show startup messages)
+- Disable AirPlay Receiver (see Step 10)
 - Try `http://127.0.0.1:5000` instead
-- If still not working, try a different port: before launching the bot, open Terminal and run:
+- If still not working, use a different port:
   ```bash
   export GUI_PORT=8080
-  ./BotifyTrades
+  ~/Desktop/BotifyTrades/BotifyTrades
   ```
   Then open `http://localhost:8080`
 
@@ -300,20 +317,19 @@ chmod +x ~/Desktop/BotifyTrades/BotifyTrades
 Contact support for a license renewal. Your Machine ID is shown when the bot starts.
 
 ### "Discord token error"
-Your Discord token may have expired. Get a new one using `GET_DISCORD_TOKEN.html` (see Step 4) and re-enter it in the web dashboard under Settings.
+Your Discord token may have expired. Get a new one (see Step 8) and re-enter it in the web dashboard under Settings.
 
 ### Bot not executing trades
 - Check that Discord channels are configured in the web dashboard
 - Verify broker credentials are correct under Settings
 - Check the Terminal window for error messages
 
-### Bot crashes on startup
+### Bot crashes immediately
 - Make sure you have an active internet connection
 - Verify macOS is version 12 or later (Apple menu → About This Mac)
-- Try running from Terminal to see the error:
+- Run from Terminal to see the full error output:
   ```bash
-  cd ~/Desktop/BotifyTrades
-  ./BotifyTrades
+  ~/Desktop/BotifyTrades/BotifyTrades
   ```
 
 ---
@@ -323,22 +339,22 @@ Your Discord token may have expired. Get a new one using `GET_DISCORD_TOKEN.html
 - **Start with paper trading** — enable `paper_trade` in Settings before using real money
 - **Monitor the bot** — check positions regularly through the web dashboard
 - **Keep your credentials secure** — never share your Discord token, license key, or broker credentials
-- **Your license is hardware-locked** — it only works on this specific Mac. Contact support if you get a new computer.
+- **Your license is hardware-locked** — it only works on this specific Mac. Contact support if you get a new computer
 
 ---
 
 ## Quick Reference
 
-| Action | How |
+| Action | Command |
 |---|---|
-| Start bot | Double-click `BotifyTrades` |
-| Stop bot | Close Terminal window or press `Ctrl + C` |
-| Open dashboard | Go to `http://localhost:5000` in browser |
-| Run in background | `nohup ./BotifyTrades > bot_output.log 2>&1 &` |
+| Run the bot | `~/Desktop/BotifyTrades/BotifyTrades` |
+| Stop the bot | `Ctrl + C` in Terminal |
+| Open dashboard | `http://localhost:5000` in browser |
+| Run in background | `nohup ~/Desktop/BotifyTrades/BotifyTrades > ~/Desktop/BotifyTrades/bot_output.log 2>&1 &` |
 | Stop background bot | `pkill -f BotifyTrades` |
-| Fix macOS security block | Right-click → Open → Open |
-| Fix permission denied | `chmod +x BotifyTrades` |
+| Fix security block | `chmod +x BotifyTrades && xattr -rd com.apple.quarantine BotifyTrades` |
 | Fix port 5000 conflict | Disable AirPlay Receiver in System Settings |
+| Check your Mac type | Apple menu → About This Mac |
 
 ---
 
