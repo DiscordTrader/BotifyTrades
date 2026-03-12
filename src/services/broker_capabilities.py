@@ -34,13 +34,6 @@ BROKER_CAPABILITIES: Dict[str, BrokerCapability] = {
         rate_limit_key='webull',
         priority=40
     ),
-    'WEBULL_PAPER': BrokerCapability(
-        broker_id='WEBULL_PAPER',
-        supports_stock_quotes=True,
-        supports_option_quotes=False,
-        rate_limit_key='webull',
-        priority=41
-    ),
     'ALPACA': BrokerCapability(
         broker_id='ALPACA',
         supports_stock_quotes=True,

@@ -963,7 +963,6 @@ def _refresh_snapshot(bot_instance):
 
         broker_fetchers = {
             'WEBULL': (_fetch_webull, bot_instance),
-            'WEBULL_PAPER': (_fetch_webull_paper, bot_instance),
             'ALPACA_PAPER': (_fetch_alpaca, bot_instance),
             'ROBINHOOD': (_fetch_robinhood, bot_instance),
             'SCHWAB': (_fetch_schwab, bot_instance),

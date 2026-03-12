@@ -2202,7 +2202,8 @@ def init_db():
     
     conn.commit()
     
-    # Ensure signal verification tables exist
+    init_broker_states_table()
+    
     ensure_signal_verification_tables()
     
     print("[DATABASE] ✓ Database initialized")
@@ -3679,7 +3680,7 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
     cursor.execute(broker_query)
     brokers = [row['broker'] for row in cursor.fetchall()]
     if not brokers:
-        brokers = ['WEBULL', 'WEBULL_PAPER', 'ALPACA_PAPER', 'ROBINHOOD']
+        brokers = ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']
     
     return {
         'positions': position_list,
@@ -4554,10 +4555,13 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     if not lot:
         return None
     
-    # Calculate PNL with proper rounding to avoid floating point precision issues
+    if close_price is None:
+        print(f"[LOT_MATCHER] ⚠️ close_price is None for lot {lot_id} — skipping P&L calculation")
+        return None
+    
     cost_basis = lot['open_price'] * close_qty
     if lot['asset_type'] == 'option':
-        cost_basis *= 100  # Options contract multiplier
+        cost_basis *= 100
         proceeds = close_price * close_qty * 100
     else:
         proceeds = close_price * close_qty

@@ -34,7 +34,6 @@ class BrokerLiveAnalytics:
     
     BROKER_CONFIGS = {
         'webull_live': {'name': 'Webull Live', 'type': 'webull', 'paper': False},
-        'webull_paper': {'name': 'Webull Paper', 'type': 'webull', 'paper': True},
         'alpaca_live': {'name': 'Alpaca Live', 'type': 'alpaca', 'paper': False},
         'alpaca_paper': {'name': 'Alpaca Paper', 'type': 'alpaca', 'paper': True},
         'tastytrade_live': {'name': 'Tastytrade Live', 'type': 'tastytrade', 'paper': False},
@@ -876,7 +875,6 @@ class BrokerLiveAnalytics:
         # Map broker_id to broker name for database lookup
         broker_name_map = {
             'webull_live': 'Webull',
-            'webull_paper': 'Webull',
             'alpaca_live': 'Alpaca',
             'alpaca_paper': 'Alpaca',
             'ibkr_live': 'IBKR',
