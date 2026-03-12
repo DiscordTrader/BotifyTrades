@@ -1961,8 +1961,15 @@ def register_routes(app):
             # If legacy trailing is being set, disable early trailing
             data['enable_early_trailing'] = 0
         
-        # When channel-specific risk settings are saved, disable "use global" flag
-        if data.get('risk_management_enabled') or data.get('stop_loss_pct') is not None or data.get('profit_target_1_pct') is not None:
+        channel_specific_risk_fields = (
+            'risk_management_enabled', 'stop_loss_pct', 'profit_target_1_pct',
+            'exit_strategy_mode', 'signal_update_automation', 'escalation_only_mode',
+            'trailing_stop_pct', 'trailing_activation_pct',
+            'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
+            'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct',
+            'profit_target_2_pct', 'profit_target_3_pct', 'profit_target_4_pct',
+        )
+        if any(data.get(f) is not None for f in channel_specific_risk_fields):
             data.setdefault('use_global_risk_settings', 0)
         
         # Perform the update

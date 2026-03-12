@@ -1746,9 +1746,9 @@ function buildRiskControlsTab(ch) {
                 <div class="settings-field">
                     <label>Order Chase</label>
                     <select onchange="updateChaseMode(${ch.id}, this.value)">
-                        <option value="off" ${ch.entry_chase_enabled === 0 && ch.order_chase_enabled === 0 ? 'selected' : ''}>OFF</option>
-                        <option value="entry" ${ch.entry_chase_enabled === 1 && ch.order_chase_enabled === 0 ? 'selected' : ''}>Entry Only</option>
-                        <option value="exit" ${(ch.entry_chase_enabled === 0 || ch.entry_chase_enabled === null) && (ch.order_chase_enabled === 1 || ch.order_chase_enabled === null) ? 'selected' : ''}>Exit Only</option>
+                        <option value="off" ${!ch.entry_chase_enabled && !ch.order_chase_enabled ? 'selected' : ''}>OFF</option>
+                        <option value="entry" ${ch.entry_chase_enabled === 1 && !ch.order_chase_enabled ? 'selected' : ''}>Entry Only</option>
+                        <option value="exit" ${!ch.entry_chase_enabled && ch.order_chase_enabled === 1 ? 'selected' : ''}>Exit Only</option>
                         <option value="both" ${ch.entry_chase_enabled === 1 && ch.order_chase_enabled === 1 ? 'selected' : ''}>Both</option>
                     </select>
                     <div class="settings-helper">Chase unfilled orders with mid-price replacement</div>
@@ -2155,7 +2155,7 @@ async function updateEscalationOnlyMode(channelId, enabled) {
         if (response.ok) {
             updateLocalChannel(channelId, { escalation_only_mode: enabled ? 1 : 0 });
             if (enabled) {
-                const ch = channelsData.find(c => c.id === channelId);
+                const ch = allChannels.find(c => c.id === channelId);
                 const hasDynSL = ch && ch.enable_dynamic_sl;
                 const hasEarlyTrail = ch && ch.enable_early_trailing;
                 if (!hasDynSL && !hasEarlyTrail) {
