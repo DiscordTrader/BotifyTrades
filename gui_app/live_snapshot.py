@@ -756,6 +756,8 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
 
         enriched.append(pos)
 
+    DECOMMISSIONED_BROKERS = {'WEBULL_PAPER'}
+
     synced_brokers = set()
     if broker_status:
         for bname, bstat in broker_status.items():
@@ -766,6 +768,9 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
         tid = t.get('id')
         if tid not in seen_db_ids:
             trade_broker = str(t.get('broker', '')).upper()
+
+            if trade_broker in DECOMMISSIONED_BROKERS:
+                continue
 
             if trade_broker in synced_brokers:
                 trade_status = str(t.get('status', '')).upper()
