@@ -6,3 +6,9 @@ id = "KpD1aRlY8zU2fLV8KbwhO"
 uri = "file://MACOS_SETUP_GUIDE.md"
 type = "text"
 title = "BotifyTrades v6.2.6 — macOS Setup Guide (Executable)"
+
+[[outputs]]
+id = "-XjY76wTW_2dBGNFekD0I"
+uri = "file://CONDITIONAL_ORDERS_GUIDE.md"
+type = "text"
+title = "Conditional Orders Guide"
