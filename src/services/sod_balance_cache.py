@@ -84,8 +84,10 @@ class SODBalanceCache:
                     entry = dict(snapshot)
                     entry['_date'] = date_str
                     persist_data[cache_key] = entry
-            with open(_PERSIST_PATH, 'w') as f:
+            tmp_path = _PERSIST_PATH + '.tmp'
+            with open(tmp_path, 'w') as f:
                 json.dump(persist_data, f, indent=2)
+            os.replace(tmp_path, _PERSIST_PATH)
         except Exception as e:
             print(f"[SOD] ⚠️ Failed to persist snapshots: {e}")
 

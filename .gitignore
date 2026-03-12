@@ -83,6 +83,9 @@ build/linux/build_temp_hardened/
 bot_data.db
 *.db
 
+# Runtime SOD snapshots (daily P&L baseline persistence)
+sod_snapshots.json
+
 # Attached assets (may contain sensitive data)
 attached_assets/*.ini
 attached_assets/
