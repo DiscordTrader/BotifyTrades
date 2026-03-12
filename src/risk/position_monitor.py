@@ -2128,8 +2128,30 @@ class RiskManager:
         # 'signal' mode = follow trader exit signals only, no automated exits
         # 'risk' mode = use automated risk management only
         # 'hybrid' mode = both trader signals AND automated exits
+        # Exception: EMA risk still runs in 'signal' mode when explicitly enabled
         if channel_settings and channel_settings.exit_strategy_mode == 'signal':
-            return  # Signal mode: don't apply automated risk management, follow trader signals only
+            if channel_settings.ema_risk_enabled:
+                self._log_position_status(position, cache, channel_settings, pct_change)
+                ema_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
+                if ema_decision and ema_decision.should_exit:
+                    from src.services.market_hours import is_regular_market_hours, is_extended_hours
+                    if position.asset == 'option':
+                        market_open = is_regular_market_hours()
+                    else:
+                        market_open = is_regular_market_hours() or is_extended_hours()
+                    if not market_open:
+                        if not hasattr(self, '_after_hours_logged'):
+                            self._after_hours_logged = set()
+                        if pos_key not in self._after_hours_logged:
+                            self._after_hours_logged.add(pos_key)
+                            print(f"[RISK] ⏸️ AFTER HOURS — suppressing EMA exit for {pos_key} "
+                                  f"(reason: {ema_decision.reason}). Will re-evaluate when market opens.")
+                        return
+                    if hasattr(self, '_after_hours_logged'):
+                        self._after_hours_logged.discard(pos_key)
+                    await self._execute_exit(position, cache, ema_decision, channel_settings)
+                return
+            return
         
         self._log_position_status(position, cache, channel_settings, pct_change)
         
