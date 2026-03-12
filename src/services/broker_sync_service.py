@@ -544,6 +544,12 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'get_positions_detailed'):
                     positions = await broker_instance.get_positions_detailed() or []
                     
+                    if not positions and not result.get('_fetch_error'):
+                        had_error = getattr(broker_instance, '_last_fetch_had_error', False)
+                        if had_error:
+                            print(f"[SYNC] ⚠️ SCHWAB returned 0 positions after internal error — marking as fetch error")
+                            result['_fetch_error'] = True
+                    
                     for pos in positions:
                         result['positions'].append({
                             'symbol': pos.get('symbol'),
@@ -1129,29 +1135,34 @@ class BrokerSyncService:
         pending_by_symbol = {o['symbol']: o for o in normalized_data.get('pending_orders', [])}
         
         has_pending_trades = any(t['status'] == 'PENDING' for t in active_trades)
+        has_open_trades = any(t['status'] == 'OPEN' for t in active_trades)
         broker_returned_empty = not positions_by_key and not pending_by_order_id and not pending_by_symbol
-        if has_pending_trades and broker_returned_empty:
-            fetch_error = normalized_data.get('_fetch_error', False)
+        fetch_error = normalized_data.get('_fetch_error', False)
+        
+        if not hasattr(self, '_consecutive_empty_counts'):
+            self._consecutive_empty_counts = {}
+        
+        if broker_returned_empty and (has_pending_trades or has_open_trades):
             if fetch_error:
-                print(f"[SYNC] ⚠️ {broker_name} returned empty data with fetch error — skipping PENDING trade cancellation to avoid false cancels")
-                active_trades = [t for t in active_trades if t['status'] != 'PENDING']
-                if not hasattr(self, '_consecutive_empty_counts'):
-                    self._consecutive_empty_counts = {}
+                print(f"[SYNC] ⚠️ {broker_name} returned empty data with fetch error — skipping trade closures to avoid false state changes")
+                active_trades = [t for t in active_trades if t['status'] not in ('PENDING', 'OPEN')]
                 self._consecutive_empty_counts[broker_name] = 0
             else:
-                if not hasattr(self, '_consecutive_empty_counts'):
-                    self._consecutive_empty_counts = {}
                 self._consecutive_empty_counts[broker_name] = self._consecutive_empty_counts.get(broker_name, 0) + 1
                 empty_count = self._consecutive_empty_counts[broker_name]
-                if empty_count < 2:
-                    print(f"[SYNC] ⚠️ {broker_name} returned empty with PENDING trades (empty_count={empty_count}/2) — deferring cancellation for re-verify")
-                    active_trades = [t for t in active_trades if t['status'] != 'PENDING']
+                required_consecutive = 3
+                if empty_count < required_consecutive:
+                    statuses_deferred = []
+                    if has_pending_trades:
+                        statuses_deferred.append('PENDING')
+                    if has_open_trades:
+                        statuses_deferred.append('OPEN')
+                    print(f"[SYNC] ⚠️ {broker_name} returned empty with {'+'.join(statuses_deferred)} trades (empty_count={empty_count}/{required_consecutive}) — deferring closures for re-verify")
+                    active_trades = [t for t in active_trades if t['status'] not in statuses_deferred]
                 else:
-                    print(f"[SYNC] {broker_name} returned empty for {empty_count} consecutive cycles — proceeding with PENDING trade reconciliation")
+                    print(f"[SYNC] {broker_name} returned empty for {empty_count} consecutive cycles — proceeding with trade reconciliation")
         else:
-            if not hasattr(self, '_consecutive_empty_counts'):
-                self._consecutive_empty_counts = {}
-            if broker_name in getattr(self, '_consecutive_empty_counts', {}):
+            if broker_name in self._consecutive_empty_counts:
                 self._consecutive_empty_counts[broker_name] = 0
         
         for trade in active_trades:

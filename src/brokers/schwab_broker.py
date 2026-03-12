@@ -59,6 +59,7 @@ class SchwabBroker(BrokerInterface):
         self._position_cache_ttl = 60
         self._consecutive_zero_positions = 0
         self._position_cache_invalidated = False
+        self._last_fetch_had_error = False
         
         self._global_429_until = 0
         self._consecutive_429s = 0
@@ -1607,6 +1608,7 @@ class SchwabBroker(BrokerInterface):
     
     async def get_positions_detailed(self) -> List[Dict[str, Any]]:
         """Get detailed positions for sync service"""
+        self._last_fetch_had_error = False
         try:
             if self._should_skip_non_critical():
                 if self._data_hub:
@@ -1617,6 +1619,7 @@ class SchwabBroker(BrokerInterface):
                     return list(self._last_valid_positions)
             
             if not await self._ensure_valid_token():
+                self._last_fetch_had_error = True
                 if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                     print(f"[{self.name}] Token refresh pending - returning {len(self._last_valid_positions)} cached positions")
                     return list(self._last_valid_positions)
@@ -1624,6 +1627,7 @@ class SchwabBroker(BrokerInterface):
             
             if not self.account_hash:
                 print(f"[{self.name}] No account_hash - cannot fetch positions")
+                self._last_fetch_had_error = True
                 return []
             
 
@@ -1635,6 +1639,7 @@ class SchwabBroker(BrokerInterface):
 
             
             if response.status_code in (429, 503) or getattr(response, '_budget_blocked', False):
+                self._last_fetch_had_error = True
                 print(f"[{self.name}] ⚠️ Rate limited/throttled on get_positions_detailed - returning {len(self._last_valid_positions)} cached positions")
                 return list(self._last_valid_positions)
             
@@ -1703,6 +1708,7 @@ class SchwabBroker(BrokerInterface):
                     self._last_valid_positions_time = time.time()
                     self._consecutive_zero_positions = 0
                     self._position_cache_invalidated = False
+                    self._last_fetch_had_error = False
                     if self._data_hub:
                         try:
                             self._data_hub.update_positions(result, detailed=True, source="rest")
@@ -1729,6 +1735,7 @@ class SchwabBroker(BrokerInterface):
                     
         except Exception as e:
             print(f"[{self.name}] Error getting detailed positions: {e}")
+            self._last_fetch_had_error = True
             if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                 print(f"[{self.name}] Returning {len(self._last_valid_positions)} cached positions after error")
                 return list(self._last_valid_positions)
