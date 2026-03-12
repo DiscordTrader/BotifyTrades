@@ -4577,6 +4577,40 @@ class WebullBroker:
 
             stock_enforce = 'GTC'
             if is_market_order:
+                _convert_to_limit = False
+                try:
+                    from src.services.market_hours import is_regular_market_hours
+                    if not is_regular_market_hours():
+                        _convert_to_limit = True
+                except Exception:
+                    pass
+
+                if _convert_to_limit:
+                    _ext_price = None
+                    try:
+                        _ext_price = self._get_current_stock_quote(wb, base_sym)
+                    except Exception:
+                        pass
+                    if not _ext_price or _ext_price <= 0:
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            _wdh = get_webull_data_hub()
+                            if _wdh:
+                                _ext_price = _wdh.get_quote_price(base_sym)
+                        except Exception:
+                            pass
+                    if _ext_price and _ext_price > 0:
+                        if side == 'SELL':
+                            _ext_price = round(_ext_price * 0.97, 4)
+                        else:
+                            _ext_price = round(_ext_price * 1.03, 4)
+                        effective_price = _ext_price
+                        is_market_order = False
+                        print(f"[WEBULL] ⚠️ Extended hours — converting MKT to LMT @ ${_ext_price:.4f} for {side} {adjusted_qty} {base_sym}")
+                    else:
+                        print(f"[WEBULL] ⚠️ Extended hours but no quote — attempting MKT anyway for {side} {adjusted_qty} {base_sym}")
+
+            if is_market_order:
                 base_payload = {
                     'stock': base_sym,
                     'tId': int(tId),

@@ -879,11 +879,35 @@ class WebullBroker(BrokerInterface):
                     print(f"[{self.name}] ⚠️ Webull requires minimum {min_qty} shares for ${price:.4f} stocks, adjusting {quantity} → {min_qty}")
                     quantity = min_qty
             
+            _effective_price = price
+            _use_limit = price is not None
+
+            if price is None:
+                _convert_to_limit = False
+                try:
+                    from src.services.market_hours import is_regular_market_hours
+                    if not is_regular_market_hours():
+                        _convert_to_limit = True
+                except Exception:
+                    pass
+
+                if _convert_to_limit:
+                    try:
+                        quote = self.wb.get_quote(stock=symbol)
+                        if quote:
+                            _qp = float(quote.get('close', 0) or quote.get('price', 0) or 0)
+                            if _qp > 0:
+                                if side == 'SELL':
+                                    _effective_price = round(_qp * 0.97, 4)
+                                else:
+                                    _effective_price = round(_qp * 1.03, 4)
+                                _use_limit = True
+                                print(f"[{self.name}] ⚠️ Extended hours — converting MKT to LMT @ ${_effective_price:.4f}")
+                    except Exception as _eq:
+                        print(f"[{self.name}] ⚠️ Extended hours quote fetch failed: {_eq}")
+
             def execute_order():
-                if price is None:
-                    # Market order - does NOT support extended hours on Webull
-                    if extended_hours_enabled:
-                        print(f"[{self.name}] ⚠️ Extended hours disabled for MARKET orders (not supported by Webull)")
+                if not _use_limit:
                     return self.wb.place_order(
                         stock=symbol,
                         price=0.0,
@@ -891,18 +915,16 @@ class WebullBroker(BrokerInterface):
                         orderType='MKT',
                         enforce='GTC',
                         quant=quantity
-                        # outsideRegularTradingHour NOT set for market orders
                     )
                 else:
-                    # Limit order - supports extended hours trading
                     return self.wb.place_order(
                         stock=symbol,
-                        price=price,
+                        price=_effective_price,
                         action=side,
                         orderType='LMT',
                         enforce='GTC',
                         quant=quantity,
-                        outsideRegularTradingHour=extended_hours_enabled
+                        outsideRegularTradingHour=True
                     )
             
             TRANSIENT_CODES = {'trade.system.exception', 'trade.busy', 'system.busy'}
