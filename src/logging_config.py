@@ -105,6 +105,8 @@ class CleanConsoleFormatter(logging.Formatter):
         '[SCHWAB TOKEN]', '[SCHWAB HOT-CONNECT]',
         # SOD Balance Cache
         '[SOD]',
+        # EMA Candlestick Risk Engine
+        '[EMA]',
         # Debug (when enabled)
         '[DEBUG]', '[API]', '[ROUTE]'
     ]

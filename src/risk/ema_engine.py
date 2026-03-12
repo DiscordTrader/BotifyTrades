@@ -1019,6 +1019,12 @@ _candle_service: Optional[CandlePreWarmService] = None
 
 def get_candle_service() -> CandlePreWarmService:
     global _candle_service
+    import builtins
+    existing = getattr(builtins, '_ema_candle_service_singleton', None)
+    if existing is not None:
+        _candle_service = existing
+        return existing
     if _candle_service is None:
         _candle_service = CandlePreWarmService()
+        builtins._ema_candle_service_singleton = _candle_service
     return _candle_service
