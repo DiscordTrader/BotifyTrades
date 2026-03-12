@@ -13682,6 +13682,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
                     }
                     print(f"[RISK CONFIG] ✓ Channel risk settings attached for LIVE execution")
+                    opt['_exit_strategy_mode'] = channel_info.get('exit_strategy_mode', 'signal')
                 
                 # GAP FIX: Check circuit breaker before execution (same as conditional orders)
                 try:
@@ -14173,7 +14174,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # Auto-generate bracket order prices from channel risk settings (stock BTO only)
                 # When signal doesn't include SL/PT but channel has them configured, compute dollar prices
-                if channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price'):
+                # SKIP bracket auto-generation for 'signal' exit mode — exits should only happen via STC signals
+                ch_exit_mode = channel_info.get('exit_strategy_mode', 'signal') if channel_info else 'signal'
+                if channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode != 'signal':
                     entry_price = float(stk['price'])
                     
                     if not stk.get('stop_loss_price'):
@@ -14190,6 +14193,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             stk['profit_target_price'] = pt_price
                             stk['_pt_from_channel'] = True
                             print(f"[BRACKET AUTO] ✓ Channel PT1 {ch_pt_pct}% → ${pt_price:.2f} (entry: ${entry_price:.2f})")
+                elif channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode == 'signal':
+                    print(f"[BRACKET AUTO] ⏭ Skipped bracket auto-generation — exit_strategy_mode='signal' (exits via STC signals only)")
+                
+                stk['_exit_strategy_mode'] = ch_exit_mode
                 
                 # Entry Confirmation for stocks: require price to go +X% above signal's watching price
                 stk_entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
@@ -14900,11 +14907,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             _original_print(f"[{broker_name}] Executing {signal['action']} {signal['qty']} {signal['symbol']}")
             
             # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
+            # NEVER use bracket orders for 'signal' exit mode — exits must come from STC signals only
+            _sig_exit_mode = signal.get('_exit_strategy_mode', 'hybrid')
             use_bracket = (
                 signal['action'] == 'BTO' and
                 (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                hasattr(broker_instance, 'place_bracket_order')
+                hasattr(broker_instance, 'place_bracket_order') and
+                _sig_exit_mode != 'signal'
             )
+            
+            if _sig_exit_mode == 'signal' and (signal.get('stop_loss_price') or signal.get('profit_target_price')):
+                _original_print(f"[{broker_name}] ⏭ Bracket order SKIPPED — exit_strategy_mode='signal' (SL/PT stored for software-side risk only)")
             
             if use_bracket:
                 asset_label = signal['asset'].upper()
@@ -17014,11 +17027,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         _original_print(f"[PAPER TRADE] [POSITION SIZE] ⚠️ Could not calculate position size: {e}")
                                 
                                 # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
+                                # NEVER use bracket orders for 'signal' exit mode
+                                _paper_exit_mode = signal.get('_exit_strategy_mode', 'hybrid')
                                 use_bracket = (
                                     signal['action'] == 'BTO' and
                                     (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                                    hasattr(active_paper_broker, 'place_bracket_order')
+                                    hasattr(active_paper_broker, 'place_bracket_order') and
+                                    _paper_exit_mode != 'signal'
                                 )
+                                
+                                if _paper_exit_mode == 'signal' and (signal.get('stop_loss_price') or signal.get('profit_target_price')):
+                                    _original_print(f"[PAPER TRADE] ⏭ Bracket order SKIPPED — exit_strategy_mode='signal'")
                                 
                                 if use_bracket:
                                     asset_label = signal['asset'].upper()
@@ -17220,11 +17239,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 traceback.print_exc()
                         
                         # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
+                        # NEVER use bracket orders for 'signal' exit mode
+                        _live_exit_mode = signal.get('_exit_strategy_mode', 'hybrid')
                         use_bracket = (
                             signal['action'] == 'BTO' and
                             (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                            hasattr(live_broker, 'place_bracket_order')
+                            hasattr(live_broker, 'place_bracket_order') and
+                            _live_exit_mode != 'signal'
                         )
+                        
+                        if _live_exit_mode == 'signal' and (signal.get('stop_loss_price') or signal.get('profit_target_price')):
+                            _original_print(f"[LIVE TRADE] ⏭ Bracket order SKIPPED — exit_strategy_mode='signal'")
                         
                         # Retry configuration for transient errors
                         max_retries = 3

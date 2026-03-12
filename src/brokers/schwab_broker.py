@@ -54,6 +54,8 @@ class SchwabBroker(BrokerInterface):
         self._last_api_call = 0
         self._min_api_interval = 0.5
         self._http_client = None
+        self._http_client_loop_id = None
+        self._token_refresh_lock_loop_id = None
         self._last_valid_positions = []
         self._last_valid_positions_time = 0
         self._position_cache_ttl = 60
@@ -74,8 +76,13 @@ class SchwabBroker(BrokerInterface):
         self._API_BUDGET_CRITICAL = 108
 
     def _get_token_refresh_lock(self):
-        if self._token_refresh_lock is None:
+        try:
+            current_loop_id = id(asyncio.get_running_loop())
+        except RuntimeError:
+            current_loop_id = None
+        if self._token_refresh_lock is None or self._token_refresh_lock_loop_id != current_loop_id:
             self._token_refresh_lock = asyncio.Lock()
+            self._token_refresh_lock_loop_id = current_loop_id
         return self._token_refresh_lock
 
     async def connect(self) -> bool:
@@ -556,8 +563,23 @@ class SchwabBroker(BrokerInterface):
         if 'Accept' not in headers:
             headers['Accept'] = 'application/json'
 
-        if self._http_client is None or self._http_client.is_closed:
+        try:
+            current_loop_id = id(asyncio.get_running_loop())
+        except RuntimeError:
+            current_loop_id = None
+        needs_new_client = (
+            self._http_client is None
+            or self._http_client.is_closed
+            or self._http_client_loop_id != current_loop_id
+        )
+        if needs_new_client:
+            if self._http_client is not None and not self._http_client.is_closed:
+                try:
+                    await self._http_client.aclose()
+                except Exception:
+                    pass
             self._http_client = httpx.AsyncClient(timeout=8.0, http2=False, limits=httpx.Limits(max_connections=5, max_keepalive_connections=3))
+            self._http_client_loop_id = current_loop_id
 
         response = await asyncio.wait_for(
             self._http_client.request(method, url, headers=headers, **kwargs),
@@ -1734,7 +1756,8 @@ class SchwabBroker(BrokerInterface):
                 return result
                     
         except Exception as e:
-            print(f"[{self.name}] Error getting detailed positions: {e}")
+            err_msg = str(e) or type(e).__name__
+            print(f"[{self.name}] Error getting detailed positions: {err_msg}")
             self._last_fetch_had_error = True
             if self._last_valid_positions and (time.time() - self._last_valid_positions_time) < self._position_cache_ttl:
                 print(f"[{self.name}] Returning {len(self._last_valid_positions)} cached positions after error")
