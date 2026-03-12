@@ -348,7 +348,7 @@ input:checked + .slider:before {
         <span id="discord-status-badge" class="status-badge disconnected">Discord</span>
         <span id="alpaca-paper-status-badge" class="status-badge disconnected">Alpaca Paper</span>
         <span id="webull-live-status-badge" class="status-badge disconnected">Webull Live</span>
-        <span id="webull-paper-status-badge" class="status-badge disconnected">Webull Paper</span>
+        <span id="webull-paper-status-badge" class="status-badge disconnected" style="display: none;">Webull Paper</span>
         <span id="tastytrade-paper-status-badge" class="status-badge disconnected">Tasty Paper</span>
         <span id="tastytrade-live-status-badge" class="status-badge disconnected">Tasty Live</span>
         <span id="ibkr-status-badge" class="status-badge disconnected">IBKR</span>
@@ -977,7 +977,7 @@ input:checked + .slider:before {
             </label>
             <p class="help-text">Controls the primary Webull broker (WEBULL). When ON, primary broker uses paper trading.</p>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="display: none;">
             <label class="toggle-label">
                 <span>Also Enable Paper Account</span>
                 <label class="switch">

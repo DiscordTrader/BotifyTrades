@@ -3,7 +3,7 @@
 let channelCategory = 'EXECUTE';
 
 // All available broker options
-const ALL_BROKERS = ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'ROBINHOOD'];
+const ALL_BROKERS = ['WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'ROBINHOOD'];
 
 // Helper function to parse enabled_brokers (handles both JSON string and array)
 function parseEnabledBrokers(enabledBrokers) {
@@ -134,13 +134,7 @@ async function loadChannels() {
                                             <div style="font-size: 11px; color: #8E8E93;">Real money trading</div>
                                         </div>
                                     </label>
-                                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid #3A3A3C; border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00d4ff'" onmouseout="this.style.borderColor='#3A3A3C'">
-                                        <input type="checkbox" id="broker-WEBULL_PAPER-${channel.id}" value="WEBULL_PAPER" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'WEBULL_PAPER')}>
-                                        <div>
-                                            <div style="font-weight: 600; color: #00ff88; font-size: 13px;">📊 Webull PAPER</div>
-                                            <div style="font-size: 11px; color: #8E8E93;">Paper trading</div>
-                                        </div>
-                                    </label>
+                                    <!-- Webull Paper disabled - hidden from channel broker selection -->
                                     <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid #3A3A3C; border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00d4ff'" onmouseout="this.style.borderColor='#3A3A3C'">
                                         <input type="checkbox" id="broker-ALPACA-${channel.id}" value="ALPACA" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'ALPACA')}>
                                         <div>

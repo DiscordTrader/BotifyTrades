@@ -7084,43 +7084,12 @@ class SelfClient(discord.Client):
                 pass
         
         self.webull_paper_broker = None
+        _original_print("[WEBULL_PAPER] Paper trading disabled — skipping initialization", flush=True)
         try:
-            from gui_app.broker_credentials_service import get_webull_credentials, set_broker_status
-            wb_creds = get_webull_credentials() or {}
-            wb_paper_enabled = wb_creds.get('paper_account_enabled', False)
-            
-            if wb_paper_enabled and (wb_creds.get('access_token') or wb_creds.get('email')):
-                _original_print("[WEBULL_PAPER] Starting paper broker initialization...", flush=True)
-                self.webull_paper_broker = WebullBroker(
-                    loop=self.loop,
-                    name="WEBULL_PAPER",
-                    paper_trade=True,
-                    credentials=wb_creds
-                )
-                try:
-                    await self.webull_paper_broker.login()
-                    if self.webull_paper_broker._logged_in:
-                        _original_print("[WEBULL_PAPER] ✓ Paper trading broker connected", flush=True)
-                        set_broker_status('webull_paper', True, 'connected', account_info={'mode': 'paper'})
-                        try:
-                            from gui_app.discord_notifier import notify_broker_reconnected
-                            notify_broker_reconnected('Webull Paper')
-                        except Exception:
-                            pass
-                    else:
-                        _original_print("[WEBULL_PAPER] ⚠️  Paper broker login returned no client", flush=True)
-                        self.webull_paper_broker = None
-                        set_broker_status('webull_paper', False, 'disconnected', error='Login failed')
-                except Exception as wp_err:
-                    _original_print(f"[WEBULL_PAPER] ⚠️  Paper broker login failed: {wp_err}", flush=True)
-                    self.webull_paper_broker = None
-                    set_broker_status('webull_paper', False, 'disconnected', error=str(wp_err))
-            else:
-                _original_print("[WEBULL_PAPER] Paper trading not enabled or no credentials - skipping", flush=True)
-                set_broker_status('webull_paper', False, 'disconnected', error='Not enabled')
-        except Exception as e:
-            _original_print(f"[WEBULL_PAPER] ⚠️  Initialization error: {e}", flush=True)
-            self.webull_paper_broker = None
+            from gui_app.broker_credentials_service import set_broker_status
+            set_broker_status('webull_paper', False, 'disconnected', error='Disabled')
+        except Exception:
+            pass
         
         # Initialize Alpaca paper trading broker for tracking channels
         try:
