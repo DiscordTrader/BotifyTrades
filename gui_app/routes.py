@@ -5809,6 +5809,7 @@ def register_routes(app):
     @app.route('/api/trades/<trade_id>/close', methods=['POST'])
     def close_position_by_id(trade_id):
         """Close a position by trade ID (used by Dashboard) - Uses LIVE broker quantity"""
+        import concurrent.futures
         print(f"[API] ========== CLOSE ENDPOINT CALLED FOR TRADE ID {trade_id} ==========")
         try:
             if _bot_instance is None:
