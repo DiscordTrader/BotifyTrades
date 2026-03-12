@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "KpD1aRlY8zU2fLV8KbwhO"
+uri = "file://MACOS_SETUP_GUIDE.md"
+type = "text"
+title = "BotifyTrades — macOS Setup Guide"
