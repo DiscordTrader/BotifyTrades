@@ -708,7 +708,7 @@ class SignalFormatRegistry:
             name="phoenix_out_of",
             description="Phoenix exit - out of SYMBOL",
             priority=70,
-            pattern=r'out\s+(?:of\s+)?\$?([A-Z]{1,5})(?![a-z])',
+            pattern=r'out\s+(?:of\s+)?\$?((?!WITH|ON\b)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_exit,
             examples=["out of PHGE", "out of PHGE with a loss", "out PAVM"],
             flags=re.IGNORECASE
@@ -722,6 +722,28 @@ class SignalFormatRegistry:
             pattern=r'stopped?\s+out\s+(?:of\s+)?\$?([A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_exit,
             examples=["stopped out MIGI", "stopped out of ENVB"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix exit: stop out with SYMBOL (e.g. "stop out with POLa")
+        self.register(
+            name="phoenix_stop_out_with",
+            description="Phoenix stop out with SYMBOL",
+            priority=69,
+            pattern=r'stop(?:ped)?\s+out\s+(?:with|on)\s+\$?([A-Z]{1,5})(?![a-z])',
+            parser=self._parse_phoenix_exit,
+            examples=["stop out with POLA", "stopped out with ENVB", "stop out on MIGI"],
+            flags=re.IGNORECASE
+        )
+        
+        # Phoenix trim: selling X% more SYMBOL
+        self.register(
+            name="phoenix_trim_more",
+            description="Phoenix partial exit - selling X% more SYMBOL",
+            priority=64,
+            pattern=r'selling\s+(\d+)%\s+more\s+\$?([A-Z]{1,5})(?![a-z])',
+            parser=self._parse_phoenix_trim_with_sym,
+            examples=["selling 10% more AGRZ", "selling 20% more LWLG"],
             flags=re.IGNORECASE
         )
         
@@ -1606,6 +1628,33 @@ class SignalFormatRegistry:
     
     def _parse_phoenix_trim(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Phoenix trim: selling 80% here PAVM"""
+        groups = match.groups()
+        percentage = float(groups[0]) if groups else None
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": percentage,
+            "confidence": 1.0,
+            "_phoenix_trim": True
+        }
+    
+    def _parse_phoenix_trim_with_sym(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trim: selling 10% more AGRZ"""
         groups = match.groups()
         percentage = float(groups[0]) if groups else None
         symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
