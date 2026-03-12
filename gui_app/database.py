@@ -5449,10 +5449,8 @@ def record_execution_closure_atomic(
         if asset_type == 'option' and not strike and not expiry and not call_put:
             asset_type = 'stock'
         
-        # BEGIN IMMEDIATE for exclusive write lock
         cursor.execute('BEGIN IMMEDIATE')
         
-        # Find matching execution lot (FIFO) - try exact asset_type first, fallback to any
         query = '''
             SELECT * FROM execution_lots 
             WHERE broker = ? AND symbol = ? AND asset_type = ? 
@@ -5471,90 +5469,105 @@ def record_execution_closure_atomic(
                 query += ' AND call_put = ?'
                 params.append(call_put)
         
-        query += ' ORDER BY order_filled_at ASC LIMIT 1'
+        query += ' ORDER BY order_filled_at ASC'
         cursor.execute(query, params)
-        exec_lot = cursor.fetchone()
+        exec_lots = cursor.fetchall()
         
-        if not exec_lot and asset_type == 'stock':
+        if not exec_lots and asset_type == 'stock':
             cursor.execute('''
                 SELECT * FROM execution_lots 
                 WHERE broker = ? AND symbol = ? 
                 AND status IN ('OPEN', 'PARTIAL') AND remaining_qty > 0
-                ORDER BY order_filled_at ASC LIMIT 1
+                ORDER BY order_filled_at ASC
             ''', (broker, symbol))
-            exec_lot = cursor.fetchone()
-            if exec_lot and exec_lot['asset_type'] != asset_type:
-                print(f"[DATABASE] ⚠️ Lot asset_type mismatch: lot={exec_lot['asset_type']}, closure={asset_type} for {symbol} - using lot's type")
+            exec_lots = cursor.fetchall()
+            if exec_lots and exec_lots[0]['asset_type'] != asset_type:
+                print(f"[DATABASE] ⚠️ Lot asset_type mismatch: lot={exec_lots[0]['asset_type']}, closure={asset_type} for {symbol} - using lot's type")
         
-        if not exec_lot:
+        if not exec_lots:
             cursor.execute('ROLLBACK')
             return None, None
         
-        # Calculate P&L using the LOT's asset_type (canonical source)
-        entry_price = exec_lot['fill_price']
-        lot_asset_type = exec_lot['asset_type']
-        if lot_asset_type == 'option' and not exec_lot['strike'] and not exec_lot['expiry']:
-            lot_asset_type = 'stock'
-        multiplier = 100 if lot_asset_type == 'option' else 1
-        pnl = (fill_price - entry_price) * closed_qty * multiplier
-        pnl_percent = ((fill_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+        total_pnl = 0.0
+        qty_remaining_to_close = closed_qty
+        first_closure_id = None
         
-        # Calculate holding days
-        holding_days = None
-        if exec_lot['order_filled_at']:
-            try:
-                from datetime import datetime
-                if isinstance(filled_at, str):
-                    exit_dt = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
-                else:
-                    exit_dt = filled_at
-                entry_dt = datetime.fromisoformat(str(exec_lot['order_filled_at']).replace('Z', '+00:00'))
-                holding_days = (exit_dt - entry_dt).total_seconds() / 86400
-            except:
-                pass
-        
-        # Calculate slippage
-        slippage_pct = None
-        if signal_exit_price and signal_exit_price > 0:
-            slippage_pct = (fill_price - signal_exit_price) / signal_exit_price * 100
-        
-        # Generate closure hash for deduplication
-        closure_hash = hashlib.sha256(
-            f"{exec_lot['id']}:{broker}:{closed_qty}:{filled_at}".encode()
-        ).hexdigest()[:32]
-        
-        # Use provided channel_id or fallback to lot's channel_id
-        final_channel_id = channel_id or exec_lot['channel_id']
-        
-        # Insert closure
-        cursor.execute('''
-            INSERT INTO execution_closures (
-                execution_lot_id, channel_id, broker, broker_order_id,
-                closed_qty, fill_price, signal_exit_price, slippage_pct,
-                order_submitted_at, filled_at, pnl, pnl_percent, holding_days,
+        for exec_lot in exec_lots:
+            if qty_remaining_to_close <= 0:
+                break
+            
+            lot_close_qty = min(qty_remaining_to_close, exec_lot['remaining_qty'])
+            
+            entry_price = exec_lot['fill_price']
+            lot_asset_type = exec_lot['asset_type']
+            if lot_asset_type == 'option' and not exec_lot['strike'] and not exec_lot['expiry']:
+                lot_asset_type = 'stock'
+            multiplier = 100 if lot_asset_type == 'option' else 1
+            lot_pnl = (fill_price - entry_price) * lot_close_qty * multiplier
+            lot_pnl_percent = ((fill_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+            
+            holding_days = None
+            if exec_lot['order_filled_at']:
+                try:
+                    from datetime import datetime
+                    if isinstance(filled_at, str):
+                        exit_dt = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
+                    else:
+                        exit_dt = filled_at
+                    entry_dt = datetime.fromisoformat(str(exec_lot['order_filled_at']).replace('Z', '+00:00'))
+                    holding_days = (exit_dt - entry_dt).total_seconds() / 86400
+                except:
+                    pass
+            
+            slippage_pct = None
+            if signal_exit_price and signal_exit_price > 0:
+                slippage_pct = (fill_price - signal_exit_price) / signal_exit_price * 100
+            
+            closure_hash = hashlib.sha256(
+                f"{exec_lot['id']}:{broker}:{lot_close_qty}:{filled_at}".encode()
+            ).hexdigest()[:32]
+            
+            final_channel_id = channel_id or exec_lot['channel_id']
+            
+            cursor.execute('''
+                INSERT INTO execution_closures (
+                    execution_lot_id, channel_id, broker, broker_order_id,
+                    closed_qty, fill_price, signal_exit_price, slippage_pct,
+                    order_submitted_at, filled_at, pnl, pnl_percent, holding_days,
+                    exit_source, closure_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                exec_lot['id'], final_channel_id, broker, broker_order_id,
+                lot_close_qty, fill_price, signal_exit_price, slippage_pct,
+                order_submitted_at, filled_at, lot_pnl, lot_pnl_percent, holding_days,
                 exit_source, closure_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            exec_lot['id'], final_channel_id, broker, broker_order_id,
-            closed_qty, fill_price, signal_exit_price, slippage_pct,
-            order_submitted_at, filled_at, pnl, pnl_percent, holding_days,
-            exit_source, closure_hash
-        ))
+            ))
+            
+            if first_closure_id is None:
+                first_closure_id = cursor.lastrowid
+            
+            new_remaining = exec_lot['remaining_qty'] - lot_close_qty
+            if new_remaining <= 0:
+                cursor.execute('UPDATE execution_lots SET remaining_qty = 0, status = "CLOSED" WHERE id = ?', (exec_lot['id'],))
+            else:
+                cursor.execute('UPDATE execution_lots SET remaining_qty = ?, status = "PARTIAL" WHERE id = ?', (new_remaining, exec_lot['id']))
+            
+            total_pnl += lot_pnl
+            qty_remaining_to_close -= lot_close_qty
+            
+            if qty_remaining_to_close > 0:
+                print(f"[DATABASE] Closure overflow: {lot_close_qty} from lot #{exec_lot['id']}, {qty_remaining_to_close} spilling to next lot")
         
-        # Update lot remaining quantity
-        new_remaining = exec_lot['remaining_qty'] - closed_qty
-        if new_remaining <= 0:
-            cursor.execute('UPDATE execution_lots SET remaining_qty = 0, status = "CLOSED" WHERE id = ?', (exec_lot['id'],))
-        else:
-            cursor.execute('UPDATE execution_lots SET remaining_qty = ?, status = "PARTIAL" WHERE id = ?', (new_remaining, exec_lot['id']))
+        if qty_remaining_to_close > 0:
+            print(f"[DATABASE] ⚠️ Unmatched closure qty: {qty_remaining_to_close} shares of {symbol} on {broker} could not be matched to any execution lot")
         
         cursor.execute('COMMIT')
-        return cursor.lastrowid, pnl
+        return first_closure_id, total_pnl
         
     except Exception as e:
         cursor.execute('ROLLBACK')
         if 'UNIQUE constraint failed' in str(e):
-            return None, None  # Duplicate closure, already processed
+            return None, None
         print(f"[DATABASE] Error in atomic closure: {e}")
         return None, None
 
