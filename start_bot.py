@@ -42,21 +42,20 @@ t.start()
 
 print('[PREBIND] Port placeholder active, starting bot subprocess...', flush=True)
 
+_stop.set()
+time.sleep(0.2)
+try:
+    s.close()
+except:
+    pass
+print(f'[PREBIND] Released placeholder port {port}', flush=True)
+
 bot_proc = subprocess.Popen(
     [sys.executable, '-u', 'src/selfbot_webull.py'],
     stdout=sys.stdout,
     stderr=sys.stderr,
     env={**os.environ, 'PYTHONUNBUFFERED': '1'}
 )
-
-time.sleep(5)
-print('[PREBIND] Releasing placeholder port (Flask should have it now)', flush=True)
-_stop.set()
-time.sleep(0.3)
-try:
-    s.close()
-except:
-    pass
 
 def forward_signal(signum, frame):
     bot_proc.send_signal(signum)
