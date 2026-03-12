@@ -97,13 +97,30 @@ def start_gui_server(host='0.0.0.0', port=None):
     
     app = create_app()
     
+    from werkzeug.serving import make_server
+    _bind_error = [None]
+    _server_ready = threading.Event()
+    
     def run():
-        print(f"[GUI] Starting web control panel on http://{host}:{port}")
-        print(f"[GUI] Open your browser to access the control panel")
-        app.run(host=host, port=port, debug=False, use_reloader=False)
+        try:
+            srv = make_server(host, port, app, threaded=True)
+            _server_ready.set()
+            print(f"[GUI] Starting web control panel on http://{host}:{port}")
+            print(f"[GUI] Open your browser to access the control panel")
+            srv.serve_forever()
+        except OSError as e:
+            _bind_error[0] = e
+            _server_ready.set()
+            print(f"[GUI] ✗ Failed to bind port {port}: {e}")
     
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
+    
+    _server_ready.wait(timeout=10)
+    
+    if _bind_error[0]:
+        raise RuntimeError(f"Flask GUI failed to start: {_bind_error[0]}")
+    
     print(f"[GUI] Web server thread started")
     
     return thread, port

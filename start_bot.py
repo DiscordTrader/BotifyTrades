@@ -11,17 +11,21 @@ port = int(os.environ.get('GUI_PORT', 5000))
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
+bound = False
 for attempt in range(60):
     try:
         s.bind(('0.0.0.0', port))
         s.listen(1)
         print(f'[PREBIND] Port {port} ready', flush=True)
+        bound = True
         break
     except OSError as e:
         print(f'[PREBIND] Port {port} busy ({e}), retry {attempt+1}/60', flush=True)
         time.sleep(1)
-else:
-    print(f'[PREBIND] WARNING: Could not bind port {port}', flush=True)
+
+if not bound:
+    print(f'[PREBIND] FATAL: Could not bind port {port} after 60 attempts', flush=True)
+    sys.exit(1)
 
 _stop = threading.Event()
 
@@ -56,6 +60,25 @@ bot_proc = subprocess.Popen(
     stderr=sys.stderr,
     env={**os.environ, 'PYTHONUNBUFFERED': '1'}
 )
+
+for i in range(30):
+    time.sleep(1)
+    if bot_proc.poll() is not None:
+        print(f'[PREBIND] FATAL: Bot process exited with code {bot_proc.returncode}', flush=True)
+        sys.exit(bot_proc.returncode or 1)
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.settimeout(1)
+        probe.connect(('127.0.0.1', port))
+        probe.close()
+        print(f'[PREBIND] ✓ Flask confirmed listening on port {port} after {i+1}s', flush=True)
+        break
+    except (ConnectionRefusedError, OSError):
+        probe.close()
+        if i % 5 == 4:
+            print(f'[PREBIND] Waiting for Flask... ({i+1}s)', flush=True)
+else:
+    print(f'[PREBIND] WARNING: Flask did not respond on port {port} after 30s', flush=True)
 
 def forward_signal(signum, frame):
     bot_proc.send_signal(signum)
