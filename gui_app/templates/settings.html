@@ -967,25 +967,12 @@ input:checked + .slider:before {
             </div>
         </details>
         
+        <input type="hidden" id="webull-paper" value="false">
         <div class="form-group">
-            <label class="toggle-label">
-                <span>Paper Trading Mode</span>
-                <label class="switch">
-                    <input type="checkbox" id="webull-paper" checked>
-                    <span class="slider"></span>
-                </label>
-            </label>
-            <p class="help-text">Controls the primary Webull broker (WEBULL). When ON, primary broker uses paper trading.</p>
-        </div>
-        <div class="form-group" style="display: none;">
-            <label class="toggle-label">
-                <span>Also Enable Paper Account</span>
-                <label class="switch">
-                    <input type="checkbox" id="webull-paper-account">
-                    <span class="slider"></span>
-                </label>
-            </label>
-            <p class="help-text">Enables a separate WEBULL_PAPER broker alongside the primary. Turn this ON with Paper Mode OFF to run both Live and Paper simultaneously.</p>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.3); border-radius: 8px;">
+                <span style="font-size: 14px; font-weight: 700; color: #ff5252;">⚠️ LIVE TRADING MODE</span>
+            </div>
+            <p class="help-text">Webull paper trading has been disabled. All trades are executed with real money.</p>
         </div>
         <div class="btn-group">
             <button id="save-webull-creds" class="btn btn-success">💾 Save</button>
@@ -3962,10 +3949,10 @@ async function loadWebullCredentials() {
             document.getElementById('webull-did').value = data.device_id || '';
             document.getElementById('webull-access-token').value = data.access_token || '';
             document.getElementById('webull-refresh-token').value = data.refresh_token || 'dummy';
-            document.getElementById('webull-paper').checked = data.paper_mode;
-            document.getElementById('webull-paper-account').checked = data.paper_account_enabled || false;
+            // Paper mode disabled - always false
+            document.getElementById('webull-paper').value = 'false';
             
-            const status = data.paper_mode ? data.paper_status : data.live_status;
+            const status = data.live_status;
             updateConnectionStatus('webull-connection-status',
                 status.connected ? 'connected' : 'disconnected',
                 status.connected ? 'Connected' : 'Not connected',
@@ -4028,8 +4015,8 @@ document.getElementById('save-webull-creds').addEventListener('click', async () 
         device_id: document.getElementById('webull-did').value.trim(),
         access_token: document.getElementById('webull-access-token').value.trim(),
         refresh_token: document.getElementById('webull-refresh-token').value.trim() || 'dummy',
-        paper_mode: document.getElementById('webull-paper').checked,
-        paper_account_enabled: document.getElementById('webull-paper-account').checked
+        paper_mode: false,
+        paper_account_enabled: false
     };
     
     try {
@@ -4047,8 +4034,8 @@ document.getElementById('save-webull-creds').addEventListener('click', async () 
 });
 
 document.getElementById('connect-webull').addEventListener('click', async () => {
-    const isPaper = document.getElementById('webull-paper').checked;
-    const brokerId = isPaper ? 'webull_paper' : 'webull_live';
+    const isPaper = false;
+    const brokerId = 'webull_live';
     const tokenOnlyMode = document.getElementById('webull-token-mode').checked;
     
     updateConnectionStatus('webull-connection-status', 'connecting', 'Connecting...');
