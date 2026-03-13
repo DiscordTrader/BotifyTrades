@@ -2453,36 +2453,64 @@ class WebullBroker:
                 return
 
             accounts = result['data']
-            type_map = {
-                'margin': ['1', 'MARGIN', 'margin'],
-                'cash': ['2', 'CASH', 'cash'],
-                'ira': ['3', 'IRA', 'ira', '5'],
-            }
-            match_values = type_map.get(desired_type, [])
+            valid_accounts = [a for a in accounts if a.get('secAccountId')]
 
-            print(f"[{self.name}] Found {len(accounts)} account(s):")
-            for i, acct in enumerate(accounts):
-                acct_type_val = str(acct.get('brokerAccountType', acct.get('accountType', acct.get('brokerAccountTypeStr', ''))))
-                acct_type_str = acct.get('brokerAccountTypeStr', acct.get('accountTypeName', acct_type_val))
-                sec_id = acct.get('secAccountId', acct.get('accountId', 'N/A'))
-                print(f"[{self.name}]   [{i}] secAccountId={sec_id} type={acct_type_str} (raw={acct_type_val})")
+            print(f"[{self.name}] Found {len(accounts)} account(s) ({len(valid_accounts)} with secAccountId), resolving types...")
 
-                if acct_type_val in match_values or acct_type_str.upper() in [v.upper() for v in match_values] or desired_type.upper() in acct_type_str.upper():
-                    wb.zone_var = str(acct.get('rzone', ''))
-                    wb._account_id = str(sec_id)
-                    print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}]")
+            for i, acct in enumerate(valid_accounts):
+                sec_id = str(acct.get('secAccountId', ''))
+                rzone = str(acct.get('rzone', ''))
+                detected_type = self._detect_account_type(wb, sec_id, headers)
+                print(f"[{self.name}]   [{i}] secAccountId={sec_id} detected_type={detected_type}")
+
+                if detected_type.upper() == desired_type.upper():
+                    wb.zone_var = rzone
+                    wb._account_id = sec_id
+                    print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}] (secAccountId={sec_id})")
                     return
 
-            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found in {len(accounts)} account(s) — using first account (index 0)")
+            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found in {len(valid_accounts)} account(s) — using first account")
             print(f"[{self.name}] ⚠️ Selected account type '{desired_type}' was NOT applied. Trading on default account.")
-            wb.zone_var = str(accounts[0].get('rzone', ''))
-            wb._account_id = str(accounts[0].get('secAccountId', accounts[0].get('accountId', '')))
+            wb.zone_var = str(valid_accounts[0].get('rzone', ''))
+            wb._account_id = str(valid_accounts[0].get('secAccountId', ''))
         except Exception as e:
             print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — desired '{desired_type}' NOT applied, falling back to index 0")
             try:
                 wb.get_account_id()
             except Exception:
                 pass
+
+    def _detect_account_type(self, wb, sec_account_id, headers):
+        """Query account details to detect type (Margin/Cash/IRA)."""
+        import requests as _req
+        try:
+            url = wb._urls.account(sec_account_id)
+            resp = _req.get(url, headers=headers, timeout=10)
+            data = resp.json()
+            account = data.get('data', data) if isinstance(data, dict) else data
+            if not isinstance(account, dict):
+                return 'Unknown'
+            account_data = {}
+            for item in account.get('accountMembers', []):
+                if isinstance(item, dict) and 'key' in item and 'value' in item:
+                    account_data[item['key']] = item['value']
+            for k, v in account.items():
+                if k != 'accountMembers' and k not in account_data:
+                    account_data[k] = v
+            for field in ['brokerAccountTypeStr', 'accountType', 'brokerAccountType']:
+                if field in account_data:
+                    raw = str(account_data[field]).upper()
+                    if 'MARGIN' in raw:
+                        return 'Margin'
+                    elif 'CASH' in raw:
+                        return 'Cash'
+                    elif 'IRA' in raw or 'ROTH' in raw or 'TRADITIONAL' in raw:
+                        return 'IRA'
+                    return account_data[field]
+            return 'Unknown'
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Could not detect type for account {sec_account_id}: {e}")
+            return 'Unknown'
 
     def _apply_tokens(self, wb, access_token, refresh_token, did_from_web=None, region_data=None):
         for attr, val in (("_access_token", access_token),
