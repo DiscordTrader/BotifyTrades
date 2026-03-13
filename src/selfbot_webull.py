@@ -1364,20 +1364,16 @@ JC_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)([CPcp])\s+([0-9]{
 # Groups: (action, qty, strike, opt_type)
 SPX_NDX_SHORTHAND_PATTERN = r'^(?:(BTO|STC)\s+)?(?:(\d+)\s+)?(\d{4,5})([CPcp])$'
 
-# Waxui-style patterns (LOTTO alerts)
-# Entry format: SPX here 12/05 6880C Avg. 4.00 or "SPX here 12/13 6100C Avg .35" or "Avg, 3.60"
-# Groups: (symbol, month, day, strike, opt_type, price)
-# Price pattern: supports "4.00", ".35", "0.35" formats
-# Supports both "Avg." (period) and "Avg," (comma) formats
 WAXUI_ENTRY_PATTERN = r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg[.,]?\s*(\.?\d+\.?\d*)'
-
-# Trim format: "Trim SPX here" or "Trim SPX here at $5.50" - partial exit
-# Groups: (symbol)
-WAXUI_TRIM_PATTERN = r'[Tt]rim\s+([A-Za-z]+)\s+here'
-
-# Close format: "Closed SPX here" or "Close SPX here" - full exit
-# Groups: (symbol)
+WAXUI_TRIM_PATTERN = r'(?:[Ss]afety\s+)?[Tt]rim\s+([A-Za-z]+)(?:\s+here)?'
 WAXUI_CLOSE_PATTERN = r'[Cc]lose[d]?\s+([A-Za-z]+)\s+here'
+WAXUI_MORE_PATTERN = r'[Mm]ore\s+([A-Za-z]+)\s+here'
+WAXUI_ADDED_PATTERN = r'[Aa]dded\s+(?:back\s+)?(?:into\s+)?([A-Za-z]+)\s+@\s*(\d+\.?\d*)'
+WAXUI_REDUCED_PATTERN = r'[Rr]educed\s+risk\s+@\s*(\d+\.?\d*)'
+WAXUI_TRAIL_PATTERN = r'[Tt]rail\s*stops?\s+(?:set\s+)?@\s*([Bb]/[Ee]|[Bb]reak\s*even|\d+\.?\d*)'
+WAXUI_PROFIT_LADDER_PATTERN = r'(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)\s*[✓✔️☑✅]?\s*(\d+)%'
+WAXUI_HOLDING_PATTERN = r'[Hh]olding\s+(most|majority|1/2|half|runners\s+only|runners|last\s+con[s]?\.?)'
+WAXUI_IMPLICIT_TRIM_PATTERN = r'^[*_]*([A-Z]{2,5})\1*Y*\s*$'
 
 # Bear-style patterns (@Stxbearish Discord format)
 # Entry format: **Contract:** $SPX 12/19 6845C\n**Entry:** @2.45
@@ -3655,6 +3651,8 @@ class WebullBroker:
                         _raw_price = _fallback_price
                         print(f"[WEBULL] ⚡ Quote unavailable — using signal fallback price ${_fallback_price:.2f} → limit ${effective_price:.2f} (3% buffer, CBOE rounded)", flush=True)
                     else:
+                        print(f"[WEBULL] ❌ NO_PRICE: Live quote failed AND no fallback price for {broker_sym} (option_id={option_id}, side={side})", flush=True)
+                        print(f"[WEBULL] ❌ NO_PRICE kwargs: signal_price_fallback={kwargs.get('_signal_price_fallback')}, is_market={kwargs.get('_is_market_order')}", flush=True)
                         return {
                             'success': False,
                             'msg': 'Webull options require a limit price. Could not determine market price.',
@@ -5437,6 +5435,49 @@ SPX_NDX_SHORTHAND_REGEX = re.compile(SPX_NDX_SHORTHAND_PATTERN, re.IGNORECASE)
 WAXUI_ENTRY_REGEX = re.compile(WAXUI_ENTRY_PATTERN, re.IGNORECASE)
 WAXUI_TRIM_REGEX = re.compile(WAXUI_TRIM_PATTERN, re.IGNORECASE)
 WAXUI_CLOSE_REGEX = re.compile(WAXUI_CLOSE_PATTERN, re.IGNORECASE)
+WAXUI_MORE_REGEX = re.compile(WAXUI_MORE_PATTERN, re.IGNORECASE)
+WAXUI_ADDED_REGEX = re.compile(WAXUI_ADDED_PATTERN, re.IGNORECASE)
+WAXUI_REDUCED_REGEX = re.compile(WAXUI_REDUCED_PATTERN, re.IGNORECASE)
+WAXUI_TRAIL_REGEX = re.compile(WAXUI_TRAIL_PATTERN, re.IGNORECASE)
+WAXUI_PROFIT_LADDER_REGEX = re.compile(WAXUI_PROFIT_LADDER_PATTERN)
+WAXUI_HOLDING_REGEX = re.compile(WAXUI_HOLDING_PATTERN, re.IGNORECASE)
+WAXUI_IMPLICIT_TRIM_REGEX = re.compile(WAXUI_IMPLICIT_TRIM_PATTERN, re.MULTILINE)
+
+WAXUI_HOLDING_TO_REMAINING_PCT = {
+    'most': 75,
+    'majority': 60,
+    'half': 50,
+    '1/2': 50,
+    'runners only': 20,
+    'runners': 20,
+    'last cons': 10,
+    'last cons.': 10,
+    'last con': 10,
+    'last con.': 10,
+}
+
+def _waxui_extract_exit_price_and_holding(text):
+    exit_price = None
+    entry_price = None
+    profit_pct = None
+    holding_remaining_pct = 50
+    holding_text = None
+
+    ladder_m = WAXUI_PROFIT_LADDER_REGEX.search(text)
+    if ladder_m:
+        entry_price = float(ladder_m.group(1))
+        exit_price = float(ladder_m.group(2))
+        profit_pct = float(ladder_m.group(3))
+
+    holding_m = WAXUI_HOLDING_REGEX.search(text)
+    if holding_m:
+        holding_text = holding_m.group(1).strip().rstrip('.').lower()
+        for key, pct in WAXUI_HOLDING_TO_REMAINING_PCT.items():
+            if holding_text.startswith(key.split()[0]) and (len(key.split()) == 1 or key in holding_text):
+                holding_remaining_pct = pct
+                break
+
+    return exit_price, entry_price, profit_pct, holding_remaining_pct, holding_text
 BEAR_CONTRACT_REGEX = re.compile(BEAR_CONTRACT_PATTERN, re.IGNORECASE | re.MULTILINE)
 BEAR_ENTRY_REGEX = re.compile(BEAR_ENTRY_PATTERN, re.IGNORECASE)
 BEAR_TRIM_REGEX = re.compile(BEAR_TRIM_PATTERN, re.IGNORECASE)
@@ -5704,7 +5745,8 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                     m = WAXUI_CLOSE_REGEX.search(text.strip())
                                                     if m:
                                                         symbol = m.group(1)
-                                                        print(f"[Discord] ✓ Matched Waxui CLOSE format: {symbol}")
+                                                        exit_price, _ep, _pp, _hrp, _ht = _waxui_extract_exit_price_and_holding(text.strip())
+                                                        print(f"[Discord] ✓ Matched Waxui CLOSE format: {symbol}" + (f" (exit price ${exit_price})" if exit_price else ""))
                                                         return {
                                                             "asset": "option",
                                                             "action": "STC",
@@ -5713,17 +5755,21 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                             "strike": None,
                                                             "opt_type": None,
                                                             "expiry": None,
-                                                            "price": None,
+                                                            "price": exit_price,
                                                             "is_market_order": True,
+                                                            "_use_market_order": True,
                                                             "_waxui_close": True,
                                                             "_exit_type": "ALL"
                                                         }
                                                     else:
-                                                        # Try Waxui trim: Trim SPX here
+                                                        # Try Waxui trim: Trim SPX here / Safety trim SPX
                                                         m = WAXUI_TRIM_REGEX.search(text.strip())
+                                                        if not m:
+                                                            m = WAXUI_MORE_REGEX.search(text.strip())
                                                         if m:
                                                             symbol = m.group(1)
-                                                            print(f"[Discord] ✓ Matched Waxui TRIM format: {symbol}")
+                                                            exit_price, entry_price, profit_pct, holding_remaining_pct, holding_text = _waxui_extract_exit_price_and_holding(text.strip())
+                                                            print(f"[Discord] ✓ Matched Waxui TRIM/MORE format: {symbol} | Holding: {holding_text or 'unknown'} ({holding_remaining_pct}% remaining)" + (f" | Exit ${exit_price}" if exit_price else ""))
                                                             return {
                                                                 "asset": "option",
                                                                 "action": "STC",
@@ -5732,12 +5778,127 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                 "strike": None,
                                                                 "opt_type": None,
                                                                 "expiry": None,
-                                                                "price": None,
+                                                                "price": exit_price,
                                                                 "is_market_order": True,
+                                                                "_use_market_order": True,
                                                                 "_waxui_trim": True,
-                                                                "_exit_type": "HALF"
+                                                                "_exit_type": "WAXUI_HOLDING",
+                                                                "_holding_remaining_pct": holding_remaining_pct,
+                                                                "_holding_text": holding_text,
+                                                                "_waxui_entry_price": entry_price,
+                                                                "_waxui_profit_pct": profit_pct
                                                             }
                                                         else:
+                                                            # Try Waxui implicit trim: "SPYYY\n2.00 - 3.30 ✅ 65%\nHolding 1/2!"
+                                                            has_ladder = WAXUI_PROFIT_LADDER_REGEX.search(text.strip())
+                                                            has_holding = WAXUI_HOLDING_REGEX.search(text.strip())
+                                                            if has_ladder and has_holding:
+                                                                ticker_m = re.search(r'^[*_]*([A-Z]{2,5})', text.strip(), re.MULTILINE)
+                                                                if ticker_m:
+                                                                    raw_sym = ticker_m.group(1)
+                                                                    symbol = raw_sym.rstrip('Y')
+                                                                    if len(symbol) < 3 and len(raw_sym) >= 3:
+                                                                        symbol = raw_sym[:3]
+                                                                    if len(symbol) >= 2:
+                                                                        exit_price, entry_price, profit_pct, holding_remaining_pct, holding_text = _waxui_extract_exit_price_and_holding(text.strip())
+                                                                        print(f"[Discord] ✓ Matched Waxui IMPLICIT TRIM: {raw_sym}→{symbol} | Holding: {holding_text} ({holding_remaining_pct}% remaining) | Exit ${exit_price}")
+                                                                        return {
+                                                                            "asset": "option",
+                                                                            "action": "STC",
+                                                                            "qty": 1,
+                                                                            "symbol": symbol.upper(),
+                                                                            "strike": None,
+                                                                            "opt_type": None,
+                                                                            "expiry": None,
+                                                                            "price": exit_price,
+                                                                            "is_market_order": True,
+                                                                            "_use_market_order": True,
+                                                                            "_waxui_trim": True,
+                                                                            "_exit_type": "WAXUI_HOLDING",
+                                                                            "_holding_remaining_pct": holding_remaining_pct,
+                                                                            "_holding_text": holding_text,
+                                                                            "_waxui_entry_price": entry_price,
+                                                                            "_waxui_profit_pct": profit_pct,
+                                                                            "_waxui_implicit": True
+                                                                        }
+                                                            # Try Waxui "Reduced risk @price"
+                                                            reduced_m = WAXUI_REDUCED_REGEX.search(text.strip())
+                                                            if reduced_m:
+                                                                exit_price = float(reduced_m.group(1))
+                                                                print(f"[Discord] ✓ Matched Waxui REDUCED RISK @ ${exit_price}")
+                                                                return {
+                                                                    "asset": "option",
+                                                                    "action": "STC",
+                                                                    "qty": 1,
+                                                                    "symbol": None,
+                                                                    "strike": None,
+                                                                    "opt_type": None,
+                                                                    "expiry": None,
+                                                                    "price": exit_price,
+                                                                    "is_market_order": True,
+                                                                    "_use_market_order": True,
+                                                                    "_waxui_trim": True,
+                                                                    "_exit_type": "WAXUI_HOLDING",
+                                                                    "_holding_remaining_pct": 75,
+                                                                    "_holding_text": "reduced",
+                                                                    "_waxui_reduced_risk": True,
+                                                                    "_price_only": True
+                                                                }
+                                                            # Try Waxui "Added back into SPY @1.25"
+                                                            added_m = WAXUI_ADDED_REGEX.search(text.strip())
+                                                            if added_m:
+                                                                symbol = added_m.group(1).upper()
+                                                                add_price = float(added_m.group(2))
+                                                                new_avg_m = re.search(r'[Nn]ew\s+[Aa]vg[.,]?\s+(?:is\s+)?(\d+\.?\d*)', text.strip())
+                                                                new_avg = float(new_avg_m.group(1)) if new_avg_m else add_price
+                                                                _add_strike = None
+                                                                _add_opt_type = None
+                                                                _add_expiry = None
+                                                                try:
+                                                                    from gui_app.database import get_connection
+                                                                    _add_conn = get_connection()
+                                                                    _add_cursor = _add_conn.cursor()
+                                                                    _add_cursor.execute('''
+                                                                        SELECT strike, call_put, expiry FROM trades
+                                                                        WHERE symbol = ? AND direction = 'BTO'
+                                                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                                                        ORDER BY created_at DESC LIMIT 1
+                                                                    ''', (symbol,))
+                                                                    _add_pos = _add_cursor.fetchone()
+                                                                    if _add_pos:
+                                                                        _add_strike = _add_pos['strike']
+                                                                        _add_opt_type = _add_pos['call_put']
+                                                                        _add_expiry = _add_pos['expiry']
+                                                                        print(f"[Discord] ✓ Matched Waxui ADDED: {symbol} ${_add_strike}{_add_opt_type} {_add_expiry} @ ${add_price} (new avg ${new_avg})")
+                                                                    else:
+                                                                        print(f"[Discord] ⚠️ Waxui ADDED: {symbol} @ ${add_price} but no open position found — skipping")
+                                                                        return None
+                                                                except Exception as _add_e:
+                                                                    print(f"[Discord] ⚠️ Waxui ADDED: position lookup failed: {_add_e} — skipping")
+                                                                    return None
+                                                                _current_trading_settings = get_trading_settings()
+                                                                max_position_size = _current_trading_settings['max_position_size']
+                                                                actual_cost = add_price * 100
+                                                                qty = max(1, int(max_position_size / actual_cost)) if actual_cost > 0 else 1
+                                                                return {
+                                                                    "asset": "option",
+                                                                    "action": "BTO",
+                                                                    "qty": qty,
+                                                                    "symbol": symbol,
+                                                                    "strike": _add_strike,
+                                                                    "opt_type": _add_opt_type,
+                                                                    "expiry": _add_expiry,
+                                                                    "price": add_price,
+                                                                    "is_market_order": False,
+                                                                    "_waxui_format": True,
+                                                                    "_waxui_add": True,
+                                                                    "_waxui_new_avg": new_avg
+                                                                }
+                                                            # Try Waxui trail stop (informational - log only)
+                                                            trail_m = WAXUI_TRAIL_REGEX.search(text.strip())
+                                                            if trail_m:
+                                                                trail_val = trail_m.group(1)
+                                                                print(f"[Discord] ℹ️ Waxui TRAIL STOP: @{trail_val} (informational, no order)")
                                                             # Try SPX/NDX shorthand: 6900c, BTO 25 6900c, STC 15000p
                                                             m = SPX_NDX_SHORTHAND_REGEX.search(text.strip())
                                                             if m:
@@ -5762,241 +5923,235 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                     "is_market_order": True,
                                                                     "_spx_ndx_shorthand": True
                                                                 }
-                                                            else:
-                                                                # Try Bear-style Contract/Entry format
-                                                                bear_contract_m = BEAR_CONTRACT_REGEX.search(text.strip())
-                                                                if bear_contract_m:
-                                                                    symbol, month, day, strike, opt_type = bear_contract_m.groups()
-                                                                    expiry = f"{month}/{day}"
-                                                                    # Check for Entry price
-                                                                    bear_entry_m = BEAR_ENTRY_REGEX.search(text.strip())
-                                                                    if bear_entry_m:
-                                                                        price_str = bear_entry_m.group(1)
-                                                                        price = float(price_str) if price_str else None
-                                                                        print(f"[Discord] ✓ Matched Bear Contract/Entry format: {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
-                                                                        _current_trading_settings = get_trading_settings()
-                                                                        max_position_size = _current_trading_settings['max_position_size']
-                                                                        actual_cost_per_contract = price * 100 if price else 100
-                                                                        qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
-                                                                        print(f"[AUTO-QTY] Bear: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
-                                                                        return {
-                                                                            "asset": "option",
-                                                                            "action": "BTO",
-                                                                            "qty": qty,
-                                                                            "symbol": symbol.upper(),
-                                                                            "strike": float(strike),
-                                                                            "opt_type": opt_type.upper(),
-                                                                            "expiry": expiry,
-                                                                            "price": price,
-                                                                            "is_market_order": price is None,
-                                                                            "_bear_format": True
-                                                                        }
-                                                                    else:
-                                                                        # Contract without Entry - check if it's a trim
-                                                                        bear_trim_m = BEAR_TRIM_REGEX.search(text.strip())
-                                                                        if bear_trim_m:
-                                                                            print(f"[Discord] ✓ Matched Bear TRIM format: {symbol} {strike}{opt_type} {expiry}")
-                                                                            return {
-                                                                                "asset": "option",
-                                                                                "action": "STC",
-                                                                                "qty": 1,
-                                                                                "symbol": symbol.upper(),
-                                                                                "strike": float(strike),
-                                                                                "opt_type": opt_type.upper(),
-                                                                                "expiry": expiry,
-                                                                                "price": None,
-                                                                                "is_market_order": True,
-                                                                                "_bear_trim": True,
-                                                                                "_exit_type": "HALF"
-                                                                            }
-                                                                        else:
-                                                                            # Just tracking/update - no execution
-                                                                            print(f"[Discord] Bear Contract (tracking only, no Entry): {symbol} {strike}{opt_type} {expiry}")
-                                                                            return None
+                                                            # Try Bear-style Contract/Entry format
+                                                            bear_contract_m = BEAR_CONTRACT_REGEX.search(text.strip())
+                                                            if bear_contract_m:
+                                                                symbol, month, day, strike, opt_type = bear_contract_m.groups()
+                                                                expiry = f"{month}/{day}"
+                                                                bear_entry_m = BEAR_ENTRY_REGEX.search(text.strip())
+                                                                if bear_entry_m:
+                                                                    price_str = bear_entry_m.group(1)
+                                                                    price = float(price_str) if price_str else None
+                                                                    print(f"[Discord] ✓ Matched Bear Contract/Entry format: {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                    _current_trading_settings = get_trading_settings()
+                                                                    max_position_size = _current_trading_settings['max_position_size']
+                                                                    actual_cost_per_contract = price * 100 if price else 100
+                                                                    qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                    print(f"[AUTO-QTY] Bear: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                                                                    return {
+                                                                        "asset": "option",
+                                                                        "action": "BTO",
+                                                                        "qty": qty,
+                                                                        "symbol": symbol.upper(),
+                                                                        "strike": float(strike),
+                                                                        "opt_type": opt_type.upper(),
+                                                                        "expiry": expiry,
+                                                                        "price": price,
+                                                                        "is_market_order": price is None,
+                                                                        "_bear_format": True
+                                                                    }
                                                                 else:
-                                                                    # Try Bear lotto format: SPX 11/18. 5900c @0.55
-                                                                    bear_lotto_m = BEAR_LOTTO_REGEX.search(text.strip())
-                                                                    if bear_lotto_m:
-                                                                        symbol, month, day, strike, opt_type, price_str = bear_lotto_m.groups()
-                                                                        expiry = f"{month}/{day}"
-                                                                        price = float(price_str)
-                                                                        print(f"[Discord] ✓ Matched Bear LOTTO format: {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
-                                                                        _current_trading_settings = get_trading_settings()
-                                                                        max_position_size = _current_trading_settings['max_position_size']
-                                                                        actual_cost_per_contract = price * 100
-                                                                        qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
-                                                                        print(f"[AUTO-QTY] Bear Lotto: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                                                                    bear_trim_m = BEAR_TRIM_REGEX.search(text.strip())
+                                                                    if bear_trim_m:
+                                                                        print(f"[Discord] ✓ Matched Bear TRIM format: {symbol} {strike}{opt_type} {expiry}")
                                                                         return {
                                                                             "asset": "option",
-                                                                            "action": "BTO",
-                                                                            "qty": qty,
+                                                                            "action": "STC",
+                                                                            "qty": 1,
                                                                             "symbol": symbol.upper(),
                                                                             "strike": float(strike),
                                                                             "opt_type": opt_type.upper(),
                                                                             "expiry": expiry,
-                                                                            "price": price,
-                                                                            "is_market_order": False,
-                                                                            "_bear_lotto": True
+                                                                            "price": None,
+                                                                            "is_market_order": True,
+                                                                            "_bear_trim": True,
+                                                                            "_exit_type": "HALF"
                                                                         }
                                                                     else:
-                                                                        # Try standalone Bear trim: "I'm trimming here"
-                                                                        bear_trim_standalone_m = BEAR_TRIM_REGEX.search(text.strip())
-                                                                        if bear_trim_standalone_m:
-                                                                            print(f"[Discord] ✓ Matched standalone Bear TRIM format (no contract context)")
-                                                                            return {
-                                                                                "asset": "option",
-                                                                                "action": "STC",
-                                                                                "qty": 1,
-                                                                                "symbol": None,
-                                                                                "strike": None,
-                                                                                "opt_type": None,
-                                                                                "expiry": None,
-                                                                                "price": None,
-                                                                                "is_market_order": True,
-                                                                                "_bear_trim": True,
-                                                                                "_exit_type": "HALF"
-                                                                            }
-                                                                        else:
-                                                                            # Try Bishop trim format: Trimming SPX 6900 P 12/30 @$1.30 or @$30%
-                                                                            bishop_trim_m = BISHOP_TRIM_REGEX.search(text.strip())
-                                                                            if bishop_trim_m:
-                                                                                groups = bishop_trim_m.groups()
-                                                                                symbol, strike, opt_type, month, day, price_str = groups[:6]
-                                                                                is_percent = groups[6] if len(groups) > 6 else None
-                                                                                expiry = f"{month}/{day}"
-                                                                                
-                                                                                if is_percent:
-                                                                                    # This is a percentage trim (e.g., @$30% means trim at 30% profit)
-                                                                                    trim_pct = float(price_str)
-                                                                                    print(f"[Discord] ✓ Matched Bishop TRIM format (PERCENT): STC {symbol} {strike}{opt_type} {expiry} @ {trim_pct}%")
-                                                                                    return {
-                                                                                        "asset": "option",
-                                                                                        "action": "STC",
-                                                                                        "qty": 1,
-                                                                                        "qty_specified": False,
-                                                                                        "symbol": symbol.upper(),
-                                                                                        "strike": float(strike),
-                                                                                        "opt_type": opt_type.upper(),
-                                                                                        "expiry": expiry,
-                                                                                        "price": None,  # No specific price - use market
-                                                                                        "trim_percent": trim_pct,  # Store the trim percentage
-                                                                                        "is_market_order": True,  # Market order for percentage trims
-                                                                                        "_bishop_trim": True,
-                                                                                        "_bishop_trim_percent": True,
-                                                                                        "_exit_type": "PARTIAL"
-                                                                                    }
-                                                                                else:
-                                                                                    # This is a price-based trim (e.g., @$1.30)
-                                                                                    price = float(price_str)
-                                                                                    print(f"[Discord] ✓ Matched Bishop TRIM format: STC {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
-                                                                                    return {
-                                                                                        "asset": "option",
-                                                                                        "action": "STC",
-                                                                                        "qty": 1,
-                                                                                        "qty_specified": False,
-                                                                                        "symbol": symbol.upper(),
-                                                                                        "strike": float(strike),
-                                                                                        "opt_type": opt_type.upper(),
-                                                                                        "expiry": expiry,
-                                                                                        "price": price,
-                                                                                        "is_market_order": False,
-                                                                                        "_bishop_trim": True,
-                                                                                        "_exit_type": "PARTIAL"
-                                                                                    }
+                                                                        print(f"[Discord] Bear Contract (tracking only, no Entry): {symbol} {strike}{opt_type} {expiry}")
+                                                                        return None
+                                                            else:
+                                                                bear_lotto_m = BEAR_LOTTO_REGEX.search(text.strip())
+                                                                if bear_lotto_m:
+                                                                    symbol, month, day, strike, opt_type, price_str = bear_lotto_m.groups()
+                                                                    expiry = f"{month}/{day}"
+                                                                    price = float(price_str)
+                                                                    print(f"[Discord] ✓ Matched Bear LOTTO format: {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                    _current_trading_settings = get_trading_settings()
+                                                                    max_position_size = _current_trading_settings['max_position_size']
+                                                                    actual_cost_per_contract = price * 100
+                                                                    qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                    print(f"[AUTO-QTY] Bear Lotto: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                                                                    return {
+                                                                        "asset": "option",
+                                                                        "action": "BTO",
+                                                                        "qty": qty,
+                                                                        "symbol": symbol.upper(),
+                                                                        "strike": float(strike),
+                                                                        "opt_type": opt_type.upper(),
+                                                                        "expiry": expiry,
+                                                                        "price": price,
+                                                                        "is_market_order": False,
+                                                                        "_bear_lotto": True
+                                                                    }
+                                                                else:
+                                                                    bear_trim_standalone_m = BEAR_TRIM_REGEX.search(text.strip())
+                                                                    if bear_trim_standalone_m:
+                                                                        print(f"[Discord] ✓ Matched standalone Bear TRIM format (no contract context)")
+                                                                        return {
+                                                                            "asset": "option",
+                                                                            "action": "STC",
+                                                                            "qty": 1,
+                                                                            "symbol": None,
+                                                                            "strike": None,
+                                                                            "opt_type": None,
+                                                                            "expiry": None,
+                                                                            "price": None,
+                                                                            "is_market_order": True,
+                                                                            "_bear_trim": True,
+                                                                            "_exit_type": "HALF"
+                                                                        }
+                                                                    else:
+                                                                        # Try Bishop trim format: Trimming SPX 6900 P 12/30 @$1.30 or @$30%
+                                                                        bishop_trim_m = BISHOP_TRIM_REGEX.search(text.strip())
+                                                                        if bishop_trim_m:
+                                                                            groups = bishop_trim_m.groups()
+                                                                            symbol, strike, opt_type, month, day, price_str = groups[:6]
+                                                                            is_percent = groups[6] if len(groups) > 6 else None
+                                                                            expiry = f"{month}/{day}"
+                                                                            
+                                                                            if is_percent:
+                                                                                # This is a percentage trim (e.g., @$30% means trim at 30% profit)
+                                                                                trim_pct = float(price_str)
+                                                                                print(f"[Discord] ✓ Matched Bishop TRIM format (PERCENT): STC {symbol} {strike}{opt_type} {expiry} @ {trim_pct}%")
+                                                                                return {
+                                                                                    "asset": "option",
+                                                                                    "action": "STC",
+                                                                                    "qty": 1,
+                                                                                    "qty_specified": False,
+                                                                                    "symbol": symbol.upper(),
+                                                                                    "strike": float(strike),
+                                                                                    "opt_type": opt_type.upper(),
+                                                                                    "expiry": expiry,
+                                                                                    "price": None,  # No specific price - use market
+                                                                                    "trim_percent": trim_pct,  # Store the trim percentage
+                                                                                    "is_market_order": True,  # Market order for percentage trims
+                                                                                    "_bishop_trim": True,
+                                                                                    "_bishop_trim_percent": True,
+                                                                                    "_exit_type": "PARTIAL"
+                                                                                }
                                                                             else:
-                                                                                # Try Bishop entry format: "I'm Entering" + "Option: SPX 6900 P 12/30" + "Entry: 1.00"
-                                                                                if "i'm entering" in text.lower() or "im entering" in text.lower():
-                                                                                    bishop_option_m = BISHOP_OPTION_REGEX.search(text.strip())
-                                                                                    if bishop_option_m:
-                                                                                        symbol, strike, opt_type, month, day = bishop_option_m.groups()
-                                                                                        expiry = f"{month}/{day}"
-                                                                                        # Check for Entry price
-                                                                                        bishop_entry_m = BISHOP_ENTRY_REGEX.search(text.strip())
-                                                                                        if bishop_entry_m:
-                                                                                            price_low_str = bishop_entry_m.group(1)
-                                                                                            price_high_str = bishop_entry_m.group(2)  # Optional high end of range
-                                                                                            
-                                                                                            # Use HIGHER price from range for better fill (Entry: 1.58-1.60 → use 1.60)
-                                                                                            if price_high_str:
-                                                                                                price_str = price_high_str
-                                                                                                price = float(price_high_str)
-                                                                                                print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str} (range: {price_low_str}-{price_high_str}, using HIGH)")
-                                                                                            else:
-                                                                                                price_str = price_low_str
-                                                                                                price = float(price_low_str) if price_low_str else None
-                                                                                                print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
-                                                                                            _current_trading_settings = get_trading_settings()
-                                                                                            max_position_size = _current_trading_settings['max_position_size']
-                                                                                            actual_cost_per_contract = price * 100 if price else 100
-                                                                                            qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
-                                                                                            print(f"[AUTO-QTY] Bishop: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
-                                                                                            return {
-                                                                                                "asset": "option",
-                                                                                                "action": "BTO",
-                                                                                                "qty": qty,
-                                                                                                "qty_specified": False,
-                                                                                                "symbol": symbol.upper(),
-                                                                                                "strike": float(strike),
-                                                                                                "opt_type": opt_type.upper(),
-                                                                                                "expiry": expiry,
-                                                                                                "price": price,
-                                                                                                "is_market_order": price is None,
-                                                                                                "_bishop_format": True
-                                                                                            }
-                                                                                
-                                                                                # Try Bishop "stopped out" format: "Got stopped out at $1.65"
-                                                                                # This requires position matching since it doesn't include contract details
-                                                                                bishop_stopped_m = BISHOP_STOPPED_REGEX.search(text.strip())
-                                                                                if bishop_stopped_m:
-                                                                                    price_str = bishop_stopped_m.group(1)
-                                                                                    price = float(price_str) if price_str else None
-                                                                                    print(f"[Discord] ✓ Matched Bishop STOPPED format: exit @ ${price_str}")
-                                                                                    # Mark this signal for position matching (will be resolved during execution)
-                                                                                    return {
-                                                                                        "asset": "option",
-                                                                                        "action": "STC",
-                                                                                        "qty": 0,  # Will be filled from position
-                                                                                        "qty_specified": False,
-                                                                                        "symbol": None,  # Will be matched from most recent position
-                                                                                        "strike": None,
-                                                                                        "opt_type": None,
-                                                                                        "expiry": None,
-                                                                                        "price": price,
-                                                                                        "is_market_order": price is None,
-                                                                                        "_bishop_stopped": True,
-                                                                                        "_exit_type": "ALL",
-                                                                                        "_needs_position_match": True  # Flag for position matching
-                                                                                    }
-                                                                                
-                                                                                # Try EvaPanda format: BTO FSLR 01/16/26 300C @ 3.25
-                                                                                # Uses embed title "Open" or "Close" to indicate entry/exit
-                                                                                evapanda_m = EVAPANDA_REGEX.search(text.strip())
-                                                                                if evapanda_m:
-                                                                                    action, symbol, month, day, year, strike, opt_type, price_str = evapanda_m.groups()
-                                                                                    expiry = f"{month}/{day}"  # Convert to MM/DD format
-                                                                                    price = float(price_str) if price_str else None
-                                                                                    print(f"[Discord] ✓ Matched EvaPanda format: {action} {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
-                                                                                    _current_trading_settings = get_trading_settings()
-                                                                                    max_position_size = _current_trading_settings['max_position_size']
-                                                                                    actual_cost_per_contract = price * 100 if price else 100
-                                                                                    qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
-                                                                                    print(f"[AUTO-QTY] EvaPanda: ${price} x 100 = ${actual_cost_per_contract}/contract, qty={qty} (max ${max_position_size})")
-                                                                                    return {
-                                                                                        "asset": "option",
-                                                                                        "action": action.upper(),
-                                                                                        "qty": qty,
-                                                                                        "qty_specified": False,
-                                                                                        "symbol": symbol.upper(),
-                                                                                        "strike": float(strike),
-                                                                                        "opt_type": opt_type.upper(),
-                                                                                        "expiry": expiry,
-                                                                                        "price": price,
-                                                                                        "is_market_order": price is None,
-                                                                                        "_evapanda_format": True
-                                                                                    }
-                                                                                
-                                                                                # Silently return None - let the caller try other formats (stock, TRADE IDEA)
-                                                                                return None
+                                                                                # This is a price-based trim (e.g., @$1.30)
+                                                                                price = float(price_str)
+                                                                                print(f"[Discord] ✓ Matched Bishop TRIM format: STC {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                return {
+                                                                                    "asset": "option",
+                                                                                    "action": "STC",
+                                                                                    "qty": 1,
+                                                                                    "qty_specified": False,
+                                                                                    "symbol": symbol.upper(),
+                                                                                    "strike": float(strike),
+                                                                                    "opt_type": opt_type.upper(),
+                                                                                    "expiry": expiry,
+                                                                                    "price": price,
+                                                                                    "is_market_order": False,
+                                                                                    "_bishop_trim": True,
+                                                                                    "_exit_type": "PARTIAL"
+                                                                                }
+                                                                        else:
+                                                                            # Try Bishop entry format: "I'm Entering" + "Option: SPX 6900 P 12/30" + "Entry: 1.00"
+                                                                            if "i'm entering" in text.lower() or "im entering" in text.lower():
+                                                                                bishop_option_m = BISHOP_OPTION_REGEX.search(text.strip())
+                                                                                if bishop_option_m:
+                                                                                    symbol, strike, opt_type, month, day = bishop_option_m.groups()
+                                                                                    expiry = f"{month}/{day}"
+                                                                                    # Check for Entry price
+                                                                                    bishop_entry_m = BISHOP_ENTRY_REGEX.search(text.strip())
+                                                                                    if bishop_entry_m:
+                                                                                        price_low_str = bishop_entry_m.group(1)
+                                                                                        price_high_str = bishop_entry_m.group(2)  # Optional high end of range
+                                                                                        
+                                                                                        # Use HIGHER price from range for better fill (Entry: 1.58-1.60 → use 1.60)
+                                                                                        if price_high_str:
+                                                                                            price_str = price_high_str
+                                                                                            price = float(price_high_str)
+                                                                                            print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str} (range: {price_low_str}-{price_high_str}, using HIGH)")
+                                                                                        else:
+                                                                                            price_str = price_low_str
+                                                                                            price = float(price_low_str) if price_low_str else None
+                                                                                            print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                        _current_trading_settings = get_trading_settings()
+                                                                                        max_position_size = _current_trading_settings['max_position_size']
+                                                                                        actual_cost_per_contract = price * 100 if price else 100
+                                                                                        qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                                        print(f"[AUTO-QTY] Bishop: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                                                                                        return {
+                                                                                            "asset": "option",
+                                                                                            "action": "BTO",
+                                                                                            "qty": qty,
+                                                                                            "qty_specified": False,
+                                                                                            "symbol": symbol.upper(),
+                                                                                            "strike": float(strike),
+                                                                                            "opt_type": opt_type.upper(),
+                                                                                            "expiry": expiry,
+                                                                                            "price": price,
+                                                                                            "is_market_order": price is None,
+                                                                                            "_bishop_format": True
+                                                                                        }
+                                                                            
+                                                                            # Try Bishop "stopped out" format: "Got stopped out at $1.65"
+                                                                            # This requires position matching since it doesn't include contract details
+                                                                            bishop_stopped_m = BISHOP_STOPPED_REGEX.search(text.strip())
+                                                                            if bishop_stopped_m:
+                                                                                price_str = bishop_stopped_m.group(1)
+                                                                                price = float(price_str) if price_str else None
+                                                                                print(f"[Discord] ✓ Matched Bishop STOPPED format: exit @ ${price_str}")
+                                                                                # Mark this signal for position matching (will be resolved during execution)
+                                                                                return {
+                                                                                    "asset": "option",
+                                                                                    "action": "STC",
+                                                                                    "qty": 0,  # Will be filled from position
+                                                                                    "qty_specified": False,
+                                                                                    "symbol": None,  # Will be matched from most recent position
+                                                                                    "strike": None,
+                                                                                    "opt_type": None,
+                                                                                    "expiry": None,
+                                                                                    "price": price,
+                                                                                    "is_market_order": price is None,
+                                                                                    "_bishop_stopped": True,
+                                                                                    "_exit_type": "ALL",
+                                                                                    "_needs_position_match": True  # Flag for position matching
+                                                                                }
+                                                                            
+                                                                            # Try EvaPanda format: BTO FSLR 01/16/26 300C @ 3.25
+                                                                            # Uses embed title "Open" or "Close" to indicate entry/exit
+                                                                            evapanda_m = EVAPANDA_REGEX.search(text.strip())
+                                                                            if evapanda_m:
+                                                                                action, symbol, month, day, year, strike, opt_type, price_str = evapanda_m.groups()
+                                                                                expiry = f"{month}/{day}"  # Convert to MM/DD format
+                                                                                price = float(price_str) if price_str else None
+                                                                                print(f"[Discord] ✓ Matched EvaPanda format: {action} {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                _current_trading_settings = get_trading_settings()
+                                                                                max_position_size = _current_trading_settings['max_position_size']
+                                                                                actual_cost_per_contract = price * 100 if price else 100
+                                                                                qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                                print(f"[AUTO-QTY] EvaPanda: ${price} x 100 = ${actual_cost_per_contract}/contract, qty={qty} (max ${max_position_size})")
+                                                                                return {
+                                                                                    "asset": "option",
+                                                                                    "action": action.upper(),
+                                                                                    "qty": qty,
+                                                                                    "qty_specified": False,
+                                                                                    "symbol": symbol.upper(),
+                                                                                    "strike": float(strike),
+                                                                                    "opt_type": opt_type.upper(),
+                                                                                    "expiry": expiry,
+                                                                                    "price": price,
+                                                                                    "is_market_order": price is None,
+                                                                                    "_evapanda_format": True
+                                                                                }
+                                                                            
+                                                                            # Silently return None - let the caller try other formats (stock, TRADE IDEA)
+                                                                            return None
     
     if use_steel_stc:
         # Handle various STC formats with different group structures
@@ -13088,8 +13243,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     opt['qty'] = adjusted_qty
             
             # PROPORTIONAL EXIT FOR STC: Calculate proportional exit qty based on trader's exit percentage
-            # This ensures we exit the same PERCENTAGE of our position as the trader does
-            if opt.get('action') == 'STC' and opt.get('symbol'):
+            # Skip for waxui signals - they use holding-state based qty from the WAXUI TRIM resolver
+            if opt.get('action') == 'STC' and opt.get('symbol') and not opt.get('_waxui_trim') and not opt.get('_waxui_close'):
                 trader_exit_qty = opt.get('qty')  # Trader's exit qty from signal
                 channel_id = str(message.channel.id)
                 
@@ -13127,7 +13282,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     from gui_app.database import get_connection
                     conn = get_connection()
                     cursor = conn.cursor()
-                    # Find most recent open BTO trade from this channel
                     cursor.execute('''
                         SELECT symbol, strike, call_put, expiry 
                         FROM trades 
@@ -13140,10 +13294,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     open_position = cursor.fetchone()
                     if open_position:
                         opt['symbol'] = open_position['symbol']
-                        opt['strike'] = open_position['strike']
-                        opt['opt_type'] = open_position['call_put']
-                        opt['expiry'] = open_position['expiry']
-                        print(f"[STC] ✓ Found open position: {opt['symbol']} ${opt['strike']}{opt['opt_type']} {opt['expiry']}")
+                        if opt.get('_waxui_trim') or opt.get('_waxui_close'):
+                            print(f"[STC] ✓ Found open position for waxui price-only: {opt['symbol']} (qty via WAXUI TRIM resolver)")
+                        else:
+                            opt['strike'] = open_position['strike']
+                            opt['opt_type'] = open_position['call_put']
+                            opt['expiry'] = open_position['expiry']
+                            print(f"[STC] ✓ Found open position: {opt['symbol']} ${opt['strike']}{opt['opt_type']} {opt['expiry']}")
                     else:
                         print(f"[STC] ❌ No open positions found for channel {message.channel.id} - cannot process price-only STC")
                         return
@@ -13178,13 +13335,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['expiry'] = open_position['expiry']
                         original_qty = open_position['quantity'] or 1
                         
-                        # Calculate exit quantity based on exit_type
-                        if exit_type == 'HALF':
+                        if exit_type == 'WAXUI_HOLDING':
+                            holding_remaining_pct = opt.get('_holding_remaining_pct', 50)
+                            holding_text = opt.get('_holding_text', 'unknown')
+                            target_remaining = max(0, int(original_qty * holding_remaining_pct / 100))
+                            exit_qty = max(1, original_qty - target_remaining)
+                            if exit_qty >= original_qty:
+                                exit_qty = original_qty
+                            print(f"[WAXUI TRIM] Holding '{holding_text}' → keep {holding_remaining_pct}% ({target_remaining} contracts), selling {exit_qty} of {original_qty}")
+                        elif exit_type == 'ALL' or opt.get('_waxui_close'):
+                            exit_qty = original_qty
+                            print(f"[WAXUI CLOSE] Selling ALL: {exit_qty} contracts")
+                        elif exit_type == 'HALF':
                             exit_qty = max(1, original_qty // 2)
                             print(f"[WAXUI TRIM] Selling HALF: {exit_qty} of {original_qty} contracts")
                         else:
                             exit_qty = original_qty
-                            print(f"[WAXUI CLOSE] Selling ALL: {exit_qty} contracts")
+                            print(f"[WAXUI {waxui_type}] Selling ALL (fallback): {exit_qty} contracts")
                         
                         opt['qty'] = exit_qty
                         opt['_original_qty'] = original_qty
@@ -13208,7 +13375,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             opt['expiry'] = open_position['expiry']
                             original_qty = open_position['quantity'] or 1
                             
-                            if exit_type == 'HALF':
+                            if exit_type == 'WAXUI_HOLDING':
+                                holding_remaining_pct = opt.get('_holding_remaining_pct', 50)
+                                target_remaining = max(0, int(original_qty * holding_remaining_pct / 100))
+                                exit_qty = max(1, original_qty - target_remaining)
+                                if exit_qty >= original_qty:
+                                    exit_qty = original_qty
+                            elif exit_type == 'ALL' or opt.get('_waxui_close'):
+                                exit_qty = original_qty
+                            elif exit_type == 'HALF':
                                 exit_qty = max(1, original_qty // 2)
                             else:
                                 exit_qty = original_qty
