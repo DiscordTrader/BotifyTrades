@@ -1366,14 +1366,15 @@ SPX_NDX_SHORTHAND_PATTERN = r'^(?:(BTO|STC)\s+)?(?:(\d+)\s+)?(\d{4,5})([CPcp])$'
 
 WAXUI_ENTRY_PATTERN = r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg[.,]?\s*(\.?\d+\.?\d*)'
 WAXUI_TRIM_PATTERN = r'(?:[Ss]afety\s+)?[Tt]rim\s+([A-Za-z]+)(?:\s+here)?'
-WAXUI_CLOSE_PATTERN = r'[Cc]lose[d]?\s+([A-Za-z]+)\s+here'
+WAXUI_CLOSE_PATTERN = r'[Cc]lose[d]?\s+([A-Za-z]+)(?:\s+(?:runners|all|everything))?\s+here'
+WAXUI_STOPPED_PATTERN = r'[Ss]topped\s+out\s+(?:of\s+)?([A-Za-z]+)'
 WAXUI_MORE_PATTERN = r'[Mm]ore\s+([A-Za-z]+)\s+here'
 WAXUI_ADDED_PATTERN = r'[Aa]dded\s+(?:back\s+)?(?:into\s+)?([A-Za-z]+)\s+@\s*(\d+\.?\d*)'
 WAXUI_REDUCED_PATTERN = r'[Rr]educed\s+risk\s+@\s*(\d+\.?\d*)'
 WAXUI_TRAIL_PATTERN = r'[Tt]rail\s*stops?\s+(?:set\s+)?@\s*([Bb]/[Ee]|[Bb]reak\s*even|\d+\.?\d*)'
 WAXUI_PROFIT_LADDER_PATTERN = r'(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)\s*[✓✔️☑✅]?\s*(\d+)%'
 WAXUI_HOLDING_PATTERN = r'[Hh]olding\s+(most|majority|1/2|half|runners\s+only|runners|last\s+con[s]?\.?)'
-WAXUI_IMPLICIT_TRIM_PATTERN = r'^[*_]*([A-Z]{2,5})\1*Y*\s*$'
+WAXUI_IMPLICIT_TRIM_PATTERN = r'^[*_]*([A-Z]{2,})\s*$'
 
 # Bear-style patterns (@Stxbearish Discord format)
 # Entry format: **Contract:** $SPX 12/19 6845C\n**Entry:** @2.45
@@ -5435,6 +5436,7 @@ SPX_NDX_SHORTHAND_REGEX = re.compile(SPX_NDX_SHORTHAND_PATTERN, re.IGNORECASE)
 WAXUI_ENTRY_REGEX = re.compile(WAXUI_ENTRY_PATTERN, re.IGNORECASE)
 WAXUI_TRIM_REGEX = re.compile(WAXUI_TRIM_PATTERN, re.IGNORECASE)
 WAXUI_CLOSE_REGEX = re.compile(WAXUI_CLOSE_PATTERN, re.IGNORECASE)
+WAXUI_STOPPED_REGEX = re.compile(WAXUI_STOPPED_PATTERN, re.IGNORECASE)
 WAXUI_MORE_REGEX = re.compile(WAXUI_MORE_PATTERN, re.IGNORECASE)
 WAXUI_ADDED_REGEX = re.compile(WAXUI_ADDED_PATTERN, re.IGNORECASE)
 WAXUI_REDUCED_REGEX = re.compile(WAXUI_REDUCED_PATTERN, re.IGNORECASE)
@@ -5741,12 +5743,13 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                         "_waxui_format": True
                                                     }
                                                 else:
-                                                    # Try Waxui close: Closed SPX here
                                                     m = WAXUI_CLOSE_REGEX.search(text.strip())
+                                                    if not m:
+                                                        m = WAXUI_STOPPED_REGEX.search(text.strip())
                                                     if m:
                                                         symbol = m.group(1)
                                                         exit_price, _ep, _pp, _hrp, _ht = _waxui_extract_exit_price_and_holding(text.strip())
-                                                        print(f"[Discord] ✓ Matched Waxui CLOSE format: {symbol}" + (f" (exit price ${exit_price})" if exit_price else ""))
+                                                        print(f"[Discord] ✓ Matched Waxui CLOSE/STOPPED format: {symbol}" + (f" (exit price ${exit_price})" if exit_price else ""))
                                                         return {
                                                             "asset": "option",
                                                             "action": "STC",
@@ -5789,16 +5792,19 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                 "_waxui_profit_pct": profit_pct
                                                             }
                                                         else:
-                                                            # Try Waxui implicit trim: "SPYYY\n2.00 - 3.30 ✅ 65%\nHolding 1/2!"
-                                                            has_ladder = WAXUI_PROFIT_LADDER_REGEX.search(text.strip())
-                                                            has_holding = WAXUI_HOLDING_REGEX.search(text.strip())
+                                                            clean_text = re.sub(r'<@[&!]?\d+>', '', text).strip()
+                                                            has_ladder = WAXUI_PROFIT_LADDER_REGEX.search(clean_text)
+                                                            has_holding = WAXUI_HOLDING_REGEX.search(clean_text)
                                                             if has_ladder and has_holding:
-                                                                ticker_m = re.search(r'^[*_]*([A-Z]{2,5})', text.strip(), re.MULTILINE)
+                                                                ticker_m = re.search(r'^[*_]*([A-Z]{2,})', clean_text, re.MULTILINE)
                                                                 if ticker_m:
                                                                     raw_sym = ticker_m.group(1)
-                                                                    symbol = raw_sym.rstrip('Y')
-                                                                    if len(symbol) < 3 and len(raw_sym) >= 3:
-                                                                        symbol = raw_sym[:3]
+                                                                    last_char = raw_sym[-1]
+                                                                    symbol = raw_sym.rstrip(last_char)
+                                                                    if not symbol or len(symbol) < 2:
+                                                                        symbol = raw_sym[:3] if len(raw_sym) >= 3 else raw_sym
+                                                                    else:
+                                                                        symbol = symbol + last_char
                                                                     if len(symbol) >= 2:
                                                                         exit_price, entry_price, profit_pct, holding_remaining_pct, holding_text = _waxui_extract_exit_price_and_holding(text.strip())
                                                                         print(f"[Discord] ✓ Matched Waxui IMPLICIT TRIM: {raw_sym}→{symbol} | Holding: {holding_text} ({holding_remaining_pct}% remaining) | Exit ${exit_price}")
