@@ -61,20 +61,18 @@ bot_proc = subprocess.Popen(
     env={**os.environ, 'PYTHONUNBUFFERED': '1'}
 )
 
+import urllib.request
 for i in range(30):
     time.sleep(1)
     if bot_proc.poll() is not None:
         print(f'[PREBIND] FATAL: Bot process exited with code {bot_proc.returncode}', flush=True)
         sys.exit(bot_proc.returncode or 1)
     try:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        probe.settimeout(1)
-        probe.connect(('127.0.0.1', port))
-        probe.close()
-        print(f'[PREBIND] ✓ Flask confirmed listening on port {port} after {i+1}s', flush=True)
-        break
-    except (ConnectionRefusedError, OSError):
-        probe.close()
+        resp = urllib.request.urlopen(f'http://127.0.0.1:{port}/readyz', timeout=2)
+        if resp.status == 200:
+            print(f'[PREBIND] ✓ Flask confirmed listening on port {port} after {i+1}s', flush=True)
+            break
+    except Exception:
         if i % 5 == 4:
             print(f'[PREBIND] Waiting for Flask... ({i+1}s)', flush=True)
 else:

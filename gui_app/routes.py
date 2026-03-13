@@ -908,6 +908,9 @@ def register_routes(app):
         # Allow conditional orders status API (for debugging)
         if request.path == '/api/conditional_orders/status':
             return None
+        # Allow readiness probe (Replit proxy health check)
+        if request.path == '/readyz':
+            return None
         # Allow user dashboard routes (handled by user_login_required decorator)
         if request.path.startswith('/user/') or request.path.startswith('/api/user/'):
             return None
@@ -1844,6 +1847,11 @@ def register_routes(app):
         response.headers['Expires'] = '0'
         return response
     
+    @app.route('/readyz')
+    def readyz():
+        """Readiness probe for Replit proxy and health checks (PUBLIC - no auth)"""
+        return 'ok', 200
+
     @app.route('/architecture')
     def architecture():
         """System architecture presentation page (PUBLIC - no auth required)"""
