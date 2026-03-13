@@ -52,10 +52,20 @@ class WebullBroker(BrokerInterface):
             
             if access_token and refresh_token:
                 print(f"[{self.name}] Using saved tokens for authentication")
+                self.wb._access_token = access_token
                 self.wb.access_token = access_token
+                self.wb._refresh_token = refresh_token
                 self.wb.refresh_token = refresh_token
                 if did:
+                    self.wb._did = did
                     self.wb.did = did
+                try:
+                    if hasattr(self.wb, '_headers'):
+                        self.wb._headers['Authorization'] = f'Bearer {access_token}'
+                    if hasattr(self.wb, '_session') and hasattr(self.wb._session, 'headers'):
+                        self.wb._session.headers['Authorization'] = f'Bearer {access_token}'
+                except Exception:
+                    pass
                 
                 desired_account_type = self.config.get('account_type', 'margin').lower()
                 acct_id = await asyncio.to_thread(self._resolve_account_by_type, desired_account_type)
@@ -128,6 +138,10 @@ class WebullBroker(BrokerInterface):
                     print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}] (secAccountId={sec_id})")
                     return self.wb._account_id
 
+            if not valid_accounts:
+                print(f"[{self.name}] ⚠️ No valid accounts found — falling back to default")
+                return self.wb.get_account_id()
+
             print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found in {len(valid_accounts)} account(s) — using first account")
             print(f"[{self.name}] ⚠️ Selected account type '{desired_type}' was NOT applied. Trading on default account.")
             self.wb.zone_var = str(valid_accounts[0].get('rzone', ''))
@@ -146,6 +160,9 @@ class WebullBroker(BrokerInterface):
         try:
             url = self.wb._urls.account(sec_account_id)
             resp = _req.get(url, headers=headers, timeout=self.wb.timeout)
+            if resp.status_code != 200:
+                print(f"[{self.name}] ⚠️ Account detail API returned {resp.status_code} for {sec_account_id}")
+                return 'Unknown'
             data = resp.json()
             account = data.get('data', data) if isinstance(data, dict) else data
             if not isinstance(account, dict):

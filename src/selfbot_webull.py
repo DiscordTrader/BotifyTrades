@@ -2469,6 +2469,11 @@ class WebullBroker:
                     print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}] (secAccountId={sec_id})")
                     return
 
+            if not valid_accounts:
+                print(f"[{self.name}] ⚠️ No valid accounts found — falling back to default")
+                wb.get_account_id()
+                return
+
             print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found in {len(valid_accounts)} account(s) — using first account")
             print(f"[{self.name}] ⚠️ Selected account type '{desired_type}' was NOT applied. Trading on default account.")
             wb.zone_var = str(valid_accounts[0].get('rzone', ''))
@@ -2486,6 +2491,9 @@ class WebullBroker:
         try:
             url = wb._urls.account(sec_account_id)
             resp = _req.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                print(f"[{self.name}] ⚠️ Account detail API returned {resp.status_code} for {sec_account_id}")
+                return 'Unknown'
             data = resp.json()
             account = data.get('data', data) if isinstance(data, dict) else data
             if not isinstance(account, dict):
