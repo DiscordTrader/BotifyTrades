@@ -18826,7 +18826,7 @@ if __name__ == '__main__':
         """Handle SIGTERM/SIGINT gracefully to prevent segfaults."""
         _original_print(f"\n[SHUTDOWN] Received signal {signum}, initiating graceful shutdown...")
         cleanup_resources()
-        sys.exit(0)
+        os._exit(0)
     
     # Register signal handlers (SIGKILL cannot be caught)
     try:

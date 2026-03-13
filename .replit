@@ -19,12 +19,12 @@ args = "BotifyTrades"
 name = "BotifyTrades"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PYTHONUNBUFFERED=1 python -u src/selfbot_webull.py"
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [nix]
 channel = "stable-25_05"
