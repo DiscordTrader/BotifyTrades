@@ -2473,11 +2473,12 @@ class WebullBroker:
                     print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}]")
                     return
 
-            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found — using first account (index 0)")
+            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found in {len(accounts)} account(s) — using first account (index 0)")
+            print(f"[{self.name}] ⚠️ Selected account type '{desired_type}' was NOT applied. Trading on default account.")
             wb.zone_var = str(accounts[0].get('rzone', ''))
             wb._account_id = str(accounts[0].get('secAccountId', accounts[0].get('accountId', '')))
         except Exception as e:
-            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — falling back to default")
+            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — desired '{desired_type}' NOT applied, falling back to index 0")
             try:
                 wb.get_account_id()
             except Exception:
@@ -2619,12 +2620,15 @@ class WebullBroker:
             else:
                 try:
                     desired_account_type = 'margin'
-                    try:
-                        from gui_app.broker_credentials_service import get_webull_credentials
-                        wb_creds = get_webull_credentials()
-                        desired_account_type = wb_creds.get('account_type', 'margin').lower()
-                    except Exception:
-                        pass
+                    if creds.get('account_type'):
+                        desired_account_type = creds['account_type'].lower()
+                    else:
+                        try:
+                            from gui_app.broker_credentials_service import get_webull_credentials
+                            wb_creds = get_webull_credentials()
+                            desired_account_type = wb_creds.get('account_type', 'margin').lower()
+                        except Exception:
+                            pass
                     self._resolve_account_by_type_sync(wb, desired_account_type)
                 except Exception as e_acc:
                     print(f"[{self.name}] get_account_id warning: {e_acc}")

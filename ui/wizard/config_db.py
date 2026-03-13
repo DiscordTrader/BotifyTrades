@@ -111,11 +111,13 @@ class WizardDatabaseAdapter:
             creds = credentials.get(broker_id, {})
             
             if broker_id == 'webull':
+                existing_webull = get_webull_credentials()
                 save_webull_credentials(
                     device_id=creds.get('device_id', ''),
                     access_token=creds.get('access_token', ''),
                     trade_pin=creds.get('trade_pin', ''),
-                    paper_mode=creds.get('paper_trade', True)
+                    paper_mode=creds.get('paper_trade', True),
+                    account_type=existing_webull.get('account_type', 'margin')
                 )
             elif broker_id == 'alpaca':
                 save_alpaca_credentials(

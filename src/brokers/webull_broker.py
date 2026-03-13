@@ -132,12 +132,13 @@ class WebullBroker(BrokerInterface):
                     print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}]")
                     return self.wb._account_id
 
-            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found — using first account (index 0)")
+            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found in {len(accounts)} account(s) — using first account (index 0)")
+            print(f"[{self.name}] ⚠️ Selected account type '{desired_type}' was NOT applied. Trading on default account.")
             self.wb.zone_var = str(accounts[0].get('rzone', ''))
             self.wb._account_id = str(accounts[0].get('secAccountId', accounts[0].get('accountId', '')))
             return self.wb._account_id
         except Exception as e:
-            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — falling back to default")
+            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — desired '{desired_type}' NOT applied, falling back to index 0")
             try:
                 return self.wb.get_account_id()
             except Exception:
