@@ -7979,7 +7979,8 @@ def register_routes(app):
                     access_token=existing_webull.get('access_token', ''),
                     refresh_token=existing_webull.get('refresh_token', ''),
                     paper_mode=data.get('webull_paper', existing_webull.get('paper_mode', True)),
-                    paper_account_enabled=existing_webull.get('paper_account_enabled', False)
+                    paper_account_enabled=existing_webull.get('paper_account_enabled', False),
+                    account_type=existing_webull.get('account_type', 'margin')
                 )
             
             # Save API keys
@@ -13362,6 +13363,7 @@ def register_routes(app):
                 'has_tokens': bool(creds.get('access_token') and creds.get('refresh_token')),
                 'paper_mode': creds.get('paper_mode', True),
                 'paper_account_enabled': creds.get('paper_account_enabled', False),
+                'account_type': creds.get('account_type', 'margin'),
                 'live_status': live_status,
                 'paper_status': paper_status
             })
@@ -13417,7 +13419,8 @@ def register_routes(app):
                 zone_id=zone_id,
                 rzone=rzone,
                 region_id=region_id,
-                paper_account_enabled=data.get('paper_account_enabled', existing.get('paper_account_enabled', False))
+                paper_account_enabled=data.get('paper_account_enabled', existing.get('paper_account_enabled', False)),
+                account_type=data.get('account_type', existing.get('account_type', 'margin'))
             )
             
             message = 'Webull credentials saved.'
@@ -13456,7 +13459,8 @@ def register_routes(app):
                 zone_id=existing.get('zone_id', ''),
                 rzone=existing.get('rzone', ''),
                 region_id=existing.get('region_id', ''),
-                paper_account_enabled=existing.get('paper_account_enabled', False)
+                paper_account_enabled=existing.get('paper_account_enabled', False),
+                account_type=existing.get('account_type', 'margin')
             )
             
             print("[Webull] Tokens cleared manually - region data preserved, will require fresh authentication")

@@ -57,9 +57,10 @@ class WebullBroker(BrokerInterface):
                 if did:
                     self.wb.did = did
                 
-                acct_id = await asyncio.to_thread(self.wb.get_account_id)
+                desired_account_type = self.config.get('account_type', 'margin').lower()
+                acct_id = await asyncio.to_thread(self._resolve_account_by_type, desired_account_type)
                 if acct_id:
-                    print(f"[{self.name}] ✓ Account ID resolved: {acct_id} ({'paper' if self.paper_trade else 'live'})")
+                    print(f"[{self.name}] ✓ Account ID resolved: {acct_id} ({desired_account_type.upper()} account, {'paper' if self.paper_trade else 'live'})")
                 else:
                     print(f"[{self.name}] ⚠️ Could not resolve account ID — positions may be unreliable")
                 
@@ -82,9 +83,11 @@ class WebullBroker(BrokerInterface):
                 
                 result = await asyncio.to_thread(login)
                 if result:
+                    desired_account_type = self.config.get('account_type', 'margin').lower()
+                    await asyncio.to_thread(self._resolve_account_by_type, desired_account_type)
                     self.connected = True
                     self._tokens_valid = True
-                    print(f"[{self.name}] ✓ Connected successfully (password auth)")
+                    print(f"[{self.name}] ✓ Connected successfully (password auth, {desired_account_type.upper()} account)")
                     self._start_proactive_token_refresh()
                     self._start_streaming()
                     return True
@@ -96,6 +99,50 @@ class WebullBroker(BrokerInterface):
             print(f"[{self.name}] ❌ Connection error: {e}")
             return False
     
+    def _resolve_account_by_type(self, desired_type='margin'):
+        """Resolve account ID by type (margin/cash/ira). Falls back to index 0 if type not found."""
+        import requests as _req
+        try:
+            headers = self.wb.build_req_headers()
+            url = self.wb._urls.account_id()
+            response = _req.get(url, headers=headers, timeout=self.wb.timeout)
+            result = response.json()
+            if not (result.get('success') and result.get('data')):
+                print(f"[{self.name}] ⚠️ Could not fetch account list — falling back to default")
+                return self.wb.get_account_id()
+
+            accounts = result['data']
+            type_map = {
+                'margin': ['1', 'MARGIN', 'margin'],
+                'cash': ['2', 'CASH', 'cash'],
+                'ira': ['3', 'IRA', 'ira', '5'],
+            }
+            match_values = type_map.get(desired_type, [])
+
+            print(f"[{self.name}] Found {len(accounts)} account(s):")
+            for i, acct in enumerate(accounts):
+                acct_type_val = str(acct.get('brokerAccountType', acct.get('accountType', acct.get('brokerAccountTypeStr', ''))))
+                acct_type_str = acct.get('brokerAccountTypeStr', acct.get('accountTypeName', acct_type_val))
+                sec_id = acct.get('secAccountId', acct.get('accountId', 'N/A'))
+                print(f"[{self.name}]   [{i}] secAccountId={sec_id} type={acct_type_str} (raw={acct_type_val})")
+
+                if acct_type_val in match_values or acct_type_str.upper() in [v.upper() for v in match_values] or desired_type.upper() in acct_type_str.upper():
+                    self.wb.zone_var = str(acct.get('rzone', ''))
+                    self.wb._account_id = str(sec_id)
+                    print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}]")
+                    return self.wb._account_id
+
+            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found — using first account (index 0)")
+            self.wb.zone_var = str(accounts[0].get('rzone', ''))
+            self.wb._account_id = str(accounts[0].get('secAccountId', accounts[0].get('accountId', '')))
+            return self.wb._account_id
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — falling back to default")
+            try:
+                return self.wb.get_account_id()
+            except Exception:
+                return None
+
     def _start_streaming(self):
         try:
             from src.services.webull_streaming_client import WebullStreamingClient

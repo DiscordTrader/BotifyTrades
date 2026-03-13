@@ -968,6 +968,26 @@ input:checked + .slider:before {
         </details>
         
         <input type="hidden" id="webull-paper" value="false">
+        
+        <div class="form-group">
+            <label>Account Type</label>
+            <div id="webull-account-type-selector" style="display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid rgba(0, 212, 255, 0.3); margin-bottom: 4px;">
+                <label style="flex: 1; text-align: center; padding: 8px 0; cursor: pointer; background: rgba(0, 212, 255, 0.15); color: #00d4ff; font-weight: 600; font-size: 13px; transition: all 0.2s; margin: 0; border-right: 1px solid rgba(0, 212, 255, 0.2);">
+                    <input type="radio" name="webull-account-type" value="margin" checked style="display: none;">
+                    Margin
+                </label>
+                <label style="flex: 1; text-align: center; padding: 8px 0; cursor: pointer; background: transparent; color: var(--text-secondary); font-weight: 600; font-size: 13px; transition: all 0.2s; margin: 0; border-right: 1px solid rgba(0, 212, 255, 0.2);">
+                    <input type="radio" name="webull-account-type" value="cash" style="display: none;">
+                    Cash
+                </label>
+                <label style="flex: 1; text-align: center; padding: 8px 0; cursor: pointer; background: transparent; color: var(--text-secondary); font-weight: 600; font-size: 13px; transition: all 0.2s; margin: 0;">
+                    <input type="radio" name="webull-account-type" value="ira" style="display: none;">
+                    IRA
+                </label>
+            </div>
+            <p class="help-text">Select which Webull account to trade on. Requires bot restart after changing.</p>
+        </div>
+        
         <div class="form-group">
             <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.3); border-radius: 8px;">
                 <span style="font-size: 14px; font-weight: 700; color: #ff5252;">⚠️ LIVE TRADING MODE</span>
@@ -3949,8 +3969,21 @@ async function loadWebullCredentials() {
             document.getElementById('webull-did').value = data.device_id || '';
             document.getElementById('webull-access-token').value = data.access_token || '';
             document.getElementById('webull-refresh-token').value = data.refresh_token || 'dummy';
-            // Paper mode disabled - always false
             document.getElementById('webull-paper').value = 'false';
+            
+            const accountType = data.account_type || 'margin';
+            const radios = document.querySelectorAll('input[name="webull-account-type"]');
+            radios.forEach(r => {
+                r.checked = (r.value === accountType);
+                const lbl = r.parentElement;
+                if (r.checked) {
+                    lbl.style.background = 'rgba(0, 212, 255, 0.15)';
+                    lbl.style.color = '#00d4ff';
+                } else {
+                    lbl.style.background = 'transparent';
+                    lbl.style.color = 'var(--text-secondary)';
+                }
+            });
             
             const status = data.live_status;
             updateConnectionStatus('webull-connection-status',
@@ -3987,6 +4020,21 @@ document.getElementById('webull-token-mode').addEventListener('change', function
     toggleWebullTokenMode(this.checked);
 });
 
+document.querySelectorAll('input[name="webull-account-type"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.querySelectorAll('input[name="webull-account-type"]').forEach(r => {
+            const lbl = r.parentElement;
+            if (r.checked) {
+                lbl.style.background = 'rgba(0, 212, 255, 0.15)';
+                lbl.style.color = '#00d4ff';
+            } else {
+                lbl.style.background = 'transparent';
+                lbl.style.color = 'var(--text-secondary)';
+            }
+        });
+    });
+});
+
 // Clear Webull tokens button
 document.getElementById('clear-webull-tokens').addEventListener('click', async () => {
     if (!confirm('Clear saved tokens? You will need to re-authenticate.')) return;
@@ -4016,7 +4064,8 @@ document.getElementById('save-webull-creds').addEventListener('click', async () 
         access_token: document.getElementById('webull-access-token').value.trim(),
         refresh_token: document.getElementById('webull-refresh-token').value.trim() || 'dummy',
         paper_mode: false,
-        paper_account_enabled: false
+        paper_account_enabled: false,
+        account_type: (document.querySelector('input[name="webull-account-type"]:checked') || {}).value || 'margin'
     };
     
     try {

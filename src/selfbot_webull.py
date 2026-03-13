@@ -2439,6 +2439,50 @@ class WebullBroker:
             else:
                 wb._did = WB_DID
 
+    def _resolve_account_by_type_sync(self, wb, desired_type='margin'):
+        """Resolve account ID by type (margin/cash/ira). Falls back to index 0 if type not found."""
+        import requests as _req
+        try:
+            headers = wb.build_req_headers()
+            url = wb._urls.account_id()
+            response = _req.get(url, headers=headers, timeout=10)
+            result = response.json()
+            if not (result.get('success') and result.get('data')):
+                print(f"[{self.name}] ⚠️ Could not fetch account list — falling back to default")
+                wb.get_account_id()
+                return
+
+            accounts = result['data']
+            type_map = {
+                'margin': ['1', 'MARGIN', 'margin'],
+                'cash': ['2', 'CASH', 'cash'],
+                'ira': ['3', 'IRA', 'ira', '5'],
+            }
+            match_values = type_map.get(desired_type, [])
+
+            print(f"[{self.name}] Found {len(accounts)} account(s):")
+            for i, acct in enumerate(accounts):
+                acct_type_val = str(acct.get('brokerAccountType', acct.get('accountType', acct.get('brokerAccountTypeStr', ''))))
+                acct_type_str = acct.get('brokerAccountTypeStr', acct.get('accountTypeName', acct_type_val))
+                sec_id = acct.get('secAccountId', acct.get('accountId', 'N/A'))
+                print(f"[{self.name}]   [{i}] secAccountId={sec_id} type={acct_type_str} (raw={acct_type_val})")
+
+                if acct_type_val in match_values or acct_type_str.upper() in [v.upper() for v in match_values] or desired_type.upper() in acct_type_str.upper():
+                    wb.zone_var = str(acct.get('rzone', ''))
+                    wb._account_id = str(sec_id)
+                    print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}]")
+                    return
+
+            print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found — using first account (index 0)")
+            wb.zone_var = str(accounts[0].get('rzone', ''))
+            wb._account_id = str(accounts[0].get('secAccountId', accounts[0].get('accountId', '')))
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — falling back to default")
+            try:
+                wb.get_account_id()
+            except Exception:
+                pass
+
     def _apply_tokens(self, wb, access_token, refresh_token, did_from_web=None, region_data=None):
         for attr, val in (("_access_token", access_token),
                           ("access_token", access_token),
@@ -2574,7 +2618,14 @@ class WebullBroker:
                         pass
             else:
                 try:
-                    wb.get_account_id()
+                    desired_account_type = 'margin'
+                    try:
+                        from gui_app.broker_credentials_service import get_webull_credentials
+                        wb_creds = get_webull_credentials()
+                        desired_account_type = wb_creds.get('account_type', 'margin').lower()
+                    except Exception:
+                        pass
+                    self._resolve_account_by_type_sync(wb, desired_account_type)
                 except Exception as e_acc:
                     print(f"[{self.name}] get_account_id warning: {e_acc}")
             try:
