@@ -18848,7 +18848,25 @@ def run_bot_startup(progress_callback=None):
         else:
             _original_print(f"[STARTUP] {message}")
     
-    report_progress(1, "Loading configuration...")
+    report_progress(1, "Starting web control panel...")
+    
+    gui_port = 5000
+    try:
+        import sys
+        from pathlib import Path
+        parent_dir = Path(__file__).parent.parent
+        if str(parent_dir) not in sys.path:
+            sys.path.insert(0, str(parent_dir))
+        
+        from gui_app import start_gui_server, get_gui_port
+        gui_port = get_gui_port()
+        gui_thread, gui_port = start_gui_server()
+        _original_print(f"[GUI] ✓ Web control panel started on port {gui_port}")
+    except Exception as e:
+        _original_print(f"[GUI] ⚠️  Failed to start web GUI: {e}")
+        _original_print("[GUI] Bot will continue without web interface")
+    
+    report_progress(2, "Loading configuration...")
     
     # Initialize global lifecycle events
     _discord_ready_event = threading.Event()
@@ -18858,7 +18876,7 @@ def run_bot_startup(progress_callback=None):
     _telegram_shutdown_event = threading.Event()
     _telegram_signal_queue = queue.Queue()
     
-    report_progress(2, "Running diagnostics...")
+    report_progress(3, "Running diagnostics...")
     
     # Run startup diagnostics
     try:
@@ -18880,25 +18898,6 @@ def run_bot_startup(progress_callback=None):
         _original_print("[STARTUP] Diagnostics module not available, skipping health checks")
     except Exception as e:
         _original_print(f"[STARTUP] Warning: Could not run diagnostics: {e}")
-    
-    report_progress(3, "Starting web control panel...")
-    
-    # Start Flask GUI server
-    gui_port = 5000
-    try:
-        import sys
-        from pathlib import Path
-        parent_dir = Path(__file__).parent.parent
-        if str(parent_dir) not in sys.path:
-            sys.path.insert(0, str(parent_dir))
-        
-        from gui_app import start_gui_server, get_gui_port
-        gui_port = get_gui_port()
-        gui_thread, gui_port = start_gui_server()
-        _original_print(f"[GUI] ✓ Web control panel started on port {gui_port}")
-    except Exception as e:
-        _original_print(f"[GUI] ⚠️  Failed to start web GUI: {e}")
-        _original_print("[GUI] Bot will continue without web interface")
     
     report_progress(4, "Connecting to Discord...")
     
