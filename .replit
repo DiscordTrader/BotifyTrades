@@ -19,12 +19,12 @@ args = "BotifyTrades"
 name = "BotifyTrades"
 author = "agent"
 
-[workflows.workflow.metadata]
-outputType = "console"
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PYTHONUNBUFFERED=1 python -u src/selfbot_webull.py"
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [nix]
 channel = "stable-25_05"
@@ -32,7 +32,6 @@ packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt
 
 [[ports]]
 localPort = 5000
-externalPort = 80
 
 [[ports]]
 localPort = 5904
