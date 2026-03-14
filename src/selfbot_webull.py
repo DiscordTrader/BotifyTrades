@@ -5,9 +5,10 @@
 # on Webull (stocks + options). Use at your own risk.
 # ------------------------------------------------------------
 
-# BUILD VERSION MARKER - This MUST print if the code is current
 import sys
 import os
+
+# BUILD VERSION MARKER - This MUST print if the code is current
 import builtins
 _early_print = builtins.print  # Save original print before any override
 

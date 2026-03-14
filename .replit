@@ -24,7 +24,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PYTHONUNBUFFERED=1 python -u src/selfbot_webull.py"
+args = "PYTHONUNBUFFERED=1 python -u start.py"
 
 [nix]
 channel = "stable-25_05"
@@ -32,6 +32,10 @@ packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt
 
 [[ports]]
 localPort = 5000
+
+[[ports]]
+localPort = 5001
+externalPort = 80
 
 [[ports]]
 localPort = 5904
