@@ -793,10 +793,13 @@ class UnfilledOrderChaser:
                 hub_data = self._check_streaming_hubs_stock(order.symbol)
                 if hub_data:
                     bid = float(hub_data.get('bid', 0) or 0)
+                    close = float(hub_data.get('close', 0) or 0)
                     last = float(hub_data.get('last', 0) or 0)
                     if bid > 0:
                         print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} — fills instantly")
                         return bid
+                    elif close > 0:
+                        return close
                     elif last > 0:
                         return last
 
@@ -808,9 +811,12 @@ class UnfilledOrderChaser:
                     else:
                         quote = result
                     if quote:
-                        bid = quote.get('bid', 0)
-                        if bid and bid > 0:
+                        bid = float(quote.get('bid', 0) or 0)
+                        if bid > 0:
                             return bid
+                        close = float(quote.get('close', 0) or 0)
+                        if close > 0:
+                            return close
                         return quote.get('last') or quote.get('mid')
                 
                 if hasattr(broker, 'get_quote'):
@@ -820,7 +826,16 @@ class UnfilledOrderChaser:
                         price = await result
                     else:
                         price = result
-                    return price
+                    if isinstance(price, dict):
+                        bid_val = float(price.get('bid', 0) or 0)
+                        if bid_val > 0:
+                            return bid_val
+                        close_val = float(price.get('close', 0) or 0)
+                        if close_val > 0:
+                            return close_val
+                        price = (price.get('last') or
+                                 price.get('price') or price.get('latestPrice'))
+                    return float(price) if price is not None else None
             
             return None
         except Exception as e:
@@ -1108,9 +1123,12 @@ class UnfilledOrderChaser:
                 hub_data = self._check_streaming_hubs_stock(order.symbol)
                 if hub_data:
                     ask = float(hub_data.get('ask', 0) or 0)
+                    close = float(hub_data.get('close', 0) or 0)
                     last = float(hub_data.get('last', 0) or 0)
                     if ask > 0:
                         return ask
+                    elif close > 0:
+                        return close
                     elif last > 0:
                         return last
 
@@ -1122,9 +1140,12 @@ class UnfilledOrderChaser:
                     else:
                         quote = result
                     if quote:
-                        ask = quote.get('ask', 0)
-                        if ask and ask > 0:
+                        ask = float(quote.get('ask', 0) or 0)
+                        if ask > 0:
                             return ask
+                        close = float(quote.get('close', 0) or 0)
+                        if close > 0:
+                            return close
                 
                 if hasattr(broker, 'get_quote'):
                     method = broker.get_quote
@@ -1134,7 +1155,13 @@ class UnfilledOrderChaser:
                     else:
                         price = result
                     if isinstance(price, dict):
-                        price = (price.get('last') or price.get('close') or
+                        ask_val = float(price.get('ask', 0) or 0)
+                        if ask_val > 0:
+                            return ask_val
+                        close_val = float(price.get('close', 0) or 0)
+                        if close_val > 0:
+                            return close_val
+                        price = (price.get('last') or
                                  price.get('price') or price.get('latestPrice'))
                     return float(price) if price is not None else None
             
