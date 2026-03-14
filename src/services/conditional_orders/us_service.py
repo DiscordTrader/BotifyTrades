@@ -50,11 +50,12 @@ class USConditionalOrderService(BaseConditionalOrderService):
         """
         Build price monitor for US market orders.
         
-        Fallback chain:
-        1. Streaming data hub (WebSocket/MQTT) - sub-100ms, zero API calls
-        2. Channel-configured broker REST API - real-time
-        3. Finnhub API - real-time
-        4. yfinance - delayed (~15 min)
+        Priority chain:
+        1. Data hub with active streaming (WebSocket/MQTT) - sub-100ms, zero API calls
+        2. Data hub without streaming (hub cache + broker REST fallback) - broker-first
+        3. Broker REST API direct - real-time polling
+        4. Finnhub API - real-time
+        5. yfinance - delayed (~15 min)
         """
         symbol = order['symbol']
         settings_threshold = 0.8
@@ -73,9 +74,20 @@ class USConditionalOrderService(BaseConditionalOrderService):
             await self._on_price_update(order['id'], sym, price)
         
         hub = self.get_data_hub(broker_name) if broker_name else None
-        if hub:
+        hub_is_streaming = self.is_hub_streaming(broker_name) if broker_name else False
+        
+        if hub and hub_is_streaming:
             data_source = f"{broker_key}_stream"
             self._log(f"Using STREAMING hub for {symbol} via {broker_name} (sub-100ms, zero API calls)")
+            monitor = StreamingPriceMonitor(
+                symbol, price_callback, hub, broker_name,
+                broker_instance=broker_instance,
+                finnhub_api_key=self.finnhub_api_key
+            )
+        
+        elif hub:
+            data_source = broker_key
+            self._log(f"Using data hub for {symbol} via {broker_name} (hub cache + broker REST fallback, will auto-upgrade when streaming connects)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
                 broker_instance=broker_instance,

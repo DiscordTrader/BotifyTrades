@@ -695,6 +695,17 @@ class BaseConditionalOrderService(ABC):
                 sys.stderr.write(f"[{self.MARKET}] Hub for {broker_key} now streaming — upgrading any REST monitors\n")
                 sys.stderr.flush()
                 await self._upgrade_to_streaming(broker_key, hub)
+                broker_lower = broker_key.lower()
+                for order_id, monitor in list(self.monitors.items()):
+                    if isinstance(monitor, StreamingPriceMonitor) and not monitor._using_rest_fallback:
+                        order = self.pending_orders.get(order_id)
+                        if order:
+                            order_broker_key = order.get('broker_primary', '').lower().replace('_paper', '').replace('_live', '')
+                            if order_broker_key == broker_lower:
+                                new_ds = f"{broker_lower}_stream"
+                                from gui_app.database import update_conditional_order_status
+                                update_conditional_order_status(order_id, 'ACTIVE_MONITORING', data_source_active=new_ds)
+                                self._log(f"#{order_id} data source upgraded to {new_ds}")
                 return
     
     async def _upgrade_to_streaming(self, broker_key: str, hub: Any):
@@ -756,12 +767,21 @@ class BaseConditionalOrderService(ABC):
             self._log(f"Upgraded {upgraded_count} monitor(s) to streaming via {broker_key}")
     
     def get_data_hub(self, broker_name: str) -> Optional[Any]:
-        """Get the streaming data hub for a broker, checking common aliases."""
+        """Get the data hub for a broker (streaming or not).
+        
+        Returns the hub even when not actively streaming, so that
+        StreamingPriceMonitor can attempt to subscribe and use its
+        internal REST fallback chain (broker REST → Finnhub).
+        """
         broker_lower = broker_name.lower().replace('_paper', '').replace('_live', '')
         hub = self.data_hubs.get(broker_lower)
-        if hub and hasattr(hub, 'is_streaming') and hub.is_streaming():
-            return hub
-        return None
+        return hub if hub else None
+    
+    def is_hub_streaming(self, broker_name: str) -> bool:
+        """Check if a broker's data hub is actively streaming."""
+        broker_lower = broker_name.lower().replace('_paper', '').replace('_live', '')
+        hub = self.data_hubs.get(broker_lower)
+        return bool(hub and hasattr(hub, 'is_streaming') and hub.is_streaming())
     
     @abstractmethod
     def _init_rate_limiters(self):
@@ -955,6 +975,30 @@ class BaseConditionalOrderService(ABC):
         if not market_orders:
             self._log("No active orders to restore")
             return
+        
+        needed_brokers = set()
+        for order in market_orders:
+            bp = order.get('broker_primary', '').lower().replace('_paper', '').replace('_live', '')
+            if bp:
+                needed_brokers.add(bp)
+        
+        if needed_brokers:
+            wait_deadline = asyncio.get_event_loop().time() + 10.0
+            while asyncio.get_event_loop().time() < wait_deadline:
+                registered = set(self.broker_instances.keys())
+                missing = needed_brokers - registered
+                has_any_hub = bool(self.data_hubs)
+                if not missing and has_any_hub:
+                    self._log(f"All needed brokers registered: {needed_brokers}, hubs: {list(self.data_hubs.keys())}")
+                    break
+                if not missing and (asyncio.get_event_loop().time() - (wait_deadline - 10.0)) > 3.0:
+                    self._log(f"Brokers ready, no data hubs after 3s — proceeding with broker REST")
+                    break
+                await asyncio.sleep(0.25)
+            else:
+                missing = needed_brokers - set(self.broker_instances.keys())
+                if missing:
+                    self._log(f"Broker wait timeout — still missing: {missing} (will use fallback)")
         
         self._log(f"Restoring {len(market_orders)} active orders")
         for order in market_orders:
