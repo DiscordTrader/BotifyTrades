@@ -156,7 +156,68 @@ class UnfilledOrderChaser:
         self._entry_chase_enabled = True
         
         print(f"[ORDER_CHASER] Initialized (timeout={chase_timeout_seconds}s, max_attempts={max_chase_attempts}, cancel_on_fail={cancel_entry_on_max_attempts})")
-    
+
+    def _get_remaining_qty(self, pending_orders: list, order_id: str, original_qty: int) -> int:
+        """Extract remaining unfilled quantity from pending order data.
+        Returns original_qty if no partial fill info is available (safe default)."""
+        try:
+            for po in (pending_orders or []):
+                if str(po.get('order_id', '')) != str(order_id):
+                    continue
+                filled = 0
+                for key in ('filled_quantity', 'filledQuantity', 'filled_qty', 'executedQty', 'filledQty'):
+                    val = po.get(key)
+                    if val is not None and int(val) > 0:
+                        filled = int(val)
+                        break
+                if filled > 0:
+                    remaining = max(0, original_qty - filled)
+                    print(f"[ORDER_CHASER] Partial fill detected: {filled}/{original_qty} filled, remaining={remaining}")
+                    return remaining
+                for key in ('remaining_qty', 'remainingQuantity', 'leavesQty'):
+                    val = po.get(key)
+                    if val is not None:
+                        remaining = max(0, min(int(val), original_qty))
+                        if remaining < original_qty:
+                            print(f"[ORDER_CHASER] Partial fill detected: remaining={remaining}/{original_qty}")
+                        return remaining
+                return original_qty
+        except Exception as e:
+            print(f"[ORDER_CHASER] ⚠️ Error computing remaining qty: {e}")
+        return original_qty
+
+    async def _safe_get_option_quote(self, broker, symbol: str, strike: float, expiry: str, call_put: str) -> Optional[dict]:
+        """Get option quote with cross-broker parameter compatibility."""
+        try:
+            if not hasattr(broker, 'get_option_quote'):
+                return None
+            method = broker.get_option_quote
+            try:
+                result = method(symbol=symbol, strike=strike, expiry=expiry, call_put=call_put)
+                if inspect.iscoroutine(result):
+                    return await result
+                return result
+            except TypeError:
+                pass
+            try:
+                result = method(symbol=symbol, strike=strike, expiry=expiry, opt_type=call_put)
+                if inspect.iscoroutine(result):
+                    return await result
+                return result
+            except TypeError:
+                pass
+            try:
+                result = method(symbol=symbol, strike=strike, expiry=expiry, option_type=call_put)
+                if inspect.iscoroutine(result):
+                    return await result
+                return result
+            except TypeError:
+                pass
+            return None
+        except Exception as e:
+            print(f"[ORDER_CHASER] ⚠️ Error getting option quote: {e}")
+            return None
+
     async def _cancel_broker_order(self, broker, order_id: str, asset_type: str = 'option', broker_id: str = '') -> bool:
         try:
             broker_upper = broker_id.upper() if broker_id else ''
@@ -621,6 +682,12 @@ class UnfilledOrderChaser:
             
             print(f"[ORDER_CHASER]   Exit Price (bid): ${mid_price:.2f}")
             
+            remaining_qty = self._get_remaining_qty(pending_orders, order.order_id, int(order.quantity))
+            if remaining_qty <= 0:
+                print(f"[ORDER_CHASER] Order fully filled (partial fills consumed all qty) — marking filled")
+                await self.mark_filled(order.order_id)
+                return
+
             cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
             if not cancel_ok:
                 print(f"[ORDER_CHASER] ❌ Failed to cancel exit order")
@@ -631,15 +698,16 @@ class UnfilledOrderChaser:
             
             await asyncio.sleep(0.5)
             
-            new_order_id = await self._place_replacement_order(broker, order, mid_price)
+            replace_qty = remaining_qty
+            new_order_id = await self._place_replacement_order(broker, order, mid_price, quantity_override=replace_qty)
             
             if new_order_id:
-                print(f"[ORDER_CHASER] ✓ Placed replacement order: {new_order_id} @ ${mid_price:.2f}")
+                print(f"[ORDER_CHASER] ✓ Placed replacement order: {new_order_id} @ ${mid_price:.2f} qty={replace_qty}")
                 order.replacement_order_id = new_order_id
                 order.status = OrderChaseStatus.REPLACED
                 try:
                     from gui_app.database import record_order_event
-                    record_order_event('CHASER_REPLACED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=mid_price, order_id=new_order_id, reason=f"Stale order replaced: ${order.original_price:.2f} → ${mid_price:.2f} (attempt {order.chase_attempts})", severity='warning', source='order_chaser', position_key=order.position_key)
+                    record_order_event('CHASER_REPLACED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=new_order_id, reason=f"Stale order replaced: ${order.original_price:.2f} → ${mid_price:.2f} (attempt {order.chase_attempts}, qty {replace_qty}/{int(order.quantity)})", severity='warning', source='order_chaser', position_key=order.position_key)
                 except Exception:
                     pass
                 
@@ -652,7 +720,7 @@ class UnfilledOrderChaser:
                         broker_id=order.broker_id,
                         symbol=order.symbol,
                         asset_type=order.asset_type,
-                        quantity=order.quantity,
+                        quantity=replace_qty,
                         original_price=mid_price,
                         action=order.action,
                         placed_at=datetime.now(),
@@ -664,8 +732,14 @@ class UnfilledOrderChaser:
                     )
                     self._tracked_orders[new_order_id] = new_tracked
             else:
-                print(f"[ORDER_CHASER] ❌ Failed to place replacement order")
-                order.status = OrderChaseStatus.FAILED
+                print(f"[ORDER_CHASER] ❌ Failed to place replacement exit order — retrying next cycle")
+                order.status = OrderChaseStatus.PENDING
+                order.placed_at = datetime.now()
+                try:
+                    from gui_app.database import record_order_event
+                    record_order_event('CHASER_REPLACE_FAILED_RETRYING', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=order.order_id, reason=f"Cancel succeeded but replacement failed — will retry (attempt {order.chase_attempts})", severity='error', source='order_chaser', position_key=order.position_key)
+                except Exception:
+                    pass
             
             print(f"[ORDER_CHASER] {'='*50}\n")
             
@@ -675,6 +749,28 @@ class UnfilledOrderChaser:
             traceback.print_exc()
             order.status = OrderChaseStatus.PENDING
     
+    def _normalize_expiry(self, expiry: str) -> list:
+        """Return list of possible expiry format variants for DB matching."""
+        if not expiry:
+            return []
+        variants = [expiry]
+        if '/' in expiry:
+            parts = expiry.split('/')
+            if len(parts) == 2:
+                from datetime import datetime as dt
+                variants.append(f"{dt.now().year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}")
+                variants.append(f"{parts[0].zfill(2)}/{parts[1].zfill(2)}")
+            elif len(parts) == 3:
+                variants.append(f"20{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}" if len(parts[2]) == 2 else f"{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}")
+                variants.append(f"{parts[0].zfill(2)}/{parts[1].zfill(2)}/{parts[2]}")
+                variants.append(f"{parts[0]}/{parts[1]}")
+        elif '-' in expiry:
+            parts = expiry.split('-')
+            if len(parts) == 3:
+                variants.append(f"{parts[1]}/{parts[2]}/{parts[0][2:]}")
+                variants.append(f"{parts[1]}/{parts[2]}")
+        return list(set(variants))
+
     def _check_streaming_hubs_option(self, symbol: str, strike: float, expiry: str, call_put: str) -> Optional[dict]:
         try:
             from src.services.webull_data_hub import get_webull_data_hub
@@ -683,11 +779,23 @@ class UnfilledOrderChaser:
                 try:
                     from gui_app.database import get_db
                     db = get_db()
-                    cursor = db.execute(
-                        "SELECT option_id FROM trades WHERE symbol=? AND strike=? AND call_put=? AND status='OPEN' LIMIT 1",
-                        (symbol, strike, call_put)
-                    )
-                    row = cursor.fetchone()
+                    expiry_variants = self._normalize_expiry(expiry) if expiry else []
+                    row = None
+                    if expiry_variants:
+                        placeholders = ','.join(['?'] * len(expiry_variants))
+                        cursor = db.execute(
+                            f"SELECT option_id FROM trades WHERE symbol=? AND strike=? AND call_put=? AND expiry IN ({placeholders}) AND status='OPEN' LIMIT 1",
+                            [symbol, strike, call_put] + expiry_variants
+                        )
+                        row = cursor.fetchone()
+                    if not row:
+                        cursor = db.execute(
+                            "SELECT option_id, expiry FROM trades WHERE symbol=? AND strike=? AND call_put=? AND status='OPEN' LIMIT 1",
+                            (symbol, strike, call_put)
+                        )
+                        row = cursor.fetchone()
+                        if row and row[0] and expiry:
+                            print(f"[ORDER_CHASER] ⚠️ Webull hub: expiry mismatch (wanted={expiry}, found={row[1]}) — using fallback match")
                     if row and row[0]:
                         data = hub.get_quote_detailed(str(row[0]))
                         if data and (data.get('bid', 0) > 0 or data.get('ask', 0) > 0):
@@ -767,27 +875,16 @@ class UnfilledOrderChaser:
                         return bid
                     elif last > 0:
                         return last
-                if hasattr(broker, 'get_option_quote'):
-                    method = broker.get_option_quote
-                    result = method(
-                        symbol=order.symbol,
-                        strike=order.strike,
-                        expiry=order.expiry,
-                        call_put=order.call_put
-                    )
-                    if inspect.iscoroutine(result):
-                        quote = await result
-                    else:
-                        quote = result
-                    if quote:
-                        bid = quote.get('bid', 0)
-                        ask = quote.get('ask', 0)
-                        if bid and bid > 0:
-                            print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}) via REST — fills instantly")
-                            return bid
-                        last = quote.get('last')
-                        if last and last > 0:
-                            return last
+                quote = await self._safe_get_option_quote(broker, order.symbol, order.strike, order.expiry, order.call_put)
+                if quote:
+                    bid = quote.get('bid', 0)
+                    ask = quote.get('ask', 0)
+                    if bid and bid > 0:
+                        print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}) via REST — fills instantly")
+                        return bid
+                    last = quote.get('last')
+                    if last and last > 0:
+                        return last
                 return None
             else:
                 hub_data = self._check_streaming_hubs_stock(order.symbol)
@@ -846,17 +943,22 @@ class UnfilledOrderChaser:
         self,
         broker,
         order: TrackedExitOrder,
-        price: float
+        price: float,
+        quantity_override: Optional[int] = None
     ) -> Optional[str]:
         """Place a replacement order at the specified price"""
         try:
+            qty = quantity_override if quantity_override is not None else int(order.quantity)
+            if qty <= 0:
+                print(f"[ORDER_CHASER] ❌ Cannot place replacement with qty={qty}")
+                return None
             if order.asset_type == 'option':
                 if not order.call_put:
                     print(f"[ORDER_CHASER] ❌ Cannot place exit option replacement — call_put is None for {order.symbol}")
                     return None
                 result = await broker.place_option_order(
                     symbol=order.symbol,
-                    quantity=int(order.quantity),
+                    quantity=qty,
                     price=price,
                     action=order.action,
                     strike=order.strike,
@@ -866,7 +968,7 @@ class UnfilledOrderChaser:
             else:
                 result = await broker.place_stock_order(
                     symbol=order.symbol,
-                    quantity=int(order.quantity),
+                    quantity=qty,
                     price=price,
                     action=order.action
                 )
@@ -1018,7 +1120,13 @@ class UnfilledOrderChaser:
                 return
             
             print(f"[ORDER_CHASER]   New Chase Price: ${chase_price:.2f}")
-            
+
+            remaining_qty = self._get_remaining_qty(pending_orders, order.order_id, int(order.quantity))
+            if remaining_qty <= 0:
+                print(f"[ORDER_CHASER] Entry order fully filled (partial fills consumed all qty) — marking filled")
+                await self.mark_entry_filled(order.order_id)
+                return
+
             cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
             if not cancel_ok:
                 print(f"[ORDER_CHASER] ❌ Failed to cancel entry order")
@@ -1029,10 +1137,11 @@ class UnfilledOrderChaser:
             
             await asyncio.sleep(0.5)
             
-            new_order_id = await self._place_entry_replacement_order(broker, order, chase_price)
+            replace_qty = remaining_qty
+            new_order_id = await self._place_entry_replacement_order(broker, order, chase_price, quantity_override=replace_qty)
             
             if new_order_id:
-                print(f"[ORDER_CHASER] ✓ Placed replacement entry order: {new_order_id} @ ${chase_price:.2f}")
+                print(f"[ORDER_CHASER] ✓ Placed replacement entry order: {new_order_id} @ ${chase_price:.2f} qty={replace_qty}")
                 order.replacement_order_id = new_order_id
                 order.status = OrderChaseStatus.REPLACED
                 
@@ -1045,7 +1154,7 @@ class UnfilledOrderChaser:
                         broker_id=order.broker_id,
                         symbol=order.symbol,
                         asset_type=order.asset_type,
-                        quantity=order.quantity,
+                        quantity=replace_qty,
                         original_price=chase_price,
                         action=order.action,
                         placed_at=datetime.now(),
@@ -1057,13 +1166,19 @@ class UnfilledOrderChaser:
                         slippage_max_pct=order.slippage_max_pct,
                         signal_price=order.signal_price,
                         timeout_minutes=order.timeout_minutes,
-                        limit_cap_price=order.limit_cap_price,  # Preserve limit cap ceiling
+                        limit_cap_price=order.limit_cap_price,
                         chase_attempts=order.chase_attempts
                     )
                     self._tracked_entry_orders[new_order_id] = new_tracked
             else:
-                print(f"[ORDER_CHASER] ❌ Failed to place entry replacement order")
-                order.status = OrderChaseStatus.FAILED
+                print(f"[ORDER_CHASER] ❌ Failed to place entry replacement order — retrying next cycle")
+                order.status = OrderChaseStatus.PENDING
+                order.placed_at = datetime.now()
+                try:
+                    from gui_app.database import record_order_event
+                    record_order_event('CHASER_REPLACE_FAILED_RETRYING', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=chase_price, order_id=order.order_id, reason=f"Cancel succeeded but entry replacement failed — will retry (attempt {order.chase_attempts})", severity='error', source='order_chaser')
+                except Exception:
+                    pass
             
             print(f"[ORDER_CHASER] {'='*50}\n")
             
@@ -1097,27 +1212,16 @@ class UnfilledOrderChaser:
                         return ask
                     elif last > 0:
                         return last
-                if hasattr(broker, 'get_option_quote'):
-                    method = broker.get_option_quote
-                    result = method(
-                        symbol=order.symbol,
-                        strike=order.strike,
-                        expiry=order.expiry,
-                        call_put=order.call_put
-                    )
-                    if inspect.iscoroutine(result):
-                        quote = await result
-                    else:
-                        quote = result
-                    if quote:
-                        bid = quote.get('bid', 0)
-                        ask = quote.get('ask', 0)
-                        if bid and ask:
-                            print(f"[ORDER_CHASER]   REST: Bid ${bid:.2f} | Ask ${ask:.2f}")
-                            return ask
-                        if ask:
-                            return ask
-                        return quote.get('last')
+                quote = await self._safe_get_option_quote(broker, order.symbol, order.strike, order.expiry, order.call_put)
+                if quote:
+                    bid = quote.get('bid', 0)
+                    ask = quote.get('ask', 0)
+                    if bid and ask:
+                        print(f"[ORDER_CHASER]   REST: Bid ${bid:.2f} | Ask ${ask:.2f}")
+                        return ask
+                    if ask:
+                        return ask
+                    return quote.get('last')
                 return None
             else:
                 hub_data = self._check_streaming_hubs_stock(order.symbol)
@@ -1174,17 +1278,22 @@ class UnfilledOrderChaser:
         self,
         broker,
         order: TrackedEntryOrder,
-        price: float
+        price: float,
+        quantity_override: Optional[int] = None
     ) -> Optional[str]:
         """Place a replacement entry order at the specified price"""
         try:
+            qty = quantity_override if quantity_override is not None else int(order.quantity)
+            if qty <= 0:
+                print(f"[ORDER_CHASER] ❌ Cannot place entry replacement with qty={qty}")
+                return None
             if order.asset_type == 'option':
                 if not order.call_put:
                     print(f"[ORDER_CHASER] ❌ Cannot place option replacement — call_put is None for {order.symbol}")
                     return None
                 result = await broker.place_option_order(
                     symbol=order.symbol,
-                    quantity=int(order.quantity),
+                    quantity=qty,
                     price=price,
                     action=order.action,
                     strike=order.strike,
@@ -1194,7 +1303,7 @@ class UnfilledOrderChaser:
             else:
                 result = await broker.place_stock_order(
                     symbol=order.symbol,
-                    quantity=int(order.quantity),
+                    quantity=qty,
                     price=price,
                     action=order.action
                 )
