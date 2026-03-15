@@ -1,4 +1,84 @@
-# TRADE212 Integration Plan — BotifyTrades
+# TRADE212 Integration Plan — BotifyTrades (Definitive)
+
+## Architect Review: Attached Document vs Replit Plan vs Actual Codebase
+
+### Gap Reality Check — Attached Document's 26 Gaps
+
+The attached architecture document scores the system very low (Risk=0/10, Discord Intake=3/10) and proposes 26 gaps. **Most of these are phantom gaps** — the BotifyTrades codebase already has robust implementations. Here is the truth table:
+
+| Attached Doc Gap | Score Given | ACTUAL Status | What Already Exists |
+|---|---|---|---|
+| GAP-01: No signal persistence | CRITICAL | **SOLVED** | SQLite `trades` table + `PositionLedger` persists all signals/trades across restarts |
+| GAP-02: No duplicate signal guard | CRITICAL | **SOLVED** | `SignalDeduplicator` in `signal_parsing_pipeline.py` — TTL cache with async locks |
+| GAP-03: No signal schema validation | CRITICAL | **SOLVED** | 5-tier parsing pipeline with Pydantic-style validation + confidence scoring (blocks <0.8) |
+| GAP-04: No channel/role authorization | HIGH | **SOLVED** | `allowed_author_ids`, `allowed_guild_ids`, per-channel EXECUTE/TRACK flags |
+| GAP-05: No signal-to-broker routing | HIGH | **SOLVED** | `SignalRoutingEngine` with per-channel broker selection + routing ledger |
+| GAP-06: No pre-trade risk gateway | CRITICAL | **SOLVED** | Full risk engine: position sizing limits, daily P&L limits, market hours, buying power checks |
+| GAP-07: No order idempotency | CRITICAL | **PARTIAL** | `ExitArbiter` locks + `OrderResilienceLayer`; T212-specific fingerprint guard needed |
+| GAP-08: No fill confirmation | CRITICAL | **SOLVED** | `UnfilledOrderChaser` with configurable timeout + chase + cancel |
+| GAP-09: No partial fill handling | HIGH | **SOLVED** | `TradeState.remaining_qty` tracking + ratio-based partial exits |
+| GAP-10: Clock drift | CRITICAL | **MINOR** | Low priority — system uses asyncio event loop competently; T212 DataHub will use proper timing |
+| GAP-11: No cache TTL/eviction | HIGH | **SOLVED** | Enrichment cache pruning, position cache cycle management |
+| GAP-12: No delta thresholds | HIGH | **N/A** | Uses WebSocket streaming for Webull/Schwab — no noise issue; T212 DataHub polls at 5s intervals |
+| GAP-13: No cross-broker reconciliation | MEDIUM | **SOLVED** | `BrokerSyncService` runs every 30s reconciling DB vs broker positions |
+| GAP-14: No durable event bus | CRITICAL | **SOLVED** | SQLite trades/execution_lots/execution_closures provide full persistence |
+| GAP-15: No P&L aggregation | CRITICAL | **SOLVED** | `DailyPnLLimitService` + cross-broker P&L tracking + per-trade FIFO lot matching |
+| GAP-16: No signal_id linkage | HIGH | **SOLVED** | `routing_mapping_id` links trades to originating signals |
+| GAP-17: No schema versioning | MEDIUM | **LOW PRIORITY** | Internal system — schema migrations handled by database.py |
+| GAP-18: No kill switch | CRITICAL | **SOLVED** | `CircuitBreaker.halt_global()` in `circuit_breaker.py` |
+| GAP-19: No daily max-loss breaker | CRITICAL | **SOLVED** | `DailyPnLLimitService` with dollar/percentage limits, auto-lock on breach |
+| GAP-20: No position size limits | CRITICAL | **SOLVED** | `position_sizing_service.py` with max_position_pct, min/max contracts |
+| GAP-21: No market hours check | HIGH | **SOLVED** | `market_hours.py` with holidays, pre/after-market, weekend detection |
+| GAP-22: No health endpoints | CRITICAL | **SOLVED** | Flask dashboard + `/api/v2/broker-states` + health monitoring |
+| GAP-23: No structured logging | CRITICAL | **SOLVED** | `logging_config.py` with specialized loggers (signal, execution, balance, etc.) |
+| GAP-24: No alerting | HIGH | **PARTIAL** | Console + dashboard alerts exist; no PagerDuty (not needed for this deployment) |
+| GAP-25: No secret management | HIGH | **SOLVED** | Replit Secrets + encrypted config table in SQLite |
+| GAP-26: No soft-throttle detection | MEDIUM | **REAL GAP** | Needs implementation in T212 DataHub |
+
+**Summary: 22 of 26 gaps are PHANTOM (already solved). Only 4 items have value:**
+- GAP-07 partial: T212-specific duplicate order fingerprint guard
+- GAP-10 minor: perf_counter-anchored polling (good practice for DataHub)
+- GAP-24 partial: External alerting (low priority)
+- GAP-26 real: T212 soft-throttle detection via response time P99
+
+### Attached Document — What to REJECT
+
+| Recommendation | Why It's Rejected |
+|---|---|
+| Redis Streams for signal persistence | System uses SQLite — works perfectly, no Redis dependency needed |
+| Redis-backed kill switch | `CircuitBreaker.halt_global()` already exists in-process |
+| FastAPI health endpoints | System uses Flask — adding FastAPI creates dual-framework mess |
+| Prometheus metrics | System has its own monitoring via Flask dashboard |
+| PagerDuty integration | Overkill for current deployment; Discord alerts sufficient |
+| structlog migration | Existing `logging_config.py` is comprehensive |
+| Pydantic v2 migration | System already validates signals through 5-tier pipeline |
+| aiohttp client library | System uses `httpx` (Schwab) and `requests`; stay consistent |
+
+### Attached Document — What to ADOPT
+
+| Idea | How to Adapt |
+|---|---|
+| Adaptive polling states (pending/active/watching/idle) | Implement in Trading212DataHub with proper intervals |
+| Dual-endpoint interleave (portfolio ↔ orders) | Good for cutting effective latency in DataHub poller |
+| perf_counter-anchored timing | Use in DataHub polling loop |
+| Soft-throttle detection (P99 monitoring) | Add response time tracking in Trading212Client |
+| Token bucket per endpoint | Already have `rate_limit_manager.py` — add T212 profile |
+
+### Replit Plan — What to KEEP (Almost Everything)
+
+| Component | Status |
+|---|---|
+| 33 touch-point file-by-file map | ✅ Keep — verified accurate |
+| 5-phase dependency chain | ✅ Keep — correct ordering |
+| Rate limit analysis (GET /portfolio bottleneck) | ✅ Keep — critical constraint |
+| Trading212DataHub centralized cache | ✅ Keep — mandatory solution |
+| Duplicate order fingerprint guard | ✅ Keep — T212 API is not idempotent |
+| Ticker translation cache (AAPL → AAPL_US_EQ) | ✅ Keep — required for all T212 API calls |
+| Negative quantity for SELL | ✅ Keep — handled inside adapter |
+| Per-endpoint rate limiting | ✅ Keep — enhance with soft-throttle detection |
+| BrokerInterface pattern | ✅ Keep — consistent with other brokers |
+
+---
 
 ## Trading 212 API Assessment
 
@@ -38,6 +118,7 @@
 - **50 max pending orders** per ticker per account
 - **Rate limits are per-account** regardless of which API key or IP
 - **No WebSocket** — must poll for positions, orders, and quotes
+- **Soft throttle**: Returns 200 OK with stale data (NOT 429) — must detect via response time P99
 
 ### Request/Response Formats
 
@@ -116,6 +197,114 @@
 
 ---
 
+## Definitive Architecture Decisions
+
+### 1. Duplicate Order Guard — CRITICAL (System-Wide)
+
+**Problem:** T212 API is NOT idempotent. Duplicate POST = duplicate real order = real money at risk.
+
+**Solution:** System-wide execution fingerprint guard (benefits all future non-idempotent brokers).
+- Fingerprint: `SHA256(broker + channel + action + symbol + qty + 5-second time bucket)`
+- Thread-safe TTL cache (5-10s window) — in-memory, not Redis
+- Checked in `execute_on_single_broker` BEFORE any order POST
+- Stored in memory (not DB — needs to be fast)
+
+### 2. STC → Negative Quantity Conversion
+
+**Decision:** Handle INSIDE the broker adapter (`trading212_broker.py`), not upstream.
+- Adapter receives standard `(symbol, action='SELL', quantity=10)` call
+- Internally converts to `quantity=-10` for the T212 API payload
+- Keeps the adapter self-contained; no changes to upstream execution flow
+
+### 3. Trading212DataHub — Centralized Polling Cache (MANDATORY)
+
+**Rationale:** Multiple consumers need position data (live snapshot, broker sync, risk monitor). Without a shared cache, each consumer polls independently, blowing the 1 req/5s rate limit.
+
+**Design (enhanced from both documents):**
+```
+                    Trading212DataHub
+                    (Single Poller)
+                         │
+          ┌──────────────┼──────────────┐
+          │              │              │
+    GET /portfolio  GET /orders  GET /account/summary
+    (every 5s)      (every 5s)   (every 10s)
+          │              │              │
+          ▼              ▼              ▼
+      positions_cache  orders_cache  account_cache
+          │              │              │
+    ┌─────┼─────┐   ┌───┼───┐     ┌───┼───┐
+    │     │     │   │       │     │       │
+  Risk  Price  Live Sync  Chaser Snapshot Dashboard
+  Engine Mon.  Snap Svc          Daemon
+```
+
+**Adaptive Polling States (from attached document — good idea):**
+| State | Interval | Trigger |
+|---|---|---|
+| `idle` | 30s | No open positions, no pending orders |
+| `watching` | 5s | Positions open, no pending activity |
+| `active` | 2s (interleaved = 1s effective) | Active trading, positions being monitored |
+| `pending` | 1s (interleaved = 0.5s effective) | Order just submitted, awaiting fill confirmation |
+
+**State Transitions:**
+```
+idle → watching  (position detected OR order placed)
+watching → active  (risk engine evaluating positions)
+active → pending  (BTO/STC order submitted)
+pending → active  (fill confirmed)
+active → watching  (no evaluations for 60s)
+watching → idle  (no positions for 5 min)
+```
+
+**Soft-Throttle Detection (from attached document):**
+- Track response time P99 for each endpoint
+- If P99 > 2.5× baseline median → treat as soft throttle
+- Back off to maximum interval, mark prices as stale
+- Alert operator via console log
+
+**perf_counter-Anchored Timing (from attached document):**
+- Use `time.perf_counter()` for wall-clock-anchored intervals
+- Calculate actual sleep needed after subtracting work time
+- Log drift warnings when > 200ms
+
+### 4. Ticker Translation Cache
+
+- Load full instrument list from `/metadata/instruments` on `connect()`
+- Build bidirectional map: `AAPL ↔ AAPL_US_EQ`
+- TTL refresh: every 24 hours
+- Unknown symbol fallback: try `{SYMBOL}_US_EQ` heuristic, log warning, fail gracefully
+- Cache instrument metadata (minTradeQuantity, maxTradeQuantity) for fractional share validation
+
+### 5. Per-Endpoint Rate Limiting
+
+Uses existing `rate_limit_manager.py` with T212-specific profile:
+
+| Endpoint Category | Rate Limit | Implementation |
+|---|---|---|
+| Market orders | 50 req/min | Token bucket, 1 token per 1.2s |
+| Limit/Stop/StopLimit orders | 1 req/2s | Strict sequential queue |
+| Cancel orders | 50 req/min | Token bucket |
+| Positions/Account/Instruments | 1 req/5s | Shared polling cache (DataHub) |
+| Single order status | 1 req/1s | Individual rate gate |
+
+### 6. Option Signal Handling
+
+When an option signal arrives on a T212-enabled channel:
+- Skip execution for T212 with log: `"[TRADING212] ⚠️ Options not supported — signal skipped"`
+- Continue execution on other enabled brokers for that channel
+- No crash, no error notification to the user
+- Pre-flight capability check BEFORE calling `place_option_order`
+
+### 7. Connection Test
+
+- Use generic `broker.test_connection()` pattern (consistent with other brokers)
+- T212 test hits `GET /api/v0/equity/account/summary`
+- Returns account ID + available cash on success
+- Add T212-specific branch in `api_test_broker_connection` route
+
+---
+
 ## Codebase Integration Surface — Complete File-by-File Map
 
 ### TIER 1 — Core Broker Infrastructure (7 files)
@@ -175,76 +364,76 @@
 | 31 | `gui_app/templates/options.html` | L1020-1027 | Hide/skip TRADING212 (no options support) |
 | 32 | `ui/wizard/pages/broker_selection.py` | L259-263 | Add TRADING212 to setup wizard list |
 
-### TIER 6 — Database Seed (1 operation)
+### TIER 6 — New Files
+
+| # | File | Purpose |
+|---|---|---|
+| 33 | `src/brokers/trading212_broker.py` | BrokerInterface implementation |
+| 34 | `src/services/trading212_data_hub.py` | Centralized polling cache with adaptive states |
+| 35 | `src/services/trading212_client.py` | HTTP client with auth, rate limiter, soft-throttle detection |
+
+### TIER 7 — Database Seed
 
 | # | Change Required |
 |---|---|
-| 33 | INSERT into `broker_profiles`: broker_name=`TRADING212`, country_code=`UK`, display_name=`Trading 212`, credential_fields=`["api_key", "api_secret", "environment"]`, supports_options=`0`, supports_stocks=`1`, supports_paper=`1`, python_library=`requests` |
+| 36 | INSERT into `broker_profiles`: broker_name=`TRADING212`, country_code=`UK`, display_name=`Trading 212`, credential_fields=`["api_key", "api_secret", "environment"]`, supports_options=`0`, supports_stocks=`1`, supports_paper=`1`, python_library=`requests` |
 
 ---
 
-## Architecture Decisions (Architect-Reviewed)
+## BrokerInterface Method Mapping
 
-### 1. Duplicate Order Guard — CRITICAL
-
-**Problem:** T212 API is NOT idempotent. Duplicate POST = duplicate real order = real money at risk.
-
-**Solution:** System-wide execution fingerprint guard (benefits all future non-idempotent brokers).
-- Fingerprint: `SHA256(broker + channel + action + symbol + qty + 5-second time bucket)`
-- Thread-safe TTL cache (5-10s window)
-- Checked in `execute_on_single_broker` BEFORE any order POST
-- Stored in memory (not DB — needs to be fast)
-
-### 2. STC → Negative Quantity Conversion
-
-**Decision:** Handle INSIDE the broker adapter (`trading212_broker.py`), not upstream.
-- Adapter receives standard `(symbol, action='SELL', quantity=10)` call
-- Internally converts to `quantity=-10` for the T212 API payload
-- Keeps the adapter self-contained; no changes to upstream execution flow
-
-### 3. Trading212DataHub — Yes, Create One
-
-**Rationale:** Multiple consumers need position data (live snapshot, broker sync, risk monitor). Without a shared cache, each consumer polls independently, blowing the 1 req/5s rate limit.
-- Simple polling cache: poll once every 5s, share cached result
-- Pattern matches existing `webull_data_hub.py` / `schwab_data_hub.py`
-- Exposes `get_positions()`, `get_account_summary()`, `get_pending_orders()` from cache
-
-### 4. Ticker Translation Cache
-
-- Load full instrument list from `/metadata/instruments` on `connect()`
-- Build bidirectional map: `AAPL ↔ AAPL_US_EQ`
-- TTL refresh: every 24 hours
-- Unknown symbol fallback: try `{SYMBOL}_US_EQ` heuristic, log warning, fail gracefully
-- Cache instrument metadata (minTradeQuantity, maxTradeQuantity) for fractional share validation
-
-### 5. Per-Endpoint Rate Limiting
-
-| Endpoint Category | Rate Limit | Implementation |
-|---|---|---|
-| Market orders | 50 req/min | Token bucket, 1 token per 1.2s |
-| Limit/Stop/StopLimit orders | 1 req/2s | Strict sequential queue |
-| Cancel orders | 50 req/min | Token bucket |
-| Positions/Account/Instruments | 1 req/5s | Shared polling cache (DataHub) |
-| Single order status | 1 req/1s | Individual rate gate |
-
-### 6. Option Signal Handling
-
-When an option signal arrives on a T212-enabled channel:
-- Skip execution for T212 with log: `"[TRADING212] ⚠️ Options not supported — signal skipped"`
-- Continue execution on other enabled brokers for that channel
-- No crash, no error notification to the user
-- Pre-flight capability check BEFORE calling `place_option_order`
-
-### 7. Connection Test
-
-- Use generic `broker.test_connection()` pattern (consistent with other brokers)
-- T212 test hits `GET /api/v0/equity/account/summary`
-- Returns account ID + available cash on success
-- Add T212-specific branch in `api_test_broker_connection` route
+| BrokerInterface Method | Trading 212 Implementation |
+|---|---|
+| `connect()` | Base64 encode key:secret, GET /account/summary to validate |
+| `disconnect()` | Close HTTP session |
+| `get_account_info()` | GET /account/summary → map to {buying_power, cash, portfolio_value} |
+| `get_positions()` | GET /portfolio → normalize to standard position format |
+| `place_stock_order(symbol, action, qty, price)` | Translate ticker, negate qty for SELL, POST /orders/market or /orders/limit |
+| `place_option_order(...)` | Return `{success: False, error: 'Options not supported on Trading 212'}` |
+| `get_quote(symbol)` | GET /portfolio/{ticker} for held positions, or use QuoteAggregator fallback |
+| `cancel_order(order_id)` | DELETE /orders/{id} |
+| `get_pending_orders()` | GET /orders |
+| `get_order_history(count)` | GET /history/orders with cursor pagination |
+| `test_connection()` | GET /account/summary, return success + account_id |
 
 ---
 
-## Execution Flow Detail
+## Rate Limit Budget — The Hard Constraint
+
+### GET /portfolio (1 req/5s = 12 req/min MAX) — #1 BOTTLENECK
+
+**Without DataHub (WILL BREACH):**
+
+| Consumer | Calls/min | T212 Limit/min | Status |
+|---|---|---|---|
+| Risk Engine (position monitor) | 12–60 | 12 | BREACH |
+| Broker Sync Service | 2 | 12 | OK alone |
+| Live Snapshot Daemon | 12 | 12 | AT LIMIT alone |
+| **TOTAL (best case)** | **26** | **12** | **2x OVER** |
+
+**With DataHub (SAFE):**
+
+| Endpoint | DataHub Poll Rate | T212 Limit | Status |
+|---|---|---|---|
+| GET /portfolio | 1 req/5s | 1 req/5s | AT LIMIT (safe) |
+| GET /orders | 1 req/5s | 1 req/5s | AT LIMIT (safe) |
+| GET /account/summary | 1 req/10s | 1 req/5s | UNDER LIMIT (safe) |
+| GET /history/orders | 1 req/30s | 1 req/5s | UNDER LIMIT (safe) |
+
+All consumers read from DataHub cache — ZERO direct API calls.
+
+### Unfilled Order Chaser — Requires T212-Specific Throttling
+
+| Setting | Standard Brokers | T212 Value | Reason |
+|---|---|---|---|
+| risk_check_interval_seconds | 1s | 5s (minimum) | Match /portfolio rate limit |
+| order_chase_timeout | 4s | 10s | Slower chase to stay within limits |
+| order_chase_max_attempts | 3 | 2 | Fewer chases to conserve API budget |
+| order_chase_status_poll | 1s | 5s | Match /orders rate limit |
+
+---
+
+## Execution Flow
 
 ```
 Signal arrives from Discord/Telegram
@@ -254,6 +443,9 @@ Channel's enabled_brokers includes "TRADING212"
     │
     ▼
 execute_on_single_broker(signal, "TRADING212", t212_instance)
+    │
+    ├── Duplicate Order Fingerprint Guard → Check SHA256 cache
+    │       If duplicate within 5s: BLOCK, return {success: false, reason: 'duplicate'}
     │
     ├── Daily PnL Limit Check → Block if daily loss limit reached
     ├── Circuit Breaker (order_resilience) → Check for rapid-fire failures
@@ -265,9 +457,6 @@ execute_on_single_broker(signal, "TRADING212", t212_instance)
     │       Return {success: false, reason: 'options_not_supported'}
     │
     ├── IF signal.asset == 'stock':
-    │       │
-    │       ├── Duplicate Order Guard → Check fingerprint cache
-    │       │       If duplicate: BLOCK, return {success: false, reason: 'duplicate'}
     │       │
     │       ├── Ticker Translation → AAPL → AAPL_US_EQ via instrument cache
     │       │       If unknown: try heuristic, log warning
@@ -291,62 +480,23 @@ execute_on_single_broker(signal, "TRADING212", t212_instance)
     │
     ▼
 BrokerSyncService (every 30s):
-    ├── Poll GET /equity/portfolio → Reconcile with trades table
-    ├── Poll GET /equity/orders → Check pending order statuses
-    ├── Poll GET /equity/history/orders → Backfill fill prices
+    ├── Read from Trading212DataHub cache → Reconcile with trades table
+    ├── Check pending order statuses (from DataHub orders cache)
+    ├── Backfill fill prices from order history (from DataHub history cache)
     └── Update execution_lots / execution_closures for PNL
 ```
-
----
-
-## Impact Analysis — What Breaks
-
-### Will NOT Break (Existing Functionality Safe)
-
-| Subsystem | Why It's Safe |
-|---|---|
-| BrokerManager init | Each broker has its own try/except block; T212 failure won't affect others |
-| Broker sync loop | Uses `asyncio.gather(return_exceptions=True)` + 3 layers of try/except |
-| Live snapshot page | Only fetches brokers in its hardcoded dictionary; T212 simply won't appear |
-| Order routing (routes.py) | Has explicit `else: return 400 "Unknown broker"` |
-| Options page | Falls back to Webull/Alpaca for data |
-| Risk engine | Completely broker-agnostic |
-| Signal parser | Completely broker-independent |
-
-### Functional Gaps If Not Fully Wired
-
-| Gap | Impact | Severity |
-|---|---|---|
-| Option signals on T212 channels | Silent `AttributeError` instead of clean skip | Medium |
-| Order chaser won't track T212 | Unfilled limit orders never get chased | High |
-| Position sync returns empty | Trades stay "OPEN" forever, no PNL updates | High |
-| Live snapshot page | T212 positions invisible on dashboard | Medium |
-| PNL badge styling | Unstyled badge, visually inconsistent | Low |
-
-### Integration Risks
-
-| Risk | Severity | Mitigation |
-|---|---|---|
-| Duplicate orders from non-idempotent API | **CRITICAL** | System-wide fingerprint guard with 5s TTL |
-| Bad import in `src/brokers/__init__.py` | **CRITICAL** | Test import before registering; lazy import pattern |
-| Typo in selfbot_webull.py broker mappings | **HIGH** | Grep verification after each edit |
-| Rate limit 429 during multi-signal bursts | HIGH | Per-endpoint token bucket with async queue |
-| Database migration constraint violation | HIGH | Test INSERT on paper DB first |
-| Symbol not found (OTC, recent IPO) | MEDIUM | Heuristic fallback + graceful failure |
-| Position sync staleness (5s polling lag) | MEDIUM | Acceptable for stocks; document the lag |
-| API is beta — could change | MEDIUM | Abstraction layer isolates changes |
 
 ---
 
 ## Implementation Phases & Dependencies
 
 ```
-Phase 1: Core Broker Module
+Phase 1: Core Broker Module + HTTP Client
+├── trading212_client.py (HTTP client with auth, rate limiter, soft-throttle)
 ├── trading212_broker.py (BrokerInterface implementation)
-├── Trading212Client (HTTP client with auth, rate limiter)
-├── Ticker translation cache
-├── Duplicate order fingerprint guard
-└── Unit tests against demo.trading212.com
+├── Ticker translation cache with 24h TTL refresh
+├── Duplicate order fingerprint guard (system-wide, benefits all brokers)
+└── Test against demo.trading212.com
     │
     ▼
 Phase 2: Execution Flow Wiring (depends on Phase 1)
@@ -358,10 +508,10 @@ Phase 2: Execution Flow Wiring (depends on Phase 1)
 └── Grep verification: all 6 mapping dicts updated
     │
     ▼
-Phase 3: Sync + Order Chaser + PNL (depends on Phase 2)
-├── Trading212DataHub (polling cache)
+Phase 3: DataHub + Sync + Order Chaser (depends on Phase 2)
+├── Trading212DataHub (centralized polling cache with adaptive states)
 ├── BrokerSyncService normalization case
-├── UnfilledOrderChaser broker instance map
+├── UnfilledOrderChaser broker instance map (throttled intervals)
 ├── Position reconciliation logic
 ├── Fill price backfill from order history
 ├── execution_lots / execution_closures population
@@ -385,22 +535,12 @@ Phase 4a: GUI/Database         Phase 4b: Frontend Templates
              ├── Demo/Paper trading test suite
              ├── Buy/sell fractional shares
              ├── Cancel + replace chase test
-             ├── Rate limit soak test
+             ├── Rate limit soak test (idle/light/normal/heavy scenarios)
+             ├── Soft-throttle detection verification
              ├── Duplicate protection replay test
              ├── Multi-broker parallel execution test
              └── PNL page verification
 ```
-
-### Phase Estimates
-
-| Phase | Files | Complexity | Estimate |
-|---|---|---|---|
-| Phase 1: Core Broker | 1 new file | High (rate limiter, ticker cache, auth, dedup guard) | Core foundation |
-| Phase 2: Execution | 2 files, 8 locations | Medium (pattern-matching existing brokers) | Wiring |
-| Phase 3: Sync/PNL | 3 files | High (normalization, DataHub, fill backfill) | Data pipeline |
-| Phase 4a: GUI/DB | 5 files, 8 locations | Low-Medium (additive changes) | Configuration |
-| Phase 4b: Frontend | 8 files, 12 locations | Low (additive HTML/CSS/JS) | UI polish |
-| Phase 5: Validation | 0 files (testing only) | Medium (live API testing) | Verification |
 
 ---
 
@@ -445,24 +585,6 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 
 ---
 
-## BrokerInterface Method Mapping
-
-| BrokerInterface Method | Trading 212 Implementation |
-|---|---|
-| `connect()` | Base64 encode key:secret, GET /account/summary to validate |
-| `disconnect()` | Close HTTP session |
-| `get_account_info()` | GET /account/summary → map to {buying_power, cash, portfolio_value} |
-| `get_positions()` | GET /portfolio → normalize to standard position format |
-| `place_stock_order(symbol, action, qty, price)` | Translate ticker, negate qty for SELL, POST /orders/market or /orders/limit |
-| `place_option_order(...)` | Return `{success: False, error: 'Options not supported on Trading 212'}` |
-| `get_quote(symbol)` | GET /portfolio/{ticker} for held positions, or use QuoteAggregator fallback |
-| `cancel_order(order_id)` | DELETE /orders/{id} |
-| `get_pending_orders()` | GET /orders |
-| `get_order_history(count)` | GET /history/orders with cursor pagination |
-| `test_connection()` | GET /account/summary, return success + account_id |
-
----
-
 ## No-Go Scenarios (When NOT to Route to T212)
 
 | Scenario | Action |
@@ -471,255 +593,20 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 | Short selling (STC without position) | Block — T212 Invest accounts don't support shorting |
 | Order value exceeds account currency | Block — T212 only executes in primary account currency |
 | Symbol not in instrument list | Skip with warning, attempt heuristic, fail gracefully |
-| Rate limit 429 received | Queue and retry after backoff, do NOT duplicate the order |
+| Rate limit soft-throttle detected | Queue and retry after backoff, do NOT duplicate the order |
 | Market closed + market order | T212 queues until market opens (inform user) |
 
 ---
 
-## API Rate Limit Consumption Analysis
+## Impact Analysis — What Will NOT Break
 
-### Trading 212 Rate Limits (Hard Constraints)
-
-| Endpoint | Rate Limit | Per-Second Equivalent |
-|---|---|---|
-| POST /orders/market | 50 req/1min | 0.83 req/s |
-| POST /orders/limit | 1 req/2s | 0.50 req/s |
-| POST /orders/stop | 1 req/2s | 0.50 req/s |
-| POST /orders/stop_limit | 1 req/2s | 0.50 req/s |
-| DELETE /orders/{id} | 50 req/1min | 0.83 req/s |
-| GET /orders (all pending) | 1 req/5s | 0.20 req/s |
-| GET /orders/{id} | 1 req/1s | 1.00 req/s |
-| GET /portfolio (all positions) | 1 req/5s | 0.20 req/s |
-| GET /portfolio/{ticker} | 1 req/1s | 1.00 req/s |
-| GET /account/summary | 1 req/5s | 0.20 req/s |
-| GET /metadata/instruments | 1 req/5s | 0.20 req/s |
-| GET /history/orders | 1 req/5s | 0.20 req/s |
-
-### System Components That Make Broker API Calls
-
-#### 1. Risk Engine / Position Monitor
-- **Current behavior (Webull/Schwab):** Uses WebSocket streaming — ZERO API cost
-- **T212 behavior (no WebSocket):** Must poll GET /portfolio every cycle
-- **Cycle interval:** 1 second (default, configurable 0.2s–60s)
-- **Calls per cycle:** 1 (GET /portfolio fetches ALL positions in one batch)
-- **T212 rate limit for /portfolio:** 1 req/5s (0.20 req/s)
-
-| Scenario | Desired Rate | T212 Limit | BREACH? |
-|---|---|---|---|
-| Default 1s interval | 60 req/min | 12 req/min | YES — 5x OVER LIMIT |
-| Adjusted to 5s interval | 12 req/min | 12 req/min | EXACTLY AT LIMIT |
-| Adjusted to 10s interval | 6 req/min | 12 req/min | Safe |
-
-**VERDICT: WILL BREACH unless T212 risk monitor interval is forced to ≥5 seconds.**
-The default 1-second polling that works for Webull (zero-cost WebSocket) would hit 429 errors every second on T212.
-
-#### 2. Broker Sync Service
-- **Sync interval:** Every 30 seconds
-- **Calls per standard cycle:** 2 (GET /portfolio + GET /orders)
-- **Calls per health cycle (every 60s):** +1 (GET /account/summary)
-- **Calls per fill sync (every 150s):** +1 (GET /history/orders)
-
-| Cycle Type | Frequency | Endpoints Hit | Calls |
-|---|---|---|---|
-| Standard | Every 30s | /portfolio, /orders | 2 |
-| Health (every 2nd cycle) | Every 60s | + /account/summary | +1 |
-| Fill sync (every 5th cycle) | Every 150s | + /history/orders | +1 |
-
-**Average: ~4.5 calls/min across 4 endpoints**
-
-| Endpoint | Calls/min from Sync | T212 Limit/min | BREACH? |
-|---|---|---|---|
-| GET /portfolio | 2.0 | 12 | No |
-| GET /orders | 2.0 | 12 | No |
-| GET /account/summary | 1.0 | 12 | No |
-| GET /history/orders | 0.4 | 12 | No |
-
-**VERDICT: SAFE on its own. But shares /portfolio and /orders endpoints with other consumers.**
-
-#### 3. Price Monitor Service
-- **Current behavior (Webull/Schwab):** Auto-subscribes to streaming hubs — ZERO API cost
-- **T212 behavior (no WebSocket):** Must poll per position
-- **Polling pattern:** 1 call per position, 0.5s stagger between positions
-- **No batch endpoint** — T212 has GET /portfolio/{ticker} (1 req/1s) or GET /portfolio (1 req/5s)
-
-| Open Positions | Calls Using /portfolio/{ticker} | T212 Limit | BREACH? |
-|---|---|---|---|
-| 5 positions | 5 calls per cycle, ~40/min | 60 req/min (1/s) | No |
-| 10 positions | 10 calls per cycle, ~60/min | 60 req/min (1/s) | AT LIMIT |
-| 15+ positions | 15+ calls per cycle, ~60+/min | 60 req/min (1/s) | YES — BREACH |
-
-**Using GET /portfolio (all positions in one call) instead:**
-
-| Open Positions | Calls/min | T212 Limit | BREACH? |
-|---|---|---|---|
-| Any count | 12/min (1 per 5s) | 12 req/min | EXACTLY AT LIMIT |
-
-**VERDICT: WILL BREACH at 10+ positions if using per-ticker endpoint. Must use batch /portfolio and share cache.**
-
-#### 4. Live Snapshot Daemon
-- **Refresh interval:** Every 5 seconds
-- **Calls per refresh:** 1 (GET /portfolio) + optionally 1 (GET /account/summary)
-
-| Endpoint | Calls/min from Snapshot | T212 Limit/min | BREACH? |
-|---|---|---|---|
-| GET /portfolio | 12 | 12 | EXACTLY AT LIMIT |
-| GET /account/summary | 12 | 12 | EXACTLY AT LIMIT |
-
-**VERDICT: AT LIMIT on its own. Combined with any other consumer = BREACH.**
-
-#### 5. Unfilled Order Chaser
-- **Monitor interval:** Every 1 second
-- **Idle (tracking, not chasing):** 0 API calls (uses local timestamps)
-- **Active chase per order:**
-  - GET /orders (verify pending): 1 call
-  - GET /portfolio/{ticker} (quote for mid-price): 1 call
-  - DELETE /orders/{id} (cancel): 1 call
-  - POST /orders/limit (replace): 1 call
-  - **Total per chase event: 4 calls**
-- **Chase frequency:** Every 4 seconds per stale order (chase_timeout)
-
-| Orders Being Chased | Calls/min | Endpoints Hit | BREACH? |
-|---|---|---|---|
-| 1 order | ~60 (status checks) + 4 per chase | GET /orders at 12/min limit | YES |
-| 3 orders | ~180 + 12 per chase | GET /orders at 12/min limit | YES — SEVERE |
-
-**VERDICT: WILL BREACH IMMEDIATELY. The 1-second status check loop hits GET /orders (1 req/5s limit) at 60x the allowed rate.**
-
-#### 6. GUI Dashboard Polling
-- **Broker states (/api/v2/broker-states):** Every 30s → may trigger GET /account/summary
-- **Trades page (/api/trades):** Every 30s → reads from DB cache, no direct broker call
-- **Bot status (/api/status):** Every 10s → no broker API call
-
-**VERDICT: SAFE — dashboard reads from internal caches, not broker APIs directly.**
-
-#### 7. Order Placement (Signal Execution)
-- **Frequency:** On-demand (when signals arrive)
-- **Calls per trade:** 1 POST (/orders/market or /orders/limit)
-
-| Signal Volume | Order Type | Calls | T212 Limit | BREACH? |
-|---|---|---|---|---|
-| 1 signal | Market | 1 | 50/min | No |
-| 5 signals in 10s | Market | 5 | 50/min | No |
-| 3 signals in 6s | Limit | 3 in 6s | 1 per 2s | YES — needs queuing |
-| 10 signals in 1min | Market | 10 | 50/min | No |
-
-**VERDICT: Market orders SAFE. Limit orders WILL BREACH during signal bursts without queuing.**
-
-### Combined Load: The Real Problem
-
-The critical issue is that **multiple systems share the same endpoints** and T212 rate limits are per-account, not per-endpoint-consumer.
-
-#### GET /portfolio Endpoint (1 req/5s = 12 req/min MAX)
-
-| Consumer | Calls/min | Notes |
-|---|---|---|
-| Risk Engine (position monitor) | 12–60 | 12 if throttled to 5s; 60 at default 1s |
-| Broker Sync Service | 2 | Every 30s |
-| Live Snapshot Daemon | 12 | Every 5s |
-| Price Monitor Service | 12–60 | Depends on position count |
-| **TOTAL (best case)** | **38** | Even throttled, 3x over limit |
-| **TOTAL (worst case)** | **134** | 11x over limit |
-| **T212 LIMIT** | **12** | |
-
-**GET /portfolio is the #1 bottleneck. Every major system needs it.**
-
-#### GET /orders Endpoint (1 req/5s = 12 req/min MAX)
-
-| Consumer | Calls/min | Notes |
-|---|---|---|
-| Broker Sync Service | 2 | Every 30s |
-| Unfilled Order Chaser | 15–60 | 1/s per tracked order (or every 4s per chase) |
-| **TOTAL** | **17–62** | 1.4x to 5x over limit |
-| **T212 LIMIT** | **12** | |
-
-#### GET /account/summary Endpoint (1 req/5s = 12 req/min MAX)
-
-| Consumer | Calls/min | Notes |
-|---|---|---|
-| Broker Sync (health) | 1 | Every 60s |
-| Live Snapshot | 12 | Every 5s |
-| Dashboard polling | 2 | Every 30s |
-| **TOTAL** | **15** | 1.25x over limit |
-| **T212 LIMIT** | **12** | |
-
-#### POST /orders/limit Endpoint (1 req/2s = 30 req/min MAX)
-
-| Consumer | Calls/min | Notes |
-|---|---|---|
-| Signal execution | 0–5 | On-demand |
-| Order chaser (replacement) | 0–15 | Per chase event |
-| Risk engine (SL/PT orders) | 0–10 | On risk trigger |
-| **TOTAL (active trading)** | **5–30** | At limit during bursts |
-| **T212 LIMIT** | **30** | |
-
-### Summary: Breach Probability by Scenario
-
-| Scenario | GET /portfolio | GET /orders | POST /orders | Overall Breach? |
-|---|---|---|---|---|
-| **Idle (0 positions, no signals)** | 14/min (sync+snapshot) | 2/min | 0/min | YES — /portfolio over |
-| **Light (3 positions, occasional signals)** | 26/min | 2/min | 1/min | YES — /portfolio 2x over |
-| **Normal (5 positions, steady signals)** | 38/min | 17/min | 5/min | YES — /portfolio 3x, /orders 1.4x |
-| **Heavy (10+ positions, signal burst)** | 86/min | 62/min | 15/min | YES — everything breached |
-
-### Root Cause
-
-The existing system was designed for brokers with **WebSocket streaming** (Webull, Schwab) or **generous rate limits** (Alpaca: 200 req/min). Four separate systems (risk monitor, price monitor, sync service, snapshot daemon) each independently poll the same endpoints. This works when:
-- Webull/Schwab: Streaming hubs provide data at ZERO API cost
-- Alpaca: 200 req/min is generous enough for all consumers
-
-Trading 212's limits are 10–15x tighter than what the system currently demands.
-
-### Required Architecture Change: Trading212DataHub (Shared Polling Cache)
-
-The ONLY solution is a **centralized cache** that all consumers read from, with a single poller respecting rate limits:
-
-```
-                    Trading212DataHub
-                    (Single Poller)
-                         │
-          ┌──────────────┼──────────────┐
-          │              │              │
-    GET /portfolio  GET /orders  GET /account/summary
-    (every 5s)      (every 5s)   (every 5s)
-          │              │              │
-          ▼              ▼              ▼
-      positions_cache  orders_cache  account_cache
-          │              │              │
-    ┌─────┼─────┐   ┌───┼───┐     ┌───┼───┐
-    │     │     │   │       │     │       │
-  Risk  Price  Live Sync  Chaser Snapshot Dashboard
-  Engine Mon.  Snap Svc          Daemon
-```
-
-**All consumers read from cache. ZERO direct API calls.**
-
-| Endpoint | DataHub Poll Rate | T212 Limit | Status |
-|---|---|---|---|
-| GET /portfolio | 1 req/5s | 1 req/5s | AT LIMIT (safe) |
-| GET /orders | 1 req/5s | 1 req/5s | AT LIMIT (safe) |
-| GET /account/summary | 1 req/10s | 1 req/5s | UNDER LIMIT (safe) |
-| GET /history/orders | 1 req/30s | 1 req/5s | UNDER LIMIT (safe) |
-
-**Total with DataHub: ~30 req/min across all endpoints vs 12 req/min limit per endpoint**
-**Actual per-endpoint: within limits**
-
-### Remaining Risks After DataHub
-
-| Risk | Probability | Severity |
-|---|---|---|
-| 5-second stale data for risk decisions | 100% (by design) | MEDIUM — acceptable for stocks, dangerous for volatile penny stocks |
-| Limit order bursts during signal storms | Medium | HIGH — 1 req/2s means 3 simultaneous signals take 6 seconds |
-| Order chaser cancel+replace rate | Medium | HIGH — each chase needs DELETE + POST, both rate-limited |
-| Position monitor missing fast moves | Low-Medium | MEDIUM — a stock dropping 5% in 5 seconds won't trigger SL in time |
-
-### Recommended T212-Specific Configuration Defaults
-
-| Setting | Standard Brokers | T212 Value | Reason |
-|---|---|---|---|
-| risk_check_interval_seconds | 1s | 5s (minimum) | Match /portfolio rate limit |
-| price_monitor_interval | 0.5s per position | Disabled (use DataHub) | Cannot afford per-position polling |
-| snapshot_daemon_interval | 5s | Disabled (use DataHub) | Cannot afford independent polling |
-| sync_interval | 30s | 30s (keep) | Low enough call volume |
-| order_chase_timeout | 4s | 10s | Slower chase to stay within limits |
-| order_chase_max_attempts | 3 | 2 | Fewer chases to conserve API budget |
-| order_chase_status_poll | 1s | 5s | Match /orders rate limit |
+| Subsystem | Why It's Safe |
+|---|---|
+| BrokerManager init | Each broker has its own try/except block; T212 failure won't affect others |
+| Broker sync loop | Uses `asyncio.gather(return_exceptions=True)` + 3 layers of try/except |
+| Live snapshot page | Only fetches brokers in its hardcoded dictionary; T212 added explicitly |
+| Order routing (routes.py) | Has explicit `else: return 400 "Unknown broker"` |
+| Options page | Falls back to Webull/Alpaca for data |
+| Risk engine | Completely broker-agnostic — reads PositionSnapshot regardless of source |
+| Signal parser | Completely broker-independent |
+| Existing brokers | Zero changes to Webull/Schwab/IBKR/Alpaca/Tastytrade/Robinhood code |
