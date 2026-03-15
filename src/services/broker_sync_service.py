@@ -1944,6 +1944,7 @@ class BrokerSyncService:
             if asset_type == 'option' and (not strike or float(strike) == 0 or not expiry or not call_put):
                 try:
                     recovery_trades = self.db.get_trades(status='OPEN', limit=500) + self.db.get_trades(status='PENDING', limit=500)
+                    recovery_candidates = []
                     for t in recovery_trades:
                         if (t.get('symbol', '').upper() == symbol.upper() and 
                             t.get('broker', '').upper() == broker_name.upper() and
@@ -1952,16 +1953,28 @@ class BrokerSyncService:
                             t_expiry = t.get('expiry')
                             t_cp = t.get('call_put') or t.get('opt_type')
                             if t_strike and float(t_strike) > 0 and t_expiry and t_cp:
-                                strike = t_strike
-                                expiry = t_expiry
-                                call_put = t_cp
-                                position['strike'] = strike
-                                position['expiry'] = expiry
-                                position['call_put'] = call_put
-                                print(f"[SYNC] 💡 Recovered option metadata for {symbol} from trade #{t.get('id')}: strike={strike}, expiry={t_expiry}, cp={call_put}")
-                                break
+                                recovery_candidates.append(t)
+                    open_candidates = [c for c in recovery_candidates if c.get('status') == 'OPEN']
+                    if len(open_candidates) == 1:
+                        recovery_candidates = open_candidates
+                    if len(recovery_candidates) == 1:
+                        t = recovery_candidates[0]
+                        strike = t.get('strike')
+                        expiry = t.get('expiry')
+                        call_put = t.get('call_put') or t.get('opt_type')
+                        position['strike'] = strike
+                        position['expiry'] = expiry
+                        position['call_put'] = call_put
+                        print(f"[SYNC] 💡 Recovered option metadata for {symbol} from trade #{t.get('id')}: strike={strike}, expiry={expiry}, cp={call_put}")
+                    elif len(recovery_candidates) > 1:
+                        print(f"[SYNC] ⚠️ Option metadata recovery ambiguous: {len(recovery_candidates)} candidates for {symbol} on {broker_name} — skipping import")
+                        continue
                 except Exception as e:
                     print(f"[SYNC] ⚠️ Option metadata recovery failed: {e}")
+
+            if asset_type == 'option' and (not strike or float(strike or 0) == 0 or not expiry or not call_put):
+                print(f"[SYNC] ⚠️ Skipping import of {broker_name} option {symbol} — incomplete metadata (strike={strike}, expiry={expiry}, cp={call_put})")
+                continue
 
             pos_key = self._build_position_key(symbol, asset_type, strike, expiry, call_put)
             

@@ -806,6 +806,15 @@ class RiskDBAdapter:
                             print(f"[RISK] ✓ Fuzzy trade lookup (strike=0.0): matched trade #{rows[0][0]} for {sym_try} on {broker}")
                             return rows[0][0]
                         elif len(rows) > 1:
+                            row_ids = [r[0] for r in rows]
+                            cursor.execute(f'''
+                                SELECT id, status FROM trades WHERE id IN ({",".join("?" * len(row_ids))})
+                            ''', row_ids)
+                            status_rows = cursor.fetchall()
+                            open_rows = [r for r in status_rows if r[1] == 'OPEN']
+                            if len(open_rows) == 1:
+                                print(f"[RISK] ✓ Fuzzy trade lookup (strike=0.0): {len(rows)} candidates, preferring OPEN trade #{open_rows[0][0]} for {sym_try} on {broker}")
+                                return open_rows[0][0]
                             print(f"[RISK] ⚠️ Fuzzy trade lookup (strike=0.0): {len(rows)} ambiguous matches for {sym_try} on {broker} — skipping")
                 return None
             else:
@@ -921,6 +930,11 @@ class RiskDBAdapter:
                                     fuzzy_candidates.append(ex)
 
                 if fuzzy_candidates and float(position.strike or 0) == 0.0:
+                    if len(fuzzy_candidates) > 1:
+                        open_only = [ex for ex in fuzzy_candidates if ex.get('status') == 'OPEN']
+                        if len(open_only) >= 1:
+                            fuzzy_candidates = open_only
+
                     if len(fuzzy_candidates) == 1:
                         matched = fuzzy_candidates[0]
                         print(f"[RISK] ✓ Fuzzy-matched position (strike=0.0) to trade #{matched.get('id')} "
@@ -935,9 +949,14 @@ class RiskDBAdapter:
                             return matched.get('id')
                         else:
                             print(f"[RISK] ⚠️ Fuzzy-match ambiguous: {len(fuzzy_candidates)} candidates for {position.symbol} (strike=0.0) — skipping auto-import")
+                            return None
             except Exception:
                 pass
             
+            if float(position.strike or 0) == 0.0 and position.asset == 'option':
+                print(f"[RISK] ⚠️ Refusing to auto-import option with strike=0.0 ({position.symbol}) — waiting for enriched data")
+                return None
+
             if hasattr(self._db, 'add_trade'):
                 trade_id = self._db.add_trade(trade_data)
             else:
@@ -1526,27 +1545,49 @@ class RiskManager:
             flickered_removed = set()
             flickered_new = set()
             if new_keys and removed_keys:
+                def _parse_key(k):
+                    parts = k.split('_')
+                    if len(parts) >= 4:
+                        return parts[0], parts[1], parts[2], parts[3], parts[4] if len(parts) > 4 else ''
+                    return None, None, None, None, None
+
                 for nk in list(new_keys):
-                    nk_parts = nk.split('_')
-                    if len(nk_parts) >= 4 and nk_parts[2] in ('0.0', '0', 'None', ''):
-                        n_broker = nk_parts[0]
-                        n_symbol = nk_parts[1]
-                        n_expiry = nk_parts[3] if len(nk_parts) > 3 else ''
-                        for rk in list(removed_keys):
-                            rk_parts = rk.split('_')
-                            if (len(rk_parts) >= 4 and
-                                rk_parts[0] == n_broker and
-                                rk_parts[1] == n_symbol and
-                                rk_parts[3] == n_expiry and
-                                rk_parts[2] not in ('0.0', '0', 'None', '')):
-                                flickered_removed.add(rk)
-                                flickered_new.add(nk)
-                                print(f"[RISK] ⚠️ Position key flicker detected: {rk} → {nk} "
-                                      f"(Webull returned strike=0.0, using previously known key)")
-                                break
+                    nb, ns, nstrike, nexp, ndir = _parse_key(nk)
+                    if nb is None:
+                        continue
+                    is_nk_degraded = nstrike in ('0.0', '0', 'None', '') or not ndir
+                    for rk in list(removed_keys):
+                        if rk in flickered_removed:
+                            continue
+                        rb, rs, rstrike, rexp, rdir = _parse_key(rk)
+                        if rb is None or rb != nb or rs != ns or rexp != nexp:
+                            continue
+                        is_rk_degraded = rstrike in ('0.0', '0', 'None', '') or not rdir
+                        if is_nk_degraded != is_rk_degraded:
+                            flickered_removed.add(rk)
+                            flickered_new.add(nk)
+                            canonical = rk if is_nk_degraded else nk
+                            degraded = nk if is_nk_degraded else rk
+                            print(f"[RISK] ⚠️ Position key flicker detected: {degraded} ↔ {canonical} "
+                                  f"(Webull strike/direction data inconsistency, keeping canonical key)")
+                            break
 
             real_new_keys = new_keys - flickered_new
             real_removed_keys = removed_keys - flickered_removed
+
+            canonical_keys = set(current_keys)
+            for nk in flickered_new:
+                nb, ns, nstrike, nexp, ndir = _parse_key(nk)
+                if nb is None:
+                    continue
+                is_nk_degraded = nstrike in ('0.0', '0', 'None', '') or not ndir
+                if is_nk_degraded:
+                    for rk in flickered_removed:
+                        rb, rs, rstrike, rexp, rdir = _parse_key(rk)
+                        if rb == nb and rs == ns and rexp == nexp:
+                            canonical_keys.discard(nk)
+                            canonical_keys.add(rk)
+                            break
 
             if real_new_keys:
                 for nk in real_new_keys:
@@ -1561,7 +1602,7 @@ class RiskManager:
                 for rk in real_removed_keys:
                     print(f"[RISK] 📤 Position closed externally: {rk}")
             
-            self._prev_position_keys = current_keys
+            self._prev_position_keys = canonical_keys
             
             import time as _t
             if not hasattr(self, '_last_monitoring_summary_ts'):
@@ -1667,13 +1708,24 @@ class RiskManager:
 
                         if not hasattr(self, '_webull_enrichment_cache'):
                             self._webull_enrichment_cache = {}
+                        if not hasattr(self, '_webull_enrichment_active_keys'):
+                            self._webull_enrichment_active_keys = set()
 
-                        enrich_key = str(option_id or ticker_id or f"{symbol}_{raw_exp}")
+                        enrich_keys = []
+                        if option_id:
+                            enrich_keys.append(f"oid_{option_id}")
+                        if ticker_id:
+                            enrich_keys.append(f"tid_{ticker_id}")
+                        if not enrich_keys:
+                            enrich_keys.append(f"sym_{symbol}_{raw_exp}_{direction}")
 
+                        for ek in enrich_keys:
+                            self._webull_enrichment_active_keys.add(ek)
+
+                        enrichment_data = {'strike': strike, 'direction': direction, 'expiry': raw_exp}
                         if strike and strike > 0.0 and direction:
-                            self._webull_enrichment_cache[enrich_key] = {
-                                'strike': strike, 'direction': direction, 'expiry': raw_exp
-                            }
+                            for ek in enrich_keys:
+                                self._webull_enrichment_cache[ek] = enrichment_data
 
                         if (not strike or strike == 0.0) and (option_id or ticker_id):
                             try:
@@ -1686,22 +1738,25 @@ class RiskManager:
                                         strike = reverse['strike']
                                         direction = reverse['option_type']
                                         raw_exp = reverse['expiry']
-                                        self._webull_enrichment_cache[enrich_key] = {
-                                            'strike': strike, 'direction': direction, 'expiry': raw_exp
-                                        }
+                                        enrichment_data = {'strike': strike, 'direction': direction, 'expiry': raw_exp}
+                                        for ek in enrich_keys:
+                                            self._webull_enrichment_cache[ek] = enrichment_data
                                         print(f"[RISK] ✓ Reverse cache enriched Webull position: {symbol} {strike} {direction} {raw_exp}")
                             except Exception:
                                 pass
 
-                        if (not strike or strike == 0.0 or not direction) and enrich_key in self._webull_enrichment_cache:
-                            cached = self._webull_enrichment_cache[enrich_key]
-                            if not strike or strike == 0.0:
-                                strike = cached['strike']
-                            if not direction:
-                                direction = cached['direction']
-                            if not raw_exp:
-                                raw_exp = cached['expiry']
-                            print(f"[RISK] ✓ Used cached enrichment for Webull position: {symbol} {strike} {direction} {raw_exp}")
+                        if not strike or strike == 0.0 or not direction:
+                            for ek in enrich_keys:
+                                cached = self._webull_enrichment_cache.get(ek)
+                                if cached:
+                                    if not strike or strike == 0.0:
+                                        strike = cached['strike']
+                                    if not direction:
+                                        direction = cached['direction']
+                                    if not raw_exp:
+                                        raw_exp = cached['expiry']
+                                    print(f"[RISK] ✓ Used cached enrichment for Webull position: {symbol} {strike} {direction} {raw_exp}")
+                                    break
 
                         expiry = ''
                         if raw_exp and '-' in raw_exp:
@@ -1954,6 +2009,13 @@ class RiskManager:
             elif isinstance(r, Exception):
                 print(f"[RISK] ⚠️ Parallel fetch error: {r}")
         
+        if hasattr(self, '_webull_enrichment_cache') and hasattr(self, '_webull_enrichment_active_keys'):
+            if self._webull_enrichment_active_keys:
+                stale_keys = set(self._webull_enrichment_cache.keys()) - self._webull_enrichment_active_keys
+                for sk in stale_keys:
+                    del self._webull_enrichment_cache[sk]
+            self._webull_enrichment_active_keys = set()
+
         return positions
     
     async def _fetch_alpaca_positions(self) -> List[PositionSnapshot]:
@@ -3656,15 +3718,24 @@ class RiskManager:
 
         if asset == 'option' and broker == 'Webull' and (not strike or float(strike or 0) == 0.0 or not direction):
             if hasattr(self, '_webull_enrichment_cache'):
-                enrich_key = str(option_id or pos.get('ticker_id', '') or f"{pos.get('symbol', '')}_{expiry}")
-                cached = self._webull_enrichment_cache.get(enrich_key)
-                if cached:
-                    if not strike or float(strike or 0) == 0.0:
-                        strike = cached['strike']
-                    if not direction:
-                        direction = cached['direction']
-                    if not expiry:
-                        expiry = cached['expiry']
+                lookup_keys = []
+                if option_id:
+                    lookup_keys.append(f"oid_{option_id}")
+                ticker_id = pos.get('ticker_id', '')
+                if ticker_id:
+                    lookup_keys.append(f"tid_{ticker_id}")
+                if not lookup_keys:
+                    lookup_keys.append(f"sym_{pos.get('symbol', '')}_{expiry}_{direction or ''}")
+                for lk in lookup_keys:
+                    cached = self._webull_enrichment_cache.get(lk)
+                    if cached:
+                        if not strike or float(strike or 0) == 0.0:
+                            strike = cached['strike']
+                        if not direction:
+                            direction = cached['direction']
+                        if not expiry:
+                            expiry = cached['expiry']
+                        break
 
         return PositionSnapshot(
             symbol=pos.get('symbol', ''),
