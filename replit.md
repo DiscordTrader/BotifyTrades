@@ -88,6 +88,6 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **ta**: For technical analysis.
 - **aiohttp**: Asynchronous HTTP client.
 - **pyotp**: For TOTP 2FA.
-- **PySide6**: For setup wizard GUI.
+- **PySide6**: For setup wizard GUI and desktop splash screen (license activation + startup progress). Splash uses `Qt.Window|Qt.FramelessWindowHint` (not `Qt.SplashScreen`) for macOS clipboard compatibility, macOS-style close/minimize buttons, event-filter-based drag-to-move, and explicit keyboard shortcuts (Cmd/Ctrl+C/V/X/A/Q, Escape).
 - **paho-mqtt**: For Webull MQTT.
 - **Chart.js**: Frontend data visualization.

@@ -4,14 +4,15 @@ Modern glassmorphism design with integrated license validation and progress trac
 """
 import sys
 import os
+import platform
 from typing import Optional
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QProgressBar, QGraphicsDropShadowEffect, QStackedWidget,
-    QLineEdit, QPushButton, QFrame
+    QLineEdit, QPushButton, QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, QTimer, Signal, QObject, QPoint, QEvent
+from PySide6.QtGui import QFont, QColor, QAction, QKeySequence, QShortcut
 
 try:
     from upgrade.version import APP_VERSION
@@ -54,9 +55,46 @@ class StartupProgress(QObject):
         self.startup_failed.emit(error)
 
 
+class _WindowControlButton(QPushButton):
+    """macOS-style traffic light window control button"""
+    
+    def __init__(self, color: str, hover_color: str, icon_text: str = "", parent=None):
+        super().__init__(parent)
+        self._color = color
+        self._hover_color = hover_color
+        self._icon_text = icon_text
+        self.setFixedSize(14, 14)
+        self.setCursor(Qt.PointingHandCursor)
+        self._update_style(hovered=False)
+    
+    def _update_style(self, hovered=False):
+        bg = self._hover_color if hovered else self._color
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg};
+                border: none;
+                border-radius: 7px;
+                font-size: 8px;
+                color: rgba(0,0,0,0.6);
+                padding: 0;
+                margin: 0;
+            }}
+        """)
+        self.setText(self._icon_text if hovered else "")
+    
+    def enterEvent(self, event):
+        self._update_style(hovered=True)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        self._update_style(hovered=False)
+        super().leaveEvent(event)
+
+
 class SplashScreen(QWidget):
     """
-    Premium splash screen with glassmorphism design, license validation, and startup progress
+    Premium splash screen with glassmorphism design, license validation, and startup progress.
+    Features: draggable window, close/minimize controls, full clipboard support.
     """
     
     license_validated = Signal(dict)
@@ -69,19 +107,62 @@ class SplashScreen(QWidget):
         self.skip_license = skip_license
         self.license_controller = LicenseController() if LicenseController else None
         self._license_check_started = False
+        self._drag_pos = None
         self._setup_ui()
         self._connect_signals()
+        self._setup_shortcuts()
     
+    def _setup_shortcuts(self):
+        """Setup keyboard shortcuts for clipboard operations and window management"""
+        is_mac = platform.system() == 'Darwin'
+        mod = Qt.ControlModifier if not is_mac else Qt.MetaModifier
+
+        self._shortcuts = []
+        for key, handler in [
+            (Qt.Key_C, self._copy_selection),
+            (Qt.Key_V, self._paste_clipboard),
+            (Qt.Key_X, self._cut_selection),
+            (Qt.Key_A, self._select_all),
+            (Qt.Key_Q, self.close),
+        ]:
+            sc = QShortcut(QKeySequence(mod | key), self)
+            sc.activated.connect(handler)
+            self._shortcuts.append(sc)
+        esc = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        esc.activated.connect(self.close)
+        self._shortcuts.append(esc)
+
+    def _copy_selection(self):
+        w = QApplication.focusWidget()
+        if isinstance(w, QLineEdit) and w.hasSelectedText():
+            QApplication.clipboard().setText(w.selectedText())
+
+    def _paste_clipboard(self):
+        w = QApplication.focusWidget()
+        if isinstance(w, QLineEdit):
+            w.insert(QApplication.clipboard().text())
+
+    def _cut_selection(self):
+        w = QApplication.focusWidget()
+        if isinstance(w, QLineEdit) and w.hasSelectedText():
+            QApplication.clipboard().setText(w.selectedText())
+            w.del_()
+
+    def _select_all(self):
+        w = QApplication.focusWidget()
+        if isinstance(w, QLineEdit):
+            w.selectAll()
+
     def _setup_ui(self):
         """Setup the splash screen UI with premium glassmorphism design"""
         self.setWindowFlags(
-            Qt.FramelessWindowHint | 
+            Qt.FramelessWindowHint |
             Qt.WindowStaysOnTopHint |
-            Qt.SplashScreen
+            Qt.Window
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         
-        self.setFixedSize(520, 420)
+        self.setFixedSize(540, 440)
         
         screen = QApplication.primaryScreen()
         if screen:
@@ -98,12 +179,12 @@ class SplashScreen(QWidget):
         container.setStyleSheet("""
             #splashContainer {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(10, 15, 30, 0.95), 
-                    stop:0.3 rgba(20, 30, 60, 0.92),
-                    stop:0.7 rgba(15, 25, 50, 0.92),
-                    stop:1 rgba(8, 12, 25, 0.95));
+                    stop:0 rgba(10, 15, 30, 0.97), 
+                    stop:0.3 rgba(20, 30, 60, 0.95),
+                    stop:0.7 rgba(15, 25, 50, 0.95),
+                    stop:1 rgba(8, 12, 25, 0.97));
                 border-radius: 20px;
-                border: 1px solid rgba(79, 172, 254, 0.4);
+                border: 1px solid rgba(79, 172, 254, 0.35);
             }
         """)
         
@@ -114,8 +195,46 @@ class SplashScreen(QWidget):
         container.setGraphicsEffect(shadow)
         
         container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(40, 35, 40, 30)
-        container_layout.setSpacing(12)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+        
+        title_bar = QWidget()
+        title_bar.setObjectName("titleBar")
+        title_bar.setFixedHeight(40)
+        title_bar.setStyleSheet("""
+            #titleBar {
+                background: transparent;
+                border-top-left-radius: 20px;
+                border-top-right-radius: 20px;
+            }
+        """)
+        title_bar_layout = QHBoxLayout(title_bar)
+        title_bar_layout.setContentsMargins(16, 10, 16, 0)
+        title_bar_layout.setSpacing(8)
+        
+        self._close_btn = _WindowControlButton("#ff5f57", "#ff3b30", "\u2715")
+        self._close_btn.setToolTip("Close")
+        self._close_btn.clicked.connect(self.close)
+        title_bar_layout.addWidget(self._close_btn)
+        
+        self._minimize_btn = _WindowControlButton("#febc2e", "#f0a500", "\u2013")
+        self._minimize_btn.setToolTip("Minimize")
+        self._minimize_btn.clicked.connect(self.showMinimized)
+        title_bar_layout.addWidget(self._minimize_btn)
+        
+        spacer_dot = QWidget()
+        spacer_dot.setFixedSize(14, 14)
+        spacer_dot.setStyleSheet("background: rgba(40, 50, 70, 0.5); border-radius: 7px;")
+        title_bar_layout.addWidget(spacer_dot)
+        
+        title_bar_layout.addStretch()
+        
+        container_layout.addWidget(title_bar)
+        
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(40, 10, 40, 30)
+        content_layout.setSpacing(12)
         
         header_layout = QHBoxLayout()
         header_layout.setSpacing(18)
@@ -145,24 +264,24 @@ class SplashScreen(QWidget):
         header_layout.addWidget(self.logo_label)
         
         title_container = QWidget()
-        title_layout = QVBoxLayout(title_container)
-        title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(4)
+        title_vlayout = QVBoxLayout(title_container)
+        title_vlayout.setContentsMargins(0, 0, 0, 0)
+        title_vlayout.setSpacing(4)
         
         title_label = QLabel("BotifyTrades")
         title_label.setFont(QFont("Segoe UI", 32, QFont.Bold))
         title_label.setStyleSheet("color: #4facfe; background: transparent; letter-spacing: -1px;")
-        title_layout.addWidget(title_label)
+        title_vlayout.addWidget(title_label)
         
         subtitle_label = QLabel("Multi-Platform Trading Automation")
         subtitle_label.setFont(QFont("Segoe UI", 11, QFont.Normal))
         subtitle_label.setStyleSheet("color: rgba(136, 146, 176, 0.9); background: transparent;")
-        title_layout.addWidget(subtitle_label)
+        title_vlayout.addWidget(subtitle_label)
         
         header_layout.addWidget(title_container)
-        container_layout.addLayout(header_layout)
+        content_layout.addLayout(header_layout)
         
-        container_layout.addSpacing(20)
+        content_layout.addSpacing(16)
         
         self.stacked_widget = QStackedWidget()
         self.stacked_widget.setStyleSheet("background: transparent;")
@@ -170,12 +289,11 @@ class SplashScreen(QWidget):
         self._create_license_panel()
         self._create_progress_panel()
         
-        # Default to progress panel (index 1) - will switch to license panel if needed
         self.stacked_widget.setCurrentIndex(1)
         
-        container_layout.addWidget(self.stacked_widget)
+        content_layout.addWidget(self.stacked_widget)
         
-        container_layout.addStretch()
+        content_layout.addStretch()
         
         footer_layout = QHBoxLayout()
         footer_layout.setContentsMargins(0, 0, 0, 0)
@@ -197,10 +315,36 @@ class SplashScreen(QWidget):
         """)
         footer_layout.addWidget(version_label)
         
-        container_layout.addLayout(footer_layout)
+        content_layout.addLayout(footer_layout)
+        
+        container_layout.addWidget(content_widget)
         
         main_layout.addWidget(container)
-    
+        
+        self._install_drag_filter(container)
+
+    def eventFilter(self, obj, event):
+        """Intercept mouse events from all child widgets for window dragging"""
+        if isinstance(obj, QLineEdit):
+            return False
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            return True
+        elif event.type() == QEvent.MouseMove and self._drag_pos is not None:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            return True
+        elif event.type() == QEvent.MouseButtonRelease:
+            self._drag_pos = None
+            return True
+        return super().eventFilter(obj, event)
+
+    def _install_drag_filter(self, widget):
+        """Recursively install event filter on widget and its children for drag support"""
+        widget.installEventFilter(self)
+        for child in widget.findChildren(QWidget):
+            if not isinstance(child, (QPushButton, QLineEdit)):
+                child.installEventFilter(self)
+
     def _create_license_panel(self):
         """Create the license activation panel"""
         license_panel = QWidget()
@@ -219,8 +363,8 @@ class SplashScreen(QWidget):
             }
         """)
         glass_layout = QVBoxLayout(glass_panel)
-        glass_layout.setContentsMargins(20, 18, 20, 18)
-        glass_layout.setSpacing(12)
+        glass_layout.setContentsMargins(24, 20, 24, 20)
+        glass_layout.setSpacing(14)
         
         self.license_title = QLabel("License Activation")
         self.license_title.setFont(QFont("Segoe UI Semibold", 13))
@@ -237,19 +381,22 @@ class SplashScreen(QWidget):
         
         self.license_input = QLineEdit()
         self.license_input.setPlaceholderText("Enter license key (BTF-XXXX-XXXX-XXXX)")
+        self.license_input.setContextMenuPolicy(Qt.DefaultContextMenu)
         license_font = QFont()
         license_font.setStyleHint(QFont.Monospace)
         license_font.setPointSize(11)
         self.license_input.setFont(license_font)
         self.license_input.setAlignment(Qt.AlignCenter)
-        self.license_input.setFixedHeight(42)
+        self.license_input.setFixedHeight(44)
         self.license_input.setStyleSheet("""
             QLineEdit {
                 background: rgba(45, 55, 72, 0.6);
                 border: 1px solid rgba(79, 172, 254, 0.3);
-                border-radius: 8px;
+                border-radius: 10px;
                 color: #e2e8f0;
                 padding: 8px 15px;
+                selection-background-color: rgba(79, 172, 254, 0.4);
+                selection-color: #ffffff;
             }
             QLineEdit:focus {
                 border: 1px solid rgba(79, 172, 254, 0.7);
@@ -262,17 +409,17 @@ class SplashScreen(QWidget):
         glass_layout.addWidget(self.license_input)
         
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(12)
         
         self.trial_button = QPushButton("Start Free Trial")
         self.trial_button.setFont(QFont("Segoe UI Semibold", 10))
-        self.trial_button.setFixedHeight(38)
+        self.trial_button.setFixedHeight(40)
         self.trial_button.setCursor(Qt.PointingHandCursor)
         self.trial_button.setStyleSheet("""
             QPushButton {
                 background: rgba(72, 187, 120, 0.2);
                 border: 1px solid rgba(72, 187, 120, 0.5);
-                border-radius: 8px;
+                border-radius: 10px;
                 color: #48bb78;
                 padding: 8px 20px;
             }
@@ -293,14 +440,14 @@ class SplashScreen(QWidget):
         
         self.activate_button = QPushButton("Activate License")
         self.activate_button.setFont(QFont("Segoe UI Semibold", 10))
-        self.activate_button.setFixedHeight(38)
+        self.activate_button.setFixedHeight(40)
         self.activate_button.setCursor(Qt.PointingHandCursor)
         self.activate_button.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 rgba(79, 172, 254, 0.3), stop:1 rgba(0, 242, 254, 0.3));
                 border: 1px solid rgba(79, 172, 254, 0.5);
-                border-radius: 8px;
+                border-radius: 10px;
                 color: #4facfe;
                 padding: 8px 20px;
             }
@@ -353,7 +500,7 @@ class SplashScreen(QWidget):
             }
         """)
         glass_layout = QVBoxLayout(glass_panel)
-        glass_layout.setContentsMargins(20, 18, 20, 18)
+        glass_layout.setContentsMargins(24, 20, 24, 20)
         glass_layout.setSpacing(12)
         
         self.license_info = QLabel("")
@@ -412,7 +559,6 @@ class SplashScreen(QWidget):
         """Called when splash screen is shown - trigger license check immediately"""
         super().showEvent(event)
         
-        # Use QTimer to allow splash to paint first, then start license check
         if not self._license_check_started:
             self._license_check_started = True
             QTimer.singleShot(50, self._auto_license_check)
@@ -420,22 +566,16 @@ class SplashScreen(QWidget):
     def _auto_license_check(self):
         """Automatically check for existing license when splash is shown"""
         if self.skip_license:
-            # License already validated externally - defer emission to next event loop cycle
-            # to ensure caller has connected the signal before we emit
             self.status_label.setText("License verified - starting...")
             QTimer.singleShot(0, self.startup_ready.emit)
             return
         
-        # Show "Checking license..." in progress panel
         self.status_label.setText("Checking license...")
         QApplication.processEvents()
         
         if self.license_controller:
-            # This will emit signals - if valid, goes to ACTIVATED
-            # If invalid/missing, goes to REQUIRE_KEY which triggers _on_require_input
             self.license_controller.check_existing_license()
         else:
-            # No controller - check environment variable
             license_key = os.getenv('LICENSE_KEY', '').strip()
             if license_key:
                 self.license_info.setText("License: Active")
@@ -465,12 +605,13 @@ class SplashScreen(QWidget):
     def _show_license_panel(self):
         """Show the license activation panel"""
         self.stacked_widget.setCurrentIndex(0)
-        self.setFixedSize(520, 420)
+        self.setFixedSize(540, 440)
+        self.license_input.setFocus()
     
     def _show_progress_panel(self):
         """Show the startup progress panel"""
         self.stacked_widget.setCurrentIndex(1)
-        self.setFixedSize(520, 340)
+        self.setFixedSize(540, 360)
     
     def _show_validating(self):
         """Show validating state"""
@@ -507,8 +648,6 @@ class SplashScreen(QWidget):
         if state == LicenseState.VALIDATING:
             self.status_label.setText("Validating license...")
         elif state == LicenseState.ACTIVATED or state == LicenseState.OFFLINE_GRACE:
-            # License is valid - stay on progress panel and emit startup_ready
-            # The license_activated signal will also be emitted separately
             self.status_label.setText("License valid - starting...")
         elif state == LicenseState.REQUIRE_KEY:
             self._show_license_panel()
@@ -531,7 +670,6 @@ class SplashScreen(QWidget):
         days = license_data.get('days_remaining', 0)
         license_type = license_data.get('license_type', 'subscription').title()
         
-        # Save license to database for persistence
         self._save_license_to_database(license_data)
         
         self.license_info.setText(f"{license_type} License - {days} days remaining")
@@ -542,10 +680,8 @@ class SplashScreen(QWidget):
     def _save_license_to_database(self, license_data: dict):
         """Save the activated license to database for persistence across restarts"""
         try:
-            # Get license key from controller or data
             license_key = license_data.get('license_key', '')
             if not license_key and self.license_controller and hasattr(self.license_controller, '_client'):
-                # Try to get from cache
                 cache = self.license_controller._client._load_cache() if self.license_controller._client else None
                 if cache:
                     license_key = cache.get('license_key', '')
@@ -557,12 +693,10 @@ class SplashScreen(QWidget):
                 print("[SPLASH] Warning: No license key to save to database")
                 return
             
-            # Get machine_id from controller client
             machine_id = ''
             if self.license_controller and hasattr(self.license_controller, '_client') and self.license_controller._client:
                 machine_id = self.license_controller._client.machine_id
             
-            # Import database function
             try:
                 from gui_app.database import save_local_license
                 save_local_license(license_key, machine_id, license_data)
