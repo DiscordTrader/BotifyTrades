@@ -598,6 +598,79 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 
 ---
 
+## Risk Register — Where the Bot WILL Break
+
+### CRITICAL Risks (Will cause real financial loss if not mitigated)
+
+| ID | Component | What Breaks | Conditions | Probability | Mitigation |
+|---|---|---|---|---|---|
+| R12 | `broker_sync_service._fetch_and_normalize()` | **Missing T212 branch in if/elif chain returns empty positions/orders.** After 2 consecutive empty responses, sync service marks OPEN trades as cancelled. T212 trades get falsely closed in DB, triggering duplicate re-imports and phantom "closed externally" events. | T212 added to BrokerManager but not to sync service's explicit if/elif dispatch | Certain (if missed) | Add explicit TRADING212 normalizer branch. Change unknown-broker fallback from empty-success to logged error. |
+| R14 | `position_monitor._fetch_all_positions()` | **Risk engine completely blind to T212 positions.** Stop losses, trailing stops, profit targets — NONE fire for T212 positions. Positions sit with no risk protection. | T212 positions exist but no `_fetch_trading212_cached()` function in the hardcoded asyncio.gather list | Certain (if missed) | Add `_fetch_trading212_cached()` to the gather list. Wire Trading212DataHub as the data source (no direct API calls). |
+| R18 | `execute_on_single_broker` + `order_resilience.py` | **Duplicate real orders on T212.** Network timeout → OrderResilienceLayer retries → T212 receives duplicate POST → two real orders fill → double position. T212 API is NOT idempotent. | Network timeout during POST /orders/market or /orders/limit, followed by automatic retry | Likely | Implement SHA256 fingerprint guard (broker+channel+action+symbol+qty+5s bucket) checked BEFORE POST. For T212 specifically: on timeout, probe GET /orders first before retrying. |
+
+### HIGH Risks (Will cause functional failures)
+
+| ID | Component | What Breaks | Conditions | Probability | Mitigation |
+|---|---|---|---|---|---|
+| R1-R6 | `selfbot_webull.py` (6 broker_map locations) | **T212 signals silently dropped on one or more execution paths.** There are 6 SEPARATE identical broker_map dictionaries at lines ~7005, ~12047, ~12449, ~12868, ~12996, ~13220. Missing T212 from ANY ONE causes that path to silently skip T212 with no error. User sees trade execute on Webull/Schwab but not on T212 — no crash, no log, no indication. | T212 added to 5 of 6 maps but one is missed (easy to do — they're spread across 6000+ lines) | Certain (one will be missed) | Refactor: extract ONE centralized `BROKER_MAP` constant at module level. All 6 locations reference it. Add startup assertion verifying TRADING212 is in the map. |
+| R7 | `execute_on_single_broker` | **Option signal attempts T212 execution, fails confusingly.** Code checks `signal['asset'] == 'option'` then calls `place_option_order()`. T212 adapter returns error dict, but the try/except around the entire block catches it as generic failure. DB trade record may still be created with status PENDING that never resolves. | Option signal on a channel with T212 enabled alongside other brokers | Likely | Add early capability check: `if broker == TRADING212 and asset == option: return {success: False, reason: 'options_not_supported', skipped: True}` BEFORE the option/stock dispatch. This must be a clean skip, not a failure. |
+| R8 | `execute_on_single_broker` result handling | **Error result from T212 triggers downstream side effects.** If T212 returns a dict with unexpected keys (e.g., T212 error body containing an `id` field), post-execution logic may interpret it as a successful order and register it in the unfilled order chaser or create execution lots. | T212 API error response has `id` or `orderId` field in error body | Possible | Enforce canonical success contract: only trigger DB/chaser/lot side effects when `result.get('success') is True` (strict boolean check). |
+| R10 | `BrokerManager.initialize()` | **T212 instance stored in partial/disconnected state.** If `connect()` returns False (not raises), the instance may still be stored in self.brokers and later used for order execution, causing silent failures or API errors. | T212 API key invalid, environment wrong, or demo.trading212.com down during startup | Possible | Guard: `if await broker.connect() is True: self.brokers[name] = broker` with explicit True check. Add `is_connected()` health check method. |
+| R11 | `broker_sync_service._perform_sync()` | **T212 never synced even when positions exist.** _perform_sync uses HARDCODED attribute checks like `hasattr(self.broker_manager, 'webull_broker')`. Without `trading212_broker` attribute, sync loop skips T212 entirely. Trades stay PENDING forever, no P&L updates, fills never confirmed in DB. | T212 added to BrokerManager but _perform_sync hardcoded list not updated | Certain (if missed) | Add `trading212_broker` and `trading212_paper_broker` attribute checks to _perform_sync. Add startup validation that all initialized brokers have sync coverage. |
+| R13 | `broker_sync_service._is_broker_match()` / `_get_order_status()` | **T212 reconciliation silently fails.** Broker name normalization doesn't recognize 'TRADING212' or 'Trading212' as matching. Pending orders aren't matched to DB trades. Filled orders aren't detected. Cancelled orders aren't cleaned up. | Sync service encounters T212 broker name variant not in normalization aliases | Likely | Add T212 aliases to `_is_broker_match` normalization matrix: `{'TRADING212', 'Trading212', 'trading212', 'TRADING_212', 'Trading 212'}`. |
+| R15 | Risk engine (all exit strategies) | **SL/PT exits fire on stale prices.** T212 polls at 5s intervals (DataHub). Risk engine evaluates current_price without staleness check. A stock drops 3% in 2 seconds, but risk engine sees the 5-second-old price and doesn't trigger SL. Conversely, a price spike in stale data triggers premature PT. | Active T212 stock position with volatile price movement between poll intervals | Likely | (1) Cross-broker price sync: if T212 stock is also streamable via Schwab/Webull hub, steal the streaming price. (2) Add optional price_age_seconds to PositionSnapshot; log warning when risk decisions use prices > 5s old. (3) Document in UI that T212 risk monitoring has 5-10s latency vs <1s for streaming brokers. |
+| R16 | Trading212DataHub | **Soft throttle serves stale data silently.** T212 returns HTTP 200 OK with STALE DATA when throttled (not 429). DataHub stores stale positions/prices as current. Risk engine, sync service, and dashboard all see wrong data without any indication. | T212 API under load or account hitting sustained rate limits | Likely | Track response time P99 per endpoint in DataHub. If P99 > 2.5× baseline median, flag as soft-throttled: mark all cached data as `is_stale=True`, back off poll interval, log alert. |
+| R17 | `unfilled_order_chaser.py` | **Order chaser immediately rate-limited.** Default 1-second status poll hits T212 GET /orders (1 req/5s limit) at 12× allowed rate. Chaser enters retry loop, consumes entire endpoint budget, blocks sync service and DataHub from polling orders. | Any T212 limit order that doesn't fill immediately | Certain | Add per-broker poll floor config. T212 minimum: 5s status poll interval, 2 max chase attempts (vs 3 for other brokers), 10s chase timeout (vs 4s). |
+| R19 | `trading212_broker.place_stock_order()` | **Ticker translation fails on cold cache.** Signal arrives before instrument list loads from GET /metadata/instruments. Ticker `AAPL` can't be translated to `AAPL_US_EQ`. Order fails, but user thinks trade was placed. | Signal arrives within first 10-30 seconds of bot startup while instrument cache is warming | Likely | Block T212 order execution until instrument cache is warm (`_instruments_ready` flag). Return `{success: False, reason: 'instrument_cache_loading'}` if not ready. Log estimated warmup time. |
+
+### MEDIUM Risks (Degraded experience but no financial loss)
+
+| ID | Component | What Breaks | Conditions | Probability | Mitigation |
+|---|---|---|---|---|---|
+| R9 | `execute_on_single_broker` signature routing | **Wrong stock order call signature used.** If T212 not in `uses_modern_signature` list, the old-style Webull-specific signature is used (wrong kwargs), causing TypeError. Caught by try/except but order silently fails. | Stock signal routed to T212 | Possible | Add 'TRADING212' to `uses_modern_signature` list. Add integration test verifying stock order call signature matches adapter interface. |
+| R20 | Position sizing / quantity format | **Float quantity rejected by non-T212 brokers, or int quantity wastes T212 fractional support.** If position_sizing_service returns float 0.7 for T212, the same signal on Webull (which doesn't support fractional stocks) may fail. If it returns int 1, T212's fractional share advantage is lost. | Multi-broker channel with T212 + Webull executing same stock signal | Possible | Add broker-specific quantity normalizer in the adapter layer. T212 adapter accepts floats as-is. Other adapters floor to int. Position sizing stays broker-agnostic upstream. |
+
+---
+
+## Risk Mitigation Summary — Mandatory Pre-Implementation Checklist
+
+### Before ANY Code (Architecture Guards)
+
+| # | Action | Prevents |
+|---|---|---|
+| 1 | Extract ONE centralized `BROKER_MAP` constant in selfbot_webull.py; all 6 locations reference it | R1-R6: Silent signal drops |
+| 2 | Add startup self-test: assert all required broker IDs exist in all dispatch maps | R1-R6: Missing entries |
+| 3 | Add SHA256 fingerprint guard in `execute_on_single_broker` BEFORE any broker POST | R18: Duplicate real orders |
+| 4 | Add per-broker poll floor in unfilled_order_chaser config | R17: Rate limit breach |
+
+### Phase 1 Implementation (Core Adapter)
+
+| # | Action | Prevents |
+|---|---|---|
+| 5 | `trading212_broker.place_option_order()` returns clean skip (not error) | R7: Confusing option failures |
+| 6 | `connect()` returns explicit True/False; BrokerManager only stores on True | R10: Partial-state broker |
+| 7 | Ticker cache loads synchronously during `connect()` with `_instruments_ready` gate | R19: Cold cache failures |
+| 8 | Canonical success contract: downstream side effects only on `result.get('success') is True` | R8: False-positive tracking |
+
+### Phase 2 Implementation (DataHub + Sync)
+
+| # | Action | Prevents |
+|---|---|---|
+| 9 | Add `_fetch_trading212_cached()` to position_monitor asyncio.gather | R14: Blind risk engine |
+| 10 | Add TRADING212 branch to broker_sync_service if/elif chain | R12: False trade closures |
+| 11 | Add T212 attrs to _perform_sync hardcoded list | R11: Never-syncing |
+| 12 | Add T212 aliases to _is_broker_match normalization | R13: Reconciliation failures |
+| 13 | Add P99 response-time tracking for soft-throttle detection | R16: Stale data poisoning |
+
+### Phase 3 (Risk Engine Awareness)
+
+| # | Action | Prevents |
+|---|---|---|
+| 14 | Wire cross-broker price sync for T212 stock symbols | R15: Stale price exits |
+| 15 | Add price staleness logging for non-streaming broker positions | R15: Silent stale decisions |
+
+---
+
 ## Impact Analysis — What Will NOT Break
 
 | Subsystem | Why It's Safe |
@@ -607,6 +680,6 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 | Live snapshot page | Only fetches brokers in its hardcoded dictionary; T212 added explicitly |
 | Order routing (routes.py) | Has explicit `else: return 400 "Unknown broker"` |
 | Options page | Falls back to Webull/Alpaca for data |
-| Risk engine | Completely broker-agnostic — reads PositionSnapshot regardless of source |
 | Signal parser | Completely broker-independent |
 | Existing brokers | Zero changes to Webull/Schwab/IBKR/Alpaca/Tastytrade/Robinhood code |
+| Risk engine logic | Broker-agnostic — reads PositionSnapshot regardless of source (once wired) |
