@@ -337,46 +337,72 @@ When an option signal arrives on a T212-enabled channel:
 |---|---|---|
 | 15 | `src/broker_manager.py` | Add TRADING212 init block (config-driven, Live + Paper, own try/except) |
 
-### TIER 4 — GUI Routes & Database (3 files)
+### TIER 4 — GUI Routes & Database (14 files — EXPANDED after audit)
 
-| # | File | Line(s) | Change Required |
-|---|---|---|---|
-| 16 | `gui_app/routes.py` | L7133-7139 | Add TRADING212 to internal broker adapter mapping |
-| 17 | `gui_app/routes.py` | L10524-10579 | Add TRADING212 to order placement routing |
-| 18 | `gui_app/routes.py` | L13342-13352 | Add TRADING212 to broker types mapping |
-| 19 | `gui_app/routes.py` | L18838-18845 | Add TRADING212 to supported brokers list |
-| 20 | `gui_app/database.py` | L3682 | Add 'TRADING212' to brokers list in `get_all_positions_for_user` |
-| 21 | `gui_app/live_snapshot.py` | L965-971 | Add TRADING212 to fetch function mapping |
+| # | File | Line(s) | Change Required | Gap Status |
+|---|---|---|---|---|
+| 16 | `gui_app/routes.py` | L7133-7139 | Add TRADING212 to internal broker adapter mapping | ✅ In plan |
+| 17 | `gui_app/routes.py` | L10524-10579 | Add TRADING212 to order placement routing | ✅ In plan |
+| 18 | `gui_app/routes.py` | L13342-13352 | Add TRADING212 to broker types mapping | ✅ In plan |
+| 19 | `gui_app/routes.py` | L18838-18845 | Add TRADING212 to supported brokers list | ✅ In plan |
+| 20 | `gui_app/database.py` | L3682 | Add 'TRADING212' to brokers list in `get_all_positions_for_user` | ✅ In plan |
+| 21 | `gui_app/live_snapshot.py` | L965-971 | Add TRADING212 to fetch function mapping + new `_fetch_trading212()` | ✅ In plan |
+| 22 | `gui_app/routes.py` | L5700-5714 | Add TRADING212 to `SUPPORTED_CANCEL_BROKERS` dict (order cancellation via DELETE /orders/{id}) | 🆕 GAP-01 |
+| 23 | `gui_app/routes.py` | L5809 | Add `if 'TRADING212' in broker:` block in `close_position_by_id` (sell-to-close via market order with negative qty) | 🆕 GAP-03 |
+| 24 | `gui_app/routes.py` | L18593 | Add `trading212` to `EXTENDED_HOURS_SUPPORT` dict (T212 supports extended hours via `extendedHours: true` flag) | 🆕 GAP-04 |
+| 25 | `gui_app/routes.py` | L18216 | Add `elif broker_name == 'trading212':` block in `api_test_broker_connection` | 🆕 GAP-05 |
+| 26 | `gui_app/routes.py` | L18803 | Add `('trading212', 'broker', 'UK', 'USD')` to initialization status check list | 🆕 GAP-06 |
+| 27 | `gui_app/routes.py` | L18873 | Add `trading212` entry to `BROKER_CONFIGS` dict (country=UK, currency=USD/GBP/EUR) | 🆕 GAP-07 |
+| 28 | `gui_app/routes.py` | L1671 | Add `trading212` entry to `BROKER_REGIONS` dict | 🆕 GAP-08 |
+| 29 | `gui_app/routes.py` | NEW | Add `GET/POST /api/brokers/credentials/trading212` endpoint (API Key + Environment selector) | 🆕 GAP-25 |
+| 30 | `gui_app/database.py` | L3683 | Add 'TRADING212' to default brokers fallback list | 🆕 GAP-20 |
+| 31 | `gui_app/database.py` | L12800 | Ensure `broker_limits` table tracks T212 rate limit hits (auto if broker_name column is generic) | 🆕 GAP-23 |
+| 32 | `gui_app/broker_credentials_service.py` | NEW funcs | Add `save_trading212_credentials()` and `get_trading212_credentials()` | 🆕 GAP-26 |
+| 33 | `src/core/config_loader.py` | credentials | Add T212 to `load_credentials_from_database()` so BrokerFactory receives T212 creds at startup | 🆕 GAP-27 |
 
-### TIER 5 — Frontend Templates (8 files)
+### TIER 5 — Frontend Templates & JS (14 files — EXPANDED after audit)
 
-| # | File | Line(s) | Change Required |
-|---|---|---|---|
-| 22 | `gui_app/templates/index.html` | L151-160 | Add TRADING212 to broker `<option>` dropdown |
-| 23 | `gui_app/templates/index.html` | L2268 | Add TRADING212 JS brokerLabel conditional |
-| 24 | `gui_app/templates/index.html` | L3117-3125 | Add TRADING212 CSS gradient mapping |
-| 25 | `gui_app/templates/trades.html` | L172-179, L230-239 | Add TRADING212 to filter dropdowns |
-| 26 | `gui_app/templates/performance.html` | L158-163 | Add TRADING212 to filter dropdown |
-| 27 | `gui_app/templates/performance.html` | L376-380 | Add TRADING212 chart color |
-| 28 | `gui_app/templates/execution.html` | L129-171 | Add TRADING212 multi-broker checkbox |
-| 29 | `gui_app/templates/pnl_tracker.html` | L327-343 | Add `.broker-badge.trading212` CSS class |
-| 30 | `gui_app/static/js/channels.js` | L6 | Add 'TRADING212' to `ALL_BROKERS` array |
-| 31 | `gui_app/templates/options.html` | L1020-1027 | Hide/skip TRADING212 (no options support) |
-| 32 | `ui/wizard/pages/broker_selection.py` | L259-263 | Add TRADING212 to setup wizard list |
+| # | File | Line(s) | Change Required | Gap Status |
+|---|---|---|---|---|
+| 34 | `gui_app/templates/index.html` | L147 | Add TRADING212 to Account Balance filter dropdown | 🆕 GAP-09 |
+| 35 | `gui_app/templates/index.html` | L151-160 | Add TRADING212 to main broker `<option>` dropdown | ✅ In plan |
+| 36 | `gui_app/templates/index.html` | L321 | Add TRADING212 to Filled Orders filter dropdown | 🆕 GAP-10 |
+| 37 | `gui_app/templates/index.html` | L1093 | Add `.broker-badge.trading212` CSS class (gradient: `linear-gradient(135deg, #0052FF, #00A3FF)`) | 🆕 GAP-11 |
+| 38 | `gui_app/templates/index.html` | L1912-2100 | Add TRADING212 to JS broker labeling + color mapping logic | 🆕 GAP-12 |
+| 39 | `gui_app/templates/index.html` | L2268 | Add TRADING212 JS brokerLabel conditional | ✅ In plan |
+| 40 | `gui_app/templates/index.html` | L3117-3125 | Add TRADING212 CSS gradient mapping | ✅ In plan |
+| 41 | `gui_app/templates/trades.html` | L153-154 | Add `.qt-source.trading212` CSS class for Quick Trade badges | 🆕 GAP-13 |
+| 42 | `gui_app/templates/trades.html` | L171 | Add TRADING212 to Quick Trade broker selector dropdown | 🆕 GAP-14 |
+| 43 | `gui_app/templates/trades.html` | L172-179, L230-239 | Add TRADING212 to trade filter dropdowns | ✅ In plan |
+| 44 | `gui_app/templates/performance.html` | L158-163 | Add TRADING212 to filter dropdown | ✅ In plan |
+| 45 | `gui_app/templates/performance.html` | L376-380 | Add TRADING212 chart color `#0052FF` | ✅ In plan |
+| 46 | `gui_app/templates/execution.html` | L129-171 | Add TRADING212 multi-broker checkbox | ✅ In plan |
+| 47 | `gui_app/templates/pnl_tracker.html` | L327-343 | Add `.broker-badge.trading212` CSS class with gradient | ✅ In plan |
+| 48 | `gui_app/templates/options.html` | L1020-1027 | Hide/skip TRADING212 (no options support) | ✅ In plan |
+| 49 | `gui_app/templates/options.html` | L1435-1444 | Add `trading212` to `brokerRefreshRates` JS object (rate: 5000ms) | 🆕 GAP-15 |
+| 50 | `gui_app/templates/settings.html` | L349-356 | Add Trading 212 connection status badge to status grid | 🆕 GAP-16 |
+| 51 | `gui_app/templates/settings.html` | L620-900 | Add Trading 212 credential input section (API Key + Environment dropdown: live/demo) | 🆕 GAP-17 |
+| 52 | `gui_app/templates/verification.html` | L105 | Add TRADING212 to broker verification selector | 🆕 GAP-18 |
+| 53 | `gui_app/templates/brokers.html` | L747 | Add TRADING212 to multi-broker management selector | 🆕 GAP-19 |
+| 54 | `gui_app/static/js/channels.js` | L6 | Add 'TRADING212' to `ALL_BROKERS` array | ✅ In plan |
+| 55 | `ui/wizard/pages/broker_selection.py` | L259-263 | Add TRADING212 to setup wizard broker checklist | ✅ In plan |
+| 56 | `ui/wizard/pages/broker_credentials.py` | Dynamic | Add TRADING212 credential form generation (API Key + Environment) | 🆕 GAP-28 |
 
 ### TIER 6 — New Files
 
 | # | File | Purpose |
 |---|---|---|
-| 33 | `src/brokers/trading212_broker.py` | BrokerInterface implementation |
-| 34 | `src/services/trading212_data_hub.py` | Centralized polling cache with adaptive states |
-| 35 | `src/services/trading212_client.py` | HTTP client with auth, rate limiter, soft-throttle detection |
+| 57 | `src/brokers/trading212_broker.py` | BrokerInterface implementation |
+| 58 | `src/services/trading212_data_hub.py` | Centralized polling cache with adaptive states |
+| 59 | `src/services/trading212_client.py` | HTTP client with auth, rate limiter, soft-throttle detection |
 
 ### TIER 7 — Database Seed
 
-| # | Change Required |
-|---|---|
-| 36 | INSERT into `broker_profiles`: broker_name=`TRADING212`, country_code=`UK`, display_name=`Trading 212`, credential_fields=`["api_key", "api_secret", "environment"]`, supports_options=`0`, supports_stocks=`1`, supports_paper=`1`, python_library=`requests` |
+| # | Change Required | Gap Status |
+|---|---|---|
+| 60 | INSERT into `broker_profiles`: broker_name=`TRADING212`, country_code=`UK`, display_name=`Trading 212`, credential_fields=`["api_key", "environment"]`, supports_options=`0`, supports_stocks=`1`, supports_paper=`1`, python_library=`requests` | ✅ In plan (expanded) |
+
+### REVISED TOTAL: 60 touch points (was 36 — 28 gaps discovered by UI/DB audit)
 
 ---
 
