@@ -323,12 +323,15 @@ class BrokerHealthMonitor:
         """Get country code for broker."""
         india_brokers = ['ZERODHA', 'UPSTOX', 'DHAN']
         canada_brokers = ['QUESTRADE']
+        uk_eu_brokers = ['TRADING212']
         
         broker_upper = self._normalize_broker_name(broker_name)
         if broker_upper in india_brokers:
             return 'IN'
         elif broker_upper in canada_brokers:
             return 'CA'
+        elif broker_upper in uk_eu_brokers:
+            return 'UK'
         return 'US'
     
     def _trigger_disconnect_notification(self, broker_name: str, reason: str):

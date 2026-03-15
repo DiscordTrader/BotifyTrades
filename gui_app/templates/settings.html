@@ -3649,6 +3649,7 @@ async function loadBrokerStatus() {
             updateBrokerConnectionDisplay('tastytrade_paper', data.status.tastytrade_paper);
             updateBrokerConnectionDisplay('tastytrade_live', data.status.tastytrade_live);
             updateBrokerConnectionDisplay('schwab', data.status.schwab);
+            updateBrokerConnectionDisplay('trading212', data.status.trading212);
         }
     } catch (error) {
         console.error('Error loading broker status:', error);
@@ -3666,7 +3667,8 @@ function updateBrokerConnectionDisplay(brokerId, status) {
         'robinhood': 'robinhood',
         'tastytrade_paper': 'tastytrade-paper',
         'tastytrade_live': 'tastytrade-live',
-        'schwab': 'schwab'
+        'schwab': 'schwab',
+        'trading212': 'trading212'
     };
     
     const prefix = elementMap[brokerId];
@@ -3701,7 +3703,8 @@ function updateStatusBadge(brokerId, status) {
         'tastytrade_paper': 'tastytrade-paper-status-badge',
         'tastytrade_live': 'tastytrade-live-status-badge',
         'robinhood': 'robinhood-status-badge',
-        'schwab': 'schwab-status-badge'
+        'schwab': 'schwab-status-badge',
+        'trading212': 'trading212-status-badge'
     };
     
     const badge = document.getElementById(badgeMap[brokerId]);

@@ -1660,11 +1660,10 @@ def register_routes(app):
     def index():
         """Dashboard home page"""
         # Get broker states for Multi-Broker Dashboard (server-side render)
-        broker_states = {'USA': [], 'Canada': []}
+        broker_states = {'USA': [], 'Canada': [], 'UK_EU': []}
         try:
             from .broker_credentials_service import get_all_broker_status
             
-            # Broker region mapping (USA + Canada only)
             broker_config = {
                 'webull_live': {'region': 'USA', 'display_name': 'Webull', 'is_paper': False},
                 'alpaca_paper': {'region': 'USA', 'display_name': 'Alpaca (Paper)', 'is_paper': True},
@@ -1675,6 +1674,7 @@ def register_routes(app):
                 'tastytrade_live': {'region': 'USA', 'display_name': 'Tastytrade (Live)', 'is_paper': False},
                 'tastytrade_paper': {'region': 'USA', 'display_name': 'Tastytrade (Paper)', 'is_paper': True},
                 'schwab': {'region': 'USA', 'display_name': 'Schwab', 'is_paper': False},
+                'trading212': {'region': 'UK_EU', 'display_name': 'Trading 212', 'is_paper': False},
             }
             
             # Get centralized broker status
@@ -1726,7 +1726,7 @@ def register_routes(app):
             print(f"[INDEX] Error loading broker states: {e}")
         
         # Debug log broker states for dashboard
-        print(f"[INDEX] Rendering dashboard with broker_states: USA={len(broker_states.get('USA', []))} brokers, Canada={len(broker_states.get('Canada', []))} brokers")
+        print(f"[INDEX] Rendering dashboard with broker_states: USA={len(broker_states.get('USA', []))} brokers, Canada={len(broker_states.get('Canada', []))} brokers, UK_EU={len(broker_states.get('UK_EU', []))} brokers")
         for region, brokers in broker_states.items():
             for b in brokers:
                 print(f"[INDEX]   {region}: {b['broker_name']} - connected={b['is_connected']}")
@@ -16313,6 +16313,7 @@ def register_routes(app):
                 except:
                     pass
             
+            t212_creds = None
             try:
                 from .broker_credentials_service import get_trading212_credentials
                 t212_creds = get_trading212_credentials()
@@ -16320,7 +16321,7 @@ def register_routes(app):
             except:
                 t212_configured = False
             
-            t212_env = t212_creds.get('environment', 'demo').upper() if t212_configured else 'DEMO'
+            t212_env = t212_creds.get('environment', 'demo').upper() if (t212_configured and t212_creds) else 'DEMO'
             broker_status['trading212'] = {
                 'connected': t212_connected,
                 'status': 'connected' if t212_connected else ('configured' if t212_configured else 'not_configured'),
@@ -18800,7 +18801,7 @@ def register_routes(app):
                 from src.services.broker_health_monitor import get_health_monitor
                 health_monitor = get_health_monitor()  # Use singleton instance
                 # Use uppercase keys to match health monitor's normalization
-                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE']:
+                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE', 'TRADING212']:
                     state = health_monitor.get_broker_state(broker_key)
                     if state:
                         health_states[broker_key.upper()] = state
@@ -18821,7 +18822,7 @@ def register_routes(app):
                     ('IBKR', 'ibkr_broker', 'USA', 'USD', False),
                     ('TASTYTRADE', 'tastytrade_broker', 'USA', 'USD', False),
                     ('QUESTRADE', 'questrade_broker', 'Canada', 'CAD', False),
-                    ('TRADING212', 'trading212_broker', 'UK/EU', 'GBP', False),
+                    ('TRADING212', 'trading212_broker', 'UK_EU', 'GBP', False),
                 ]
                 
                 for broker_name, attr_name, region, currency, is_paper in broker_mappings:
@@ -18910,8 +18911,7 @@ def register_routes(app):
                     
                     configured_brokers.append(state)
             
-            # Group by region (USA + Canada only, no India)
-            grouped = {'USA': [], 'Canada': []}
+            grouped = {'USA': [], 'Canada': [], 'UK_EU': []}
             for state in configured_brokers:
                 region = state.get('region', 'USA')
                 if region in grouped:
@@ -19022,6 +19022,7 @@ def register_routes(app):
                 'dhanq': {'country': 'IN', 'currency': 'INR'},
                 'upstox': {'country': 'IN', 'currency': 'INR'},
                 'zerodha': {'country': 'IN', 'currency': 'INR'},
+                'trading212': {'country': 'UK', 'currency': 'GBP'},
             }
             
             config = broker_config.get(broker_name.lower())
@@ -19108,7 +19109,7 @@ def register_routes(app):
             
             results = {}
             # Only USA + Canada brokers
-            brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'schwab', 'robinhood', 'questrade']
+            brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'schwab', 'robinhood', 'questrade', 'trading212']
             
             for broker_name in brokers_to_refresh:
                 try:

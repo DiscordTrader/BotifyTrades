@@ -66,6 +66,7 @@
                     padding-right: 32px;">
                 <option value="USA" style="background: #1e293b; color: #e2e8f0;">🇺🇸 USA</option>
                 <option value="Canada" style="background: #1e293b; color: #e2e8f0;">🇨🇦 Canada</option>
+                <option value="UK_EU" style="background: #1e293b; color: #e2e8f0;">🇬🇧 UK / EU</option>
             </select>
             <button onclick="refreshBrokerDashboard()" 
                 style="padding: 8px 16px; font-size: 0.875rem; font-weight: 600;
@@ -130,6 +131,32 @@
                 {% else %}
                     <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
                         No brokers configured for Canada
+                    </div>
+                {% endif %}
+            </div>
+            <!-- UK/EU region (hidden by default) -->
+            <div id="region-UK_EU" class="region-brokers" style="display: none;">
+                {% if broker_states and broker_states.UK_EU and broker_states.UK_EU|length > 0 %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                    {% for broker in broker_states.UK_EU %}
+                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.12){% else %}rgba(239, 68, 68, 0.12){% endif %}; 
+                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.35){% else %}rgba(239, 68, 68, 0.35){% endif %};
+                            transition: all 0.2s ease; min-width: 140px;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; 
+                                background: {% if broker.is_connected %}#10b981{% else %}#ef4444{% endif %};
+                                box-shadow: 0 0 8px {% if broker.is_connected %}rgba(16, 185, 129, 0.6){% else %}rgba(239, 68, 68, 0.6){% endif %};"></span>
+                            <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">{{ broker.broker_name }}</span>
+                            {% if broker.is_paper %}
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
+                                    border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% else %}
+                    <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
+                        No brokers configured for UK / EU
                     </div>
                 {% endif %}
             </div>
@@ -1315,7 +1342,7 @@ function renderRegionBrokers() {
     if (typeof BrokerStore === 'undefined') return;
     
     const state = BrokerStore.getState();
-    const regions = { USA: state.byRegion.USA || [], Canada: state.byRegion.Canada || [] };
+    const regions = { USA: state.byRegion.USA || [], Canada: state.byRegion.Canada || [], UK_EU: state.byRegion.UK_EU || [] };
     
     // Track disconnected brokers for alert banner
     const disconnectedBrokers = [];
@@ -1325,9 +1352,10 @@ function renderRegionBrokers() {
         if (!container) return;
         
         if (brokers.length === 0) {
+            const regionLabel = region === 'UK_EU' ? 'UK / EU' : region;
             container.innerHTML = `
                 <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
-                    No brokers configured for ${region}
+                    No brokers configured for ${regionLabel}
                 </div>`;
             return;
         }
@@ -1415,7 +1443,7 @@ function dismissBrokerAlert() {
         // Store dismissed state in session storage
         if (typeof BrokerStore !== 'undefined') {
             const state = BrokerStore.getState();
-            const allBrokers = [...(state.byRegion.USA || []), ...(state.byRegion.Canada || [])];
+            const allBrokers = [...(state.byRegion.USA || []), ...(state.byRegion.Canada || []), ...(state.byRegion.UK_EU || [])];
             const disconnected = allBrokers.filter(b => !b.is_connected).map(b => b.broker_name);
             sessionStorage.setItem('dismissedBrokerAlerts', JSON.stringify(disconnected));
         }
@@ -1428,8 +1456,8 @@ function checkInitialBrokerStatus() {
     
     // Check from Jinja-rendered data via inline JSON
     try {
-        const brokerStates = {{ broker_states | tojson if broker_states else '{"USA":[],"Canada":[]}' | safe }};
-        const allBrokers = [...(brokerStates.USA || []), ...(brokerStates.Canada || [])];
+        const brokerStates = {{ broker_states | tojson if broker_states else '{"USA":[],"Canada":[],"UK_EU":[]}' | safe }};
+        const allBrokers = [...(brokerStates.USA || []), ...(brokerStates.Canada || []), ...(brokerStates.UK_EU || [])];
         allBrokers.forEach(broker => {
             if (!broker.is_connected) {
                 disconnectedBrokers.push({
