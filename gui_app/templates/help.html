@@ -1,0 +1,1430 @@
+{% extends "base.html" %}
+{% block title %}Help Center - BotifyTrades{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --help-accent: #0FF0B3;
+    --help-accent-dim: rgba(15, 240, 179, 0.15);
+    --help-bg: #0a0e1a;
+    --help-card: #111827;
+    --help-card-border: rgba(99, 102, 241, 0.2);
+    --help-text: #e2e8f0;
+    --help-muted: #94a3b8;
+    --help-warn: #f59e0b;
+    --help-danger: #ef4444;
+    --help-info: #3b82f6;
+    --help-success: #10b981;
+}
+
+.help-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+}
+
+.help-hero {
+    text-align: center;
+    padding: 48px 24px 40px;
+    background: linear-gradient(135deg, rgba(15, 240, 179, 0.08), rgba(99, 102, 241, 0.08));
+    border-radius: 16px;
+    border: 1px solid var(--help-card-border);
+    margin-bottom: 40px;
+}
+.help-hero h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #0FF0B3, #6366f1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+}
+.help-hero p {
+    color: var(--help-muted);
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.help-toc {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    margin-bottom: 48px;
+}
+.toc-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--help-card);
+    border: 1px solid var(--help-card-border);
+    border-radius: 10px;
+    color: var(--help-text);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+.toc-item:hover {
+    border-color: var(--help-accent);
+    background: var(--help-accent-dim);
+    transform: translateY(-2px);
+}
+.toc-icon {
+    font-size: 1.3rem;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(99, 102, 241, 0.15);
+    flex-shrink: 0;
+}
+
+.help-section {
+    margin-bottom: 48px;
+    scroll-margin-top: 80px;
+}
+.help-section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid var(--help-card-border);
+}
+.help-section-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--help-text);
+    margin: 0;
+}
+.section-badge {
+    font-size: 1.5rem;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--help-accent-dim);
+    flex-shrink: 0;
+}
+
+.help-card {
+    background: var(--help-card);
+    border: 1px solid var(--help-card-border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+}
+.help-card h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--help-text);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.help-card h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--help-accent);
+    margin: 16px 0 8px;
+}
+.help-card p, .help-card li {
+    color: var(--help-muted);
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+.help-card ul, .help-card ol {
+    padding-left: 20px;
+    margin: 8px 0;
+}
+.help-card li {
+    margin-bottom: 6px;
+}
+
+.step-flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 16px 0;
+    align-items: stretch;
+}
+.step-item {
+    flex: 1;
+    min-width: 180px;
+    padding: 18px 16px;
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid var(--help-card-border);
+    position: relative;
+    text-align: center;
+}
+.step-item:first-child { border-radius: 10px 0 0 10px; }
+.step-item:last-child { border-radius: 0 10px 10px 0; }
+.step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--help-accent);
+    color: #0a0e1a;
+    font-weight: 800;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+.step-title {
+    font-weight: 700;
+    color: var(--help-text);
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+}
+.step-desc {
+    color: var(--help-muted);
+    font-size: 0.78rem;
+}
+.step-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--help-accent);
+    font-size: 1.2rem;
+    padding: 0 4px;
+}
+
+.broker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+.broker-help-card {
+    background: var(--help-card);
+    border: 1px solid var(--help-card-border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: border-color 0.2s;
+}
+.broker-help-card:hover {
+    border-color: var(--help-accent);
+}
+.broker-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.broker-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+}
+.broker-name {
+    font-weight: 700;
+    color: var(--help-text);
+    font-size: 1rem;
+}
+.broker-region {
+    font-size: 0.75rem;
+    color: var(--help-muted);
+    margin-top: 2px;
+}
+
+.cred-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 0.85rem;
+}
+.cred-table th {
+    text-align: left;
+    padding: 8px 10px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--help-accent);
+    font-weight: 600;
+    border-bottom: 1px solid var(--help-card-border);
+}
+.cred-table td {
+    padding: 8px 10px;
+    color: var(--help-muted);
+    border-bottom: 1px solid rgba(71, 85, 105, 0.2);
+    vertical-align: top;
+}
+.cred-table td:first-child {
+    color: var(--help-text);
+    font-weight: 600;
+    white-space: nowrap;
+    width: 140px;
+}
+
+.tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.tag-required { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.tag-optional { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
+.tag-live { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.tag-paper { background: rgba(59, 130, 246, 0.15); color: #93c5fd; }
+.tag-both { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+
+.risk-diagram {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--help-card-border);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 16px 0;
+    font-family: 'Space Grotesk', monospace;
+}
+.risk-bar-container {
+    position: relative;
+    height: 48px;
+    background: rgba(30, 41, 59, 0.8);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0;
+}
+.risk-bar-segment {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+    transition: all 0.3s;
+}
+.risk-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--help-muted);
+    margin-top: 6px;
+}
+
+.example-box {
+    background: rgba(15, 240, 179, 0.05);
+    border-left: 3px solid var(--help-accent);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 12px 0;
+}
+.example-box .ex-title {
+    font-weight: 700;
+    color: var(--help-accent);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+.example-box p {
+    margin: 4px 0;
+}
+
+.warn-box {
+    background: rgba(245, 158, 11, 0.08);
+    border-left: 3px solid var(--help-warn);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 12px 0;
+}
+.warn-box .warn-title {
+    font-weight: 700;
+    color: var(--help-warn);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+
+.info-box {
+    background: rgba(59, 130, 246, 0.08);
+    border-left: 3px solid var(--help-info);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 12px 0;
+}
+.info-box .info-title {
+    font-weight: 700;
+    color: var(--help-info);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+.setting-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+    padding: 12px 16px;
+    background: rgba(30, 41, 59, 0.3);
+    border-radius: 8px;
+    border: 1px solid rgba(71, 85, 105, 0.15);
+    align-items: start;
+}
+.setting-name {
+    font-weight: 700;
+    color: var(--help-text);
+    font-size: 0.88rem;
+}
+.setting-explain {
+    color: var(--help-muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.tab-nav-help {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.tab-btn-help {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--help-card-border);
+    background: var(--help-card);
+    color: var(--help-muted);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+.tab-btn-help.active {
+    background: var(--help-accent-dim);
+    border-color: var(--help-accent);
+    color: var(--help-accent);
+}
+.tab-content-help { display: none; }
+.tab-content-help.active { display: block; }
+
+.back-to-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--help-accent);
+    color: #0a0e1a;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(15, 240, 179, 0.3);
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 100;
+}
+.back-to-top.visible { opacity: 1; }
+
+@media (max-width: 768px) {
+    .help-hero h1 { font-size: 1.6rem; }
+    .help-toc { grid-template-columns: 1fr; }
+    .broker-grid { grid-template-columns: 1fr; }
+    .step-flow { flex-direction: column; }
+    .step-item { border-radius: 10px !important; }
+    .step-arrow { transform: rotate(90deg); justify-content: center; }
+    .setting-row { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="help-container">
+
+<div class="help-hero">
+    <h1>BotifyTrades Help Center</h1>
+    <p>Complete guide to setting up and configuring your automated trading bot. Follow the steps below to get started.</p>
+</div>
+
+<div class="help-toc">
+    <a href="#onboarding" class="toc-item"><span class="toc-icon">🚀</span> Getting Started</a>
+    <a href="#discord" class="toc-item"><span class="toc-icon">💬</span> Discord Connection</a>
+    <a href="#brokers" class="toc-item"><span class="toc-icon">🏦</span> Broker Setup</a>
+    <a href="#channels" class="toc-item"><span class="toc-icon">📡</span> Channel Configuration</a>
+    <a href="#execution" class="toc-item"><span class="toc-icon">⚡</span> Execution Page</a>
+    <a href="#risk" class="toc-item"><span class="toc-icon">🛡️</span> Risk Management</a>
+    <a href="#notifications" class="toc-item"><span class="toc-icon">🔔</span> Notifications</a>
+    <a href="#advanced" class="toc-item"><span class="toc-icon">🔧</span> Advanced Settings</a>
+</div>
+
+<!-- ========== SECTION 1: ONBOARDING ========== -->
+<div class="help-section" id="onboarding">
+    <div class="help-section-header">
+        <span class="section-badge">🚀</span>
+        <h2>Getting Started &mdash; Onboarding Process</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>How BotifyTrades Works</h3>
+        <p>BotifyTrades monitors Discord and Telegram channels for trade signals, parses them automatically, and executes orders on your connected broker accounts. The flow is simple:</p>
+
+        <div class="step-flow">
+            <div class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-title">Connect Discord</div>
+                <div class="step-desc">Link your Discord account so the bot can read signal channels</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-title">Connect Broker</div>
+                <div class="step-desc">Add your brokerage credentials to enable trade execution</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-title">Add Channels</div>
+                <div class="step-desc">Tell the bot which Discord channels contain trade signals</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-title">Configure &amp; Go</div>
+                <div class="step-desc">Set risk rules, sizing, and let the bot trade for you</div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">First-Time Setup</div>
+            <p>When you first log in, the <strong>Setup Wizard</strong> will guide you through each step. You can also launch it anytime from <strong>Settings &rarr; Setup Wizard</strong>.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Recommended Setup Order</h3>
+        <ol>
+            <li><strong>Create your admin account</strong> &mdash; Set a strong password and recovery email during first login.</li>
+            <li><strong>Enter your license key</strong> &mdash; Paste your key in <strong>Settings &rarr; License</strong> or use the <code>LICENSE_KEY</code> environment variable.</li>
+            <li><strong>Connect Discord</strong> &mdash; Add your Discord user token (see Discord section below).</li>
+            <li><strong>Connect at least one broker</strong> &mdash; Start with paper trading to verify signals are being parsed correctly.</li>
+            <li><strong>Add your first channel</strong> &mdash; Pick a signal channel, set it to "Track" mode first to observe before going live.</li>
+            <li><strong>Configure risk management</strong> &mdash; Set stop losses and profit targets before enabling live execution.</li>
+            <li><strong>Switch to "Execute" mode</strong> &mdash; When you're confident, flip the channel to live execution.</li>
+        </ol>
+        <div class="warn-box">
+            <div class="warn-title">Important</div>
+            <p>Always start with <strong>Paper Trading</strong> or <strong>Track Mode</strong> to verify that signals are parsed correctly before committing real money.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 2: DISCORD ========== -->
+<div class="help-section" id="discord">
+    <div class="help-section-header">
+        <span class="section-badge">💬</span>
+        <h2>Discord Connection</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>What You Need</h3>
+        <p>BotifyTrades uses a <strong>Discord Self-Bot token</strong> (your personal user token) to monitor channels you have access to. This is <em>not</em> a bot token from the Discord Developer Portal.</p>
+
+        <h4>How to Get Your Discord User Token</h4>
+        <ol>
+            <li>Open Discord in your <strong>web browser</strong> (not the desktop app) at <a href="https://discord.com/app" target="_blank" style="color: var(--help-accent);">discord.com/app</a></li>
+            <li>Press <strong>F12</strong> (or Ctrl+Shift+I) to open Developer Tools</li>
+            <li>Go to the <strong>Network</strong> tab</li>
+            <li>Type any message in any channel, or click on any channel</li>
+            <li>In the Network tab, click on any request to <code>discord.com</code></li>
+            <li>In the request headers, find the <strong>Authorization</strong> header</li>
+            <li>Copy the value &mdash; this is your user token</li>
+        </ol>
+
+        <div class="warn-box">
+            <div class="warn-title">Security Warning</div>
+            <p>Your Discord token grants full access to your account. <strong>Never share it with anyone.</strong> BotifyTrades stores it encrypted in your local database.</p>
+        </div>
+
+        <h4>Connecting in Settings</h4>
+        <ol>
+            <li>Go to <strong>Settings</strong> page</li>
+            <li>Find the <strong>Discord Self-Bot</strong> section</li>
+            <li>Paste your token into the <strong>Discord User Token</strong> field</li>
+            <li>Click <strong>Save</strong>, then <strong>Restart Bot</strong></li>
+            <li>The status badge should turn green showing "Connected"</li>
+        </ol>
+    </div>
+
+    <div class="help-card">
+        <h3>Discord Bot Settings</h3>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Discovery Mode</div>
+                <div class="setting-explain">When enabled, the bot logs every message it sees (across all servers and channels) to the console. Use this to find <strong>Channel IDs</strong> for channels you want to monitor. Turn it off after setup to reduce noise.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Allow Self Messages</div>
+                <div class="setting-explain">If enabled, the bot will also process signals from your own Discord messages. Useful for testing &mdash; you can paste a signal in a channel and verify it gets parsed.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Allowed Author IDs</div>
+                <div class="setting-explain">Comma-separated list of Discord User IDs. If set, the bot will <em>only</em> process signals from these specific users. Leave empty to process signals from everyone in the channel.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Allowed Guild IDs</div>
+                <div class="setting-explain">Comma-separated list of Discord Server (Guild) IDs. If set, the bot will only listen to servers in this list. Leave empty to listen to all servers.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Signal Patterns</div>
+                <div class="setting-explain">Regex patterns used to parse trade signals. The bot comes pre-configured with patterns that match common signal formats like <code>BTO 5 AAPL 150C 3/21 @ 2.50</code>. Only modify these if your signal provider uses a non-standard format.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 3: BROKERS ========== -->
+<div class="help-section" id="brokers">
+    <div class="help-section-header">
+        <span class="section-badge">🏦</span>
+        <h2>Broker Connections</h2>
+    </div>
+
+    <div class="help-card" style="margin-bottom: 24px;">
+        <h3>Overview</h3>
+        <p>BotifyTrades supports multiple brokers across different regions. You can connect one or many brokers and assign specific channels to specific brokers. Each broker has its own connection process.</p>
+
+        <div class="info-box">
+            <div class="info-title">Multi-Broker Routing</div>
+            <p>When adding a channel, you select which broker(s) should execute its signals. For example, you might route options signals to Webull and stock signals to Alpaca.</p>
+        </div>
+    </div>
+
+    <div class="broker-grid">
+        <!-- Webull -->
+        <div class="broker-help-card">
+            <div class="broker-header">
+                <div class="broker-icon" style="background: linear-gradient(135deg, #00d4aa, #00a885);">W</div>
+                <div>
+                    <div class="broker-name">Webull</div>
+                    <div class="broker-region">USA &middot; Stocks &amp; Options <span class="tag tag-both">Paper + Live</span></div>
+                </div>
+            </div>
+            <table class="cred-table">
+                <tr><th>Field</th><th>Where to Get It</th></tr>
+                <tr><td>Email</td><td>Your Webull login email</td></tr>
+                <tr><td>Password</td><td>Your Webull login password</td></tr>
+                <tr><td>Trade PIN</td><td>6-digit PIN set in Webull app &rarr; Settings &rarr; Security &rarr; Trading Password <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>Device ID (DID)</td><td>Auto-generated or reuse from a previous session. Keeps your login persistent.</td></tr>
+                <tr><td>Account Type</td><td>Margin, Cash, or IRA &mdash; select which account to trade on.</td></tr>
+            </table>
+            <div class="info-box">
+                <div class="info-title">Token-Only Mode</div>
+                <p>If you already have access and refresh tokens (from a previous login), you can paste them directly to skip email/password login and avoid captcha challenges.</p>
+            </div>
+        </div>
+
+        <!-- Alpaca -->
+        <div class="broker-help-card">
+            <div class="broker-header">
+                <div class="broker-icon" style="background: linear-gradient(135deg, #f7d046, #e6a800);">A</div>
+                <div>
+                    <div class="broker-name">Alpaca</div>
+                    <div class="broker-region">USA &middot; Stocks &amp; Options <span class="tag tag-both">Paper + Live</span></div>
+                </div>
+            </div>
+            <table class="cred-table">
+                <tr><th>Field</th><th>Where to Get It</th></tr>
+                <tr><td>API Key</td><td>Alpaca Dashboard &rarr; Paper/Live &rarr; API Keys &rarr; Generate <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>Secret Key</td><td>Shown once when you generate the API key. Save it immediately. <span class="tag tag-required">Required</span></td></tr>
+            </table>
+            <div class="example-box">
+                <div class="ex-title">Steps</div>
+                <p>1. Sign up at <strong>alpaca.markets</strong><br>
+                2. Go to Paper Trading &rarr; API Keys<br>
+                3. Click "Regenerate" to get a new key pair<br>
+                4. Paste both into Settings &rarr; Alpaca Paper section<br>
+                5. For live trading, use the Live API key section</p>
+            </div>
+        </div>
+
+        <!-- Schwab -->
+        <div class="broker-help-card">
+            <div class="broker-header">
+                <div class="broker-icon" style="background: linear-gradient(135deg, #00a3e0, #0072b1);">S</div>
+                <div>
+                    <div class="broker-name">Schwab</div>
+                    <div class="broker-region">USA &middot; Stocks &amp; Options <span class="tag tag-live">Live Only</span></div>
+                </div>
+            </div>
+            <table class="cred-table">
+                <tr><th>Field</th><th>Where to Get It</th></tr>
+                <tr><td>Client ID</td><td>developer.schwab.com &rarr; Apps &rarr; Your App &rarr; App Key <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>Client Secret</td><td>developer.schwab.com &rarr; Apps &rarr; Your App &rarr; Secret <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>Redirect URI</td><td>Must match the callback URL registered in your Schwab app. Typically <code>https://127.0.0.1</code></td></tr>
+            </table>
+            <div class="warn-box">
+                <div class="warn-title">Re-Authentication Required Weekly</div>
+                <p>Schwab refresh tokens expire after 7 days. You'll need to re-authenticate via the OAuth popup in Settings once per week.</p>
+            </div>
+        </div>
+
+        <!-- IBKR -->
+        <div class="broker-help-card">
+            <div class="broker-header">
+                <div class="broker-icon" style="background: linear-gradient(135deg, #d41f2c, #a01823);">IB</div>
+                <div>
+                    <div class="broker-name">Interactive Brokers (IBKR)</div>
+                    <div class="broker-region">USA &middot; Stocks &amp; Options <span class="tag tag-both">Paper + Live</span></div>
+                </div>
+            </div>
+            <table class="cred-table">
+                <tr><th>Field</th><th>Where to Get It</th></tr>
+                <tr><td>TWS Host</td><td>Usually <code>127.0.0.1</code> if TWS/Gateway runs on the same machine <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>Paper Port</td><td>Default: <code>7497</code> (TWS Paper) or <code>4002</code> (IB Gateway Paper)</td></tr>
+                <tr><td>Live Port</td><td>Default: <code>7496</code> (TWS Live) or <code>4001</code> (IB Gateway Live)</td></tr>
+                <tr><td>Client ID</td><td>Any unique number (e.g., <code>1</code>). Must not conflict with other API connections.</td></tr>
+            </table>
+            <div class="info-box">
+                <div class="info-title">Prerequisite</div>
+                <p>You must have TWS (Trader Workstation) or IB Gateway running and configured to accept API connections. In TWS: Edit &rarr; Global Configuration &rarr; API &rarr; Settings &rarr; Enable ActiveX and Socket Clients.</p>
+            </div>
+        </div>
+
+        <!-- Robinhood -->
+        <div class="broker-help-card">
+            <div class="broker-header">
+                <div class="broker-icon" style="background: linear-gradient(135deg, #00c805, #009904);">R</div>
+                <div>
+                    <div class="broker-name">Robinhood</div>
+                    <div class="broker-region">USA &middot; Stocks &amp; Options <span class="tag tag-live">Live Only</span></div>
+                </div>
+            </div>
+            <table class="cred-table">
+                <tr><th>Field</th><th>Where to Get It</th></tr>
+                <tr><td>Email</td><td>Your Robinhood login email <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>Password</td><td>Your Robinhood login password <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>TOTP Secret</td><td>Robinhood App &rarr; Security &rarr; Two-Factor Auth &rarr; Use "Authentication App" and copy the secret key. <span class="tag tag-optional">Recommended</span></td></tr>
+            </table>
+            <div class="warn-box">
+                <div class="warn-title">No Paper Trading</div>
+                <p>Robinhood does not support paper trading. All trades are executed with <strong>real money</strong>. Test with small quantities first.</p>
+            </div>
+        </div>
+
+        <!-- Tastytrade -->
+        <div class="broker-help-card">
+            <div class="broker-header">
+                <div class="broker-icon" style="background: linear-gradient(135deg, #b71c1c, #880e4f);">TT</div>
+                <div>
+                    <div class="broker-name">Tastytrade</div>
+                    <div class="broker-region">USA &middot; Stocks &amp; Options <span class="tag tag-both">Paper + Live</span></div>
+                </div>
+            </div>
+            <table class="cred-table">
+                <tr><th>Field</th><th>Where to Get It</th></tr>
+                <tr><td>Client Secret</td><td>From Tastytrade API access request (OAuth2) <span class="tag tag-required">Required for OAuth2</span></td></tr>
+                <tr><td>Refresh Token</td><td>Generated via OAuth2 flow <span class="tag tag-required">Required for OAuth2</span></td></tr>
+                <tr><td>Username</td><td>Your Tastytrade login username <span class="tag tag-optional">Legacy login</span></td></tr>
+                <tr><td>Password</td><td>Your Tastytrade login password <span class="tag tag-optional">Legacy login</span></td></tr>
+            </table>
+            <div class="info-box">
+                <div class="info-title">OAuth2 Recommended</div>
+                <p>Tastytrade is transitioning to OAuth2 only. Use Client Secret + Refresh Token for the most reliable connection.</p>
+            </div>
+        </div>
+
+        <!-- Trading 212 -->
+        <div class="broker-help-card">
+            <div class="broker-header">
+                <div class="broker-icon" style="background: linear-gradient(135deg, #0052FF, #00A3FF);">212</div>
+                <div>
+                    <div class="broker-name">Trading 212</div>
+                    <div class="broker-region">UK / EU &middot; Stocks Only <span class="tag tag-both">Demo + Live</span></div>
+                </div>
+            </div>
+            <table class="cred-table">
+                <tr><th>Field</th><th>Where to Get It</th></tr>
+                <tr><td>API Key</td><td>Trading 212 App &rarr; Settings &rarr; API (beta) &rarr; Generate Key <span class="tag tag-required">Required</span></td></tr>
+                <tr><td>Environment</td><td>Select <strong>Demo</strong> for paper trading or <strong>Live</strong> for real trades</td></tr>
+            </table>
+            <div class="warn-box">
+                <div class="warn-title">Stocks Only</div>
+                <p>Trading 212 supports <strong>stocks and ETFs only</strong> &mdash; no options trading. The API has a strict rate limit of 1 request per 5 seconds.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 4: CHANNELS ========== -->
+<div class="help-section" id="channels">
+    <div class="help-section-header">
+        <span class="section-badge">📡</span>
+        <h2>Channel Configuration</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>Adding a Channel</h3>
+        <p>Channels are the core of BotifyTrades &mdash; each channel represents a Discord or Telegram source of trade signals.</p>
+
+        <div class="step-flow">
+            <div class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-title">Get Channel ID</div>
+                <div class="step-desc">Enable Discovery Mode, then check console logs for channel IDs</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-title">Add Channel</div>
+                <div class="step-desc">Go to Channels page &rarr; Click "Add Channel"</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-title">Select Mode</div>
+                <div class="step-desc">Choose Execute (live) or Track (paper)</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-title">Assign Broker</div>
+                <div class="step-desc">Pick which broker(s) execute trades from this channel</div>
+            </div>
+        </div>
+
+        <div class="settings-grid" style="margin-top: 16px;">
+            <div class="setting-row">
+                <div class="setting-name">Channel Type</div>
+                <div class="setting-explain"><strong>Execute</strong> &mdash; Live trade execution with real/paper broker. <strong>Track</strong> &mdash; Paper-only performance tracking (no real orders placed).</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Channel Name</div>
+                <div class="setting-explain">A friendly label for you to identify this channel (e.g., "VIP Alerts", "Dark Horse").</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Discord Channel ID</div>
+                <div class="setting-explain">The numeric ID of the Discord channel. Enable Discovery Mode in Settings, send any message in the channel, and look for the ID in console logs.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Select Brokers</div>
+                <div class="setting-explain">Check one or more brokers to route this channel's signals to. E.g., check "Webull LIVE" and "Alpaca PAPER" to execute on both simultaneously.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Channel Settings Tabs</h3>
+        <p>Click the gear icon on any channel card to open its settings. There are four tabs:</p>
+
+        <div class="tab-nav-help">
+            <button class="tab-btn-help active" onclick="showHelpTab(this, 'ch-sizing')">Sizing</button>
+            <button class="tab-btn-help" onclick="showHelpTab(this, 'ch-risk')">Risk Controls</button>
+            <button class="tab-btn-help" onclick="showHelpTab(this, 'ch-orders')">Order Types</button>
+            <button class="tab-btn-help" onclick="showHelpTab(this, 'ch-conditional')">Conditional</button>
+        </div>
+
+        <!-- Sizing Tab -->
+        <div class="tab-content-help active" id="ch-sizing">
+            <div class="settings-grid">
+                <div class="setting-row">
+                    <div class="setting-name">Execute Trades</div>
+                    <div class="setting-explain">Master toggle. When OFF, signals are detected and logged but no orders are placed. Turn this ON only after verifying your setup.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Position Size %</div>
+                    <div class="setting-explain">Percentage of your account's buying power to use per trade. E.g., 5% of $10,000 buying power = $500 per position.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Default Qty</div>
+                    <div class="setting-explain">Fixed number of contracts (options) or shares (stocks) per trade. Used when the signal doesn't specify quantity and percentage sizing isn't set.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Force My Size %</div>
+                    <div class="setting-explain">When enabled, the bot ignores the quantity from the signal and always uses your configured Position Size % for calculation.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Balance Mode</div>
+                    <div class="setting-explain"><strong>Live</strong>: Uses real-time buying power (changes throughout the day). <strong>Pre-Market</strong>: Uses a snapshot taken at 4:00 AM ET (stable baseline). <strong>Start-of-Day</strong>: Uses a snapshot taken at 9:30 AM ET market open.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Track Signals</div>
+                    <div class="setting-explain">Enables paper-trade tracking alongside live execution. Useful for comparing your performance against the signal provider.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Max Position $</div>
+                    <div class="setting-explain">Hard dollar cap on any single position. Even if % sizing calculates $2,000, this will cap it. Set to 0 to disable.</div>
+                </div>
+            </div>
+
+            <div class="example-box">
+                <div class="ex-title">Sizing Example</div>
+                <p>Account buying power: <strong>$10,000</strong> &middot; Position Size: <strong>5%</strong> &middot; Max Position: <strong>$400</strong></p>
+                <p>Calculated size: $10,000 &times; 5% = $500 &rarr; Capped at <strong>$400</strong> (Max Position limit applies)</p>
+            </div>
+        </div>
+
+        <!-- Risk Controls Tab -->
+        <div class="tab-content-help" id="ch-risk">
+            <div class="settings-grid">
+                <div class="setting-row">
+                    <div class="setting-name">Exit Mode</div>
+                    <div class="setting-explain"><strong>Signal</strong>: Only exits when the signal provider posts an STC. <strong>Risk</strong>: Bot automatically exits based on your stop loss / profit target rules. <strong>Hybrid</strong>: Both active &mdash; whichever triggers first wins.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Signal Update Automation</div>
+                    <div class="setting-explain">When a signal provider <em>edits</em> their original Discord message (e.g., changing the stop loss), the bot detects the edit and updates your position's risk settings automatically.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">SL Escalation Only</div>
+                    <div class="setting-explain">When ON, hitting profit targets does NOT sell partial positions. Instead, it only <strong>moves your stop loss up</strong> to lock in gains. Your position closes only when the trailing stop or stop loss is hit.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Slippage Protection</div>
+                    <div class="setting-explain">Prevents entering a trade if the current price has moved too far from the signal price. Protects against "chasing" old signals.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Max Slippage %</div>
+                    <div class="setting-explain">Maximum price deviation allowed. E.g., signal at $2.00 with 50% slippage = will enter up to $3.00 but reject at $3.01.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Order Chase</div>
+                    <div class="setting-explain"><strong>OFF</strong>: No order replacement. <strong>Entry Only</strong>: Chases unfilled BTO orders with better prices. <strong>Exit Only</strong>: Chases unfilled STC orders. <strong>Both</strong>: Chases both entry and exit orders. Uses mid-price replacement to get fills.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">NDX &rarr; QQQ Conversion</div>
+                    <div class="setting-explain">Automatically converts expensive NDX index options ($3,000+) into equivalent QQQ options (~$300). Useful if your account can't afford NDX contracts. Target Delta controls the strike selection.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Types Tab -->
+        <div class="tab-content-help" id="ch-orders">
+            <div class="settings-grid">
+                <div class="setting-row">
+                    <div class="setting-name">Entry Order Type</div>
+                    <div class="setting-explain"><strong>Limit</strong>: Places order at the signal price (safer, may not fill if price moves). <strong>Market</strong>: Fills immediately at current price (guaranteed fill, but may get worse price).</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Trim Order Type</div>
+                    <div class="setting-explain">How partial exits (trims) are placed. <strong>Limit</strong> at the signal's trim price, or <strong>Market</strong> for immediate fills.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Stop Loss Order Type</div>
+                    <div class="setting-explain"><strong>Limit</strong>: STC at a specific price (may not fill in fast drops). <strong>Market</strong>: Guaranteed exit but at whatever the market price is. Market is recommended for stop losses.</div>
+                </div>
+            </div>
+
+            <div class="warn-box">
+                <div class="warn-title">Recommendation</div>
+                <p>Use <strong>Limit</strong> for entries and trims, and <strong>Market</strong> for stop losses. This gives you price control on entries while ensuring your stop loss always executes.</p>
+            </div>
+        </div>
+
+        <!-- Conditional Tab -->
+        <div class="tab-content-help" id="ch-conditional">
+            <div class="settings-grid">
+                <div class="setting-row">
+                    <div class="setting-name">Conditional Orders</div>
+                    <div class="setting-explain">Enables "watching" orders &mdash; when a signal says "watching AAPL above $150", the bot creates a pending order that triggers when AAPL crosses $150.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Order Timeout</div>
+                    <div class="setting-explain">Auto-cancels any unfilled regular order after this many minutes. Prevents stale orders sitting in your broker account.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Conditional Timeout</div>
+                    <div class="setting-explain">Auto-cancels pending conditional orders (watching/waiting orders) after this many minutes if the trigger price is never reached.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Confirmation Buffer %</div>
+                    <div class="setting-explain">Requires the price to move an additional X% beyond the trigger before executing. Confirms momentum and avoids false breakouts.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Breakout Reset Guard</div>
+                    <div class="setting-explain">If the price is already past the trigger when the signal arrives, the bot waits for a pullback before entering. Prevents buying at the top of a move.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Trigger Offset</div>
+                    <div class="setting-explain">Adjusts the trigger price by a % or $ amount. E.g., 0.5% offset on a $150 trigger = enter at $149.25 (before) or $150.75 (after). Mode: Percent or Dollar.</div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">Limit Cap</div>
+                    <div class="setting-explain">Caps the maximum entry price at a % above the trigger to prevent chasing extended moves. E.g., 5% cap on $150 trigger = max entry at $157.50.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 5: EXECUTION ========== -->
+<div class="help-section" id="execution">
+    <div class="help-section-header">
+        <span class="section-badge">⚡</span>
+        <h2>Execution Page</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>Execution Overview</h3>
+        <p>The Execution page provides a real-time overview of all your configured channels with quick-action buttons for managing each one.</p>
+
+        <h4>Account Status Bar</h4>
+        <p>At the top, you'll see your connected broker accounts with live buying power and net liquidation values. Click the refresh button to update balances.</p>
+
+        <h4>Channel Type Tabs</h4>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Execution Channels</div>
+                <div class="setting-explain">Channels that place <strong>real orders</strong> on your broker account. These are your live trading channels.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Tracking Channels</div>
+                <div class="setting-explain">Channels in paper-trade mode. Signals are recorded for performance analysis but no real orders are placed.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Per-Channel Action Buttons</h3>
+        <p>Each channel card on the Execution page has several action buttons:</p>
+
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name" style="color: var(--help-success);">Status Dot</div>
+                <div class="setting-explain"><span style="color: #10b981;">Green</span> = active and processing signals. <span style="color: #ef4444;">Red</span> = inactive or execution disabled. Shows at a glance which channels are live.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Mode Badge</div>
+                <div class="setting-explain">Shows <strong>Execute</strong>, <strong>Track</strong>, <strong>Dual Mode</strong> (both), or <strong>Inactive</strong>. Dual Mode means the channel both executes and tracks.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Feature Badges</div>
+                <div class="setting-explain">Quick indicators showing active features: <strong>Cond</strong> (Conditional orders ON), <strong>Slip</strong> (Slippage protection ON), <strong>Chase</strong> (Order chaser ON), <strong>Max$</strong> (Max position cap set).</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Users Button</div>
+                <div class="setting-explain">Opens a modal to filter signals by specific Discord User IDs. If left empty, the bot processes signals from <em>all users</em> in the channel. Useful if multiple people post in a channel but you only want to follow one trader.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Extract Button</div>
+                <div class="setting-explain">Downloads the last 1,000 messages from this Discord channel as a JSON file. Useful for analyzing signal formats, building custom parsers, or debugging why signals aren't being detected.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Settings Button</div>
+                <div class="setting-explain">Opens the full 4-tab channel settings modal (Sizing, Risk Controls, Order Types, Conditional). Same settings as on the Channels page.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Delete Button</div>
+                <div class="setting-explain">Permanently removes this channel configuration. Any open positions from this channel will continue to be monitored by risk management, but no new signals will be processed.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 6: RISK MANAGEMENT ========== -->
+<div class="help-section" id="risk">
+    <div class="help-section-header">
+        <span class="section-badge">🛡️</span>
+        <h2>Risk Management</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>How Risk Management Works</h3>
+        <p>The risk engine continuously monitors all your open positions and automatically exits them based on your configured rules. It checks positions every few seconds using real-time streaming prices.</p>
+
+        <div class="step-flow">
+            <div class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-title">Signal Detected</div>
+                <div class="step-desc">BTO signal parsed and order placed</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-title">Position Opened</div>
+                <div class="step-desc">Order fills, risk engine starts monitoring</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-title">Price Monitored</div>
+                <div class="step-desc">Checks SL, PT, trailing stop every cycle</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-title">Auto Exit</div>
+                <div class="step-desc">Closes position when any rule triggers</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Global Risk Settings (Settings Page)</h3>
+        <p>These settings apply as defaults to all channels. Individual channels can override them.</p>
+
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Enable Monitoring</div>
+                <div class="setting-explain">Master toggle for the risk engine. When OFF, no automatic exits occur &mdash; positions are only closed when signal providers post STC messages.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Monitoring Interval</div>
+                <div class="setting-explain">How frequently (in seconds) the risk engine checks positions. Lower = faster response but more CPU. Default: 30s. Minimum: 0.2s for aggressive monitoring.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Exit Strategy Mode</div>
+                <div class="setting-explain"><strong>Signal</strong>: Only exits on provider STC signals. <strong>Risk</strong>: Only uses automated SL/PT/trailing. <strong>Hybrid</strong>: Both active, first trigger wins. <em>Hybrid is recommended.</em></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Stop Loss</h3>
+        <p>Automatically sells your position if it drops below a certain percentage from your entry price, limiting your maximum loss.</p>
+
+        <div class="risk-diagram">
+            <div style="text-align: center; color: var(--help-text); font-weight: 600; margin-bottom: 12px;">Stop Loss Example: Entry at $10.00, Stop Loss at 10%</div>
+            <div class="risk-bar-container">
+                <div class="risk-bar-segment" style="left: 0; width: 15%; background: rgba(239, 68, 68, 0.6);">LOSS ZONE</div>
+                <div class="risk-bar-segment" style="left: 15%; width: 3%; background: #ef4444;">SL</div>
+                <div class="risk-bar-segment" style="left: 18%; width: 82%; background: rgba(16, 185, 129, 0.15);"></div>
+            </div>
+            <div class="risk-label-row">
+                <span>$0.00</span>
+                <span style="color: #ef4444; font-weight: 600;">$9.00 &larr; STOP LOSS triggers here</span>
+                <span>$10.00 (Entry)</span>
+            </div>
+        </div>
+
+        <div class="example-box">
+            <div class="ex-title">Example</div>
+            <p>You buy AAPL at <strong>$10.00</strong> with a <strong>10% Stop Loss</strong>.</p>
+            <p>If AAPL drops to <strong>$9.00</strong> (10% below entry), the bot automatically sells your entire position.</p>
+            <p>Maximum loss: <strong>$1.00 per share</strong> (10% of entry price).</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Profit Targets (Up to 4 Tiers)</h3>
+        <p>Automatically sells a portion of your position at predetermined profit levels, locking in gains progressively.</p>
+
+        <div class="risk-diagram">
+            <div style="text-align: center; color: var(--help-text); font-weight: 600; margin-bottom: 12px;">4-Tier Profit Target Example: Entry at $10.00</div>
+            <div class="risk-bar-container">
+                <div class="risk-bar-segment" style="left: 0; width: 20%; background: rgba(30, 41, 59, 0.8);"></div>
+                <div class="risk-bar-segment" style="left: 20%; width: 20%; background: rgba(16, 185, 129, 0.2);">
+                    <span style="font-size: 0.7rem;">PT1: +10%</span>
+                </div>
+                <div class="risk-bar-segment" style="left: 40%; width: 20%; background: rgba(16, 185, 129, 0.35);">
+                    <span style="font-size: 0.7rem;">PT2: +25%</span>
+                </div>
+                <div class="risk-bar-segment" style="left: 60%; width: 20%; background: rgba(16, 185, 129, 0.5);">
+                    <span style="font-size: 0.7rem;">PT3: +50%</span>
+                </div>
+                <div class="risk-bar-segment" style="left: 80%; width: 20%; background: rgba(16, 185, 129, 0.7);">
+                    <span style="font-size: 0.7rem;">PT4: +100%</span>
+                </div>
+            </div>
+            <div class="risk-label-row">
+                <span>Entry $10.00</span>
+                <span>$11.00</span>
+                <span>$12.50</span>
+                <span>$15.00</span>
+                <span>$20.00</span>
+            </div>
+        </div>
+
+        <div class="example-box">
+            <div class="ex-title">Example with 10 contracts at $10.00</div>
+            <p><strong>PT1 (+10% = $11.00)</strong>: Sell 25% &rarr; Sell 2 contracts, keep 8</p>
+            <p><strong>PT2 (+25% = $12.50)</strong>: Sell 25% &rarr; Sell 2 contracts, keep 6</p>
+            <p><strong>PT3 (+50% = $15.00)</strong>: Sell 25% &rarr; Sell 2 contracts, keep 4</p>
+            <p><strong>PT4 (+100% = $20.00)</strong>: Sell remaining 25% &rarr; Sell 2 contracts, keep 2 runners</p>
+            <p style="color: var(--help-accent); font-weight: 600; margin-top: 8px;">Result: Locked in profits at each level while keeping "runners" for further upside.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Trailing Stop</h3>
+        <p>A dynamic stop that follows the price up. Once your position gains a certain amount, the trailing stop activates and moves with the price, never moving back down.</p>
+
+        <div class="risk-diagram">
+            <div style="text-align: center; color: var(--help-text); font-weight: 600; margin-bottom: 12px;">Trailing Stop Example: 5% trail, activates after 10% gain</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="width: 120px; text-align: right; color: var(--help-muted); font-size: 0.82rem;">Entry $10.00</span>
+                    <div style="flex: 1; height: 4px; background: var(--help-accent); border-radius: 2px; position: relative;">
+                        <div style="position: absolute; left: 0; top: -8px; width: 8px; height: 20px; background: var(--help-accent); border-radius: 3px;"></div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="width: 120px; text-align: right; color: var(--help-success); font-size: 0.82rem;">Price rises to $12.00</span>
+                    <div style="flex: 1; height: 4px; background: rgba(16, 185, 129, 0.3); border-radius: 2px; position: relative;">
+                        <div style="position: absolute; left: 0; width: 70%; height: 4px; background: var(--help-success); border-radius: 2px;"></div>
+                        <span style="position: absolute; left: 65%; top: -18px; font-size: 0.72rem; color: #f59e0b; white-space: nowrap;">Trail: $11.40 (5% below peak)</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="width: 120px; text-align: right; color: var(--help-success); font-size: 0.82rem;">Peak $14.00</span>
+                    <div style="flex: 1; height: 4px; background: rgba(16, 185, 129, 0.3); border-radius: 2px; position: relative;">
+                        <div style="position: absolute; left: 0; width: 90%; height: 4px; background: var(--help-success); border-radius: 2px;"></div>
+                        <span style="position: absolute; left: 85%; top: -18px; font-size: 0.72rem; color: #f59e0b; white-space: nowrap;">Trail: $13.30</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="width: 120px; text-align: right; color: var(--help-danger); font-size: 0.82rem;">Drops to $13.30</span>
+                    <div style="flex: 1; height: 4px; background: rgba(239, 68, 68, 0.3); border-radius: 2px; position: relative;">
+                        <div style="position: absolute; left: 0; width: 80%; height: 4px; background: var(--help-danger); border-radius: 2px;"></div>
+                        <span style="position: absolute; left: 75%; top: -18px; font-size: 0.72rem; color: #ef4444; font-weight: 700; white-space: nowrap;">SOLD at $13.30</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-grid" style="margin-top: 16px;">
+            <div class="setting-row">
+                <div class="setting-name">Trailing Stop %</div>
+                <div class="setting-explain">How far below the highest price the stop is placed. 5% trail means the stop always sits 5% below the peak. <em>Lower = tighter (exits sooner), Higher = more room.</em></div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Activation Threshold</div>
+                <div class="setting-explain">The minimum gain required before the trailing stop activates. E.g., 10% means the trail only starts after you're up 10%. Before that, only the fixed stop loss protects you.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>SL Escalation (Dynamic Stop Loss)</h3>
+        <p>When enabled, hitting each profit target <strong>moves your stop loss up</strong> instead of selling. This locks in progressively more profit while keeping your full position size.</p>
+
+        <div class="risk-diagram">
+            <div style="text-align: center; color: var(--help-text); font-weight: 600; margin-bottom: 12px;">SL Escalation Flow: Entry $10.00, Initial SL $9.00</div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                <div style="text-align: center; padding: 14px 8px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <div style="font-size: 0.8rem; color: var(--help-info); font-weight: 600;">PT1 Hit (+10%)</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 6px 0;">$11.00</div>
+                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $10.00</div>
+                    <div style="font-size: 0.7rem; color: var(--help-success);">Breakeven locked</div>
+                </div>
+                <div style="text-align: center; padding: 14px 8px; background: rgba(59, 130, 246, 0.15); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <div style="font-size: 0.8rem; color: var(--help-info); font-weight: 600;">PT2 Hit (+25%)</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 6px 0;">$12.50</div>
+                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $11.00</div>
+                    <div style="font-size: 0.7rem; color: var(--help-success);">+10% profit locked</div>
+                </div>
+                <div style="text-align: center; padding: 14px 8px; background: rgba(59, 130, 246, 0.2); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <div style="font-size: 0.8rem; color: var(--help-info); font-weight: 600;">PT3 Hit (+50%)</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 6px 0;">$15.00</div>
+                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $12.50</div>
+                    <div style="font-size: 0.7rem; color: var(--help-success);">+25% profit locked</div>
+                </div>
+                <div style="text-align: center; padding: 14px 8px; background: rgba(59, 130, 246, 0.25); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <div style="font-size: 0.8rem; color: var(--help-info); font-weight: 600;">PT4 Hit (+100%)</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 6px 0;">$20.00</div>
+                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $15.00</div>
+                    <div style="font-size: 0.7rem; color: var(--help-success);">+50% profit locked</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="example-box">
+            <div class="ex-title">Key Benefit</div>
+            <p>You keep your <strong>full position size</strong> (no partial sells) while progressively protecting more profit. If the trade reverses after hitting PT3, you still exit at +25% instead of losing everything.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Daily P&amp;L Limits</h3>
+        <p>Protects you from catastrophic days by automatically pausing trading when daily loss or profit thresholds are reached.</p>
+
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Max Daily Loss ($)</div>
+                <div class="setting-explain">If your account drops by this dollar amount from the start-of-day snapshot, all new BTO orders are blocked. Open positions continue to be monitored.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Max Daily Loss (%)</div>
+                <div class="setting-explain">Same as above but as a percentage of your starting balance. E.g., 3% of $10,000 = $300 loss limit.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Max Daily Profit ($)</div>
+                <div class="setting-explain">Locks in gains by stopping new trades after hitting a profit target. Prevents giving back a great day's gains.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Warning Threshold (%)</div>
+                <div class="setting-explain">Sends a notification when you're approaching your daily limit. E.g., 80% warning = alerts at $240 loss if your limit is $300.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Reset Time</div>
+                <div class="setting-explain"><strong>Market Open</strong>: Resets at 9:30 AM ET. <strong>Pre-Market</strong>: Resets at 4:00 AM ET. <strong>Midnight</strong>: Resets at 12:00 AM ET.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Max Profit Giveback Guard</h3>
+        <p>Prevents giving back too much unrealized profit. If your position reaches a high watermark and then retraces by a set percentage, it exits to protect those gains.</p>
+
+        <div class="example-box">
+            <div class="ex-title">Example</div>
+            <p>Giveback Guard: <strong>30%</strong>. Position peak unrealized profit: <strong>$500</strong>.</p>
+            <p>If profit drops from $500 to <strong>$350</strong> (gave back 30% of $500), the bot exits to lock in $350 profit.</p>
+            <p>Without this guard, the position might retrace all the way back to breakeven or loss.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Circuit Breaker</h3>
+        <p>An emergency shutoff that pauses all trading after a series of consecutive losses. Prevents emotional trading and cascading losses.</p>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Circuit Breaker</div>
+                <div class="setting-explain">When enabled, if you hit a configured number of consecutive losing trades, all new entries are blocked until you manually reset or the daily reset time passes.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Max Open Positions</div>
+                <div class="setting-explain">Hard limit on how many positions can be open simultaneously across all channels and brokers. New signals are rejected when this limit is reached.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 7: NOTIFICATIONS ========== -->
+<div class="help-section" id="notifications">
+    <div class="help-section-header">
+        <span class="section-badge">🔔</span>
+        <h2>Notifications</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>Trade Notifications</h3>
+        <p>BotifyTrades can send real-time notifications for every trade event via Discord webhooks.</p>
+
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Discord Webhook</div>
+                <div class="setting-explain">A URL from your personal Discord server where trade notifications are posted. To create one: Server Settings &rarr; Integrations &rarr; Webhooks &rarr; New Webhook &rarr; Copy URL.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Notification Types</div>
+                <div class="setting-explain">BTO (entries), STC (exits), stop loss triggers, profit target hits, connection alerts, daily P&amp;L warnings, and system errors are all sent automatically when configured.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 8: ADVANCED ========== -->
+<div class="help-section" id="advanced">
+    <div class="help-section-header">
+        <span class="section-badge">🔧</span>
+        <h2>Advanced Settings</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>Trading Limits</h3>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Max Position Size ($)</div>
+                <div class="setting-explain">Global hard cap on any single position. Overrides percentage-based sizing if the calculated amount exceeds this value.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Global Default Qty</div>
+                <div class="setting-explain">Fallback quantity used when a signal doesn't specify a quantity and no channel-level default is set. E.g., "1" means buy 1 contract or 1 share by default.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>AI Analysis</h3>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">AI Provider</div>
+                <div class="setting-explain">Choose between <strong>Replit AI</strong> (built-in, no API key needed) or <strong>OpenAI</strong> (requires your own API key). AI can analyze signals before execution and provide chat-based market insights.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">AI Model</div>
+                <div class="setting-explain"><strong>GPT-4o</strong>: Most capable, best analysis quality. <strong>GPT-4o-mini</strong>: Faster and cheaper, good for basic analysis.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Background Services</h3>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Broker Sync Service</div>
+                <div class="setting-explain">Continuously reconciles your database with actual broker state. Detects order fills, cancellations, and external changes. <strong>Should always be ON</strong> for accurate position tracking.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Risk Monitor Service</div>
+                <div class="setting-explain">The main risk engine that monitors positions for stop loss, profit targets, and trailing stops. <strong>Must be ON</strong> for automated risk management to work.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Trade Monitor</div>
+                <div class="setting-explain">Posts trade events (opens, closes) to a Discord webhook channel. Useful for watching your bot's activity from your phone.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Debug Mode</div>
+                <div class="setting-explain">Shows detailed configuration and diagnostic information in the console logs. Enable when troubleshooting issues, disable for cleaner logs in production.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Data Management</h3>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Clear Stale Trades</div>
+                <div class="setting-explain">Utility to remove old OPEN/PENDING trades from the database when switching broker API keys or accounts. Use this if you see phantom positions from a previous configuration.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Setup Wizard</div>
+                <div class="setting-explain">Re-launches the guided configuration wizard. Useful for initial setup or when adding a new broker. Available at Settings &rarr; Setup Wizard.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<button class="back-to-top" id="backToTop" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">&#8593;</button>
+
+<script>
+function showHelpTab(btn, tabId) {
+    const parent = btn.closest('.help-card');
+    parent.querySelectorAll('.tab-btn-help').forEach(b => b.classList.remove('active'));
+    parent.querySelectorAll('.tab-content-help').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+}
+
+window.addEventListener('scroll', function() {
+    const btn = document.getElementById('backToTop');
+    if (window.scrollY > 400) {
+        btn.classList.add('visible');
+    } else {
+        btn.classList.remove('visible');
+    }
+});
+
+document.querySelectorAll('.toc-item').forEach(item => {
+    item.addEventListener('click', function(e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+});
+</script>
+{% endblock %}

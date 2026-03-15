@@ -1849,6 +1849,16 @@ def register_routes(app):
         """System architecture presentation page (PUBLIC - no auth required)"""
         return render_template('architecture.html')
     
+    @app.route('/help')
+    @login_required
+    def help_center():
+        """Help Center - comprehensive setup and settings guide"""
+        response = make_response(render_template('help.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
     @app.route('/chat/popout')
     def chat_popout():
         """Pop-out chat assistant window"""
