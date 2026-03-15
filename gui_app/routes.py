@@ -13821,6 +13821,25 @@ def register_routes(app):
             print(f"[API] Error clearing Tastytrade credentials: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @app.route('/api/brokers/credentials/trading212', methods=['GET'])
+    def api_get_trading212_credentials():
+        """Get Trading 212 credentials (masked)"""
+        try:
+            from .broker_credentials_service import get_trading212_credentials, get_broker_status
+            creds = get_trading212_credentials()
+            api_key = creds.get('api_key', '')
+            environment = creds.get('environment', 'demo')
+            status = get_broker_status('trading212')
+            return jsonify({
+                'success': True,
+                'has_credentials': bool(api_key),
+                'api_key_masked': f"{'*' * (len(api_key) - 4)}{api_key[-4:]}" if len(api_key) > 4 else ('****' if api_key else ''),
+                'environment': environment,
+                'status': status
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/brokers/credentials/trading212', methods=['POST'])
     def api_save_trading212_credentials():
         """Save Trading 212 credentials"""

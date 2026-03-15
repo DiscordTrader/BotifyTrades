@@ -2188,12 +2188,36 @@ document.getElementById('save-alpaca').addEventListener('click', async () => {
 
 // ========== TRADING 212 SETTINGS ==========
 
+async function loadTrading212Settings() {
+    try {
+        const response = await fetch('/api/brokers/credentials/trading212');
+        const data = await response.json();
+        if (data.success) {
+            if (data.has_credentials) {
+                document.getElementById('trading212-api-key').value = data.api_key_masked;
+                document.getElementById('trading212-api-key').placeholder = 'API key saved (enter new to replace)';
+            }
+            if (data.environment) {
+                document.getElementById('trading212-environment').value = data.environment;
+            }
+            if (data.status) {
+                const statusStr = data.status.status || 'disconnected';
+                updateConnectionStatus('trading212-connection-status', statusStr, statusStr === 'connected' ? 'Connected' : 'Not connected');
+                updateStatusBadge('trading212', data.status);
+            }
+        }
+    } catch (e) {
+        console.log('[T212] Could not load settings:', e);
+    }
+}
+loadTrading212Settings();
+
 document.getElementById('save-trading212').addEventListener('click', async () => {
-    const apiKey = document.getElementById('trading212-api-key').value.trim();
+    let apiKey = document.getElementById('trading212-api-key').value.trim();
     const environment = document.getElementById('trading212-environment').value;
     
-    if (!apiKey) {
-        showMessage('error', 'API Key is required');
+    if (!apiKey || apiKey.includes('****')) {
+        showMessage('error', 'Please enter your actual API key (not the masked value)');
         return;
     }
     
