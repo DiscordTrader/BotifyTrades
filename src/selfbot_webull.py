@@ -11327,8 +11327,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[DEBUG] Taking JACOB path", flush=True)
                             jacob_parsed = parse_jacob_signal(combined_content)
                             if jacob_parsed:
-                                forward_msg = format_jacob_for_webhook(jacob_parsed)
-                                print(f"[CHANNEL MAP] ✓ Formatted Jacob: {forward_msg}")
+                                if jacob_parsed.get('action', '').upper() == 'STO':
+                                    print(f"[SHORT BLOCK] ✗ Jacob SHORT (STO) not supported — skipping forward, PNL, and execution: {jacob_parsed.get('symbol')}", flush=True)
+                                    forward_msg = None
+                                else:
+                                    forward_msg = format_jacob_for_webhook(jacob_parsed)
+                                    print(f"[CHANNEL MAP] ✓ Formatted Jacob: {forward_msg}")
                             else:
                                 forward_msg = message.content.strip()
                                 print(f"[CHANNEL MAP] ⚠️ Jacob parse failed, forwarding raw")
@@ -11504,8 +11508,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             forward_msg = message.content.strip()
                         
                         try:
-                            # Forward clean BTO/STC message (no markers needed - early exit handles dedupe)
-                            if is_webhook_dest:
+                            if forward_msg is None:
+                                print(f"[CHANNEL MAP] ⏭ Skipping forward — signal blocked (STO or unforwardable)")
+                            elif is_webhook_dest:
                                 # Forward to webhook URL
                                 import aiohttp
                                 webhook_url = target_execution_channel_id
@@ -11558,19 +11563,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif is_jacob:
                             jacob_parsed = parse_jacob_signal(combined_content)
                             if jacob_parsed:
-                                parsed_signal = {
-                                    'symbol': jacob_parsed.get('symbol', ''),
-                                    'strike': 0,
-                                    'opt_type': None,
-                                    'expiry': '',
-                                    'price': jacob_parsed.get('entry_price', 0),
-                                    'qty': jacob_parsed.get('qty', 1),
-                                    'is_exit': False,
-                                    'asset_type': 'stock',
-                                    'stop_loss': jacob_parsed.get('stop_loss'),
-                                    'profit_targets': jacob_parsed.get('profit_targets', [])
-                                }
-                                print(f"[PNL TRACK] Jacob parsed: {parsed_signal}")
+                                if jacob_parsed.get('action', '').upper() == 'STO':
+                                    print(f"[PNL TRACK] ⏭ Jacob SHORT (STO) skipped — not tracked (pipeline only supports BTO/STC): {jacob_parsed.get('symbol')}", flush=True)
+                                else:
+                                    parsed_signal = {
+                                        'symbol': jacob_parsed.get('symbol', ''),
+                                        'strike': 0,
+                                        'opt_type': None,
+                                        'expiry': '',
+                                        'price': jacob_parsed.get('entry_price', 0),
+                                        'qty': jacob_parsed.get('qty', 1),
+                                        'is_exit': False,
+                                        'asset_type': 'stock',
+                                        'stop_loss': jacob_parsed.get('stop_loss'),
+                                        'profit_targets': jacob_parsed.get('profit_targets', [])
+                                    }
+                                    print(f"[PNL TRACK] Jacob parsed: {parsed_signal}")
                         elif is_jake:
                             jake_parsed = parse_jake_signal(combined_content)
                             if jake_parsed:
@@ -14489,6 +14497,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             self._save_signal_to_db(stk, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database")
             
+            if stk.get('action', '').upper() == 'STO':
+                print(f"[SHORT BLOCK] ✗ SHORT SELL (STO) not supported — downstream pipeline (risk engine, PNL tracking, position queries) is keyed to BTO/STC only. Signal logged but NOT executed: {stk.get('symbol')}", flush=True)
+                return
+
             # Apply ticker filter BEFORE execution (BTO only - exits always pass)
             if execute_enabled and channel_info and stk.get('action', 'BTO').upper() == 'BTO':
                 try:
