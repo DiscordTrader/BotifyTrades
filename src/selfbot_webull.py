@@ -11097,8 +11097,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # Sir Goldman already detected at top-level scope (lines 7980-7994)
                 # Use the is_sir_goldman and sir_goldman_parsed variables from there
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman:
-                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman})")
+                is_phoenix_registry = False
+                _phoenix_registry_result = None
+                try:
+                    from src.services.signal_format_registry import parse_with_registry
+                    _phoenix_registry_result = parse_with_registry(combined_content)
+                    if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'stock':
+                        if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
+                            is_phoenix_registry = True
+                except Exception:
+                    pass
+                
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman or is_phoenix_registry:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman}, phoenix_registry={is_phoenix_registry})")
                     
                     # === SIGNAL ROUTING ENGINE: Forward BTO via routing engine (creates position for risk monitoring) ===
                     if is_signal_routing_source and signal_routing_config and signal_routing_config.enable_forwarding:
@@ -11425,6 +11436,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 print(f"[CHANNEL MAP] ⚠️ Sir Goldman format failed - NOT forwarding")
                                 should_forward = False
+                        elif is_phoenix_registry and _phoenix_registry_result:
+                            print(f"[DEBUG] Taking PHOENIX_REGISTRY path", flush=True)
+                            phx_action = _phoenix_registry_result.get('action', 'BTO')
+                            phx_symbol = _phoenix_registry_result.get('symbol', '')
+                            phx_price = _phoenix_registry_result.get('price')
+                            price_str = f"@ {phx_price}" if phx_price else "@ m"
+                            if phx_action == 'STC':
+                                if _phoenix_registry_result.get('is_full_exit'):
+                                    forward_msg = f"STC {phx_symbol} {price_str}"
+                                elif _phoenix_registry_result.get('trim_percentage'):
+                                    trim_pct = _phoenix_registry_result['trim_percentage']
+                                    forward_msg = f"STC {phx_symbol} {price_str} trim {trim_pct}%"
+                                else:
+                                    forward_msg = f"STC {phx_symbol} {price_str}"
+                            else:
+                                phx_sl = _phoenix_registry_result.get('stop_loss')
+                                sl_str = f" SL {phx_sl}" if phx_sl else ""
+                                forward_msg = f"BTO {phx_symbol} {price_str}{sl_str}"
+                            print(f"[CHANNEL MAP] ✓ Formatted Phoenix: {forward_msg}")
                         elif format_as_bto_stc:
                             print(f"[DEBUG] Taking FORMAT_AS_BTO_STC path", flush=True)
                             # Convert any signal format to BTO/STC format for forwarding
@@ -11669,6 +11699,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'asset_type': 'option'
                             }
                             print(f"[PNL TRACK] Sir Goldman parsed: {parsed_signal} (partial={is_partial})")
+                        elif is_phoenix_registry and _phoenix_registry_result:
+                            phx_action = _phoenix_registry_result.get('action', 'BTO')
+                            is_exit = phx_action == 'STC'
+                            is_partial = _phoenix_registry_result.get('is_trim', False)
+                            parsed_signal = {
+                                'symbol': _phoenix_registry_result.get('symbol', ''),
+                                'strike': 0,
+                                'opt_type': None,
+                                'expiry': '',
+                                'price': _phoenix_registry_result.get('price', 0),
+                                'qty': _phoenix_registry_result.get('qty', 1),
+                                'is_exit': is_exit,
+                                'is_partial': is_partial,
+                                'asset_type': 'stock',
+                                'stop_loss': _phoenix_registry_result.get('stop_loss'),
+                                'trim_percentage': _phoenix_registry_result.get('trim_percentage')
+                            }
+                            print(f"[PNL TRACK] Phoenix parsed: {parsed_signal} (partial={is_partial})")
                         else:
                             # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
                             parsed_opt = parse_option_signal(combined_content)
@@ -13081,6 +13129,52 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 add_sym = registry_result.get('symbol')
                 print(f"[PHOENIX ADD] ✓ Add-to-position signal for {add_sym} (treating as new BTO)")
                 opt = registry_result
+            elif registry_result and registry_result.get('action') in ('BTO', 'STC') and registry_result.get('asset') == 'stock':
+                fmt_name = registry_result.get('format', 'REGISTRY')
+                reg_action = registry_result.get('action')
+                reg_symbol = registry_result.get('symbol')
+                reg_price = registry_result.get('price')
+                is_trim = registry_result.get('is_trim', False)
+                is_full_exit = registry_result.get('is_full_exit', False)
+                trim_pct = registry_result.get('trim_percentage')
+                if reg_action == 'BTO':
+                    india_stock_signal = {
+                        'action': 'BTO',
+                        'symbol': reg_symbol,
+                        'qty': registry_result.get('qty', 1),
+                        'qty_specified': registry_result.get('qty_specified', False),
+                        'price': reg_price,
+                        'asset': 'stock',
+                        'stop_loss_price': registry_result.get('stop_loss'),
+                        'profit_targets': registry_result.get('profit_targets'),
+                        'is_market_order': registry_result.get('is_market_order', reg_price is None),
+                        '_bracket_order': bool(registry_result.get('stop_loss')),
+                        '_registry_parsed': True,
+                        'parsed_by': fmt_name,
+                    }
+                    if registry_result.get('profit_targets'):
+                        india_stock_signal['profit_target_price'] = registry_result['profit_targets'][0]
+                    print(f"[{fmt_name}] ✓ Registry stock BTO: {reg_symbol} @ ${reg_price} SL=${registry_result.get('stop_loss')} (bracket={india_stock_signal['_bracket_order']})")
+                elif reg_action == 'STC':
+                    india_stock_signal = {
+                        'action': 'STC',
+                        'symbol': reg_symbol,
+                        'qty': registry_result.get('qty', 1),
+                        'qty_specified': registry_result.get('qty_specified', False),
+                        'price': reg_price,
+                        'asset': 'stock',
+                        'is_market_order': registry_result.get('is_market_order', True),
+                        'is_trim': is_trim,
+                        'is_full_exit': is_full_exit,
+                        '_registry_parsed': True,
+                        'parsed_by': fmt_name,
+                    }
+                    if is_trim and trim_pct:
+                        india_stock_signal['_phoenix_trim'] = True
+                        india_stock_signal['trim_percentage'] = trim_pct
+                    if is_full_exit:
+                        india_stock_signal['_phoenix_exit'] = True
+                    print(f"[{fmt_name}] ✓ Registry stock STC: {reg_symbol} trim={is_trim} ({trim_pct}%) full_exit={is_full_exit}")
         except Exception as reg_err:
             print(f"[REGISTRY] Error checking format registry: {reg_err}")
 
@@ -14320,6 +14414,54 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 stk['stop_loss_price'] = stk['stop_loss']
             if stk.get('profit_target_price') is None and stk.get('profit_targets'):
                 stk['profit_target_price'] = stk['profit_targets'][0] if stk['profit_targets'] else None
+            
+            if stk.get('action') == 'STC' and (stk.get('_phoenix_trim') or stk.get('_phoenix_exit')):
+                try:
+                    from gui_app.database import get_connection
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    stc_sym = stk.get('symbol')
+                    if not stc_sym:
+                        cursor.execute('''
+                            SELECT id, symbol, quantity, original_qty
+                            FROM trades 
+                            WHERE channel_id = ? 
+                            AND direction = 'BTO' 
+                            AND status IN ('OPEN', 'PENDING', 'open', 'pending', 'PARTIAL')
+                            ORDER BY created_at DESC 
+                            LIMIT 1
+                        ''', (str(message.channel.id),))
+                    else:
+                        cursor.execute('''
+                            SELECT id, symbol, quantity, original_qty
+                            FROM trades 
+                            WHERE symbol = ?
+                            AND channel_id = ? 
+                            AND direction = 'BTO' 
+                            AND status IN ('OPEN', 'PENDING', 'open', 'pending', 'PARTIAL')
+                            ORDER BY created_at DESC 
+                            LIMIT 1
+                        ''', (stc_sym, str(message.channel.id)))
+                    open_pos = cursor.fetchone()
+                    if open_pos:
+                        if not stc_sym:
+                            stk['symbol'] = open_pos['symbol']
+                            stc_sym = open_pos['symbol']
+                        our_qty = open_pos['quantity'] or 1
+                        if stk.get('_phoenix_exit') or stk.get('is_full_exit'):
+                            stk['qty'] = our_qty
+                            print(f"[PHOENIX EXIT] ✓ Full exit {stc_sym}: selling ALL {our_qty} shares")
+                        elif stk.get('trim_percentage'):
+                            import math
+                            trim_pct = stk['trim_percentage']
+                            exit_qty = max(1, math.ceil(our_qty * trim_pct / 100))
+                            exit_qty = min(exit_qty, our_qty)
+                            stk['qty'] = exit_qty
+                            print(f"[PHOENIX TRIM] ✓ Trim {trim_pct}% of {stc_sym}: selling {exit_qty} of {our_qty} shares")
+                    else:
+                        print(f"[PHOENIX STC] ⚠️ No open position found for {stc_sym or 'channel'} - cannot calculate exit qty")
+                except Exception as trim_err:
+                    print(f"[PHOENIX STC] ⚠️ Error calculating trim qty: {trim_err}")
             
             print(f"[SIGNAL PARSED] ✓ Stock Signal: {stk['action']} {stk['qty']} {stk['symbol']} @ ${stk['price']}")
             if stk.get('stop_loss_price') or stk.get('profit_target_price'):
