@@ -1553,6 +1553,18 @@ class UnfilledOrderChaser:
             'schwab': 'schwab_broker',
             'Schwab': 'schwab_broker',
             'SCHWAB': 'schwab_broker',
+            'tastytrade': 'tastytrade_broker',
+            'TASTYTRADE': 'tastytrade_broker',
+            'tastytrade_live': 'tastytrade_broker',
+            'tastytrade_paper': 'tastytrade_broker',
+            'ibkr': 'ibkr_broker',
+            'IBKR': 'ibkr_broker',
+            'ibkr_live': 'ibkr_broker',
+            'ibkr_paper': 'ibkr_broker',
+            'IBKR_PAPER': 'ibkr_broker',
+            'trading212': 'trading212_broker',
+            'TRADING212': 'trading212_broker',
+            'Trading212': 'trading212_broker',
         }
         
         attr_name = broker_map.get(broker_id, f"{broker_id.lower()}_broker")

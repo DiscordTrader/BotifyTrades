@@ -286,6 +286,20 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Error getting orders: {e}")
             return []
     
+    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        try:
+            if not self.account or not self.session:
+                return {'success': False, 'msg': 'Not connected to Tastytrade'}
+            
+            result = await asyncio.to_thread(
+                self.account.delete_order, self.session, int(order_id)
+            )
+            print(f"[{self.name}] ✓ Cancelled order {order_id}")
+            return {'success': True, 'order_id': order_id}
+        except Exception as e:
+            print(f"[{self.name}] Cancel order {order_id} error: {e}")
+            return {'success': False, 'msg': str(e)}
+
     async def place_stock_order(
         self,
         symbol: str,

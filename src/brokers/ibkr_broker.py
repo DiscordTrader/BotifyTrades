@@ -163,6 +163,23 @@ class IBKRBroker(BrokerInterface):
             print(f"[{self.name}] Error getting positions: {e}")
             return {}
     
+    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        try:
+            trade = None
+            for t in self.ib.openTrades():
+                if str(t.order.orderId) == str(order_id):
+                    trade = t
+                    break
+            if not trade:
+                return {'success': False, 'msg': f'Order {order_id} not found in open trades'}
+            
+            self.ib.cancelOrder(trade.order)
+            print(f"[{self.name}] ✓ Cancelled order {order_id}")
+            return {'success': True, 'order_id': order_id}
+        except Exception as e:
+            print(f"[{self.name}] Cancel order {order_id} error: {e}")
+            return {'success': False, 'msg': str(e)}
+
     async def place_stock_order(
         self,
         symbol: str,
