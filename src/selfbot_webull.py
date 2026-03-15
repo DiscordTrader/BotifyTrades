@@ -8045,7 +8045,8 @@ class SelfClient(discord.Client):
                 self.dhanq_broker or
                 self.upstox_broker or
                 self.zerodha_broker or
-                self.schwab_broker
+                self.schwab_broker or
+                self.trading212_broker
             )
             if any_broker_available:
                 self.broker_ready.set()
@@ -8069,7 +8070,7 @@ class SelfClient(discord.Client):
                 
                 # Create simple broker manager for sync service
                 class BrokerManager:
-                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None, schwab_broker=None, webull_paper_broker=None):
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None, schwab_broker=None, webull_paper_broker=None, trading212_broker=None):
                         self.webull_broker = webull_broker
                         self.alpaca_paper_broker = alpaca_paper_broker
                         self.tastytrade_broker = tastytrade_broker
@@ -8080,8 +8081,9 @@ class SelfClient(discord.Client):
                         self.zerodha_broker = zerodha_broker
                         self.schwab_broker = schwab_broker
                         self.webull_paper_broker = webull_paper_broker
+                        self.trading212_broker = trading212_broker
                 
-                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker)
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker, trading212_broker=self.trading212_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
                 self._sync_service = self.sync_service
@@ -16753,6 +16755,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif broker_name_lower == 'questrade' and hasattr(self, 'questrade_broker') and self.questrade_broker and self.questrade_broker.connected:
                             broker_instance = self.questrade_broker
                             _original_print(f"[MULTI-BROKER] Queuing Questrade LIVE broker (Canada)")
+                        # Trading 212 Paper: 'trading212_paper', 'TRADING212_PAPER'
+                        elif broker_name_lower == 'trading212_paper' and self.trading212_broker and self.trading212_broker.connected and not getattr(self.trading212_broker, 'is_live', True):
+                            broker_instance = self.trading212_broker
+                            _original_print(f"[MULTI-BROKER] Queuing Trading 212 PAPER broker (UK/EU stocks)")
+                        # Trading 212 Live: 'trading212_live', 'trading212', 'TRADING212'
+                        elif broker_name_lower in ('trading212_live', 'trading212') and self.trading212_broker and self.trading212_broker.connected:
+                            broker_instance = self.trading212_broker
+                            mode = "LIVE" if getattr(self.trading212_broker, 'is_live', True) else "PAPER"
+                            _original_print(f"[MULTI-BROKER] Queuing Trading 212 {mode} broker (UK/EU stocks)")
                         else:
                             _original_print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
                             _original_print(f"[DEBUG] Requested: '{broker_name_lower}', paper_broker: {getattr(self.paper_broker, 'name', None) if self.paper_broker else None}, broker: {getattr(self.broker, 'name', None) if self.broker else None}")
@@ -17688,6 +17699,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 live_broker = self.questrade_broker
                                 broker_name_used = 'Questrade'
                                 _original_print(f"[LIVE TRADE] Using channel broker override: Questrade")
+                            elif broker_override in ('trading212', 'trading212_live', 'trading212_paper') and hasattr(self, 'trading212_broker') and self.trading212_broker and self.trading212_broker.connected:
+                                live_broker = self.trading212_broker
+                                broker_name_used = 'Trading212'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Trading 212")
                             else:
                                 _original_print(f"[LIVE TRADE] ❌ REJECTED: Broker override '{broker_override}' not available or not connected")
                                 _original_print(f"[LIVE TRADE] Please check broker configuration in Settings")

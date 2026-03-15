@@ -21,6 +21,7 @@ class Trading212Broker(BrokerInterface):
         self.name = "Trading212"
         self._api_key = config.get('api_key', '')
         self._environment = config.get('environment', 'demo')
+        self.is_live = (self._environment == 'live')
         self._client = None
         self._instruments = {}
         self._instruments_ready = False

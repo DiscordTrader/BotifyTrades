@@ -1996,6 +1996,33 @@ class RiskManager:
                         return list(self._last_robinhood_positions)
                 return []
 
+        async def _fetch_trading212_cached():
+            if not self.trading212_broker:
+                return []
+            if not getattr(self.trading212_broker, 'connected', False):
+                return []
+            try:
+                t212_cache_age = _time.time() - getattr(self, '_trading212_cache_ts', 0)
+                if hasattr(self, '_last_trading212_positions') and self._last_trading212_positions is not None and t212_cache_age < _REST_CACHE_TTL:
+                    return list(self._last_trading212_positions)
+                if rate_manager:
+                    can_proceed, wait_time = rate_manager.can_make_request('trading212')
+                    if not can_proceed:
+                        if hasattr(self, '_last_trading212_positions') and self._last_trading212_positions and t212_cache_age < 120:
+                            return list(self._last_trading212_positions)
+                        return []
+                    rate_manager.record_request('trading212')
+                trading212_positions = await self._fetch_trading212_positions()
+                self._last_trading212_positions = trading212_positions
+                self._trading212_cache_ts = _time.time()
+                return trading212_positions
+            except Exception as e:
+                print(f"[RISK] Warning: Could not fetch Trading 212 positions: {e}")
+                if hasattr(self, '_last_trading212_positions') and self._last_trading212_positions:
+                    if (_time.time() - getattr(self, '_trading212_cache_ts', 0)) < 30:
+                        return list(self._last_trading212_positions)
+                return []
+
         results = await asyncio.gather(
             _fetch_webull_rest(),
             _fetch_alpaca_cached(),
@@ -2003,6 +2030,7 @@ class RiskManager:
             _fetch_ibkr_cached(),
             _fetch_tastytrade_cached(),
             _fetch_robinhood_cached(),
+            _fetch_trading212_cached(),
             return_exceptions=True
         )
         for r in results:
@@ -2243,6 +2271,37 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] Error fetching Robinhood positions: {e}")
         
+        return positions
+
+    async def _fetch_trading212_positions(self) -> List[PositionSnapshot]:
+        """Fetch and parse Trading 212 positions (UK/EU stocks only)."""
+        positions = []
+
+        if not self.trading212_broker:
+            return positions
+
+        try:
+            raw_positions = await self.trading212_broker.get_positions() or []
+
+            for pos in raw_positions:
+                broker_label = 'TRADING212'
+                if not getattr(self.trading212_broker, 'is_live', True):
+                    broker_label = 'TRADING212_PAPER'
+
+                positions.append(PositionSnapshot(
+                    symbol=pos.get('symbol', ''),
+                    quantity=abs(float(pos.get('quantity', 0))),
+                    avg_cost=float(pos.get('avg_cost', 0) or 0),
+                    current_price=float(pos.get('current_price', 0) or 0),
+                    asset='stock',
+                    broker=broker_label,
+                    strike=None,
+                    expiry=None,
+                    direction=None
+                ))
+        except Exception as e:
+            print(f"[RISK] Error fetching Trading 212 positions: {e}")
+
         return positions
     
     async def _evaluate_position(

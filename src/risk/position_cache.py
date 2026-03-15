@@ -99,6 +99,8 @@ class PositionCache:
             'UPSTOX': 'Upstox',
             'ZERODHA': 'Zerodha',
             'DHANQ': 'DhanQ',
+            'TRADING212': 'Trading212',
+            'TRADING212_PAPER': 'Trading212_Paper',
         }
         return broker_map.get(broker.upper(), broker)
     

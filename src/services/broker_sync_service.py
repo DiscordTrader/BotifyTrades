@@ -275,6 +275,16 @@ class BrokerSyncService:
             except Exception:
                 pass
         
+        # Add Trading 212 if available (UK/EU stocks only)
+        if hasattr(self.broker_manager, 'trading212_broker') and self.broker_manager.trading212_broker:
+            t212 = self.broker_manager.trading212_broker
+            try:
+                if getattr(t212, 'connected', False):
+                    broker_label = 'TRADING212' if getattr(t212, 'is_live', True) else 'TRADING212_PAPER'
+                    brokers_to_sync.append((broker_label, t212))
+            except Exception:
+                pass
+        
         if not brokers_to_sync:
             print("[SYNC] No brokers available for sync", flush=True)
             return
@@ -837,6 +847,40 @@ class BrokerSyncService:
                                 })
                     except Exception as e:
                         print(f"[SYNC] DhanQ fetch error: {e}")
+                        import traceback
+                        traceback.print_exc()
+            
+            elif broker_name in ('TRADING212', 'TRADING212_PAPER'):
+                if hasattr(broker_instance, 'get_positions'):
+                    try:
+                        positions = await broker_instance.get_positions() or []
+                        for pos in positions:
+                            qty = float(pos.get('quantity', 0))
+                            if qty == 0:
+                                continue
+                            result['positions'].append({
+                                'symbol': pos.get('symbol'),
+                                'quantity': qty,
+                                'avg_price': float(pos.get('avg_cost', 0) or 0),
+                                'current_price': float(pos.get('current_price', 0) or 0),
+                                'unrealized_pnl': float(pos.get('unrealized_pnl', 0) or 0),
+                                'position_id': None,
+                                'asset_type': 'stock'
+                            })
+
+                        if hasattr(broker_instance, 'get_pending_orders'):
+                            orders = await broker_instance.get_pending_orders() or []
+                            for order in orders:
+                                result['pending_orders'].append({
+                                    'broker_order_id': order.get('order_id'),
+                                    'symbol': order.get('symbol'),
+                                    'quantity': order.get('quantity'),
+                                    'limit_price': order.get('limit_price'),
+                                    'order_type': 'BUY' if order.get('side', '').upper() == 'BUY' else 'SELL',
+                                    'status': order.get('status')
+                                })
+                    except Exception as e:
+                        print(f"[SYNC] Trading 212 fetch error: {e}")
                         import traceback
                         traceback.print_exc()
             
@@ -2179,6 +2223,23 @@ class BrokerSyncService:
             elif broker_name == 'SCHWAB':
                 if hasattr(broker_instance, 'get_order_history'):
                     filled_orders = await broker_instance.get_order_history(count=50)
+            elif broker_name in ('TRADING212', 'TRADING212_PAPER'):
+                if hasattr(broker_instance, 'get_order_history'):
+                    raw_orders = await broker_instance.get_order_history(count=50)
+                    for order in raw_orders:
+                        if order.get('status', '').upper() != 'FILLED':
+                            continue
+                        side = order.get('side', '').upper()
+                        action = 'BUY' if side == 'BUY' else 'SELL'
+                        filled_orders.append({
+                            'order_id': order.get('order_id'),
+                            'symbol': order.get('symbol'),
+                            'quantity': int(float(order.get('filled_quantity', 0) or order.get('quantity', 0))),
+                            'filled_price': float(order.get('fill_price', 0) or 0),
+                            'action': action,
+                            'filled_time': order.get('created_at', ''),
+                            'asset_type': 'stock',
+                        })
             
             if not filled_orders:
                 print(f"[SYNC] No filled orders from {broker_name}")
@@ -2422,6 +2483,8 @@ class BrokerSyncService:
                 broker_instance = getattr(self.broker_manager, 'tastytrade_broker', None)
             elif 'IBKR' in broker:
                 broker_instance = getattr(self.broker_manager, 'ibkr_broker', None)
+            elif 'TRADING212' in broker:
+                broker_instance = getattr(self.broker_manager, 'trading212_broker', None)
 
             if broker_instance and hasattr(broker_instance, 'get_order_status'):
                 return await broker_instance.get_order_status(order_id)
