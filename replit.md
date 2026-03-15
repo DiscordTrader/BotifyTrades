@@ -47,7 +47,8 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Priority Queue Execution**: `_PriorityOrderQueue` wraps `asyncio.PriorityQueue` — risk management exits (priority 0) always dequeue before normal entries (priority 1), preventing stop-loss delays during high signal volume.
 - **Hub-First Architecture**: Prioritizes cached streaming data over REST API calls.
 - **Graceful Degradation**: Automatically falls back to REST polling if streaming services are unavailable.
-- **Modular Broker Abstraction**: Uses a common interface for diverse broker APIs.
+- **Modular Broker Abstraction**: Uses a common interface for diverse broker APIs (Webull, Alpaca, Schwab, IBKR, Tastytrade, Robinhood, Trading 212).
+- **Trading 212 Integration**: UK/EU stocks-only broker via REST API. Rate limited to 1 req/5s strict. Uses `Trading212Client` (aiohttp + rate limiter + soft-throttle P99 detection + SHA256 `DuplicateOrderGuard`), `Trading212Broker` (BrokerInterface with ticker cache `AAPL_US_EQ` format), `Trading212DataHub` (adaptive polling hub with idle/watching/active/pending states). Credential flow: API key + environment (live/demo) via settings page. Registered in BrokerFactory, BrokerManager, selfbot `get_broker_instance()`, rate_limit_manager, broker_credentials_service, all frontend templates. No options support — excluded from options.html broker selector.
 - **Market Isolation**: Conditional order services for different markets operate independently.
 - **Conditional Order Guards**: Includes per-channel Breakout Reset Guard and Limit Cap.
 - **Single-Application Trigger Offset**: Offset applied once at conditional order creation (stored as `adjusted_trigger_price`), never re-applied at execution time. `original_signal_price` column preserves the raw signal price for dynamic offset recalculation. **Global Fallback**: When channel-level `trigger_offset_percent` is 0, the system now falls back to global settings table (`conditional_order_trigger_offset_percent/mode/value`) so users who set offset globally get it applied.
@@ -79,6 +80,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Telethon**: Telegram client.
 - **Webull, alpaca-py, ib-insync, robin-stocks**: Broker SDKs.
 - **httpx**: HTTP client for Schwab API.
+- **aiohttp**: HTTP client for Trading 212 API.
 - **openai**: For AI analysis.
 - **cryptography**: For encryption.
 - **yfinance**: For market data.

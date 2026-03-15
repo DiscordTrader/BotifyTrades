@@ -117,6 +117,14 @@ BROKER_LIMITS: Dict[str, BrokerLimit] = {
         active_interval_seconds=8.0,
         idle_interval_seconds=20.0
     ),
+    'trading212': BrokerLimit(
+        name='Trading 212',
+        requests_per_window=1,
+        window_seconds=5,
+        min_interval_seconds=5.0,
+        active_interval_seconds=6.0,
+        idle_interval_seconds=30.0
+    ),
     'finnhub': BrokerLimit(
         name='Finnhub',
         requests_per_window=60,

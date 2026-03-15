@@ -166,6 +166,7 @@
                     <option value="IBKR_PAPER">IBKR Paper</option>
                     <option value="QUESTRADE">Questrade</option>
                     <option value="UPSTOX">Upstox</option>
+                    <option value="TRADING212">Trading 212</option>
                 </select>
                 <div class="period-tabs">
                     <button class="period-tab" data-period="today">1D</button>
@@ -377,7 +378,8 @@ const brokerColors = {
     'ROBINHOOD':'#76ff03','SCHWAB':'#29b6f6',
     'TASTYTRADE_LIVE':'#ff7043','TASTYTRADE_PAPER':'#ffab40',
     'IBKR':'#ab47bc','IBKR_LIVE':'#ab47bc','IBKR_PAPER':'#ce93d8',
-    'QUESTRADE':'#26c6da','UPSTOX':'#ff8f00','ZERODHA':'#2962ff','DHANQ':'#00bfa5'
+    'QUESTRADE':'#26c6da','UPSTOX':'#ff8f00','ZERODHA':'#2962ff','DHANQ':'#00bfa5',
+    'TRADING212':'#0052FF','TRADING212_PAPER':'#00A3FF'
 };
 
 function fmt$(v) { let n = parseFloat(v)||0; return (n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }

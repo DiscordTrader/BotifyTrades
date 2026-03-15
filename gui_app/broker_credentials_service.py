@@ -20,6 +20,9 @@ BROKER_STATUS = {
     'tastytrade_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'robinhood': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'schwab': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'trading212': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'trading212_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'trading212_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
 }
 
 
@@ -321,6 +324,27 @@ def clear_schwab_credentials():
     })
 
 
+def get_trading212_credentials() -> Dict[str, Any]:
+    return load_config('trading212_credentials') or {
+        'api_key': '',
+        'environment': 'demo',
+    }
+
+
+def save_trading212_credentials(api_key: str, environment: str = 'demo'):
+    save_config('trading212_credentials', {
+        'api_key': api_key,
+        'environment': environment,
+    })
+
+
+def clear_trading212_credentials():
+    save_config('trading212_credentials', {
+        'api_key': '',
+        'environment': 'demo',
+    })
+
+
 def save_api_keys_extended(
     openai: str = '',
     alpha_vantage: str = '',
@@ -390,6 +414,9 @@ def get_all_credentials_for_startup() -> Dict[str, Any]:
         'ROBINHOOD_TOTP_SECRET': get_robinhood_credentials().get('totp_secret', ''),
         'ROBINHOOD_DEVICE_TOKEN': get_robinhood_credentials().get('device_token', ''),
         
+        'TRADING212_API_KEY': get_trading212_credentials().get('api_key', ''),
+        'TRADING212_ENVIRONMENT': get_trading212_credentials().get('environment', 'demo'),
+        
         'OPENAI_API_KEY': api_keys.get('openai', ''),
         'ALPHA_VANTAGE_API_KEY': api_keys.get('alpha_vantage', ''),
         'FINNHUB_API_KEY': api_keys.get('finnhub', ''),
@@ -420,11 +447,14 @@ def get_enabled_brokers() -> Dict[str, bool]:
     tastytrade = get_tastytrade_credentials()
     robinhood = get_robinhood_credentials()
     
+    trading212 = get_trading212_credentials()
+    
     return {
         'discord': bool(discord.get('token')),
         'webull': bool(webull.get('email') or webull.get('access_token')),
         'alpaca': bool(alpaca.get('api_key')),
         'ibkr': bool(ibkr.get('host')),
         'tastytrade': bool(tastytrade.get('username')),
-        'robinhood': bool(robinhood.get('username'))
+        'robinhood': bool(robinhood.get('username')),
+        'trading212': bool(trading212.get('api_key'))
     }

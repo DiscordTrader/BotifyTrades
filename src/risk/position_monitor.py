@@ -1079,6 +1079,7 @@ class RiskManager:
         ibkr_broker=None,
         tastytrade_broker=None,
         robinhood_broker=None,
+        trading212_broker=None,
         monitoring_interval: int = DEFAULT_MONITORING_INTERVAL,
         trailing_activation_pct: float = DEFAULT_TRAILING_ACTIVATION,
         loop: Optional[asyncio.AbstractEventLoop] = None
@@ -1109,6 +1110,7 @@ class RiskManager:
         self.ibkr_broker = ibkr_broker
         self.tastytrade_broker = tastytrade_broker
         self.robinhood_broker = robinhood_broker
+        self.trading212_broker = trading212_broker
         self.monitoring_interval = monitoring_interval
         self.trailing_activation_pct = trailing_activation_pct
         self.loop = loop or asyncio.get_event_loop()
@@ -3086,6 +3088,8 @@ class RiskManager:
             broker_instance = self.ibkr_broker
         elif 'TASTYTRADE' in broker_upper:
             broker_instance = self.tastytrade_broker
+        elif 'TRADING212' in broker_upper:
+            broker_instance = self.trading212_broker
         elif 'WEBULL_PAPER' in broker_upper:
             broker_instance = getattr(self, 'webull_paper_broker', None) or (getattr(self.bot, 'webull_paper', None) if hasattr(self, 'bot') and self.bot else None)
         elif 'WEBULL' in broker_upper:

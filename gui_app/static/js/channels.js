@@ -3,7 +3,7 @@
 let channelCategory = 'EXECUTE';
 
 // All available broker options
-const ALL_BROKERS = ['WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'ROBINHOOD'];
+const ALL_BROKERS = ['WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'ROBINHOOD', 'TRADING212', 'TRADING212_PAPER'];
 
 // Helper function to parse enabled_brokers (handles both JSON string and array)
 function parseEnabledBrokers(enabledBrokers) {
@@ -189,6 +189,20 @@ async function loadChannels() {
                                         <div>
                                             <div style="font-weight: 600; color: #00c853; font-size: 13px;">🪶 Robinhood (LIVE ONLY)</div>
                                             <div style="font-size: 11px; color: #ff6b6b;">⚠️ No paper trading!</div>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 82, 255, 0.15); border: 1px solid rgba(0, 163, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00A3FF'" onmouseout="this.style.borderColor='rgba(0, 163, 255, 0.4)'">
+                                        <input type="checkbox" id="broker-TRADING212-${channel.id}" value="TRADING212" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'TRADING212')}>
+                                        <div>
+                                            <div style="font-weight: 600; color: #00A3FF; font-size: 13px;">📊 Trading 212 LIVE</div>
+                                            <div style="font-size: 11px; color: #8E8E93;">Stocks only (UK/EU)</div>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 82, 255, 0.1); border: 1px solid rgba(0, 163, 255, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00A3FF'" onmouseout="this.style.borderColor='rgba(0, 163, 255, 0.3)'">
+                                        <input type="checkbox" id="broker-TRADING212_PAPER-${channel.id}" value="TRADING212_PAPER" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'TRADING212_PAPER')}>
+                                        <div>
+                                            <div style="font-weight: 600; color: #00ff88; font-size: 13px;">📊 Trading 212 PAPER</div>
+                                            <div style="font-size: 11px; color: #8E8E93;">Demo account</div>
                                         </div>
                                     </label>
                                 </div>

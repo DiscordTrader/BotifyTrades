@@ -97,6 +97,11 @@ BROKER_BUYING_POWER_FIELDS = {
         'options': ['availableBalance', 'allocatedBalance'],
         'stocks': ['availableBalance'],
         'fallback': 'availableBalance'
+    },
+    'TRADING212': {
+        'options': ['buying_power', 'cash'],
+        'stocks': ['buying_power', 'cash'],
+        'fallback': 'buying_power'
     }
 }
 

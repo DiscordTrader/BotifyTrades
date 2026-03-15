@@ -97,6 +97,13 @@ BROKER_CAPABILITIES: Dict[str, BrokerCapability] = {
         rate_limit_key='zerodha',
         priority=56
     ),
+    'TRADING212': BrokerCapability(
+        broker_id='TRADING212',
+        supports_stock_quotes=False,
+        supports_option_quotes=False,
+        rate_limit_key='trading212',
+        priority=52
+    ),
     'DHAN': BrokerCapability(
         broker_id='DHAN',
         supports_stock_quotes=True,

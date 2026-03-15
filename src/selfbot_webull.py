@@ -7015,7 +7015,9 @@ class SelfClient(discord.Client):
             'UPSTOX': 'UPSTOX',
             'ZERODHA': 'ZERODHA',
             'DHANQ': 'DHANQ',
-            'QUESTRADE': 'QUESTRADE'
+            'QUESTRADE': 'QUESTRADE',
+            'TRADING212': 'TRADING212',
+            'TRADING212_PAPER': 'TRADING212_PAPER'
         }
         if channel_info.get('enabled_brokers'):
             try:
@@ -7305,6 +7307,8 @@ class SelfClient(discord.Client):
             return getattr(self, 'schwab_broker', None)
         elif 'questrade' in broker_lower:
             return getattr(self, 'questrade_broker', None)
+        elif 'trading212' in broker_lower or 't212' in broker_lower:
+            return getattr(self, 'trading212_broker', None)
         
         return None
 
@@ -7612,6 +7616,45 @@ class SelfClient(discord.Client):
             import traceback
             traceback.print_exc()
             self.robinhood_broker = None
+
+        self.trading212_broker = None
+        try:
+            from gui_app.broker_credentials_service import get_trading212_credentials, set_broker_status
+            t212_creds = get_trading212_credentials()
+            t212_api_key = t212_creds.get('api_key', '') if t212_creds else ''
+            t212_env = t212_creds.get('environment', 'demo') if t212_creds else 'demo'
+            
+            if t212_api_key:
+                _original_print("[TRADING212] Starting broker initialization...", flush=True)
+                try:
+                    from src.brokers.trading212_broker import Trading212Broker
+                    self.trading212_broker = Trading212Broker({
+                        'api_key': t212_api_key,
+                        'environment': t212_env
+                    })
+                    connected = await asyncio.wait_for(self.trading212_broker.connect(), timeout=15.0)
+                    if connected:
+                        env_label = t212_env.upper()
+                        _original_print(f"[TRADING212] ✓ Connected ({env_label})", flush=True)
+                        try:
+                            account_info = await self.trading212_broker.get_account_info()
+                            set_broker_status('trading212', True, 'connected', account_info=account_info)
+                        except Exception:
+                            pass
+                    else:
+                        _original_print("[TRADING212] ⚠️ Connection failed", flush=True)
+                        self.trading212_broker = None
+                except asyncio.TimeoutError:
+                    _original_print("[TRADING212] ⚠️ Connection timeout", flush=True)
+                    self.trading212_broker = None
+                except ImportError:
+                    _original_print("[TRADING212] Trading212Broker not available", flush=True)
+                    self.trading212_broker = None
+            else:
+                _original_print("[TRADING212] No credentials configured - broker disabled", flush=True)
+        except Exception as e:
+            _original_print(f"[TRADING212] ⚠️ Init error: {e}", flush=True)
+            self.trading212_broker = None
 
         # Initialize IBKR broker (requires TWS or IB Gateway running)
         self.ibkr_broker = None
@@ -8137,6 +8180,7 @@ class SelfClient(discord.Client):
                     alpaca_broker=self.paper_broker,
                     schwab_broker=self.schwab_broker,
                     robinhood_broker=self.robinhood_broker,
+                    trading212_broker=getattr(self, 'trading212_broker', None),
                     loop=self.loop
                 )
                 
@@ -12057,7 +12101,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     'UPSTOX': 'UPSTOX',
                                                     'ZERODHA': 'ZERODHA',
                                                     'DHANQ': 'DHANQ',
-                                                    'QUESTRADE': 'QUESTRADE'
+                                                    'QUESTRADE': 'QUESTRADE',
+                                                    'TRADING212': 'TRADING212',
+                                                    'TRADING212_PAPER': 'TRADING212_PAPER'
                                                 }
                                                 for b in enabled:
                                                     cond_brokers.append(broker_map.get(b.upper(), b.upper()))
@@ -12459,7 +12505,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'UPSTOX': 'UPSTOX',
                                                 'ZERODHA': 'ZERODHA',
                                                 'DHANQ': 'DHANQ',
-                                                'QUESTRADE': 'QUESTRADE'
+                                                'QUESTRADE': 'QUESTRADE',
+                                                'TRADING212': 'TRADING212',
+                                                'TRADING212_PAPER': 'TRADING212_PAPER'
                                             }
                                             for b in enabled:
                                                 cond_brokers.append(broker_map.get(b.upper(), b.upper()))
@@ -12998,6 +13046,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'ALPACA_PAPER': 'ALPACA_PAPER', 'TASTYTRADE': 'TASTYTRADE',
                                             'IBKR': 'IBKR', 'SCHWAB': 'SCHWAB',
                                             'ROBINHOOD': 'ROBINHOOD',
+                                            'TRADING212': 'TRADING212',
+                                            'TRADING212_PAPER': 'TRADING212_PAPER',
                                         }
                                         cond_broker = broker_map.get(enabled[0].upper(), enabled[0].upper())
                                 except Exception:
@@ -13230,7 +13280,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'UPSTOX': 'UPSTOX',
                                             'ZERODHA': 'ZERODHA',
                                             'DHANQ': 'DHANQ',
-                                            'QUESTRADE': 'QUESTRADE'
+                                            'QUESTRADE': 'QUESTRADE',
+                                            'TRADING212': 'TRADING212',
+                                            'TRADING212_PAPER': 'TRADING212_PAPER'
                                         }
                                         first_broker = enabled[0].upper()
                                         broker = broker_map.get(first_broker, enabled[0].upper())
@@ -15413,7 +15465,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         resp = {'broker': broker_name, 'result': resp, 'executed_qty': signal['qty']}
             elif signal['asset'] == 'option':
                 broker_upper = broker_name.upper()
-                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL'])
+                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL', 'TRADING212'])
                 india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
                 
                 if signal['action'] == 'STC' and hasattr(broker_instance, 'get_positions_detailed'):
@@ -15764,7 +15816,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             else:
                 broker_upper = broker_name.upper()
-                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL'])
+                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL', 'TRADING212'])
                 
                 # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
                 use_market_order = signal.get('_use_market_order', False)

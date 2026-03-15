@@ -646,6 +646,57 @@ def _fetch_tastytrade(bot) -> List[Dict]:
         return []
 
 
+def _fetch_trading212(bot) -> List[Dict]:
+    try:
+        t212_broker = None
+        if hasattr(bot, 'trading212_broker') and bot.trading212_broker:
+            t212_broker = bot.trading212_broker
+        elif hasattr(bot, 'broker_manager') and hasattr(bot.broker_manager, 'trading212_broker'):
+            t212_broker = bot.broker_manager.trading212_broker
+
+        if not t212_broker:
+            return []
+
+        if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
+            return []
+
+        future = asyncio.run_coroutine_threadsafe(
+            t212_broker.get_positions(),
+            bot.loop
+        )
+        raw = future.result(timeout=10) or []
+
+        positions = []
+        for pos in raw:
+            if isinstance(pos, dict):
+                qty = float(pos.get('quantity', 0))
+                avg_cost = float(pos.get('avg_cost', 0))
+                cur_price = float(pos.get('current_price', 0))
+                unrealized = float(pos.get('unrealized_pnl', 0))
+                pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
+
+                positions.append(_make_position(
+                    pos_id=f"T212_{pos.get('symbol', '')}",
+                    symbol=pos.get('symbol', ''),
+                    asset_type='stock',
+                    strike=None,
+                    expiry=None,
+                    call_put='',
+                    quantity=qty,
+                    entry_price=avg_cost,
+                    current_price=cur_price,
+                    last=cur_price,
+                    unrealized_pnl=unrealized,
+                    pnl_pct=pnl_pct,
+                    broker='TRADING212',
+                    source='live_brokerage',
+                ))
+        return positions
+    except Exception as e:
+        _log(f"T212 fetch error: {e}")
+        return []
+
+
 def _normalize_strike(val):
     if val is None or val == '':
         return ''
@@ -973,6 +1024,7 @@ def _refresh_snapshot(bot_instance):
             'SCHWAB': (_fetch_schwab, bot_instance),
             'IBKR': (_fetch_ibkr, bot_instance),
             'TASTYTRADE': (_fetch_tastytrade, bot_instance),
+            'TRADING212': (_fetch_trading212, bot_instance),
         }
 
         all_live_positions: List[Dict] = []

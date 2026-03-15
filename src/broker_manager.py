@@ -132,6 +132,30 @@ class BrokerManager:
             except Exception as e:
                 print(f"[BROKER MANAGER] ❌ Schwab error: {e}")
         
+        if brokers_config.get('enable_trading212', False):
+            try:
+                t212_config = self.config.get('trading212', {}).copy()
+                try:
+                    from gui_app.broker_credentials_service import get_trading212_credentials
+                    db_creds = get_trading212_credentials()
+                    if db_creds and db_creds.get('api_key'):
+                        t212_config['api_key'] = db_creds.get('api_key', '')
+                        t212_config['environment'] = db_creds.get('environment', 'demo')
+                except ImportError:
+                    pass
+                if t212_config.get('api_key'):
+                    t212_broker = BrokerFactory.create_broker('TRADING212', t212_config)
+                    if t212_broker and await t212_broker.connect():
+                        self.brokers['TRADING212'] = t212_broker
+                        env = t212_config.get('environment', 'demo').upper()
+                        print(f"[BROKER MANAGER] Trading 212 initialized ({env})")
+                    else:
+                        print(f"[BROKER MANAGER] Trading 212 not authenticated")
+                else:
+                    print(f"[BROKER MANAGER] Trading 212 skipped (no API key)")
+            except Exception as e:
+                print(f"[BROKER MANAGER] Trading 212 error: {e}")
+
         # STRICT ROUTING: No default broker - all trades must specify broker via channel config
         # default_broker is kept for backwards compatibility but NOT used for routing
         self.default_broker = None  # Disabled - strict channel routing enforced

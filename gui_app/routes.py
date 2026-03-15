@@ -6986,6 +6986,7 @@ def register_routes(app):
                         'TASTY': 'tastytrade_broker',
                         'ROBINHOOD': 'robinhood_broker',
                         'ALPACA': 'alpaca_paper_broker',
+                        'TRADING212': 'trading212_broker',
                     }
                     
                     for key, attr in broker_attr_map.items():
@@ -9544,6 +9545,7 @@ def register_routes(app):
                 'DHAN': '%DHAN%',
                 'UPSTOX': '%UPSTOX%',
                 'ZERODHA': '%ZERODHA%',
+                'TRADING212': '%TRADING212%',
             }
             
             like_pattern = None
@@ -9609,6 +9611,7 @@ def register_routes(app):
                         WHEN UPPER(broker) LIKE '%DHAN%' THEN 'DHAN'
                         WHEN UPPER(broker) LIKE '%UPSTOX%' THEN 'UPSTOX'
                         WHEN UPPER(broker) LIKE '%ZERODHA%' THEN 'ZERODHA'
+                        WHEN UPPER(broker) LIKE '%TRADING212%' THEN 'TRADING212'
                         ELSE UPPER(broker)
                     END as broker_group,
                     COUNT(*) as count
@@ -13818,6 +13821,33 @@ def register_routes(app):
             print(f"[API] Error clearing Tastytrade credentials: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @app.route('/api/brokers/credentials/trading212', methods=['POST'])
+    def api_save_trading212_credentials():
+        """Save Trading 212 credentials"""
+        try:
+            from .broker_credentials_service import save_trading212_credentials
+            
+            data = request.json
+            api_key = data.get('api_key', '').strip()
+            environment = data.get('environment', 'demo').strip()
+            
+            if not api_key:
+                return jsonify({'success': False, 'error': 'API key is required'}), 400
+            
+            if environment not in ('live', 'demo'):
+                return jsonify({'success': False, 'error': 'Environment must be "live" or "demo"'}), 400
+            
+            save_trading212_credentials(api_key=api_key, environment=environment)
+            print(f"[API] Trading 212 credentials saved ({environment})")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Trading 212 credentials saved ({environment} mode). Use Connect to test.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Trading 212 credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/brokers/credentials/ibkr', methods=['GET'])
     def api_get_ibkr_credentials():
         """Get IBKR credentials"""
@@ -13872,7 +13902,7 @@ def register_routes(app):
         try:
             from .broker_credentials_service import set_broker_status, get_discord_credentials, get_webull_credentials, get_alpaca_credentials, get_ibkr_credentials
             
-            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper', 'robinhood', 'schwab_live', 'schwab_paper']
+            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper', 'robinhood', 'schwab_live', 'schwab_paper', 'trading212_live', 'trading212_paper', 'trading212']
             
             if broker_id not in valid_brokers:
                 return jsonify({'success': False, 'error': f'Invalid broker ID: {broker_id}'}), 400
@@ -14504,6 +14534,49 @@ def register_routes(app):
                     traceback.print_exc()
                     set_broker_status(broker_id, False, 'error', error_msg)
                     return jsonify({'success': False, 'error': f'Robinhood connection failed: {error_msg}'}), 400
+            
+            elif broker_id.startswith('trading212'):
+                try:
+                    from .broker_credentials_service import get_trading212_credentials
+                    t212_creds = get_trading212_credentials()
+                    api_key = t212_creds.get('api_key', '') if t212_creds else ''
+                    environment = t212_creds.get('environment', 'demo') if t212_creds else 'demo'
+                    
+                    if not api_key:
+                        set_broker_status(broker_id, False, 'error', 'No API key configured')
+                        return jsonify({'success': False, 'error': 'No Trading 212 API key configured. Please save your API key first.'}), 400
+                    
+                    import requests as req
+                    base_url = 'https://live.trading212.com' if environment == 'live' else 'https://demo.trading212.com'
+                    headers = {'Authorization': api_key}
+                    resp = req.get(f'{base_url}/api/v0/equity/account/cash', headers=headers, timeout=10)
+                    
+                    if resp.status_code == 200:
+                        cash_data = resp.json()
+                        account_info = {
+                            'portfolio_value': float(cash_data.get('invested', 0) or 0) + float(cash_data.get('ppl', 0) or 0) + float(cash_data.get('free', 0) or 0),
+                            'cash': float(cash_data.get('free', 0) or 0),
+                            'mode': environment.upper()
+                        }
+                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                        return jsonify({
+                            'success': True,
+                            'message': f'Trading 212 connected ({environment.upper()})!',
+                            'status': 'connected',
+                            'account': account_info
+                        })
+                    elif resp.status_code == 401:
+                        set_broker_status(broker_id, False, 'error', 'Invalid API key')
+                        return jsonify({'success': False, 'error': 'Invalid Trading 212 API key. Please check your key.'}), 401
+                    else:
+                        error_msg = f'Trading 212 API error: {resp.status_code}'
+                        set_broker_status(broker_id, False, 'error', error_msg)
+                        return jsonify({'success': False, 'error': error_msg}), 400
+                except Exception as t212_err:
+                    error_msg = str(t212_err)
+                    print(f"[API] Trading 212 connection error: {error_msg}")
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': f'Trading 212 connection failed: {error_msg}'}), 400
             
             return jsonify({'success': False, 'error': 'Broker connection not implemented'}), 501
             
@@ -16190,6 +16263,52 @@ def register_routes(app):
                 'buying_power': robinhood_buying_power,
                 'positions': robinhood_positions,
                 'configured': robinhood_configured
+            }
+            
+            t212_connected = False
+            t212_buying_power = 0
+            t212_positions = 0
+            if _bot_instance and hasattr(_bot_instance, 'trading212_broker') and _bot_instance.trading212_broker:
+                try:
+                    broker = _bot_instance.trading212_broker
+                    import asyncio
+                    loop = getattr(_bot_instance, 'loop', None)
+                    if loop and loop.is_running():
+                        if hasattr(broker, 'is_connected'):
+                            try:
+                                future = asyncio.run_coroutine_threadsafe(broker.is_connected(), loop)
+                                t212_connected = future.result(timeout=5)
+                            except:
+                                t212_connected = getattr(broker, '_connected', False)
+                        if t212_connected:
+                            try:
+                                future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
+                                account = future.result(timeout=5)
+                                if account:
+                                    t212_buying_power = float(account.get('buying_power', 0) or 0)
+                                future = asyncio.run_coroutine_threadsafe(broker.get_positions(), loop)
+                                positions = future.result(timeout=5)
+                                t212_positions = len(positions) if positions else 0
+                            except:
+                                pass
+                except:
+                    pass
+            
+            try:
+                from .broker_credentials_service import get_trading212_credentials
+                t212_creds = get_trading212_credentials()
+                t212_configured = bool(t212_creds and t212_creds.get('api_key'))
+            except:
+                t212_configured = False
+            
+            t212_env = t212_creds.get('environment', 'demo').upper() if t212_configured else 'DEMO'
+            broker_status['trading212'] = {
+                'connected': t212_connected,
+                'status': 'connected' if t212_connected else ('configured' if t212_configured else 'not_configured'),
+                'account_type': 'LIVE' if t212_env == 'LIVE' else 'PAPER',
+                'buying_power': t212_buying_power,
+                'positions': t212_positions,
+                'configured': t212_configured
             }
             
             # Check IBKR
@@ -18683,6 +18802,7 @@ def register_routes(app):
                     ('IBKR', 'ibkr_broker', 'USA', 'USD', False),
                     ('TASTYTRADE', 'tastytrade_broker', 'USA', 'USD', False),
                     ('QUESTRADE', 'questrade_broker', 'Canada', 'CAD', False),
+                    ('TRADING212', 'trading212_broker', 'UK/EU', 'GBP', False),
                 ]
                 
                 for broker_name, attr_name, region, currency, is_paper in broker_mappings:
@@ -18808,6 +18928,7 @@ def register_routes(app):
             ('robinhood', 'robinhood_broker', 'US', 'USD'),
             ('schwab', 'schwab_broker', 'US', 'USD'),
             ('questrade', 'questrade_broker', 'CA', 'CAD'),
+            ('trading212', 'trading212_broker', 'UK', 'GBP'),
         ]
         
         loop = getattr(_bot_instance, 'loop', None)
@@ -18913,6 +19034,7 @@ def register_routes(app):
                     'robinhood': 'robinhood_broker',
                     'schwab': 'schwab_broker',
                     'dhanq': 'dhanq_broker',
+                    'trading212': 'trading212_broker',
                 }
                 
                 broker_attr = broker_attr_map.get(broker_name.lower())

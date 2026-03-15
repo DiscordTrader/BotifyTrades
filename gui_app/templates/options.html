@@ -1440,7 +1440,9 @@
             'tastytrade_paper': 2000, // 2 sec - Tastytrade: ~60 req/min estimated
             'tastytrade_live': 2000,
             'ibkr': 1000,             // 1 sec - IBKR: 50 req/sec
-            'robinhood': 2000         // 2 sec - conservative default
+            'robinhood': 2000,        // 2 sec - conservative default
+            'trading212': 6000,      // 6 sec - T212: 1 req/5s strict limit
+            'trading212_paper': 6000
         };
         let refreshTimer = null;
         

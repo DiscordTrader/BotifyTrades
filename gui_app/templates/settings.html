@@ -354,6 +354,7 @@ input:checked + .slider:before {
         <span id="ibkr-status-badge" class="status-badge disconnected">IBKR</span>
         <span id="schwab-status-badge" class="status-badge disconnected">Schwab</span>
         <span id="robinhood-status-badge" class="status-badge disconnected" style="background: rgba(0, 200, 83, 0.15); border-color: rgba(0, 200, 83, 0.3);">Robinhood</span>
+        <span id="trading212-status-badge" class="status-badge disconnected" style="background: rgba(0, 82, 255, 0.15); border-color: rgba(0, 163, 255, 0.3);">T212</span>
     </div>
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid rgba(0, 212, 255, 0.2);">
         <button id="btn-reload-credentials" onclick="reloadCredentials()" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">
@@ -808,6 +809,36 @@ input:checked + .slider:before {
             <button id="connect-robinhood" class="btn btn-connect" style="background: linear-gradient(135deg, #00c853 0%, #00a843 100%);">🔌 Connect</button>
         </div>
         <div id="robinhood-account-info" class="account-info" style="display: none;"></div>
+    </div>
+    
+    <!-- Trading 212 -->
+    <div class="settings-card" style="background: linear-gradient(135deg, #0a1a3d 0%, #0d2654 100%); border-color: rgba(0, 163, 255, 0.4);">
+        <h3 style="color: #00A3FF;">📊 Trading 212</h3>
+        <p class="description">UK/EU stock trading via Trading 212 API (stocks only, no options)</p>
+        
+        <div id="trading212-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="trading212-status-text">Not connected</span>
+        </div>
+        
+        <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="trading212-api-key" placeholder="Your Trading 212 API Key">
+            <p class="help-text">Get from Trading 212 app → Settings → API</p>
+        </div>
+        <div class="form-group">
+            <label>Environment</label>
+            <select id="trading212-environment" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(0, 163, 255, 0.3); border-radius: 8px; color: #fff; font-size: 14px;">
+                <option value="demo">Demo (Paper Trading)</option>
+                <option value="live">Live (Real Money)</option>
+            </select>
+            <p class="help-text">Demo for testing, Live for real trades</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-trading212" class="btn btn-success">💾 Save</button>
+            <button id="connect-trading212" class="btn btn-connect" style="background: linear-gradient(135deg, #0052FF 0%, #00A3FF 100%);">🔌 Connect</button>
+        </div>
+        <div id="trading212-account-info" class="account-info" style="display: none;"></div>
     </div>
     
     <!-- Charles Schwab OAuth Integration -->
@@ -2152,6 +2183,65 @@ document.getElementById('save-alpaca').addEventListener('click', async () => {
         msg.textContent = '❌ Error: ' + error.message;
         msg.className = 'message error';
         setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+// ========== TRADING 212 SETTINGS ==========
+
+document.getElementById('save-trading212').addEventListener('click', async () => {
+    const apiKey = document.getElementById('trading212-api-key').value.trim();
+    const environment = document.getElementById('trading212-environment').value;
+    
+    if (!apiKey) {
+        showMessage('error', 'API Key is required');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/trading212', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: apiKey,
+                environment: environment
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            showMessage('success', `Trading 212 credentials saved (${environment} mode)! Use Connect to test.`);
+        } else {
+            showMessage('error', result.error || 'Failed to save');
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+document.getElementById('connect-trading212').addEventListener('click', async () => {
+    updateConnectionStatus('trading212-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch('/api/brokers/connect/trading212', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('trading212-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge('trading212', { status: 'connected' });
+            showMessage('success', result.message);
+            
+            if (result.account) {
+                const infoDiv = document.getElementById('trading212-account-info');
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `<strong>Portfolio:</strong> $${(result.account.portfolio_value || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Cash:</strong> $${(result.account.cash || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            }
+        } else {
+            updateConnectionStatus('trading212-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('trading212-connection-status', 'error', error.message);
+        showMessage('error', error.message);
     }
 });
 
@@ -3525,6 +3615,7 @@ async function loadBrokerStatus() {
             updateStatusBadge('tastytrade_live', data.status.tastytrade_live);
             updateStatusBadge('robinhood', data.status.robinhood);
             updateStatusBadge('schwab', data.status.schwab);
+            updateStatusBadge('trading212', data.status.trading212);
             
             updateBrokerConnectionDisplay('webull_live', data.status.webull_live);
             updateBrokerConnectionDisplay('webull_paper', data.status.webull_paper);
@@ -4196,7 +4287,7 @@ async function loadStaleTradeCounts() {
             const countsContainer = document.getElementById('stale-counts-container');
             const buttonsContainer = document.getElementById('stale-buttons-container');
             
-            const knownBrokers = ['WEBULL', 'ALPACA', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'ROBINHOOD', 'QUESTRADE', 'DHAN', 'UPSTOX', 'ZERODHA'];
+            const knownBrokers = ['WEBULL', 'ALPACA', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'ROBINHOOD', 'QUESTRADE', 'DHAN', 'UPSTOX', 'ZERODHA', 'TRADING212'];
             const allBrokers = new Set([...knownBrokers, ...Object.keys(result.counts)]);
             
             let countsHtml = '';
