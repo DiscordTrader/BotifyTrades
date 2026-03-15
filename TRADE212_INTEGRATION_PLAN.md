@@ -359,8 +359,12 @@ When an option signal arrives on a T212-enabled channel:
 | 31 | `gui_app/database.py` | L12800 | Ensure `broker_limits` table tracks T212 rate limit hits (auto if broker_name column is generic) | 🆕 GAP-23 |
 | 32 | `gui_app/broker_credentials_service.py` | NEW funcs | Add `save_trading212_credentials()` and `get_trading212_credentials()` | 🆕 GAP-26 |
 | 33 | `src/core/config_loader.py` | credentials | Add T212 to `load_credentials_from_database()` so BrokerFactory receives T212 creds at startup | 🆕 GAP-27 |
+| 34 | `gui_app/routes.py` | L4353-4413 | Add `trading212_live` and `trading212_paper` entries to `/api/brokers/all_accounts` response + T212 account data fetch block | 🆕 GAP-32 |
+| 35 | `gui_app/routes.py` | L13039-13170 | Add T212 connection status check block in `/api/brokers/status`: `getattr(_bot_instance, 'trading212_broker', None)` → check `.connected` → `set_broker_status()` | 🆕 GAP-33 |
+| 36 | `gui_app/routes.py` | L13181-13195 | Add `'TRADING212': 'trading212'` and `'TRADING212_PAPER': 'trading212_paper'` to health monitor `broker_map` dict | 🆕 GAP-34 |
+| 37 | `gui_app/routes.py` | L6981-6989 | **CRITICAL:** Add `'TRADING212': 'trading212_broker'` to `/api/trades/close-all` `broker_attr_map`. Without this, emergency Close All SKIPS T212 positions. | 🆕 GAP-35 |
 
-### TIER 5 — Frontend Templates & JS (14 files — EXPANDED after audit)
+### TIER 5 — Frontend Templates & JS (EXPANDED after Channels/Execution audit)
 
 | # | File | Line(s) | Change Required | Gap Status |
 |---|---|---|---|---|
@@ -387,22 +391,35 @@ When an option signal arrives on a T212-enabled channel:
 | 54 | `gui_app/static/js/channels.js` | L6 | Add 'TRADING212' to `ALL_BROKERS` array | ✅ In plan |
 | 55 | `ui/wizard/pages/broker_selection.py` | L259-263 | Add TRADING212 to setup wizard broker checklist | ✅ In plan |
 | 56 | `ui/wizard/pages/broker_credentials.py` | Dynamic | Add TRADING212 credential form generation (API Key + Environment) | 🆕 GAP-28 |
+| 57 | `gui_app/static/js/channels.js` | L125-194 | **Per-channel broker checkboxes are HARDCODED HTML, not generated from ALL_BROKERS.** Must add 2 new `<label>` blocks: TRADING212 LIVE (icon 📊, color #0052FF) + TRADING212 PAPER (icon 📊, color #00ff88) | 🆕 GAP-29 |
+| 58 | `gui_app/templates/execution.html` | L7-57 | Add T212 account overview card to top dashboard (blue gradient `#0052FF→#00A3FF`, buying power + net liq) | 🆕 GAP-30 |
+| 59 | `gui_app/templates/execution.html` | L220-265 | Add `data.trading212_live` handler in `loadAllAccounts()` JS to populate T212 card | 🆕 GAP-31 |
+| 60 | `gui_app/templates/channels.html` | L930 | Update description text to include "Trading 212" in broker list | 🆕 GAP-36 |
 
 ### TIER 6 — New Files
 
 | # | File | Purpose |
 |---|---|---|
-| 57 | `src/brokers/trading212_broker.py` | BrokerInterface implementation |
-| 58 | `src/services/trading212_data_hub.py` | Centralized polling cache with adaptive states |
-| 59 | `src/services/trading212_client.py` | HTTP client with auth, rate limiter, soft-throttle detection |
+| 61 | `src/brokers/trading212_broker.py` | BrokerInterface implementation |
+| 62 | `src/services/trading212_data_hub.py` | Centralized polling cache with adaptive states |
+| 63 | `src/services/trading212_client.py` | HTTP client with auth, rate limiter, soft-throttle detection |
 
 ### TIER 7 — Database Seed
 
 | # | Change Required | Gap Status |
 |---|---|---|
-| 60 | INSERT into `broker_profiles`: broker_name=`TRADING212`, country_code=`UK`, display_name=`Trading 212`, credential_fields=`["api_key", "environment"]`, supports_options=`0`, supports_stocks=`1`, supports_paper=`1`, python_library=`requests` | ✅ In plan (expanded) |
+| 64 | INSERT into `broker_profiles`: broker_name=`TRADING212`, country_code=`UK`, display_name=`Trading 212`, credential_fields=`["api_key", "environment"]`, supports_options=`0`, supports_stocks=`1`, supports_paper=`1`, python_library=`requests` | ✅ In plan (expanded) |
 
-### REVISED TOTAL: 60 touch points (was 36 — 28 gaps discovered by UI/DB audit)
+### TIER 8 — Risk Engine (from risk engine audit — R21-R24)
+
+| # | File | Line(s) | Change Required | Gap Status |
+|---|---|---|---|---|
+| 65 | `src/risk/position_monitor.py` | L1077-1081 | Add `trading212_broker=None` parameter to `RiskManager.__init__()` | 🆕 R22 |
+| 66 | `src/selfbot_webull.py` | L8132-8141 | Add `trading212_broker=self.trading212_broker` to `RiskManager()` instantiation call | 🆕 R23 |
+| 67 | `src/risk/position_monitor.py` | L3078-3093 | Add `elif 'TRADING212' in broker_upper: broker_instance = self.trading212_broker` to `_direct_execute_exit()` | 🆕 R21 |
+| 68 | `src/risk/position_monitor.py` | L1613-1621 | Add `trading212_count` to position summary logging | 🆕 R24 |
+
+### REVISED TOTAL: 68 touch points (was 36 → 60 → 68 across 3 audit rounds)
 
 ---
 
