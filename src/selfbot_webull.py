@@ -6672,11 +6672,11 @@ def parse_stock_signal(text: str) -> Optional[dict]:
 
 # ------------------------------ TRADE IDEA PARSER ---------------------------------
 TRADE_IDEA_PATTERN = re.compile(
-    r'TRADE\s+IDEA\s*\n'
-    r'.*?Ticker:\s*(\$?[A-Za-z]+)\s*\n'
-    r'.*?Entry:\s*([\d.]+)(?:\s*\(([^)]+)\))?\s*\n'
-    r'.*?Levels?:\s*(.+?)\s*\n'
-    r'.*?SL:\s*([\d.]+)',
+    r'(?:TRADE|SCALP|SWING)\s+IDEA\s*\n'
+    r'.*?Ticker:\s*\*{0,2}(\$?[A-Za-z]+)\*{0,2}\s*\n'
+    r'.*?(?:Entry|Price):\s*([\d.]+)(?:\s*\(([^)]+)\))?\s*\n'
+    r'.*?(?:Levels?|Targets?):\s*(.+?)\s*\n'
+    r'.*?(?:SL|Support):\s*(?:below\s+)?([\d.]+)',
     re.IGNORECASE | re.DOTALL
 )
 
@@ -9142,46 +9142,34 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
             'raw_text': text
         }
         
-        # Check for TRADE IDEA format first (with emojis)
-        is_trade_idea = 'TRADE IDEA' in text.upper() or '📌' in text or 'Ticker:' in text
+        text_upper = text.upper()
+        is_trade_idea = any(kw in text_upper for kw in ('TRADE IDEA', 'SCALP IDEA', 'SWING IDEA')) or '📌' in text or 'Ticker:' in text
         
         if is_trade_idea:
-            # TRADE IDEA format parsing - handles multi-line format where emoji is on separate line:
-            # 📌
-            # Ticker: AMZE
-            # 💰
-            # Entry: 0.48
-            
-            # Extract ticker - handles "📌\nTicker: AMZE" or "📌 Ticker: AMZE" or just "Ticker: AMZE"
-            ticker_match = re.search(r'Ticker:\s*\$?([A-Z]{1,5})\b', text, re.IGNORECASE)
+            ticker_match = re.search(r'Ticker:\s*\*{0,2}\$?([A-Z]{1,5})\*{0,2}\b', text, re.IGNORECASE)
             if ticker_match:
                 alert_data['symbol'] = ticker_match.group(1).upper()
             
-            # Extract entry - handles "💰\nEntry: 0.48" or "Entry: 0.48"
-            entry_match = re.search(r'Entry:\s*\$?([\d.]+)', text, re.IGNORECASE)
+            entry_match = re.search(r'(?:Entry|Price):\s*\$?([\d.]+)', text, re.IGNORECASE)
             if entry_match:
                 try:
                     alert_data['entry_price'] = float(entry_match.group(1))
                 except:
                     pass
             
-            # Extract stop loss - handles "⛔\nSL: 0.435" or "SL: 0.435" or "SL 0.435" (colon optional)
-            sl_match = re.search(r'SL[:\s]+\$?([\d.]+)', text, re.IGNORECASE)
+            sl_match = re.search(r'(?:SL|Support)[:\s]+(?:below\s+)?\$?([\d.]+)', text, re.IGNORECASE)
             if sl_match:
                 try:
                     alert_data['stop_loss'] = float(sl_match.group(1))
                 except:
                     pass
             
-            # Extract target levels - handles "📈\nLevels: 0.50 - 0.515 - 0.53"
-            levels_match = re.search(r'Levels?:\s*([\d.\s\-\+]+)', text, re.IGNORECASE)
+            levels_match = re.search(r'(?:Levels?|Targets?)[:\s]+([\d.\s\-\+]+)', text, re.IGNORECASE)
             if levels_match:
                 levels_str = levels_match.group(1)
-                # Parse all price levels (separated by - or spaces)
                 level_prices = re.findall(r'([\d.]+)\+?', levels_str)
                 try:
                     alert_data['target_levels'] = [float(p) for p in level_prices if p]
-                    # Use first level as primary target
                     if alert_data['target_levels']:
                         alert_data['target_price'] = alert_data['target_levels'][0]
                 except:

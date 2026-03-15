@@ -522,11 +522,11 @@ ZSCALPS_EXIT_PENDING = re.compile(
 
 # TRADE IDEA format patterns (C1apped style)
 TRADE_IDEA_TICKER_PATTERN = re.compile(
-    r'(?:📌\s*)?(?:Ticker|Symbol):\s*\$?([A-Z]+)',
+    r'(?:📌\s*)?(?:Ticker|Symbol):\s*\*{0,2}\$?([A-Z]+)\*{0,2}',
     re.IGNORECASE
 )
 TRADE_IDEA_ENTRY_PATTERN = re.compile(
-    r'(?:💰\s*)?Entry:\s*\$?([\d.]+)',
+    r'(?:💰\s*)?(?:Entry|Price):\s*\$?([\d.]+)',
     re.IGNORECASE
 )
 TRADE_IDEA_LEVELS_PATTERN = re.compile(
@@ -534,7 +534,7 @@ TRADE_IDEA_LEVELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 TRADE_IDEA_SL_PATTERN = re.compile(
-    r'(?:⛔\s*)?(?:SL|Stop\s*Loss|Stop):\s*\$?([\d.]+|B/?E|BE|BREAK\s*EVEN)',
+    r'(?:⛔\s*)?(?:SL|Stop\s*Loss|Stop|Support):\s*(?:below\s+)?\$?([\d.]+|B/?E|BREAKEVEN|BREAK\s*EVEN)',
     re.IGNORECASE
 )
 
@@ -638,7 +638,7 @@ def tokenize_levels_with_strikethrough(levels_str: str) -> list:
 
 def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     """
-    Parse TRADE IDEA format signals (C1apped style).
+    Parse TRADE IDEA / SCALP IDEA / SWING IDEA format signals (C1apped style).
     
     Example:
     | TRADE IDEA
@@ -647,6 +647,11 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     📈 Levels: 1.45 - 1.49 - 1.56 - 1.65 - 1.77+
     ⛔ SL: 1.22
     
+    Also matches:
+    | SCALP IDEA  (same format, different title)
+    | SWING IDEA  (same format, different title)
+    NOTE with Ticker:/Entry:/Price: fields
+    
     Strikethrough Detection:
     When levels have ~~strikethrough~~ (e.g., "Levels: ~~1.26~~ - 1.29"), 
     those are marked as hit_levels indicating partial exits occurred.
@@ -654,7 +659,10 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     
     Returns dict with parsed components or None if not a TRADE IDEA.
     """
-    if 'TRADE IDEA' not in text.upper():
+    text_upper = text.upper()
+    is_clapped_format = any(kw in text_upper for kw in ('TRADE IDEA', 'SCALP IDEA', 'SWING IDEA'))
+    has_structured_fields = TRADE_IDEA_TICKER_PATTERN.search(text) and TRADE_IDEA_ENTRY_PATTERN.search(text)
+    if not is_clapped_format and not has_structured_fields:
         return None
     
     ticker_match = TRADE_IDEA_TICKER_PATTERN.search(text)
@@ -736,8 +744,14 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
 
 
 def is_trade_idea_signal(text: str) -> bool:
-    """Check if text is a TRADE IDEA format signal."""
-    return 'TRADE IDEA' in text.upper() and (
+    """Check if text is a TRADE IDEA / SCALP IDEA / SWING IDEA format signal."""
+    text_upper = text.upper()
+    has_idea_keyword = any(kw in text_upper for kw in ('TRADE IDEA', 'SCALP IDEA', 'SWING IDEA'))
+    has_structured_fields = (
+        TRADE_IDEA_TICKER_PATTERN.search(text) is not None and
+        TRADE_IDEA_ENTRY_PATTERN.search(text) is not None
+    )
+    return (has_idea_keyword or has_structured_fields) and (
         TRADE_IDEA_TICKER_PATTERN.search(text) is not None or
         TRADE_IDEA_ENTRY_PATTERN.search(text) is not None
     )
