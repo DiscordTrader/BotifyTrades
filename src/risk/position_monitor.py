@@ -744,6 +744,70 @@ class RiskDBAdapter:
                     if row:
                         return row[0]
                 return None
+            elif asset_type == 'option' and (not strike or strike == 0.0):
+                from datetime import datetime
+                expiry_variants = []
+                if expiry:
+                    expiry_variants.append(expiry)
+                    if '/' in expiry:
+                        parts = expiry.split('/')
+                        if len(parts) == 2:
+                            mm, dd = parts[0].zfill(2), parts[1].zfill(2)
+                            year = datetime.now().year
+                            expiry_variants.append(f"{year}-{mm}-{dd}")
+                            expiry_variants.append(f"{mm}/{dd}")
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}")
+                        elif len(parts) == 3:
+                            mm, dd = parts[0].zfill(2), parts[1].zfill(2)
+                            yy_raw = parts[2]
+                            year = (2000 + int(yy_raw)) if len(yy_raw) == 2 else int(yy_raw)
+                            expiry_variants.append(f"{year}-{mm}-{dd}")
+                            expiry_variants.append(f"{mm}/{dd}")
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}")
+                    elif '-' in expiry:
+                        parts = expiry.split('-')
+                        if len(parts) == 3 and len(parts[0]) == 4:
+                            yyyy, mm, dd = parts[0], parts[1].zfill(2), parts[2].zfill(2)
+                            expiry_variants.append(f"{mm}/{dd}")
+                            expiry_variants.append(f"{int(mm)}/{int(dd)}")
+                    seen = set()
+                    expiry_variants = [x for x in expiry_variants if not (x in seen or seen.add(x))]
+
+                cp_normalized = call_put.upper()[0] if call_put else None
+
+                for sym_try in symbols_to_check:
+                    for exp_try in (expiry_variants or ['']):
+                        if exp_try and cp_normalized:
+                            cursor.execute('''
+                                SELECT id FROM trades
+                                WHERE symbol = ? AND asset_type = 'option'
+                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND LOWER(broker) = LOWER(?) AND expiry = ? AND call_put = ?
+                                ORDER BY id DESC
+                            ''', (sym_try, broker, exp_try, cp_normalized))
+                        elif exp_try:
+                            cursor.execute('''
+                                SELECT id FROM trades
+                                WHERE symbol = ? AND asset_type = 'option'
+                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND LOWER(broker) = LOWER(?) AND expiry = ?
+                                ORDER BY id DESC
+                            ''', (sym_try, broker, exp_try))
+                        else:
+                            cursor.execute('''
+                                SELECT id FROM trades
+                                WHERE symbol = ? AND asset_type = 'option'
+                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND LOWER(broker) = LOWER(?)
+                                ORDER BY id DESC
+                            ''', (sym_try, broker))
+                        rows = cursor.fetchall()
+                        if len(rows) == 1:
+                            print(f"[RISK] ✓ Fuzzy trade lookup (strike=0.0): matched trade #{rows[0][0]} for {sym_try} on {broker}")
+                            return rows[0][0]
+                        elif len(rows) > 1:
+                            print(f"[RISK] ⚠️ Fuzzy trade lookup (strike=0.0): {len(rows)} ambiguous matches for {sym_try} on {broker} — skipping")
+                return None
             else:
                 for sym_try in symbols_to_check:
                     cursor.execute('''
@@ -828,9 +892,17 @@ class RiskDBAdapter:
             try:
                 from gui_app.database import get_trades
                 existing = get_trades(status='OPEN', limit=2000) + get_trades(status='PENDING', limit=1000)
+                SYMBOL_ALIASES = {
+                    'SPX': ['SPXW', 'SPX'], 'SPXW': ['SPX', 'SPXW'],
+                    'NDX': ['NDXP', 'NDX'], 'NDXP': ['NDX', 'NDXP'],
+                }
+                symbols_to_match = set([position.symbol] + SYMBOL_ALIASES.get(position.symbol, []))
+
+                fuzzy_candidates = []
                 for ex in existing:
                     ex_broker = (ex.get('broker') or '').upper()
-                    if ex['symbol'] == position.symbol and ex_broker == position.broker.upper():
+                    ex_symbol = (ex.get('symbol') or '').upper()
+                    if ex_symbol in symbols_to_match and ex_broker == position.broker.upper():
                         if position.asset == 'stock':
                             return ex.get('id')
                         elif position.asset == 'option':
@@ -842,6 +914,27 @@ class RiskDBAdapter:
                                 ex.get('call_put') == call_put and
                                 (not pos_expiry or not ex_expiry or ex_expiry == pos_expiry)):
                                 return ex.get('id')
+                            if pos_strike == 0.0 and (not pos_expiry or not ex_expiry or ex_expiry == pos_expiry):
+                                if call_put and ex.get('call_put') == call_put:
+                                    fuzzy_candidates.append(ex)
+                                elif not call_put:
+                                    fuzzy_candidates.append(ex)
+
+                if fuzzy_candidates and float(position.strike or 0) == 0.0:
+                    if len(fuzzy_candidates) == 1:
+                        matched = fuzzy_candidates[0]
+                        print(f"[RISK] ✓ Fuzzy-matched position (strike=0.0) to trade #{matched.get('id')} "
+                              f"({matched.get('symbol')} {matched.get('strike')}{matched.get('call_put')} {matched.get('expiry')})")
+                        return matched.get('id')
+                    elif len(fuzzy_candidates) > 1:
+                        qty_matches = [ex for ex in fuzzy_candidates if int(ex.get('quantity', 0)) == int(quantity)]
+                        if len(qty_matches) == 1:
+                            matched = qty_matches[0]
+                            print(f"[RISK] ✓ Fuzzy-matched position (strike=0.0, qty={int(quantity)}) to trade #{matched.get('id')} "
+                                  f"({matched.get('symbol')} {matched.get('strike')}{matched.get('call_put')} {matched.get('expiry')})")
+                            return matched.get('id')
+                        else:
+                            print(f"[RISK] ⚠️ Fuzzy-match ambiguous: {len(fuzzy_candidates)} candidates for {position.symbol} (strike=0.0) — skipping auto-import")
             except Exception:
                 pass
             
@@ -1429,9 +1522,34 @@ class RiskManager:
             
             new_keys = current_keys - self._prev_position_keys
             removed_keys = self._prev_position_keys - current_keys
-            
-            if new_keys:
-                for nk in new_keys:
+
+            flickered_removed = set()
+            flickered_new = set()
+            if new_keys and removed_keys:
+                for nk in list(new_keys):
+                    nk_parts = nk.split('_')
+                    if len(nk_parts) >= 4 and nk_parts[2] in ('0.0', '0', 'None', ''):
+                        n_broker = nk_parts[0]
+                        n_symbol = nk_parts[1]
+                        n_expiry = nk_parts[3] if len(nk_parts) > 3 else ''
+                        for rk in list(removed_keys):
+                            rk_parts = rk.split('_')
+                            if (len(rk_parts) >= 4 and
+                                rk_parts[0] == n_broker and
+                                rk_parts[1] == n_symbol and
+                                rk_parts[3] == n_expiry and
+                                rk_parts[2] not in ('0.0', '0', 'None', '')):
+                                flickered_removed.add(rk)
+                                flickered_new.add(nk)
+                                print(f"[RISK] ⚠️ Position key flicker detected: {rk} → {nk} "
+                                      f"(Webull returned strike=0.0, using previously known key)")
+                                break
+
+            real_new_keys = new_keys - flickered_new
+            real_removed_keys = removed_keys - flickered_removed
+
+            if real_new_keys:
+                for nk in real_new_keys:
                     matching = [p for p in positions if p.position_key == nk]
                     if matching:
                         p = matching[0]
@@ -1439,8 +1557,8 @@ class RiskManager:
                               f"(qty={p.quantity}, avg_cost=${p.avg_cost}, current=${p.current_price}) — "
                               f"risk engine will evaluate immediately")
             
-            if removed_keys:
-                for rk in removed_keys:
+            if real_removed_keys:
+                for rk in real_removed_keys:
                     print(f"[RISK] 📤 Position closed externally: {rk}")
             
             self._prev_position_keys = current_keys
@@ -1547,6 +1665,16 @@ class RiskManager:
                             direction = raw_dir[:1] if raw_dir else ''
                         raw_exp = pos.get('expireDate', '')
 
+                        if not hasattr(self, '_webull_enrichment_cache'):
+                            self._webull_enrichment_cache = {}
+
+                        enrich_key = str(option_id or ticker_id or f"{symbol}_{raw_exp}")
+
+                        if strike and strike > 0.0 and direction:
+                            self._webull_enrichment_cache[enrich_key] = {
+                                'strike': strike, 'direction': direction, 'expiry': raw_exp
+                            }
+
                         if (not strike or strike == 0.0) and (option_id or ticker_id):
                             try:
                                 wb_broker = getattr(self, '_webull_broker', None) or getattr(self.bot, 'broker', None)
@@ -1558,9 +1686,22 @@ class RiskManager:
                                         strike = reverse['strike']
                                         direction = reverse['option_type']
                                         raw_exp = reverse['expiry']
+                                        self._webull_enrichment_cache[enrich_key] = {
+                                            'strike': strike, 'direction': direction, 'expiry': raw_exp
+                                        }
                                         print(f"[RISK] ✓ Reverse cache enriched Webull position: {symbol} {strike} {direction} {raw_exp}")
                             except Exception:
                                 pass
+
+                        if (not strike or strike == 0.0 or not direction) and enrich_key in self._webull_enrichment_cache:
+                            cached = self._webull_enrichment_cache[enrich_key]
+                            if not strike or strike == 0.0:
+                                strike = cached['strike']
+                            if not direction:
+                                direction = cached['direction']
+                            if not raw_exp:
+                                raw_exp = cached['expiry']
+                            print(f"[RISK] ✓ Used cached enrichment for Webull position: {symbol} {strike} {direction} {raw_exp}")
 
                         expiry = ''
                         if raw_exp and '-' in raw_exp:
@@ -3506,18 +3647,37 @@ class RiskManager:
 
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:
         """Convert raw position dict to PositionSnapshot."""
+        strike = pos.get('strike')
+        direction = pos.get('direction')
+        expiry = pos.get('expiry')
+        option_id = pos.get('option_id')
+        broker = pos.get('broker', 'UNKNOWN')
+        asset = pos.get('asset', 'stock')
+
+        if asset == 'option' and broker == 'Webull' and (not strike or float(strike or 0) == 0.0 or not direction):
+            if hasattr(self, '_webull_enrichment_cache'):
+                enrich_key = str(option_id or pos.get('ticker_id', '') or f"{pos.get('symbol', '')}_{expiry}")
+                cached = self._webull_enrichment_cache.get(enrich_key)
+                if cached:
+                    if not strike or float(strike or 0) == 0.0:
+                        strike = cached['strike']
+                    if not direction:
+                        direction = cached['direction']
+                    if not expiry:
+                        expiry = cached['expiry']
+
         return PositionSnapshot(
             symbol=pos.get('symbol', ''),
             quantity=float(pos.get('quantity', 0)),
             avg_cost=float(pos.get('avg_cost', 0)),
             current_price=float(pos.get('current_price', 0)),
-            asset=pos.get('asset', 'stock'),
-            broker=pos.get('broker', 'UNKNOWN'),
-            strike=pos.get('strike'),
-            expiry=pos.get('expiry'),
-            direction=pos.get('direction'),
+            asset=asset,
+            broker=broker,
+            strike=strike,
+            expiry=expiry,
+            direction=direction,
             raw_symbol=pos.get('raw_symbol'),
-            option_id=pos.get('option_id')
+            option_id=option_id
         )
     
     def _normalize_call_put(self, direction: Optional[str]) -> Optional[str]:
