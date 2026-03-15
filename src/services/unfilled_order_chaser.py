@@ -939,6 +939,21 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] Error getting exit price: {e}")
             return None
     
+    def _extract_order_id(self, result) -> Optional[str]:
+        if not result:
+            return None
+        if hasattr(result, 'order_id') and result.order_id:
+            return str(result.order_id)
+        if isinstance(result, dict):
+            oid = result.get('orderId') or result.get('order_id')
+            if not oid and isinstance(result.get('data'), dict):
+                oid = result['data'].get('orderId') or result['data'].get('order_id')
+            if oid:
+                return str(oid)
+        if isinstance(result, str) and len(result) > 3:
+            return result
+        return None
+
     async def _place_replacement_order(
         self,
         broker,
@@ -973,12 +988,7 @@ class UnfilledOrderChaser:
                     action=order.action
                 )
             
-            if result and hasattr(result, 'order_id') and result.order_id:
-                return result.order_id
-            elif result and isinstance(result, dict) and result.get('order_id'):
-                return result['order_id']
-            
-            return None
+            return self._extract_order_id(result)
         except Exception as e:
             print(f"[ORDER_CHASER] Error placing replacement order: {e}")
             return None
@@ -1308,12 +1318,7 @@ class UnfilledOrderChaser:
                     action=order.action
                 )
             
-            if result and hasattr(result, 'order_id') and result.order_id:
-                return result.order_id
-            elif result and isinstance(result, dict) and result.get('order_id'):
-                return result['order_id']
-            
-            return None
+            return self._extract_order_id(result)
         except Exception as e:
             print(f"[ORDER_CHASER] Error placing entry replacement order: {e}")
             return None
