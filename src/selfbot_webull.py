@@ -8103,6 +8103,7 @@ class SelfClient(discord.Client):
                         self.trading212_broker = trading212_broker
                 
                 broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker, trading212_broker=self.trading212_broker)
+                self._broker_manager = broker_manager
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
                 self._sync_service = self.sync_service
@@ -8216,7 +8217,9 @@ class SelfClient(discord.Client):
                 except Exception as e:
                     print(f"[RISK] ⚠️ Could not register global instance: {e}")
                 
-                # Link risk manager to sync service for pending order reconciliation
+                if hasattr(self, '_broker_manager') and self._broker_manager:
+                    self._broker_manager._risk_manager = self.risk_manager
+                
                 if hasattr(self, 'sync_service') and self.sync_service:
                     self.sync_service.set_risk_manager(self.risk_manager)
             except Exception as e:

@@ -674,23 +674,23 @@ class UnfilledOrderChaser:
                 await self.mark_filled(order.order_id)
                 return
             
-            mid_price = await self._get_mid_price(broker, order)
-            if not mid_price:
-                print(f"[ORDER_CHASER] ⚠️ Could not get exit price for {order.symbol}")
-                order.status = OrderChaseStatus.PENDING
-                return
-            
-            print(f"[ORDER_CHASER]   Exit Price (bid): ${mid_price:.2f}")
-            
             remaining_qty = self._get_remaining_qty(pending_orders, order.order_id, int(order.quantity))
             if remaining_qty <= 0:
                 print(f"[ORDER_CHASER] Order fully filled (partial fills consumed all qty) — marking filled")
                 await self.mark_filled(order.order_id)
                 return
 
+            mid_price = await self._get_mid_price(broker, order)
+            if not mid_price:
+                print(f"[ORDER_CHASER] ⚠️ Could not get exit price for {order.symbol} — keeping existing order alive")
+                order.status = OrderChaseStatus.PENDING
+                return
+            
+            print(f"[ORDER_CHASER]   Exit Price (bid): ${mid_price:.2f}")
+
             cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
             if not cancel_ok:
-                print(f"[ORDER_CHASER] ❌ Failed to cancel exit order")
+                print(f"[ORDER_CHASER] ❌ Failed to cancel exit order — keeping existing order")
                 order.status = OrderChaseStatus.PENDING
                 return
             
@@ -732,14 +732,61 @@ class UnfilledOrderChaser:
                     )
                     self._tracked_orders[new_order_id] = new_tracked
             else:
-                print(f"[ORDER_CHASER] ❌ Failed to place replacement exit order — retrying next cycle")
-                order.status = OrderChaseStatus.PENDING
-                order.placed_at = datetime.now()
-                try:
-                    from gui_app.database import record_order_event
-                    record_order_event('CHASER_REPLACE_FAILED_RETRYING', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=order.order_id, reason=f"Cancel succeeded but replacement failed — will retry (attempt {order.chase_attempts})", severity='error', source='order_chaser', position_key=order.position_key)
-                except Exception:
-                    pass
+                print(f"[ORDER_CHASER] ❌ Failed to place replacement exit order — immediate retry at same price")
+                await asyncio.sleep(0.5)
+                retry_order_id = await self._place_replacement_order(broker, order, mid_price, quantity_override=replace_qty)
+                if retry_order_id:
+                    print(f"[ORDER_CHASER] ✓ Retry succeeded: {retry_order_id} @ ${mid_price:.2f}")
+                    order.replacement_order_id = retry_order_id
+                    order.status = OrderChaseStatus.REPLACED
+                    async with self._lock:
+                        if order.order_id in self._tracked_orders:
+                            del self._tracked_orders[order.order_id]
+                        new_tracked = TrackedExitOrder(
+                            order_id=retry_order_id,
+                            broker_id=order.broker_id,
+                            symbol=order.symbol,
+                            asset_type=order.asset_type,
+                            quantity=replace_qty,
+                            original_price=mid_price,
+                            action=order.action,
+                            placed_at=datetime.now(),
+                            position_key=order.position_key,
+                            strike=order.strike,
+                            expiry=order.expiry,
+                            call_put=order.call_put,
+                            chase_attempts=order.chase_attempts
+                        )
+                        self._tracked_orders[retry_order_id] = new_tracked
+                else:
+                    print(f"[ORDER_CHASER] ❌ Retry also failed — releasing for risk engine retry")
+                    async with self._lock:
+                        if order.order_id in self._tracked_orders:
+                            del self._tracked_orders[order.order_id]
+                    if order.position_key:
+                        try:
+                            from src.risk.exit_lease_manager import get_exit_lease_manager
+                            get_exit_lease_manager().force_release(order.position_key)
+                        except Exception:
+                            pass
+                        try:
+                            bot = self.broker_manager
+                            rm = None
+                            if bot:
+                                rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
+                            if rm and hasattr(rm, '_exit_executed_keys') and hasattr(rm, '_exit_executed_lock'):
+                                with rm._exit_executed_lock:
+                                    rm._exit_executed_keys.discard(order.position_key)
+                            if rm and hasattr(rm, 'cache'):
+                                rm.cache.record_exit_failure(order.position_key, "Chaser cancel+replace both failed", is_stop_loss=True)
+                                print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
+                        except Exception as e:
+                            print(f"[ORDER_CHASER] ⚠️ Could not record exit failure: {e}")
+                    try:
+                        from gui_app.database import record_order_event
+                        record_order_event('CHASER_REPLACE_FAILED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=order.order_id, reason=f"Cancel succeeded but both replacement attempts failed (attempt {order.chase_attempts})", severity='error', source='order_chaser', position_key=order.position_key)
+                    except Exception:
+                        pass
             
             print(f"[ORDER_CHASER] {'='*50}\n")
             
@@ -1097,16 +1144,22 @@ class UnfilledOrderChaser:
                         pass
                     return
                 if verified == 'UNKNOWN':
-                    print(f"[ORDER_CHASER] Entry order {order.order_id} status UNKNOWN — treating as cancelled (safe default)")
-                    async with self._lock:
-                        if order.order_id in self._tracked_entry_orders:
-                            self._tracked_entry_orders[order.order_id].status = OrderChaseStatus.CANCELLED
-                            del self._tracked_entry_orders[order.order_id]
-                    try:
-                        from gui_app.database import record_order_event
-                        record_order_event('ORDER_CANCELLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='CANCELLED', reason="Entry order status unknown — assumed cancelled", severity='warning', source='order_chaser')
-                    except Exception:
-                        pass
+                    _unknown_count = getattr(order, '_unknown_count', 0) + 1
+                    order._unknown_count = _unknown_count
+                    if _unknown_count >= 3:
+                        print(f"[ORDER_CHASER] Entry order {order.order_id} status UNKNOWN {_unknown_count}x — removing (persistent failure)")
+                        async with self._lock:
+                            if order.order_id in self._tracked_entry_orders:
+                                self._tracked_entry_orders[order.order_id].status = OrderChaseStatus.CANCELLED
+                                del self._tracked_entry_orders[order.order_id]
+                        try:
+                            from gui_app.database import record_order_event
+                            record_order_event('ORDER_CANCELLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='CANCELLED', reason=f"Entry order status unknown {_unknown_count}x — assumed cancelled", severity='warning', source='order_chaser')
+                        except Exception:
+                            pass
+                    else:
+                        print(f"[ORDER_CHASER] Entry order {order.order_id} status UNKNOWN ({_unknown_count}/3) — keeping tracked (may be API issue)")
+                        order.status = OrderChaseStatus.PENDING
                     return
                 else:
                     print(f"[ORDER_CHASER] Entry order {order.order_id} verified as filled")
@@ -1181,14 +1234,47 @@ class UnfilledOrderChaser:
                     )
                     self._tracked_entry_orders[new_order_id] = new_tracked
             else:
-                print(f"[ORDER_CHASER] ❌ Failed to place entry replacement order — retrying next cycle")
-                order.status = OrderChaseStatus.PENDING
-                order.placed_at = datetime.now()
-                try:
-                    from gui_app.database import record_order_event
-                    record_order_event('CHASER_REPLACE_FAILED_RETRYING', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=chase_price, order_id=order.order_id, reason=f"Cancel succeeded but entry replacement failed — will retry (attempt {order.chase_attempts})", severity='error', source='order_chaser')
-                except Exception:
-                    pass
+                print(f"[ORDER_CHASER] ❌ Failed to place entry replacement order — immediate retry")
+                await asyncio.sleep(0.5)
+                retry_order_id = await self._place_entry_replacement_order(broker, order, chase_price, quantity_override=replace_qty)
+                if retry_order_id:
+                    print(f"[ORDER_CHASER] ✓ Entry retry succeeded: {retry_order_id} @ ${chase_price:.2f}")
+                    order.replacement_order_id = retry_order_id
+                    order.status = OrderChaseStatus.REPLACED
+                    async with self._lock:
+                        if order.order_id in self._tracked_entry_orders:
+                            del self._tracked_entry_orders[order.order_id]
+                        new_tracked = TrackedEntryOrder(
+                            order_id=retry_order_id,
+                            broker_id=order.broker_id,
+                            symbol=order.symbol,
+                            asset_type=order.asset_type,
+                            quantity=replace_qty,
+                            original_price=chase_price,
+                            action=order.action,
+                            placed_at=datetime.now(),
+                            channel_id=order.channel_id,
+                            strike=order.strike,
+                            expiry=order.expiry,
+                            call_put=order.call_put,
+                            entry_range_high=order.entry_range_high,
+                            slippage_max_pct=order.slippage_max_pct,
+                            signal_price=order.signal_price,
+                            timeout_minutes=order.timeout_minutes,
+                            limit_cap_price=order.limit_cap_price,
+                            chase_attempts=order.chase_attempts
+                        )
+                        self._tracked_entry_orders[retry_order_id] = new_tracked
+                else:
+                    print(f"[ORDER_CHASER] ❌ Entry retry also failed — untracking cancelled order")
+                    async with self._lock:
+                        if order.order_id in self._tracked_entry_orders:
+                            del self._tracked_entry_orders[order.order_id]
+                    try:
+                        from gui_app.database import record_order_event
+                        record_order_event('CHASER_ENTRY_REPLACE_FAILED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=chase_price, order_id=order.order_id, reason=f"Cancel succeeded but both entry replacement attempts failed (attempt {order.chase_attempts})", severity='error', source='order_chaser')
+                    except Exception:
+                        pass
             
             print(f"[ORDER_CHASER] {'='*50}\n")
             
