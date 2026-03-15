@@ -16145,17 +16145,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except Exception as track_err:
                         _original_print(f"[EXEC] Warning: Could not track entry order: {track_err}")
                 
-                # Track STC orders from risk management for unfilled order chasing
-                if order_id and signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
+                # Track ALL STC orders for unfilled order chasing (risk management + signal-initiated)
+                if order_id and signal.get('action', '').upper() in ('STC', 'SELL'):
                     try:
-                        # Check if order chase is enabled: mapping → channel → global
-                        order_chase_enabled = True  # Default to enabled
+                        order_chase_enabled = True
                         if DATABASE_MODULE_AVAILABLE:
                             try:
                                 from gui_app import database as db
                                 resolved = False
                                 
-                                # Priority 1: Check signal routing mapping override
                                 source_channel = signal.get('_routing_source_channel') or signal.get('source_channel_id')
                                 if source_channel:
                                     mapping = db.get_signal_routing_by_source(str(source_channel))
@@ -16163,7 +16161,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         order_chase_enabled = bool(mapping.get('order_chase_enabled'))
                                         resolved = True
                                 
-                                # Priority 2: Fall back to channel setting
                                 if not resolved and signal.get('channel_id'):
                                     channel_id = signal.get('channel_id')
                                     ch = db.get_channel_by_discord_id(str(channel_id)) or db.get_channel_by_telegram_id(str(channel_id))
@@ -16171,14 +16168,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         order_chase_enabled = bool(ch.get('order_chase_enabled'))
                                         resolved = True
                                 
-                                # Priority 3: Fall back to global setting
                                 if not resolved:
                                     order_chase_enabled = db.get_order_chase_settings().get('enabled', True)
                             except Exception:
-                                pass  # Fall back to enabled
+                                pass
                         
                         order_chaser = get_order_chaser()
                         if order_chaser and order_chase_enabled:
+                            is_risk = signal.get('_risk_management_order', False)
+                            stc_position_key = signal.get('_position_key', '')
+                            if not stc_position_key:
+                                _stc_sym = signal.get('symbol', '')
+                                _stc_asset = signal.get('asset') or signal.get('asset_type', 'stock')
+                                stc_position_key = f"{broker_name}_{_stc_sym}_{_stc_asset}"
                             await order_chaser.track_exit_order(
                                 order_id=str(order_id),
                                 broker_id=broker_name,
@@ -16187,12 +16189,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 quantity=signal.get('qty', 1),
                                 price=signal.get('price', 0),
                                 action='STC',
-                                position_key=signal.get('_position_key', ''),
+                                position_key=stc_position_key,
                                 strike=signal.get('strike'),
                                 expiry=signal.get('expiry'),
-                                call_put=signal.get('opt_type')
+                                call_put=signal.get('opt_type'),
+                                is_risk_order=is_risk
                             )
-                            _original_print(f"[ORDER_CHASER] ✓ Tracking risk STC: {signal.get('symbol')} order_id={order_id}")
+                            _stc_source = "risk STC" if is_risk else "signal STC"
+                            _original_print(f"[ORDER_CHASER] ✓ Tracking {_stc_source}: {signal.get('symbol')} order_id={order_id}")
                         elif order_chaser and not order_chase_enabled:
                             _original_print(f"[ORDER_CHASER] ℹ️ Skipped tracking - order chase disabled for channel")
                     except Exception as chase_err:
@@ -16972,16 +16976,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 _original_print(f"[ORDER_CHASER] ℹ️ Entry chase disabled for channel {channel_id}")
                         
-                        # Track exit orders for unfilled order chasing (multi-broker)
-                        if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
-                            # Check if order chase is enabled: mapping → channel → global
-                            order_chase_enabled = True  # Default to enabled
+                        # Track ALL exit orders for unfilled order chasing (multi-broker)
+                        if signal.get('action', '').upper() in ('STC', 'SELL'):
+                            order_chase_enabled = True
                             if DATABASE_MODULE_AVAILABLE:
                                 try:
                                     from gui_app import database as db
                                     resolved = False
                                     
-                                    # Priority 1: Check signal routing mapping override
                                     source_channel = signal.get('_routing_source_channel') or signal.get('source_channel_id')
                                     if source_channel:
                                         mapping = db.get_signal_routing_by_source(str(source_channel))
@@ -16989,7 +16991,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             order_chase_enabled = bool(mapping.get('order_chase_enabled'))
                                             resolved = True
                                     
-                                    # Priority 2: Fall back to channel setting
                                     if not resolved and signal.get('channel_id'):
                                         channel_id = signal.get('channel_id')
                                         ch = db.get_channel_by_discord_id(str(channel_id)) or db.get_channel_by_telegram_id(str(channel_id))
@@ -16997,13 +16998,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             order_chase_enabled = bool(ch.get('order_chase_enabled'))
                                             resolved = True
                                     
-                                    # Priority 3: Fall back to global setting
                                     if not resolved:
                                         order_chase_enabled = db.get_order_chase_settings().get('enabled', True)
                                 except Exception:
-                                    pass  # Fall back to enabled
+                                    pass
                             
                             if order_chase_enabled:
+                                is_risk = signal.get('_risk_management_order', False)
                                 for success_resp in successes:
                                     order_id = success_resp.get('orderId') or success_resp.get('order_id')
                                     broker_name = success_resp.get('broker', 'UNKNOWN')
@@ -17011,6 +17012,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         try:
                                             order_chaser = get_order_chaser()
                                             if order_chaser:
+                                                stc_position_key = signal.get('_position_key', '')
+                                                if not stc_position_key:
+                                                    _stc_sym = signal.get('symbol', '')
+                                                    _stc_asset = signal.get('asset') or signal.get('asset_type', 'stock')
+                                                    stc_position_key = f"{broker_name}_{_stc_sym}_{_stc_asset}"
                                                 await order_chaser.track_exit_order(
                                                     order_id=str(order_id),
                                                     broker_id=broker_name,
@@ -17019,12 +17025,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     quantity=signal.get('qty', 1),
                                                     price=signal.get('price', 0),
                                                     action='STC',
-                                                    position_key=signal.get('_position_key', ''),
+                                                    position_key=stc_position_key,
                                                     strike=signal.get('strike'),
                                                     expiry=signal.get('expiry'),
-                                                    call_put=signal.get('opt_type')
+                                                    call_put=signal.get('opt_type'),
+                                                    is_risk_order=is_risk
                                                 )
-                                                _original_print(f"[ORDER_CHASER] ✓ Tracking {broker_name} exit order: {order_id}")
+                                                _stc_source = "risk STC" if is_risk else "signal STC"
+                                                _original_print(f"[ORDER_CHASER] ✓ Tracking {broker_name} {_stc_source}: {order_id}")
                                         except Exception as chase_err:
                                             _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
                             else:
@@ -17148,7 +17156,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     position_key=signal.get('_position_key', ''),
                                                     strike=signal.get('strike'),
                                                     expiry=signal.get('expiry'),
-                                                    call_put=signal.get('opt_type')
+                                                    call_put=signal.get('opt_type'),
+                                                    is_risk_order=True
                                                 )
                                             except Exception as chase_err:
                                                 _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")

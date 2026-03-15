@@ -57,6 +57,7 @@ class TrackedExitOrder:
     last_chase_at: Optional[datetime] = None
     replacement_order_id: Optional[str] = None
     final_fill_price: Optional[float] = None
+    is_risk_order: bool = True
 
 
 @dataclass
@@ -366,11 +367,12 @@ class UnfilledOrderChaser:
         position_key: str,
         strike: Optional[float] = None,
         expiry: Optional[str] = None,
-        call_put: Optional[str] = None
+        call_put: Optional[str] = None,
+        is_risk_order: bool = True
     ) -> None:
         """
         Register an exit order for monitoring.
-        Called by RiskManager after placing an STC order.
+        Called after placing any STC order (risk management or signal-initiated).
         """
         async with self._lock:
             order = TrackedExitOrder(
@@ -385,10 +387,12 @@ class UnfilledOrderChaser:
                 position_key=position_key,
                 strike=strike,
                 expiry=expiry,
-                call_put=call_put
+                call_put=call_put,
+                is_risk_order=is_risk_order
             )
             self._tracked_orders[order_id] = order
-            print(f"[ORDER_CHASER] Tracking exit order: {order_id} | {symbol} {quantity}x @ ${price:.2f}")
+            _source = "risk" if is_risk_order else "signal"
+            print(f"[ORDER_CHASER] Tracking {_source} exit order: {order_id} | {symbol} {quantity}x @ ${price:.2f}")
             try:
                 from gui_app.database import record_order_event
                 record_order_event('CHASER_TRACKING', symbol=symbol, broker=broker_id, direction='STC', quantity=quantity, price=price, order_id=order_id, reason=f"Tracking exit order for fill confirmation", severity='info', source='order_chaser', position_key=position_key)
@@ -411,7 +415,7 @@ class UnfilledOrderChaser:
                     record_order_event('ORDER_FILLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=quantity, price=fill_price or order.original_price, order_id=order_id, status='FILLED', reason=f"Order confirmed filled", severity='info', source='order_chaser', position_key=position_key)
                 except Exception:
                     pass
-                if position_key and order.action == 'STC':
+                if position_key and order.action == 'STC' and order.is_risk_order:
                     try:
                         from src.risk.position_cache import get_position_cache
                         cache = get_position_cache()
@@ -426,6 +430,8 @@ class UnfilledOrderChaser:
                         get_exit_lease_manager().force_release(position_key)
                     except Exception:
                         pass
+                elif position_key and order.action == 'STC' and not order.is_risk_order:
+                    print(f"[ORDER_CHASER] ✓ Signal STC filled for {position_key} — skipping risk state updates")
     
     async def untrack_order(self, order_id: str):
         """Stop tracking an order (exit or entry)"""
@@ -568,7 +574,7 @@ class UnfilledOrderChaser:
             async with self._lock:
                 if order.order_id in self._tracked_orders:
                     del self._tracked_orders[order.order_id]
-            if order.position_key:
+            if order.position_key and order.is_risk_order:
                 try:
                     from src.risk.exit_lease_manager import get_exit_lease_manager
                     get_exit_lease_manager().force_release(order.position_key)
@@ -585,9 +591,12 @@ class UnfilledOrderChaser:
                         print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
                 except Exception:
                     pass
+            elif order.position_key and not order.is_risk_order:
+                print(f"[ORDER_CHASER] ⚠️ Signal STC chase failed for {order.symbol} — no risk lease to release")
+            _fail_source = "risk" if order.is_risk_order else "signal"
             try:
                 from gui_app.database import record_order_event
-                record_order_event('ORDER_CHASE_FAILED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='FAILED', reason="Max chase attempts exhausted", severity='error', source='order_chaser', position_key=order.position_key)
+                record_order_event('ORDER_CHASE_FAILED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='FAILED', reason=f"Max chase attempts exhausted ({_fail_source} STC)", severity='error', source='order_chaser', position_key=order.position_key)
             except Exception:
                 pass
         
@@ -638,7 +647,7 @@ class UnfilledOrderChaser:
                         record_order_event('ORDER_CANCELLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=order.original_price, order_id=order.order_id, status='CANCELLED', reason="Order verified as cancelled/rejected by broker", severity='warning', source='order_chaser', position_key=order.position_key)
                     except Exception:
                         pass
-                    if order.position_key:
+                    if order.position_key and order.is_risk_order:
                         try:
                             from src.risk.exit_lease_manager import get_exit_lease_manager
                             get_exit_lease_manager().force_release(order.position_key)
@@ -728,7 +737,8 @@ class UnfilledOrderChaser:
                         strike=order.strike,
                         expiry=order.expiry,
                         call_put=order.call_put,
-                        chase_attempts=order.chase_attempts
+                        chase_attempts=order.chase_attempts,
+                        is_risk_order=order.is_risk_order
                     )
                     self._tracked_orders[new_order_id] = new_tracked
             else:
@@ -755,7 +765,8 @@ class UnfilledOrderChaser:
                             strike=order.strike,
                             expiry=order.expiry,
                             call_put=order.call_put,
-                            chase_attempts=order.chase_attempts
+                            chase_attempts=order.chase_attempts,
+                            is_risk_order=order.is_risk_order
                         )
                         self._tracked_orders[retry_order_id] = new_tracked
                 else:
@@ -763,7 +774,7 @@ class UnfilledOrderChaser:
                     async with self._lock:
                         if order.order_id in self._tracked_orders:
                             del self._tracked_orders[order.order_id]
-                    if order.position_key:
+                    if order.position_key and order.is_risk_order:
                         try:
                             from src.risk.exit_lease_manager import get_exit_lease_manager
                             get_exit_lease_manager().force_release(order.position_key)
@@ -782,9 +793,12 @@ class UnfilledOrderChaser:
                                 print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
                         except Exception as e:
                             print(f"[ORDER_CHASER] ⚠️ Could not record exit failure: {e}")
+                    elif order.position_key and not order.is_risk_order:
+                        print(f"[ORDER_CHASER] ⚠️ Signal STC replace failed for {order.symbol} — no risk lease to release")
+                    _fail_source = "risk" if order.is_risk_order else "signal"
                     try:
                         from gui_app.database import record_order_event
-                        record_order_event('CHASER_REPLACE_FAILED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=order.order_id, reason=f"Cancel succeeded but both replacement attempts failed (attempt {order.chase_attempts})", severity='error', source='order_chaser', position_key=order.position_key)
+                        record_order_event('CHASER_REPLACE_FAILED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=order.order_id, reason=f"Cancel succeeded but both replacement attempts failed ({_fail_source} STC, attempt {order.chase_attempts})", severity='error', source='order_chaser', position_key=order.position_key)
                     except Exception:
                         pass
             
