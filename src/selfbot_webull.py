@@ -4039,15 +4039,17 @@ class WebullBroker:
                 if order_ok and order_id:
                     import time as _time
                     buffers = market_buy_buffers if side == 'BUY' else market_sell_buffers
+                    _chase_wait = 2.5
                     
                     for retry_idx in range(1, len(buffers)):
-                        _time.sleep(0.8)
+                        _time.sleep(_chase_wait)
                         try:
                             orders_list = None
                             try:
                                 from src.services.webull_data_hub import get_webull_data_hub
                                 hub = get_webull_data_hub()
-                                cached_orders = hub.get_pending_orders(max_age_seconds=5)
+                                hub.invalidate_orders()
+                                cached_orders = hub.get_pending_orders(max_age_seconds=2)
                                 if cached_orders is not None:
                                     orders_list = cached_orders
                             except Exception:
@@ -4071,25 +4073,42 @@ class WebullBroker:
                                 break
                             
                             new_buffer = buffers[retry_idx]
-                            print(f"[{self.name}] ⏳ Order not filled (status={order_status}), chasing with +{new_buffer*100:.0f}% buffer...", flush=True)
+                            print(f"[{self.name}] ⏳ Order not filled (status={order_status}) after {_chase_wait}s, chasing with +{new_buffer*100:.0f}% buffer...", flush=True)
+                            
+                            new_price, _ = _get_market_price(wb, broker_sym, option_id, side, new_buffer)
+                            if not new_price or new_price <= 0:
+                                print(f"[{self.name}] ⚠️ Could not get updated price for chase — keeping existing order alive", flush=True)
+                                break
                             
                             try:
                                 cancel_resp = wb.cancel_order(order_id)
-                                print(f"[{self.name}] 🔄 Cancelled order {order_id} for re-price", flush=True)
+                                _cancel_ok = True
+                                if isinstance(cancel_resp, dict) and cancel_resp.get('success') == False:
+                                    _cancel_ok = False
+                                if _cancel_ok:
+                                    print(f"[{self.name}] 🔄 Cancelled order {order_id} for re-price", flush=True)
+                                else:
+                                    print(f"[{self.name}] ⚠️ Cancel returned failure — keeping existing order", flush=True)
+                                    break
                             except Exception as cancel_err:
-                                print(f"[{self.name}] ⚠️ Cancel attempt: {cancel_err}", flush=True)
+                                print(f"[{self.name}] ⚠️ Cancel attempt failed: {cancel_err} — keeping existing order", flush=True)
+                                break
                             
-                            _time.sleep(0.2)
-                            new_price, _ = _get_market_price(wb, broker_sym, option_id, side, new_buffer)
-                            if new_price and new_price > 0:
-                                effective_price = new_price
-                                result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, f"[Chase {retry_idx+1}/{len(buffers)}] ")
+                            _time.sleep(0.3)
+                            effective_price = new_price
+                            result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, f"[Chase {retry_idx+1}/{len(buffers)}] ")
+                            new_order_id = (result or {}).get('orderId')
+                            if new_order_id:
+                                order_id = new_order_id
+                            else:
+                                print(f"[{self.name}] ⚠️ Chase replacement failed — retrying at same price", flush=True)
+                                _time.sleep(0.3)
+                                result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, f"[Chase {retry_idx+1}/{len(buffers)} RETRY] ")
                                 new_order_id = (result or {}).get('orderId')
                                 if new_order_id:
                                     order_id = new_order_id
-                            else:
-                                print(f"[{self.name}] ⚠️ Could not get updated price for chase", flush=True)
-                                break
+                                else:
+                                    print(f"[{self.name}] ❌ Chase replacement retry also failed — order may be lost", flush=True)
                         except Exception as chase_err:
                             print(f"[{self.name}] ⚠️ Chase check error: {chase_err}", flush=True)
                             break
