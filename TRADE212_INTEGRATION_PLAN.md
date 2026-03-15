@@ -633,6 +633,9 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 | R12 | `broker_sync_service._fetch_and_normalize()` | **Missing T212 branch in if/elif chain returns empty positions/orders.** After 2 consecutive empty responses, sync service marks OPEN trades as cancelled. T212 trades get falsely closed in DB, triggering duplicate re-imports and phantom "closed externally" events. | T212 added to BrokerManager but not to sync service's explicit if/elif dispatch | Certain (if missed) | Add explicit TRADING212 normalizer branch. Change unknown-broker fallback from empty-success to logged error. |
 | R14 | `position_monitor._fetch_all_positions()` | **Risk engine completely blind to T212 positions.** Stop losses, trailing stops, profit targets — NONE fire for T212 positions. Positions sit with no risk protection. | T212 positions exist but no `_fetch_trading212_cached()` function in the hardcoded asyncio.gather list | Certain (if missed) | Add `_fetch_trading212_cached()` to the gather list. Wire Trading212DataHub as the data source (no direct API calls). |
 | R18 | `execute_on_single_broker` + `order_resilience.py` | **Duplicate real orders on T212.** Network timeout → OrderResilienceLayer retries → T212 receives duplicate POST → two real orders fill → double position. T212 API is NOT idempotent. | Network timeout during POST /orders/market or /orders/limit, followed by automatic retry | Likely | Implement SHA256 fingerprint guard (broker+channel+action+symbol+qty+5s bucket) checked BEFORE POST. For T212 specifically: on timeout, probe GET /orders first before retrying. |
+| R21 | `position_monitor._direct_execute_exit()` (L3078-3093) | **Risk engine SL/PT exits SILENTLY FAIL for T212.** The backup direct execution path has an if/elif chain for 7 broker variants (Robinhood, Schwab, Alpaca, IBKR, Tastytrade, Webull, Webull_Paper). Missing TRADING212 branch → prints "No broker instance" → does nothing. Position bleeds without protection. **WORSE than R14**: R14 = can't see positions. R21 = can see them but can't ACT on them. | Risk engine triggers SL/PT/trailing stop for any T212 position AND primary order_queue worker is slow/blocked | Certain (if missed) | Add `elif 'TRADING212' in broker_upper: broker_instance = self.trading212_broker` to the if/elif chain. This is part of a **3-LINK CHAIN** with R22 and R23 — all 3 must be fixed together. |
+| R22 | `RiskManager.__init__()` (L1077-1081) | **Constructor has no trading212_broker parameter.** Even with R21's elif branch added, `self.trading212_broker` raises AttributeError because it was never set. The init signature only accepts: alpaca_broker, schwab_broker, ibkr_broker, tastytrade_broker, robinhood_broker. | R21 fix attempted without R22 | Certain (if missed) | Add `trading212_broker=None` parameter to `__init__()`, store as `self.trading212_broker = trading212_broker`. |
+| R23 | `selfbot_webull.py` RiskManager() instantiation (L8132-8141) | **T212 broker instance never passed to RiskManager.** The actual call only passes alpaca_broker, schwab_broker, robinhood_broker. Even with R21+R22 fixed, trading212_broker=None → exits still silently fail. **This is the 3rd link in the R21-R22-R23 chain.** | R21+R22 fixed but R23 missed | Certain (if missed) | Add `trading212_broker=self.trading212_broker` to the RiskManager() constructor call. |
 
 ### HIGH Risks (Will cause functional failures)
 
@@ -688,12 +691,27 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 | 12 | Add T212 aliases to _is_broker_match normalization | R13: Reconciliation failures |
 | 13 | Add P99 response-time tracking for soft-throttle detection | R16: Stale data poisoning |
 
-### Phase 3 (Risk Engine Awareness)
+### Phase 3 (Risk Engine — 3-LINK CHAIN, all must be done together)
 
 | # | Action | Prevents |
 |---|---|---|
-| 14 | Wire cross-broker price sync for T212 stock symbols | R15: Stale price exits |
-| 15 | Add price staleness logging for non-streaming broker positions | R15: Silent stale decisions |
+| 14 | Add `trading212_broker=None` parameter to `RiskManager.__init__()`, store as `self.trading212_broker` | R22: AttributeError on exit routing |
+| 15 | Add `trading212_broker=self.trading212_broker` to RiskManager() call in selfbot_webull.py L8132 | R23: Broker instance is None |
+| 16 | Add `elif 'TRADING212' in broker_upper: broker_instance = self.trading212_broker` to `_direct_execute_exit()` L3078 | R21: Silent SL/PT exit failure |
+| 17 | Wire cross-broker price sync for T212 stock symbols (ALREADY WORKS — L1243 auto-subscribes non-Webull/non-Schwab stocks via Schwab streaming) | R15: Stale price exits |
+| 18 | Add `trading212_count` to position summary logging at L1613 | R24: Missing T212 count in monitoring log |
+| 19 | Add price staleness logging for non-streaming broker positions | R15: Silent stale decisions |
+
+### ⚠️ R21-R22-R23 Chain Dependency Warning
+
+```
+R22 (add __init__ parameter)
+    └─→ R23 (pass instance at instantiation)
+        └─→ R21 (route exit in _direct_execute_exit)
+
+Missing ANY ONE link = stop loss exits SILENTLY FAIL for ALL T212 positions.
+The position bleeds money with no protection and no error logged (only "No broker instance" print).
+```
 
 ---
 
@@ -708,4 +726,5 @@ Chart color: `#0052FF` (Trading 212 brand blue)
 | Options page | Falls back to Webull/Alpaca for data |
 | Signal parser | Completely broker-independent |
 | Existing brokers | Zero changes to Webull/Schwab/IBKR/Alpaca/Tastytrade/Robinhood code |
-| Risk engine logic | Broker-agnostic — reads PositionSnapshot regardless of source (once wired) |
+| Risk engine evaluation logic | Broker-agnostic — tiered_targets.py, global_risk.py, trailing_stop.py all evaluate PositionSnapshot regardless of broker field. No changes needed to evaluation logic itself. |
+| Risk engine cross-broker streaming | T212 stock positions automatically get Schwab streaming prices (L1243 logic: non-Webull + non-Schwab → subscribe via Schwab). R15 is self-mitigating for stocks. |
