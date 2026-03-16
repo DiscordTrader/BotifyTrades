@@ -1699,25 +1699,27 @@ def register_routes(app):
             try:
                 from src.services.broker_health_monitor import BrokerHealthMonitor
                 health_monitor = BrokerHealthMonitor()
-                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']:
+                health_broker_map = {
+                    'WEBULL': ('Webull', 'USA'),
+                    'ALPACA_PAPER': ('Alpaca (Paper)', 'USA'),
+                    'ROBINHOOD': ('Robinhood', 'USA'),
+                    'SCHWAB': ('Schwab', 'USA'),
+                    'IBKR': ('IBKR', 'USA'),
+                    'TASTYTRADE': ('Tastytrade', 'USA'),
+                    'TRADING212': ('Trading 212', 'UK_EU'),
+                }
+                for broker_key, (display_name, region) in health_broker_map.items():
                     state = health_monitor.get_broker_state(broker_key)
                     if state and state.get('is_connected'):
-                        display_map = {
-                            'WEBULL': 'Webull',
-                            'ALPACA_PAPER': 'Alpaca (Paper)',
-                            'ROBINHOOD': 'Robinhood', 'SCHWAB': 'Schwab'
-                        }
-                        display_name = display_map.get(broker_key, broker_key)
                         is_paper = 'PAPER' in broker_key
                         
-                        # Add if not already present
-                        existing = [b['broker_name'] for b in broker_states['USA']]
+                        existing = [b['broker_name'] for b in broker_states.get(region, [])]
                         if display_name not in existing:
-                            broker_states['USA'].append({
+                            broker_states[region].append({
                                 'broker_name': display_name,
                                 'is_connected': True,
                                 'is_paper': is_paper,
-                                'region': 'USA'
+                                'region': region
                             })
             except Exception as e:
                 print(f"[INDEX] Health monitor error: {e}")
@@ -3735,6 +3737,95 @@ def register_routes(app):
                 'status': 'error',
                 'error': str(e)
             })
+
+    @app.route('/api/trading212/balance', methods=['GET'])
+    @login_required
+    def api_trading212_balance() -> Any:
+        """Get Trading 212 account balance for Dashboard"""
+        import asyncio
+
+        cache_key = 'trading212_balance'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return jsonify(cached_value)
+
+        try:
+            print("[API] Fetching Trading 212 balance...")
+
+            if _bot_instance and hasattr(_bot_instance, 'trading212_broker') and _bot_instance.trading212_broker:
+                broker = _bot_instance.trading212_broker
+                if broker.connected:
+                    print("[API] Using bot's existing Trading 212 broker instance")
+                    try:
+                        account_future = asyncio.run_coroutine_threadsafe(
+                            broker.get_account_info(),
+                            _bot_instance.loop
+                        )
+                        account_info = account_future.result(timeout=10)
+
+                        positions_future = asyncio.run_coroutine_threadsafe(
+                            broker.get_positions(),
+                            _bot_instance.loop
+                        )
+                        positions_raw = positions_future.result(timeout=10)
+
+                        positions_list = []
+                        if isinstance(positions_raw, list):
+                            for pos in positions_raw:
+                                if isinstance(pos, dict):
+                                    positions_list.append({
+                                        'symbol': pos.get('ticker', pos.get('symbol', 'UNKNOWN')),
+                                        'qty': pos.get('quantity', 0),
+                                        'market_value': pos.get('currentPrice', 0) * pos.get('quantity', 0),
+                                        'avg_price': pos.get('averagePrice', 0),
+                                        'unrealized_pnl': pos.get('ppl', 0)
+                                    })
+
+                        result_data = {
+                            'buying_power': account_info.get('buying_power', 0) if account_info else 0,
+                            'cash_balance': account_info.get('cash', 0) if account_info else 0,
+                            'net_liquidation': account_info.get('portfolio_value', 0) if account_info else 0,
+                            'equity': account_info.get('portfolio_value', 0) if account_info else 0,
+                            'unrealized_pnl': account_info.get('ppl', account_info.get('result', 0)) if account_info else 0,
+                            'total_profit_loss': account_info.get('ppl', account_info.get('result', 0)) if account_info else 0,
+                            'invested': account_info.get('invested', 0) if account_info else 0,
+                            'settled_cash': account_info.get('cash', 0) if account_info else 0,
+                            'unsettled_cash': 0,
+                            'positions': positions_list,
+                            'status': 'ok'
+                        }
+                        _api_cache[cache_key] = (result_data, time.time())
+                        return jsonify(result_data)
+                    except Exception as e:
+                        print(f"[API] Error using bot's Trading 212 broker: {e}")
+
+            return jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'positions': [],
+                'status': 'not_configured',
+                'error': 'Trading 212 not connected. Go to Settings to configure.'
+            })
+
+        except Exception as e:
+            print(f"[API] Exception in Trading 212 balance endpoint: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'positions': [],
+                'status': 'error',
+                'error': str(e)
+            })
+
     
     @app.route('/api/robinhood/balance', methods=['GET'])
     def api_robinhood_balance() -> Any:

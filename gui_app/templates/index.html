@@ -2456,6 +2456,8 @@ async function loadStats() {
                 balanceUrl = '/api/schwab/balance';
             } else if (brokerUpper === 'ROBINHOOD') {
                 balanceUrl = '/api/robinhood/balance';
+            } else if (brokerUpper.startsWith('TRADING212')) {
+                balanceUrl = '/api/trading212/balance';
             }
             
             const balance = await fetch(balanceUrl).then(r => r.json());
