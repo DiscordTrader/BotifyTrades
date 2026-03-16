@@ -1076,8 +1076,11 @@ input:checked + .slider:before {
             <button id="save-ibkr-creds" class="btn btn-success">💾 Save</button>
             <button id="connect-ibkr" class="btn btn-connect">🔌 Connect</button>
         </div>
-        <div id="ibkr-account-info" class="account-info" style="display: none;">
-            <strong>Note:</strong> Ensure TWS or IB Gateway is running on your local machine before connecting.
+        <div id="ibkr-account-info" class="account-info" style="display: none;"></div>
+        <div style="background: rgba(255, 165, 0, 0.1); border: 1px solid rgba(255, 165, 0, 0.3); border-radius: 8px; padding: 10px; margin-top: 8px;">
+            <p style="font-size: 11px; color: rgba(255, 165, 0, 0.9); margin: 0;">
+                <strong>Requirements:</strong> TWS or IB Gateway must be running with API connections enabled (Edit → Global Config → API → Settings). Market data subscriptions in TWS are needed for live quotes and option chains.
+            </p>
         </div>
     </div>
 
@@ -4298,9 +4301,30 @@ document.getElementById('connect-ibkr').addEventListener('click', async () => {
             updateConnectionStatus('ibkr-connection-status', result.status === 'connected' ? 'connected' : 'pending', 
                 result.status === 'connected' ? 'Connected' : 'Pending - Start TWS');
             showMessage('success', result.message);
+            const infoDiv = document.getElementById('ibkr-account-info');
+            if (infoDiv) {
+                if (result.account) {
+                    const acct = result.account;
+                    let html = '';
+                    if (acct.account_id) html += `<div><strong>Account:</strong> ${acct.account_id}</div>`;
+                    if (acct.buying_power) html += `<div><strong>Buying Power:</strong> $${Number(acct.buying_power).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>`;
+                    if (acct.portfolio_value) html += `<div><strong>Portfolio Value:</strong> $${Number(acct.portfolio_value).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>`;
+                    if (acct.cash) html += `<div><strong>Cash:</strong> $${Number(acct.cash).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>`;
+                    if (html) {
+                        infoDiv.innerHTML = html;
+                        infoDiv.style.display = 'block';
+                    } else {
+                        infoDiv.style.display = 'none';
+                    }
+                } else {
+                    infoDiv.style.display = 'none';
+                }
+            }
         } else {
             updateConnectionStatus('ibkr-connection-status', 'error', result.error);
             showMessage('error', result.error);
+            const infoDiv = document.getElementById('ibkr-account-info');
+            if (infoDiv) infoDiv.style.display = 'none';
         }
     } catch (error) {
         updateConnectionStatus('ibkr-connection-status', 'error', error.message);

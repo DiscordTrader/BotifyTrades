@@ -5712,8 +5712,8 @@ def register_routes(app):
         Unified cancel order endpoint for all brokers.
         Routes to the appropriate broker-specific cancel handler.
         
-        Supported brokers: alpaca, webull, robinhood
-        Unsupported (returns error): schwab, ibkr, tastytrade
+        Supported brokers: alpaca, webull, robinhood, schwab, ibkr, tastytrade, trading212
+        Unsupported (returns error): questrade
         """
         import asyncio
         
@@ -5727,9 +5727,12 @@ def register_routes(app):
             'webull': 'webull',
             'robinhood': 'robinhood',
             'schwab': 'schwab',
+            'ibkr': 'ibkr',
+            'tastytrade': 'tastytrade',
+            'trading212': 'trading212',
         }
         
-        UNSUPPORTED_BROKERS = ['ibkr', 'tastytrade', 'questrade']
+        UNSUPPORTED_BROKERS = ['questrade']
         
         if broker_lower in UNSUPPORTED_BROKERS:
             return jsonify({
@@ -5743,7 +5746,7 @@ def register_routes(app):
         if not resolved_broker:
             return jsonify({
                 'success': False,
-                'error': f'Unknown broker: {broker}. Supported: Alpaca, Webull, Robinhood'
+                'error': f'Unknown broker: {broker}. Supported: Alpaca, Webull, Robinhood, Schwab, IBKR, Tastytrade, Trading 212'
             }), 400
         
         try:
@@ -5807,6 +5810,53 @@ def register_routes(app):
                     return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
                 else:
                     return jsonify({'success': False, 'error': 'Failed to cancel order'}), 400
+            
+            elif resolved_broker == 'ibkr':
+                if not _bot_instance or not hasattr(_bot_instance, 'ibkr_broker') or not _bot_instance.ibkr_broker:
+                    return jsonify({'success': False, 'error': 'IBKR broker not initialized. Ensure TWS/Gateway is running.'}), 500
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.ibkr_broker.cancel_order(order_id),
+                    _bot_instance.loop
+                )
+                result = future.result(timeout=15)
+                
+                if result.get('success'):
+                    return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
+                else:
+                    return jsonify({'success': False, 'error': result.get('msg', 'Failed to cancel')}), 400
+            
+            elif resolved_broker == 'tastytrade':
+                tt_broker = getattr(_bot_instance, 'tastytrade_broker', None) if _bot_instance else None
+                if not tt_broker:
+                    return jsonify({'success': False, 'error': 'Tastytrade broker not initialized'}), 500
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    tt_broker.cancel_order(order_id),
+                    _bot_instance.loop
+                )
+                result = future.result(timeout=15)
+                
+                if result.get('success'):
+                    return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
+                else:
+                    return jsonify({'success': False, 'error': result.get('msg', 'Failed to cancel')}), 400
+            
+            elif resolved_broker == 'trading212':
+                t212_broker = getattr(_bot_instance, 'trading212_broker', None) if _bot_instance else None
+                if not t212_broker:
+                    return jsonify({'success': False, 'error': 'Trading 212 broker not initialized'}), 500
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    t212_broker.cancel_order(order_id),
+                    _bot_instance.loop
+                )
+                result = future.result(timeout=15)
+                
+                if result.get('success'):
+                    return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
+                else:
+                    return jsonify({'success': False, 'error': result.get('msg', result.get('error', 'Failed to cancel'))}), 400
             
         except Exception as e:
             print(f"[API] Exception in unified cancel: {e}")
@@ -14189,15 +14239,32 @@ def register_routes(app):
                     async def try_connect():
                         try:
                             await ib.connectAsync(host=host, port=port, clientId=client_id, timeout=10)
-                            return ib.isConnected()
+                            if not ib.isConnected():
+                                return False, {}
+                            acct_info = {}
+                            try:
+                                accounts = ib.managedAccounts()
+                                if accounts:
+                                    acct_info['account_id'] = accounts[0]
+                                summary = ib.accountSummary()
+                                for item in summary:
+                                    if item.tag == 'BuyingPower':
+                                        acct_info['buying_power'] = float(item.value)
+                                    elif item.tag == 'NetLiquidation':
+                                        acct_info['portfolio_value'] = float(item.value)
+                                    elif item.tag == 'TotalCashValue':
+                                        acct_info['cash'] = float(item.value)
+                            except Exception as ae:
+                                print(f"[IBKR] Account info fetch warning: {ae}")
+                            return True, acct_info
                         except Exception as e:
                             print(f"[IBKR] Connection error: {e}")
-                            return False
+                            return False, {}
                     
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        connected = loop.run_until_complete(try_connect())
+                        connected, acct_data = loop.run_until_complete(try_connect())
                     finally:
                         if ib.isConnected():
                             ib.disconnect()
@@ -14208,13 +14275,25 @@ def register_routes(app):
                             'host': host,
                             'port': port,
                             'client_id': client_id,
-                            'paper_mode': is_paper
+                            'paper_mode': is_paper,
+                            'account_id': acct_data.get('account_id', ''),
+                            'buying_power': acct_data.get('buying_power', 0),
+                            'portfolio_value': acct_data.get('portfolio_value', 0),
+                            'cash': acct_data.get('cash', 0),
                         }
                         set_broker_status(broker_id, True, 'connected', account_info=account_info)
                         mode = "Paper" if is_paper else "Live"
+                        bp = acct_data.get('buying_power', 0)
+                        pv = acct_data.get('portfolio_value', 0)
+                        acct_id = acct_data.get('account_id', '')
+                        details = f" | Account: {acct_id}" if acct_id else ""
+                        if bp:
+                            details += f" | BP: ${bp:,.2f}"
+                        if pv:
+                            details += f" | Portfolio: ${pv:,.2f}"
                         return jsonify({
                             'success': True,
-                            'message': f'IBKR {mode} connected successfully to TWS on {host}:{port}!',
+                            'message': f'IBKR {mode} connected to TWS on {host}:{port}!{details}',
                             'status': 'connected',
                             'account': account_info
                         })
