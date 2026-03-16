@@ -1435,6 +1435,7 @@ class BrokerSyncService:
                     order_id_str = trade.get('order_id', '') or ''
                     _broker_inst = None
                     _bn_upper = broker_name.upper()
+                    schwab_desc = ''
 
                     if _bn_upper == 'SCHWAB':
                         _broker_inst = getattr(self.broker_manager, 'schwab_broker', None)
@@ -1446,7 +1447,8 @@ class BrokerSyncService:
                                 )
                                 if status_result:
                                     live_status = status_result.get('status', 'unknown')
-                                    print(f"[SYNC] 🔍 Schwab re-verify order #{order_id_str}: status={live_status}")
+                                    schwab_desc = status_result.get('status_description', '')
+                                    print(f"[SYNC] 🔍 Schwab re-verify order #{order_id_str}: status={live_status}" + (f" desc={schwab_desc}" if schwab_desc else ""))
                                     if live_status in ('pending', 'working'):
                                         print(f"[SYNC] ✓ Order #{order_id_str} still {live_status} on Schwab — skipping cancellation (stale pending list)")
                                         continue
@@ -1490,6 +1492,8 @@ class BrokerSyncService:
                             _broker_inst = getattr(self.broker_manager, 'webull_broker', None) or getattr(self.broker_manager, 'webull_paper_broker', None)
 
                     cancel_reason = 'order_cancelled_or_rejected'
+                    if _bn_upper == 'SCHWAB' and schwab_desc:
+                        cancel_reason = f"order_cancelled_or_rejected: {schwab_desc}"
 
                     if order_id_str and _broker_inst and hasattr(_broker_inst, 'wb'):
                         try:
@@ -1529,12 +1533,14 @@ class BrokerSyncService:
                             continue
                     
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in pending orders: PENDING → CLOSED (cancelled) reason={cancel_reason}")
-                    self.db.update_trade(
-                        trade_id,
+                    update_kwargs = dict(
                         status='CLOSED',
                         closed_at=datetime.now().isoformat(),
                         close_reason=cancel_reason
                     )
+                    if schwab_desc:
+                        update_kwargs['rejection_reason'] = schwab_desc
+                    self.db.update_trade(trade_id, **update_kwargs)
                     
                     # Send cancellation notification (not failure - order was cancelled, not rejected)
                     try:

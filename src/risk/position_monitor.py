@@ -2795,6 +2795,16 @@ class RiskManager:
                 print(f"[RISK]   Retry {retry_state.get('retry_count')}/5 - wait {cooldown:.0f}s")
             return
         
+        if not decision.is_partial:
+            from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE
+            lease_mgr = get_exit_lease_manager()
+            tier_label = getattr(decision, 'tier', None)
+            if not lease_mgr.acquire(pos_key, OWNER_RISK_ENGINE, tier=tier_label):
+                lease_info = lease_mgr.get_state(pos_key)
+                print(f"[RISK] Exit lease active for {pos_key} (owner={lease_info['owner']}, age={lease_info['age']:.1f}s) — skipping duplicate exit")
+                return
+            self.cache.mark_closing(pos_key)
+        
         print(f"\n{'='*60}")
         print(f"[RISK] [{timestamp}] ✓ EXIT TRIGGERED")
         print(f"[RISK]   Position: {pos_key}")
@@ -2962,21 +2972,15 @@ class RiskManager:
                 
                 if not arbiter_result.get('approved'):
                     print(f"[RISK] Exit rejected by arbiter: {arbiter_result.get('reason')}")
+                    if not decision.is_partial:
+                        self.cache.clear_closing(pos_key)
+                        from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE as _OWN_ARB
+                        get_exit_lease_manager().release(pos_key, _OWN_ARB)
                     return
                 
                 print(f"[RISK] Exit approved by arbiter (hybrid mode)")
             except Exception as e:
                 print(f"[RISK] Arbiter check failed, proceeding with exit: {e}")
-        
-        if not decision.is_partial:
-            from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE
-            lease_mgr = get_exit_lease_manager()
-            tier_label = getattr(decision, 'tier', None)
-            if not lease_mgr.acquire(pos_key, OWNER_RISK_ENGINE, tier=tier_label):
-                lease_info = lease_mgr.get_state(pos_key)
-                print(f"[RISK] Exit lease active for {pos_key} (owner={lease_info['owner']}, age={lease_info['age']:.1f}s) — skipping duplicate exit")
-                return
-            self.cache.mark_closing(pos_key)
         
         try:
             stc_signal = self._build_stc_signal(position, decision)

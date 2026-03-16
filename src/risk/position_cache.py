@@ -28,7 +28,7 @@ def get_position_cache() -> 'PositionCache':
 class PositionCache:
     """Manages position state cache with file persistence."""
     
-    CLOSING_TIMEOUT_SECONDS = 60
+    CLOSING_TIMEOUT_SECONDS = 180
     
     FLIP_FLOP_HISTORY_SIZE = 3
     ENTRY_PRICE_CHANGE_TOLERANCE = 0.05

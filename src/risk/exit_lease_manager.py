@@ -23,7 +23,7 @@ OWNER_WORKER = 'worker'
 OWNER_CHASER = 'chaser'
 OWNER_BACKUP = 'backup_thread'
 
-LEASE_EXPIRY_SECONDS = 60
+LEASE_EXPIRY_SECONDS = 180
 
 
 class _LeaseEntry:
