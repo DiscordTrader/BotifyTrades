@@ -15851,6 +15851,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 broker_upper = broker_name.upper()
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL', 'TRADING212'])
                 
+                if signal['action'] == 'STC' and hasattr(broker_instance, 'get_positions_detailed'):
+                    try:
+                        pos_list = await broker_instance.get_positions_detailed()
+                        sig_symbol = signal.get('symbol', '').upper()
+                        matched_qty_raw = 0.0
+                        for p in pos_list:
+                            p_sym = p.get('symbol', '').upper()
+                            p_asset = str(p.get('asset', 'stock')).lower()
+                            if p_sym == sig_symbol and p_asset != 'option':
+                                try:
+                                    matched_qty_raw = float(p.get('quantity', 0))
+                                except (ValueError, TypeError):
+                                    matched_qty_raw = 0.0
+                                break
+                        
+                        matched_qty = int(matched_qty_raw) if matched_qty_raw >= 1 else (1 if matched_qty_raw > 0 else 0)
+                        
+                        if matched_qty <= 0:
+                            _original_print(f"[{broker_name}] ⚠️ STC rejected: No stock position for {sig_symbol} on {broker_name}")
+                            return {'success': False, 'msg': f'No stock position for {sig_symbol} on {broker_name}', 'broker': broker_name}
+                        
+                        if signal['qty'] > matched_qty:
+                            _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
+                            signal['qty'] = matched_qty
+                    except Exception as e:
+                        _original_print(f"[{broker_name}] Stock position check for STC failed (proceeding): {e}")
+
                 # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
                 use_market_order = signal.get('_use_market_order', False)
                 if use_market_order:
