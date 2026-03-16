@@ -755,6 +755,13 @@ class CandlePreWarmService:
                         timestamp=c.get('timestamp', 0), tick_count=0, finalized=True
                     ))
                 engine.seed_from_candles(symbol, candle_objects)
+                agg_key = f"{symbol}_{timeframe}m"
+                agg = self._aggregators.get(agg_key)
+                if agg:
+                    agg_state = agg._get_symbol_state(symbol)
+                    if agg_state.get('last_tick_time') is None:
+                        agg_state['last_tick_time'] = time.time()
+                        agg_state['stale'] = False
                 print(f"[EMA] Pre-seeded {symbol} ({timeframe}m/{period}p) with {len(candle_objects)} historical candles")
             else:
                 count = len(candles) if candles else 0
@@ -789,6 +796,13 @@ class CandlePreWarmService:
                         timestamp=c.get('timestamp', 0), tick_count=0, finalized=True
                     ))
                 engine.seed_from_candles(symbol, candle_objects)
+                agg_key = f"{symbol}_{timeframe}m"
+                agg = self._aggregators.get(agg_key)
+                if agg:
+                    agg_state = agg._get_symbol_state(symbol)
+                    if agg_state.get('last_tick_time') is None:
+                        agg_state['last_tick_time'] = time.time()
+                        agg_state['stale'] = False
                 print(f"[EMA] Pre-seeded {symbol} with {len(candle_objects)} historical candles")
             else:
                 count = len(candles) if candles else 0
