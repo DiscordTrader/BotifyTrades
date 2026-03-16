@@ -32,6 +32,9 @@ class Trading212Broker(BrokerInterface):
         self._positions_cache_ts = 0
         self._account_cache = {}
         self._account_cache_ts = 0
+        self._quote_cache = {}
+        self._quote_cache_time = 0
+        self._quote_cache_ttl = 3
 
     async def connect(self) -> bool:
         try:
@@ -276,11 +279,20 @@ class Trading212Broker(BrokerInterface):
         )
 
     async def get_quote(self, symbol: str) -> Optional[float]:
+        now = time.time()
+        if now - self._quote_cache_time < self._quote_cache_ttl and symbol.upper() in self._quote_cache:
+            return self._quote_cache[symbol.upper()]
+
         positions = await self.get_positions()
+        self._quote_cache_time = now
+        self._quote_cache = {}
         for pos in positions:
-            if pos.get('symbol', '').upper() == symbol.upper():
-                return pos.get('current_price')
-        return None
+            sym = pos.get('symbol', '').upper()
+            price = pos.get('current_price')
+            if sym and price:
+                self._quote_cache[sym] = price
+
+        return self._quote_cache.get(symbol.upper())
 
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         if not self._client or not self.connected:

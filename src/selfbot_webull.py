@@ -8541,6 +8541,9 @@ class SelfClient(discord.Client):
             if self.schwab_broker and getattr(self.schwab_broker, 'connected', False):
                 conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
                 _original_print("[CONDITIONAL] ✓ Schwab registered for price monitoring", flush=True)
+            if self.trading212_broker and getattr(self.trading212_broker, 'connected', False):
+                conditional_order_router.set_broker_instance('Trading212', self.trading212_broker)
+                _original_print("[CONDITIONAL] ✓ Trading212 registered for price monitoring (portfolio quotes)", flush=True)
             
             webull_hub = None
             if self.broker and hasattr(self.broker, '_data_hub') and self.broker._data_hub:

@@ -458,6 +458,7 @@ class BrokerPriceMonitor(PriceMonitor):
         'tastytrade': 2,
         'ibkr': 1,        # No strict limit for TWS
         'schwab': 2,
+        'trading212': 5,  # Portfolio-based quotes, conservative interval
     }
     
     # Stale price detection threshold

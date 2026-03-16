@@ -39,6 +39,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             'ibkr': RateLimitTracker('ibkr', 100),
             'robinhood': RateLimitTracker('robinhood', 60),
             'schwab': RateLimitTracker('schwab', 60),
+            'trading212': RateLimitTracker('trading212', 30),
             'finnhub': RateLimitTracker('finnhub', 60),
         }
     
@@ -53,9 +54,11 @@ class USConditionalOrderService(BaseConditionalOrderService):
         Priority chain:
         1. Data hub with active streaming (WebSocket/MQTT) - sub-100ms, zero API calls
         2. Data hub without streaming (hub cache + broker REST fallback) - broker-first
-        3. Broker REST API direct - real-time polling
-        4. Finnhub API - real-time
-        5. yfinance - delayed (~15 min)
+        3. Alt streaming hub (Schwab/Webull cross-broker WebSocket) - for brokers without own hub
+        4. Alt hub without streaming (cross-broker cache)
+        5. Broker REST API direct (incl. T212 portfolio quotes) - real-time polling
+        6. Finnhub API - real-time
+        7. yfinance - delayed (~15 min)
         """
         symbol = order['symbol']
         settings_threshold = 0.8
