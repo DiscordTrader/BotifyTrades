@@ -2491,14 +2491,7 @@ class WebullBroker:
             for i, raw_acct in enumerate(accounts):
                 perms = raw_acct.get('userTradePermissionVOs', [])
                 perm_sec_ids = [p.get('secAccountId') for p in perms if p.get('secAccountId')] if perms else []
-                _original_print(f"[{self.name}] Raw account[{i}] brokerId={raw_acct.get('brokerId')} status={raw_acct.get('status')} rzone={raw_acct.get('rzone')} perm_secIds={perm_sec_ids}", flush=True)
-                acct_perms = raw_acct.get('accountPermissions', [])
-                if acct_perms:
-                    for j, ap in enumerate(acct_perms):
-                        _original_print(f"[{self.name}]   accountPermissions[{j}]: {json.dumps(ap, default=str)[:200]}", flush=True)
-                if perms:
-                    for j, p in enumerate(perms):
-                        _original_print(f"[{self.name}]   userTradePermissionVOs[{j}]: {json.dumps(p, default=str)[:200]}", flush=True)
+                _original_print(f"[{self.name}] account[{i}] brokerId={raw_acct.get('brokerId')} status={raw_acct.get('status')} rzone={raw_acct.get('rzone')} secAccountId={raw_acct.get('secAccountId', 'none')} perm_secIds={perm_sec_ids}", flush=True)
                 if not raw_acct.get('secAccountId') and perm_sec_ids:
                     raw_acct['secAccountId'] = perm_sec_ids[0]
                     _original_print(f"[{self.name}]   → Promoted secAccountId from userTradePermissionVOs: {perm_sec_ids[0]}", flush=True)
@@ -2532,6 +2525,11 @@ class WebullBroker:
                         print(f"[{self.name}] ✓ UK/global account resolved: secAccountId={sec_id}, rzone={rzone}")
                         self._persist_resolved_account_id(sec_id, rzone)
                         return
+                    if getattr(self, '_uk_account_detected', False):
+                        print(f"[{self.name}] ❌ UK/Global Webull account — not supported by current library")
+                        print(f"[{self.name}]    Register at https://developer.webull.hk for OpenAPI credentials")
+                        self._set_uk_account_error_state()
+                        return
                 if saved_sec_id:
                     print(f"[{self.name}] ⚠️ No valid accounts in API — using saved ID: {saved_sec_id}")
                     wb._account_id = saved_sec_id
@@ -2563,11 +2561,26 @@ class WebullBroker:
                 pass
 
     def _try_uk_global_account_resolution(self, wb, headers, v5_accounts):
-        """Try alternative endpoints for UK/global Webull accounts where v5 returns all-unopen."""
+        """Try alternative endpoints for UK/global Webull accounts where v5 returns all-unopen.
+        
+        The unofficial webull Python library (v0.6.1) only supports US accounts natively.
+        UK/Global accounts operate on a separate backend (hktrade.webullbroker.com) that
+        requires the official Webull OpenAPI SDK with developer credentials (app_key/app_secret).
+        This method attempts several fallback endpoints but will fail for pure UK/Global accounts.
+        """
         import requests as _req
+        import hashlib
+
+        for acct in v5_accounts:
+            account_perms = acct.get('accountPermissions', [])
+            for ap in (account_perms or []):
+                sec_id = ap.get('secAccountId', '')
+                if sec_id:
+                    acct['secAccountId'] = sec_id
+                    _original_print(f"[{self.name}]   accountPermissions → found secAccountId={sec_id}", flush=True)
+                    return acct
 
         alt_endpoints = [
-            ('fintech-v6', f'{wb._urls.base_new_trade_url}/trading/v1/global/account/getSecAccountList'),
             ('ustrade-v5', f'{wb._urls.base_ustrade_url}/trade/account/getSecAccountList/v5'),
             ('ustradebroker-v5', f'{wb._urls.base_ustradebroker_url}/trade/account/getSecAccountList/v5'),
         ]
@@ -2580,10 +2593,8 @@ class WebullBroker:
                     _original_print(f"[{self.name}]   {label} → HTTP {resp.status_code}", flush=True)
                     continue
                 result = resp.json()
-                data_list = result.get('data', []) if isinstance(result, dict) else (result if isinstance(result, list) else [])
-                if not data_list:
-                    data_list = [result] if isinstance(result, dict) and result.get('secAccountId') else []
-                for entry in (data_list if isinstance(data_list, list) else [data_list]):
+                data_list = result.get('data', []) if isinstance(result, dict) else []
+                for entry in (data_list if isinstance(data_list, list) else []):
                     if not isinstance(entry, dict):
                         continue
                     sec_id = entry.get('secAccountId', '')
@@ -2594,78 +2605,93 @@ class WebullBroker:
                     for p in (perms or []):
                         if p.get('secAccountId'):
                             entry['secAccountId'] = p['secAccountId']
-                            _original_print(f"[{self.name}]   {label} → promoted secAccountId={p['secAccountId']} from permissions", flush=True)
+                            _original_print(f"[{self.name}]   {label} → promoted secAccountId from permissions", flush=True)
                             return entry
-                _original_print(f"[{self.name}]   {label} → no secAccountId found (entries={len(data_list) if isinstance(data_list, list) else 0})", flush=True)
+                _original_print(f"[{self.name}]   {label} → no secAccountId found", flush=True)
             except Exception as e:
                 _original_print(f"[{self.name}]   {label} → error: {e}", flush=True)
 
-        for acct in v5_accounts:
-            account_perms = acct.get('accountPermissions', [])
-            for ap in (account_perms or []):
-                sec_id = ap.get('secAccountId', '')
-                if sec_id:
-                    acct['secAccountId'] = sec_id
-                    _original_print(f"[{self.name}]   v5-accountPermissions → found secAccountId={sec_id}", flush=True)
-                    return acct
-
         try:
-            user_url = f'{wb._urls.base_userbroker_url}/user'
-            _original_print(f"[{self.name}] Trying user endpoint: {user_url[:80]}...", flush=True)
-            resp = _req.get(user_url, headers=headers, timeout=10)
-            _original_print(f"[{self.name}]   user endpoint → HTTP {resp.status_code}", flush=True)
-            if resp.status_code == 200:
-                user_data = resp.json()
-                sec_id = ''
-                if isinstance(user_data, dict):
-                    sec_id = user_data.get('secAccountId', '') or user_data.get('brokerAccountId', '') or user_data.get('accountId', '')
-                    _original_print(f"[{self.name}]   user endpoint keys: {list(user_data.keys())[:20]}", flush=True)
-                    uuid = user_data.get('uuid', '') or user_data.get('userId', '') or user_data.get('id', '')
-                    _original_print(f"[{self.name}]   user endpoint uuid/userId: {uuid}", flush=True)
-                if sec_id:
-                    _original_print(f"[{self.name}]   user endpoint → found account ID: {sec_id}", flush=True)
-                    return {'secAccountId': str(sec_id), 'rzone': getattr(wb, 'zone_var', 'dc_core_r001')}
-        except Exception as e:
-            _original_print(f"[{self.name}]   user endpoint → error: {e}", flush=True)
+            trade_pin = ''
+            try:
+                from gui_app.broker_credentials_service import get_webull_credentials
+                trade_pin = get_webull_credentials().get('trade_pin', '')
+            except Exception:
+                pass
 
+            if trade_pin:
+                _original_print(f"[{self.name}] Trying fintech global/home with trade token...", flush=True)
+                password = ('wl_app-a&b@!423^' + trade_pin).encode('utf-8')
+                md5_hash = hashlib.md5(password)
+                tt_data = {'pwd': md5_hash.hexdigest()}
+                tt_url = f'{wb._urls.base_new_trade_url}/trading/v1/global/trade/login'
+                tt_resp = _req.post(tt_url, json=tt_data, headers=headers, timeout=10)
+                tt_result = tt_resp.json() if tt_resp.status_code == 200 else {}
+                trade_token = tt_result.get('tradeToken', '')
+                if trade_token:
+                    home_headers = dict(headers)
+                    home_headers['t_token'] = trade_token
+                    home_url = f'{wb._urls.base_new_trade_url}/trading/v1/global/home'
+                    home_resp = _req.get(home_url, headers=home_headers, timeout=10)
+                    if home_resp.status_code == 200:
+                        home_data = home_resp.json()
+                        accounts = home_data.get('accounts', [])
+                        net_liq = home_data.get('netLiquidation', '0.00')
+                        _original_print(f"[{self.name}]   fintech global/home → netLiq={net_liq}, accounts={len(accounts)}", flush=True)
+                        if accounts:
+                            for a in accounts:
+                                sec_id = a.get('secAccountId', '') or a.get('accountId', '')
+                                if sec_id:
+                                    return {'secAccountId': str(sec_id), 'rzone': a.get('rzone', getattr(wb, 'zone_var', 'dc_core_r001'))}
+                        if float(net_liq) > 0 and not accounts:
+                            _original_print(f"[{self.name}]   fintech global/home has balance but no account IDs — UK/Global account detected", flush=True)
+                    else:
+                        _original_print(f"[{self.name}]   fintech global/home → HTTP {home_resp.status_code}", flush=True)
+                else:
+                    _original_print(f"[{self.name}]   fintech trade token failed: {tt_resp.text[:100]}", flush=True)
+        except Exception as e:
+            _original_print(f"[{self.name}]   fintech global/home → error: {e}", flush=True)
+
+        all_no_permissions = True
         for acct in v5_accounts:
-            broker_id = acct.get('brokerId', 0)
-            rzone = acct.get('rzone', 'dc_core_r001')
-            if broker_id == 8:
-                try:
-                    asset_url = f'{wb._urls.base_ustrade_url}/trade/v2/home/0'
-                    _original_print(f"[{self.name}] Trying asset summary with brokerId=8: {asset_url[:80]}...", flush=True)
-                    asset_headers = dict(headers)
-                    asset_headers['rzone'] = rzone
-                    resp = _req.get(asset_url, headers=asset_headers, timeout=10)
-                    _original_print(f"[{self.name}]   asset summary → HTTP {resp.status_code}, body[:200]={resp.text[:200]}", flush=True)
-                    if resp.status_code == 200:
-                        adata = resp.json()
-                        if isinstance(adata, dict):
-                            found_id = adata.get('secAccountId', '') or adata.get('accountId', '')
-                            if found_id:
-                                _original_print(f"[{self.name}]   asset summary → found secAccountId={found_id}", flush=True)
-                                return {'secAccountId': str(found_id), 'rzone': rzone}
-                except Exception as e:
-                    _original_print(f"[{self.name}]   asset summary → error: {e}", flush=True)
+            perms = acct.get('accountPermissions', []) or acct.get('userTradePermissionVOs', [])
+            for p in (perms or []):
+                if p.get('hasPermission'):
+                    all_no_permissions = False
+                    break
 
-        try:
-            fintech_user_url = f'{wb._urls.base_userfintech_url}/user'
-            _original_print(f"[{self.name}] Trying fintech user endpoint: {fintech_user_url[:80]}...", flush=True)
-            resp = _req.get(fintech_user_url, headers=headers, timeout=10)
-            _original_print(f"[{self.name}]   fintech user → HTTP {resp.status_code}", flush=True)
-            if resp.status_code == 200:
-                fdata = resp.json()
-                if isinstance(fdata, dict):
-                    _original_print(f"[{self.name}]   fintech user keys: {list(fdata.keys())[:20]}", flush=True)
-                    sec_id = fdata.get('secAccountId', '') or fdata.get('brokerAccountId', '') or fdata.get('accountId', '')
-                    if sec_id:
-                        return {'secAccountId': str(sec_id), 'rzone': getattr(wb, 'zone_var', 'dc_core_r001')}
-        except Exception as e:
-            _original_print(f"[{self.name}]   fintech user → error: {e}", flush=True)
+        if all_no_permissions and all(a.get('status') == 'unopen' for a in v5_accounts):
+            self._uk_account_detected = True
+            _original_print(f"[{self.name}] ╔══════════════════════════════════════════════════════════════╗", flush=True)
+            _original_print(f"[{self.name}] ║  UK/GLOBAL WEBULL ACCOUNT DETECTED                         ║", flush=True)
+            _original_print(f"[{self.name}] ║                                                            ║", flush=True)
+            _original_print(f"[{self.name}] ║  The Python webull library only supports US accounts.       ║", flush=True)
+            _original_print(f"[{self.name}] ║  UK/Global accounts require Webull's official OpenAPI SDK   ║", flush=True)
+            _original_print(f"[{self.name}] ║  with developer credentials (app_key + app_secret).        ║", flush=True)
+            _original_print(f"[{self.name}] ║                                                            ║", flush=True)
+            _original_print(f"[{self.name}] ║  To get API access:                                        ║", flush=True)
+            _original_print(f"[{self.name}] ║  1. Register at https://developer.webull.hk                ║", flush=True)
+            _original_print(f"[{self.name}] ║  2. Create an app and get app_key + app_secret             ║", flush=True)
+            _original_print(f"[{self.name}] ║  3. Enter them in Settings → Brokers → Webull              ║", flush=True)
+            _original_print(f"[{self.name}] ╚══════════════════════════════════════════════════════════════╝", flush=True)
+            return None
 
         _original_print(f"[{self.name}] UK/global account resolution: no secAccountId found via any endpoint", flush=True)
         return None
+
+    def _set_uk_account_error_state(self):
+        """Set broker state to indicate UK/Global account is not supported."""
+        try:
+            from src.services.broker_health_monitor import BrokerHealthMonitor
+            health = BrokerHealthMonitor()
+            health.update_broker_status(
+                'WEBULL',
+                is_connected=False,
+                reason='UK/Global Webull account detected. The current library only supports US accounts. Register at https://developer.webull.hk for OpenAPI credentials (app_key + app_secret), then enter them in Settings → Brokers → Webull.',
+                error_code='UK_ACCOUNT_UNSUPPORTED'
+            )
+        except Exception as e:
+            _original_print(f"[{self.name}] Could not set UK error state: {e}", flush=True)
 
     def _persist_resolved_account_id(self, sec_account_id, rzone=''):
         """Save the resolved account ID to the database for future fallback."""
