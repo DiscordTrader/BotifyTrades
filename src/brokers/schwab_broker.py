@@ -2688,7 +2688,15 @@ class SchwabBroker(BrokerInterface):
                     'EXPIRED': 'expired',
                     'PENDING_ACTIVATION': 'pending',
                     'QUEUED': 'pending',
-                    'ACCEPTED': 'pending'
+                    'ACCEPTED': 'pending',
+                    'PENDING_CANCEL': 'pending',
+                    'PENDING_REPLACE': 'pending',
+                    'AWAITING_PARENT_ORDER': 'pending',
+                    'AWAITING_CONDITION': 'pending',
+                    'AWAITING_STOP_CONDITION': 'pending',
+                    'AWAITING_MANUAL_REVIEW': 'pending',
+                    'PARTIALLY_FILLED': 'partial',
+                    'REPLACED': 'cancelled',
                 }
 
                 schwab_status = order.get('status', 'UNKNOWN')

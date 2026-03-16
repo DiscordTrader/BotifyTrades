@@ -9985,8 +9985,11 @@ def get_country(code: str) -> Optional[Dict]:
         return None
 
 
+INTERNATIONAL_BROKERS = {'SCHWAB', 'ibkr', 'alpaca'}
+
 def get_brokers_by_country(country_code: str, enabled_only: bool = True) -> List[Dict]:
-    """Get all brokers for a specific country."""
+    """Get all brokers for a specific country. For non-US countries, also includes
+    international brokers (Schwab, IBKR, Alpaca) that accept global clients."""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -10003,7 +10006,30 @@ def get_brokers_by_country(country_code: str, enabled_only: bool = True) -> List
                 WHERE country_code = ? 
                 ORDER BY display_order
             ''', (country_code,))
-        return [dict(row) for row in cursor.fetchall()]
+        results = [dict(row) for row in cursor.fetchall()]
+        
+        if country_code != 'US':
+            existing_names = {r['broker_name'] for r in results}
+            placeholders = ','.join('?' for _ in INTERNATIONAL_BROKERS)
+            if enabled_only:
+                cursor.execute(f'''
+                    SELECT * FROM broker_profiles 
+                    WHERE broker_name IN ({placeholders}) AND country_code = 'US' AND enabled = 1
+                    ORDER BY display_order
+                ''', list(INTERNATIONAL_BROKERS))
+            else:
+                cursor.execute(f'''
+                    SELECT * FROM broker_profiles 
+                    WHERE broker_name IN ({placeholders}) AND country_code = 'US'
+                    ORDER BY display_order
+                ''', list(INTERNATIONAL_BROKERS))
+            for row in cursor.fetchall():
+                broker = dict(row)
+                if broker['broker_name'] not in existing_names:
+                    broker['_international'] = True
+                    results.append(broker)
+        
+        return results
     except Exception as e:
         print(f"[DATABASE] Error getting brokers for {country_code}: {e}")
         return []
@@ -10187,7 +10213,7 @@ def update_broker_state(broker_name: str, country_code: str, state: Dict) -> boo
     conn = get_connection()
     cursor = conn.cursor()
     
-    region_map = {'US': 'USA', 'CA': 'Canada', 'IN': 'India'}
+    region_map = {'US': 'USA', 'CA': 'Canada', 'IN': 'India', 'UK': 'UK_EU'}
     region = region_map.get(country_code, 'USA')
     
     try:

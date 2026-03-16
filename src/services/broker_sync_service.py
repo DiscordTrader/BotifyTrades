@@ -1449,7 +1449,7 @@ class BrokerSyncService:
                                     live_status = status_result.get('status', 'unknown')
                                     schwab_desc = status_result.get('status_description', '')
                                     print(f"[SYNC] 🔍 Schwab re-verify order #{order_id_str}: status={live_status}" + (f" desc={schwab_desc}" if schwab_desc else ""))
-                                    if live_status in ('pending', 'working'):
+                                    if live_status in ('pending', 'working', 'partial'):
                                         print(f"[SYNC] ✓ Order #{order_id_str} still {live_status} on Schwab — skipping cancellation (stale pending list)")
                                         continue
                                     elif live_status == 'filled':
