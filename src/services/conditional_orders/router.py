@@ -59,6 +59,9 @@ class ConditionalOrderRouter:
         'dhanq': 'INDIA',
         'questrade': 'CANADA',
         'questrade_paper': 'CANADA',
+        'trading212': 'US',
+        'trading212_live': 'US',
+        'trading212_paper': 'US',
     }
     
     def __init__(self):

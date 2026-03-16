@@ -44,7 +44,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
     
     def get_supported_brokers(self) -> List[str]:
         """Return list of US market brokers."""
-        return ['webull', 'alpaca', 'tastytrade', 'ibkr', 'robinhood', 'schwab']
+        return ['webull', 'alpaca', 'tastytrade', 'ibkr', 'robinhood', 'schwab', 'trading212']
     
     async def build_price_monitor(self, order: Dict, broker_instance: Any, broker_name: str) -> Optional[PriceMonitor]:
         """
@@ -76,6 +76,21 @@ class USConditionalOrderService(BaseConditionalOrderService):
         hub = self.get_data_hub(broker_name) if broker_name else None
         hub_is_streaming = self.is_hub_streaming(broker_name) if broker_name else False
         
+        alt_hub = None
+        alt_hub_name = None
+        alt_hub_streaming = False
+        alt_hub_broker = None
+        if not hub:
+            for alt_key in ['schwab', 'webull']:
+                alt = self.get_data_hub(alt_key)
+                if alt:
+                    alt_hub = alt
+                    alt_hub_name = alt_key
+                    alt_hub_streaming = self.is_hub_streaming(alt_key)
+                    alt_hub_broker = self.broker_instances.get(alt_key)
+                    if alt_hub_streaming:
+                        break
+        
         if hub and hub_is_streaming:
             data_source = f"{broker_key}_stream"
             self._log(f"Using STREAMING hub for {symbol} via {broker_name} (sub-100ms, zero API calls)")
@@ -91,6 +106,24 @@ class USConditionalOrderService(BaseConditionalOrderService):
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
                 broker_instance=broker_instance,
+                finnhub_api_key=self.finnhub_api_key
+            )
+        
+        elif alt_hub and alt_hub_streaming:
+            data_source = f"{alt_hub_name}_stream"
+            self._log(f"Using STREAMING hub for {symbol} via {alt_hub_name} (cross-broker WebSocket for {broker_name})")
+            monitor = StreamingPriceMonitor(
+                symbol, price_callback, alt_hub, alt_hub_name,
+                broker_instance=alt_hub_broker,
+                finnhub_api_key=self.finnhub_api_key
+            )
+        
+        elif alt_hub:
+            data_source = alt_hub_name
+            self._log(f"Using data hub for {symbol} via {alt_hub_name} (cross-broker cache for {broker_name})")
+            monitor = StreamingPriceMonitor(
+                symbol, price_callback, alt_hub, alt_hub_name,
+                broker_instance=alt_hub_broker,
                 finnhub_api_key=self.finnhub_api_key
             )
         
