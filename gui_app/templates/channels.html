@@ -927,7 +927,7 @@
         <div class="help-grid">
             <div class="help-item">
                 <span class="badge execute">Execute</span>
-                <p>Signals trigger real trades on connected brokers (Webull, Alpaca, IBKR, Robinhood)</p>
+                <p>Signals trigger real trades on connected brokers (Webull, Alpaca, IBKR, Schwab, Robinhood, Trading 212)</p>
             </div>
             <div class="help-item">
                 <span class="badge track">Track</span>
@@ -1073,6 +1073,7 @@
             <h3><span>⚙</span> <span id="settingsModalTitle">Channel Settings</span></h3>
             <button class="modal-close" onclick="closeChannelSettings()">×</button>
         </div>
+        <div id="settingsModalBrokerInfo" style="padding: 8px 24px 4px 24px;"></div>
         <div class="settings-tab-bar">
             <div class="settings-tab active" onclick="switchSettingsTab('sizing')" data-tab="sizing">Sizing</div>
             <div class="settings-tab" onclick="switchSettingsTab('risk')" data-tab="risk">Risk Controls</div>
@@ -1410,6 +1411,51 @@ function refreshCardSummary(channelId) {
     if (userBadge) userBadge.textContent = userCount > 0 ? userCount : 'All';
 }
 
+function getBrokerBadgeColor(broker) {
+    const colors = {
+        'WEBULL': '#FF6D00', 'SCHWAB': '#00BCD4', 'ALPACA_PAPER': '#4CAF50',
+        'ALPACA_LIVE': '#2E7D32', 'IBKR': '#E91E63', 'IBKR_PAPER': '#F06292',
+        'ROBINHOOD': '#00C805', 'TASTYTRADE': '#9C27B0', 'TRADING212': '#00A3FF',
+        'TRADING212_PAPER': '#29B6F6', 'QUESTRADE': '#43A047'
+    };
+    return colors[broker] || '#8BA1C7';
+}
+
+function getBrokerShortName(broker) {
+    const names = {
+        'WEBULL': 'Webull', 'SCHWAB': 'Schwab', 'ALPACA_PAPER': 'Alpaca P',
+        'ALPACA_LIVE': 'Alpaca', 'IBKR': 'IBKR', 'IBKR_PAPER': 'IBKR P',
+        'ROBINHOOD': 'Robinhood', 'TASTYTRADE': 'Tastytrade', 'TRADING212': 'T212',
+        'TRADING212_PAPER': 'T212 P', 'QUESTRADE': 'Questrade'
+    };
+    return names[broker] || broker;
+}
+
+function renderBrokerBadges(channel, compact) {
+    let brokers = [];
+    try { brokers = JSON.parse(channel.enabled_brokers || '[]'); } catch(e) {}
+    if (!brokers.length) return compact ? '' : '<span style="color: #6B7A90; font-size: 11px;">No broker</span>';
+    return brokers.map(b => {
+        const color = getBrokerBadgeColor(b);
+        const name = getBrokerShortName(b);
+        const isT212 = b.startsWith('TRADING212');
+        const size = compact ? 'font-size: 9px; padding: 1px 5px;' : 'font-size: 10px; padding: 2px 7px;';
+        return `<span style="${size} background: ${color}22; border: 1px solid ${color}44; border-radius: 4px; color: ${color}; font-weight: 600; white-space: nowrap;">${name}${isT212 ? ' 📊' : ''}</span>`;
+    }).join(' ');
+}
+
+function isT212OnlyChannel(channel) {
+    let brokers = [];
+    try { brokers = JSON.parse(channel.enabled_brokers || '[]'); } catch(e) {}
+    return brokers.length > 0 && brokers.every(b => b.startsWith('TRADING212'));
+}
+
+function hasT212Broker(channel) {
+    let brokers = [];
+    try { brokers = JSON.parse(channel.enabled_brokers || '[]'); } catch(e) {}
+    return brokers.some(b => b.startsWith('TRADING212'));
+}
+
 function buildCardSummaryInner(channel) {
     const executeEnabled = channel.execute_enabled === 1;
     const trackEnabled = channel.track_enabled === 1;
@@ -1427,15 +1473,18 @@ function buildCardSummaryInner(channel) {
     if (channel.conditional_order_enabled) badges += '<span class="feature-badge active">Cond</span>';
     if (channel.slippage_protection_enabled) badges += '<span class="feature-badge active">Slip</span>';
     if (channel.channel_max_position_size) badges += `<span class="feature-badge">Max $${channel.channel_max_position_size.toLocaleString()}</span>`;
-    if (channel.ndx_to_qqq_enabled) badges += '<span class="feature-badge" style="color: #b388ff; border-color: rgba(179,136,255,0.2);">NDX→QQQ</span>';
+    if (channel.ndx_to_qqq_enabled && !isT212OnlyChannel(channel)) badges += '<span class="feature-badge" style="color: #b388ff; border-color: rgba(179,136,255,0.2);">NDX→QQQ</span>';
     const chaseEnabled = channel.entry_chase_enabled === 1 || channel.order_chase_enabled === 1;
     if (chaseEnabled) badges += '<span class="feature-badge active">Chase</span>';
+
+    const brokerBadgesHtml = renderBrokerBadges(channel, true);
 
     return `
         <div style="display: flex; gap: 20px; margin-bottom: 8px; font-size: 12px;">
             <div>Execute: ${execInfo}</div>
             <div>Track: ${trackInfo}</div>
         </div>
+        <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px;">${brokerBadgesHtml}</div>
         <div style="display: flex; gap: 5px; flex-wrap: wrap;">${badges}</div>
     `;
 }
@@ -1561,6 +1610,17 @@ function openChannelSettings(channelId) {
     currentSettingsChannelId = channelId;
     document.getElementById('settingsModalTitle').textContent = channel.name + ' Settings';
 
+    const brokerInfoEl = document.getElementById('settingsModalBrokerInfo');
+    if (brokerInfoEl) {
+        const brokerBadgesHtml = renderBrokerBadges(channel, false);
+        const t212Warning = isT212OnlyChannel(channel)
+            ? '<div style="margin-top: 6px; padding: 6px 10px; background: rgba(0,163,255,0.1); border: 1px solid rgba(0,163,255,0.2); border-radius: 6px; font-size: 11px; color: #64B5F6;">📊 Trading 212 — Stocks only. Options signals will be skipped.</div>'
+            : hasT212Broker(channel)
+                ? '<div style="margin-top: 6px; padding: 6px 10px; background: rgba(0,163,255,0.08); border: 1px solid rgba(0,163,255,0.15); border-radius: 6px; font-size: 11px; color: #90CAF9;">📊 T212 supports stocks only — options route to other brokers.</div>'
+                : '';
+        brokerInfoEl.innerHTML = `<div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">${brokerBadgesHtml}</div>${t212Warning}`;
+    }
+
     document.getElementById('settingsTabSizing').innerHTML = buildSizingTab(channel);
     document.getElementById('settingsTabRisk').innerHTML = buildRiskControlsTab(channel);
     document.getElementById('settingsTabOrders').innerHTML = buildOrderTypesTab(channel);
@@ -1593,7 +1653,11 @@ function switchSettingsTab(tabName) {
 }
 
 function buildSizingTab(ch) {
+    const t212Note = isT212OnlyChannel(ch)
+        ? '<div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(0,163,255,0.08); border: 1px solid rgba(0,163,255,0.15); border-radius: 8px; font-size: 11px; color: #90CAF9;">📊 T212 stocks-only channel — Position sizing uses T212 account balance. Options signals will be auto-skipped.</div>'
+        : '';
     return `
+        ${t212Note}
         <div class="settings-row">
             <div class="settings-section green">
                 <div class="settings-section-title">🚀 Execute</div>
@@ -1670,6 +1734,9 @@ function buildSizingTab(ch) {
 }
 
 function buildRiskControlsTab(ch) {
+    const t212Only = isT212OnlyChannel(ch);
+    const ndxDisabledAttr = t212Only ? 'disabled style="opacity: 0.5; pointer-events: none;"' : '';
+    const ndxT212Note = t212Only ? ' <span style="color: #64B5F6; font-size: 10px;">(N/A for T212 — stocks only)</span>' : '';
     return `
         <div class="settings-section violet">
             <div class="settings-section-title">🎯 Exit Strategy</div>
@@ -1755,19 +1822,19 @@ function buildRiskControlsTab(ch) {
                 </div>
             </div>
         </div>
-        <div class="settings-section amber">
-            <div class="settings-section-title">🔄 Symbol Conversion</div>
+        <div class="settings-section amber" ${ndxDisabledAttr}>
+            <div class="settings-section-title">🔄 Symbol Conversion${ndxT212Note}</div>
             <div class="settings-toggle-row">
                 <span>NDX → QQQ Conversion</span>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="modal-ndx-toggle-${ch.id}" ${ch.ndx_to_qqq_enabled ? 'checked' : ''} onchange="updateNdxToQqq(${ch.id}, this.checked)">
+                    <input type="checkbox" id="modal-ndx-toggle-${ch.id}" ${ch.ndx_to_qqq_enabled ? 'checked' : ''} onchange="updateNdxToQqq(${ch.id}, this.checked)" ${t212Only ? 'disabled' : ''}>
                     <span class="slider"></span>
                 </label>
             </div>
             <div class="settings-field" style="max-width: 200px; margin-top: 8px;">
                 <label>Target Delta</label>
                 <input type="number" id="modal-ndx-delta-${ch.id}" value="${ch.ndx_to_qqq_delta || 0.3}" placeholder="0.3" min="0.1" max="1.0" step="0.05"
-                       ${ch.ndx_to_qqq_enabled ? '' : 'disabled'} onchange="updateNdxToQqqDelta(${ch.id}, this.value)">
+                       ${ch.ndx_to_qqq_enabled && !t212Only ? '' : 'disabled'} onchange="updateNdxToQqqDelta(${ch.id}, this.value)">
                 <div class="settings-helper">Convert NDX index options to equivalent QQQ options</div>
             </div>
         </div>
@@ -1775,7 +1842,11 @@ function buildRiskControlsTab(ch) {
 }
 
 function buildOrderTypesTab(ch) {
+    const t212OrderNote = hasT212Broker(ch)
+        ? '<div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(0,163,255,0.08); border: 1px solid rgba(0,163,255,0.15); border-radius: 8px; font-size: 11px; color: #90CAF9;">📊 T212 uses value-based market orders — limit/market selection applies to other brokers on this channel.</div>'
+        : '';
     return `
+        ${t212OrderNote}
         <div class="settings-row three-col">
             <div class="settings-section green">
                 <div class="settings-section-title">📥 Entry Order</div>
@@ -1815,7 +1886,11 @@ function buildOrderTypesTab(ch) {
 }
 
 function buildConditionalTab(ch) {
+    const t212CondNote = hasT212Broker(ch)
+        ? '<div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(0,163,255,0.08); border: 1px solid rgba(0,163,255,0.15); border-radius: 8px; font-size: 11px; color: #90CAF9;">📊 Conditional orders apply to T212 stock trades only — options conditions will be skipped for T212.</div>'
+        : '';
     return `
+        ${t212CondNote}
         <div class="settings-section violet">
             <div class="settings-section-title">⏱ Conditional Orders</div>
             <div class="settings-toggle-row">
