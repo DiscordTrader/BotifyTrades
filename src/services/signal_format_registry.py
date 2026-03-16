@@ -1318,6 +1318,38 @@ class SignalFormatRegistry:
     # BRONZE SWINGS PARSER IMPLEMENTATIONS
     # =========================================================================
     
+    _BRONZE_BLOCKED_WORDS = frozenset({
+        'LONG', 'SHORT', 'BUY', 'SELL', 'CALL', 'PUT', 'HOLD', 'EXIT',
+        'STOP', 'TRIM', 'SOLD', 'ENTRY', 'AREA', 'FULL', 'HALF', 'ADD',
+        'ADDED', 'CLOSE', 'CLOSED', 'NEW', 'NOW', 'TAKE', 'TOOK',
+        'SWING', 'TRADE', 'WATCH', 'RISK', 'FREE', 'OVER', 'WITH',
+        'FROM', 'INTO', 'DONE', 'BEEN', 'THIS', 'THAT', 'HAVE', 'JUST',
+        'MORE', 'BACK', 'STILL', 'ALSO', 'WILL', 'ABOUT', 'ABOVE',
+        'BELOW', 'HERE', 'AND', 'BUT', 'NOT', 'HIS', 'HER', 'ITS',
+        'OUR', 'THE', 'WHEN', 'THEN', 'THAN', 'THEY', 'THEM', 'WHAT',
+        'WHICH', 'WHERE', 'WHILE', 'WHO', 'HOW', 'WHY', 'WAS', 'WERE',
+        'HAS', 'HAD', 'CAN', 'MAY', 'DID', 'DOES', 'COULD', 'WOULD',
+        'SHALL', 'SHOULD', 'MIGHT', 'MUST', 'NEED', 'VERY', 'SOME',
+        'MUCH', 'LIKE', 'ONLY', 'EVEN', 'MOST', 'ALSO', 'EACH',
+        'EVERY', 'BOTH', 'SAME', 'OTHER', 'SUCH', 'THESE', 'THOSE',
+        'AFTER', 'AGAIN', 'UNTIL', 'SINCE', 'ONCE', 'FIRST', 'LAST',
+        'NEXT', 'GREAT', 'GOOD', 'LOOK', 'WANT', 'GIVE', 'GOING',
+        'COME', 'CAME', 'MAKE', 'MADE', 'THINK', 'KNOW', 'SAID',
+        'WENT', 'WELL', 'BEEN', 'YEAH', 'LETS', 'HUGE', 'NICE',
+        'RUN', 'RUNS', 'SET', 'KEEP', 'KEPT', 'LEFT', 'MOVE',
+        'WAIT', 'SIZE', 'GAIN', 'LOSS', 'LOTTO', 'PLAY', 'PLAYS',
+        'ALERT', 'ALERTED', 'CALLS', 'PUTS', 'ENTER', 'STOCK',
+        'SHARE', 'PRICE', 'TODAY', 'WEEK', 'MONTH', 'YEAR',
+    })
+
+    @classmethod
+    def _is_valid_bronze_symbol(cls, symbol: str) -> bool:
+        if not symbol or len(symbol) < 2:
+            return False
+        if symbol in cls._BRONZE_BLOCKED_WORDS:
+            return False
+        return True
+
     def _parse_bronze_entry(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Bronze Swings entry signals (starter position, entered, long swing)."""
         groups = match.groups()
@@ -1334,7 +1366,7 @@ class SignalFormatRegistry:
                     except ValueError:
                         pass
         
-        if not symbol:
+        if not self._is_valid_bronze_symbol(symbol):
             return None
         
         return {
@@ -1368,7 +1400,7 @@ class SignalFormatRegistry:
                     except ValueError:
                         pass
         
-        if not symbol:
+        if not self._is_valid_bronze_symbol(symbol):
             return None
         
         return {
@@ -1403,7 +1435,7 @@ class SignalFormatRegistry:
                     except ValueError:
                         pass
         
-        if not symbol:
+        if not self._is_valid_bronze_symbol(symbol):
             return None
         
         return {
@@ -1438,7 +1470,7 @@ class SignalFormatRegistry:
                     except ValueError:
                         pass
         
-        if not symbol:
+        if not self._is_valid_bronze_symbol(symbol):
             return None
         
         return {
