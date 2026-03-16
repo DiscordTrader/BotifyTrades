@@ -110,18 +110,50 @@ class WebullBroker(BrokerInterface):
             return False
     
     def _resolve_account_by_type(self, desired_type='margin'):
-        """Resolve account ID by type (margin/cash/ira). Falls back to index 0 if type not found."""
+        """Resolve account ID by type (margin/cash/ira). Falls back to saved ID or index 0."""
         import requests as _req
+        import time
+
+        saved_sec_id = ''
+        saved_rzone = ''
+        try:
+            from gui_app.broker_credentials_service import get_webull_credentials
+            saved_creds = get_webull_credentials()
+            saved_sec_id = saved_creds.get('sec_account_id', '')
+            saved_rzone = saved_creds.get('rzone', '')
+        except Exception:
+            pass
+
         try:
             headers = self.wb.build_req_headers()
             url = self.wb._urls.account_id()
-            response = _req.get(url, headers=headers, timeout=self.wb.timeout)
-            result = response.json()
-            if not (result.get('success') and result.get('data')):
-                print(f"[{self.name}] ⚠️ Could not fetch account list — falling back to default")
+
+            api_result = None
+            for attempt in range(3):
+                try:
+                    response = _req.get(url, headers=headers, timeout=self.wb.timeout)
+                    result = response.json()
+                    if result.get('success') and result.get('data'):
+                        api_result = result
+                        break
+                    else:
+                        print(f"[{self.name}] ⚠️ Account list API returned non-success (attempt {attempt+1}/3)")
+                except Exception as api_err:
+                    print(f"[{self.name}] ⚠️ Account list API error (attempt {attempt+1}/3): {api_err}")
+                if attempt < 2:
+                    time.sleep(1)
+
+            if not api_result:
+                if saved_sec_id:
+                    print(f"[{self.name}] ✓ Using saved account ID from database: {saved_sec_id}")
+                    self.wb._account_id = saved_sec_id
+                    if saved_rzone:
+                        self.wb.zone_var = saved_rzone
+                    return self.wb._account_id
+                print(f"[{self.name}] ⚠️ Could not fetch account list and no saved ID — falling back to default")
                 return self.wb.get_account_id()
 
-            accounts = result['data']
+            accounts = api_result['data']
             valid_accounts = [a for a in accounts if a.get('secAccountId')]
 
             print(f"[{self.name}] Found {len(accounts)} account(s) ({len(valid_accounts)} with secAccountId), resolving types...")
@@ -136,23 +168,50 @@ class WebullBroker(BrokerInterface):
                     self.wb.zone_var = rzone
                     self.wb._account_id = sec_id
                     print(f"[{self.name}] ✓ Selected {desired_type.upper()} account at index [{i}] (secAccountId={sec_id})")
+                    self._persist_resolved_account_id(sec_id, rzone)
                     return self.wb._account_id
 
             if not valid_accounts:
+                if saved_sec_id:
+                    print(f"[{self.name}] ⚠️ No valid accounts in API — using saved ID: {saved_sec_id}")
+                    self.wb._account_id = saved_sec_id
+                    if saved_rzone:
+                        self.wb.zone_var = saved_rzone
+                    return self.wb._account_id
                 print(f"[{self.name}] ⚠️ No valid accounts found — falling back to default")
                 return self.wb.get_account_id()
 
             print(f"[{self.name}] ⚠️ No {desired_type.upper()} account found in {len(valid_accounts)} account(s) — using first account")
-            print(f"[{self.name}] ⚠️ Selected account type '{desired_type}' was NOT applied. Trading on default account.")
             self.wb.zone_var = str(valid_accounts[0].get('rzone', ''))
             self.wb._account_id = str(valid_accounts[0].get('secAccountId', ''))
+            self._persist_resolved_account_id(self.wb._account_id, self.wb.zone_var)
             return self.wb._account_id
         except Exception as e:
-            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — desired '{desired_type}' NOT applied, falling back to index 0")
+            if saved_sec_id:
+                print(f"[{self.name}] ⚠️ Account resolution failed ({e}) — using saved ID: {saved_sec_id}")
+                self.wb._account_id = saved_sec_id
+                if saved_rzone:
+                    self.wb.zone_var = saved_rzone
+                return self.wb._account_id
+            print(f"[{self.name}] ⚠️ Account type resolution failed ({e}) — falling back to default")
             try:
                 return self.wb.get_account_id()
             except Exception:
                 return None
+
+    def _persist_resolved_account_id(self, sec_account_id, rzone=''):
+        """Save the resolved account ID to the database for future fallback."""
+        try:
+            from gui_app.broker_credentials_service import get_webull_credentials
+            from gui_app.config_service import save_config
+            existing = get_webull_credentials()
+            existing['sec_account_id'] = sec_account_id
+            if rzone:
+                existing['rzone'] = rzone
+            save_config('webull_credentials', existing)
+            print(f"[{self.name}] ✓ Saved account ID {sec_account_id} to database for fallback")
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Could not persist account ID: {e}")
 
     def _detect_account_type(self, sec_account_id, headers):
         """Query account details to detect type (Margin/Cash/IRA)."""

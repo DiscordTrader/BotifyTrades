@@ -79,7 +79,8 @@ def save_webull_credentials(
     zone_id: str = '',
     rzone: str = '',
     paper_account_enabled: bool = False,
-    account_type: str = 'margin'
+    account_type: str = 'margin',
+    sec_account_id: str = ''
 ):
     """Save Webull broker credentials (including region metadata for API v2)"""
     save_config('webull_credentials', {
@@ -96,7 +97,8 @@ def save_webull_credentials(
         'zone_id': zone_id,
         'rzone': rzone,
         'paper_account_enabled': paper_account_enabled,
-        'account_type': account_type
+        'account_type': account_type,
+        'sec_account_id': sec_account_id
     })
 
 
@@ -134,7 +136,8 @@ def get_webull_credentials() -> Dict[str, Any]:
         'zone_id': '',
         'rzone': '',
         'paper_account_enabled': False,
-        'account_type': 'margin'
+        'account_type': 'margin',
+        'sec_account_id': ''
     }
     creds = load_config('webull_credentials') or {}
     for key, default_val in defaults.items():
