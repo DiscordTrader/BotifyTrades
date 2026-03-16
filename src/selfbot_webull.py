@@ -2767,6 +2767,16 @@ class WebullBroker:
                             print(f"[Webull] ✓ Token refreshed successfully")
                             print(f"[Webull]   New access token: {new_access[:20]}...{new_access[-10:]}")
                             
+                            try:
+                                from gui_app.broker_credentials_service import update_webull_tokens
+                                update_webull_tokens({
+                                    'access_token': new_access,
+                                    'refresh_token': new_refresh or WB_REFRESH_TOKEN
+                                })
+                                print(f"[Webull] ✓ Refreshed tokens saved to database")
+                            except Exception as save_err:
+                                print(f"[Webull] ⚠️  Could not save refreshed tokens to DB: {save_err}")
+                            
                             if os.getenv('REPL_ID'):
                                 print("[Webull] NOTE: Please update your Replit Secrets with the new token:")
                                 print(f"[Webull]   WEBULL_ACCESS_TOKEN={new_access}")
@@ -8524,8 +8534,8 @@ class SelfClient(discord.Client):
                 await asyncio.sleep(3600)
 
     async def token_refresh_scheduler(self):
-        """Automatically refresh Webull tokens every 12 hours"""
-        await asyncio.sleep(3600)  # Wait 1 hour before first refresh
+        """Automatically refresh Webull tokens every 4 hours"""
+        await asyncio.sleep(1800)
         
         while True:
             try:
@@ -8535,15 +8545,14 @@ class SelfClient(discord.Client):
                 if success:
                     print("[Webull] ✓ Automatic token refresh completed successfully")
                 else:
-                    print("[Webull] ⚠️  Automatic token refresh failed - will retry in 12 hours")
+                    print("[Webull] ⚠️  Automatic token refresh failed - will retry in 4 hours")
                 
             except Exception as e:
                 print(f"[Webull] ⚠️  Token refresh scheduler error: {e}")
                 import traceback
                 traceback.print_exc()
             
-            # Wait 12 hours before next refresh
-            await asyncio.sleep(43200)
+            await asyncio.sleep(14400)
     
     async def trade_analysis_scheduler(self):
         """Periodically check for trades needing follow-up analysis"""

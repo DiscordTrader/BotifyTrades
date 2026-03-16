@@ -15,7 +15,16 @@ def _patched_get_account_id(self, id=0):
     """
     headers = self.build_req_headers()
     response = requests.get(self._urls.account_id(), headers=headers, timeout=self.timeout)
-    result = response.json()
+    
+    if response.status_code != 200:
+        print(f"[WEBULL AUTH] get_account_id HTTP {response.status_code}: {response.text[:200]}")
+        return None
+    
+    try:
+        result = response.json()
+    except Exception:
+        print(f"[WEBULL AUTH] get_account_id non-JSON response: {response.text[:200]}")
+        return None
     
     if result.get('success') and len(result.get('data', [])) > 0:
         account_data = result['data'][int(id)]
@@ -24,6 +33,7 @@ def _patched_get_account_id(self, id=0):
         self._region_code = account_data.get('regionId', account_data.get('region_id', ''))
         return self._account_id
     else:
+        print(f"[WEBULL AUTH] get_account_id failed - API response: {str(result)[:300]}")
         return None
 
 webull.get_account_id = _patched_get_account_id
@@ -239,7 +249,38 @@ class WebullAuth:
                 if account_id:
                     print(f"[WEBULL AUTH] ✓ Got account_id: {account_id}, zone_var: {self.wb.zone_var}", flush=True)
                 else:
-                    return {"success": False, "error": "Access token expired. Please get a new access token from Webull (open https://app.webull.com, login, F12 → Console, copy new token).", "token_expired": True}
+                    if refresh_token:
+                        print(f"[WEBULL AUTH] Access token rejected — attempting refresh_login()...", flush=True)
+                        try:
+                            new_token = self.wb.refresh_login()
+                            if new_token and isinstance(new_token, dict) and new_token.get('accessToken'):
+                                new_access = new_token['accessToken']
+                                new_refresh = new_token.get('refreshToken', refresh_token)
+                                for attr, val in (("_access_token", new_access), ("access_token", new_access),
+                                                  ("_refresh_token", new_refresh), ("refresh_token", new_refresh)):
+                                    try:
+                                        setattr(self.wb, attr, val)
+                                    except Exception:
+                                        pass
+                                if hasattr(self.wb, "_headers") and isinstance(self.wb._headers, dict):
+                                    self.wb._headers['Authorization'] = f'Bearer {new_access}'
+                                if hasattr(self.wb, "_session") and hasattr(self.wb._session, 'headers'):
+                                    self.wb._session.headers['Authorization'] = f'Bearer {new_access}'
+                                print(f"[WEBULL AUTH] ✓ refresh_login() got new access token ({len(new_access)} chars)", flush=True)
+                                account_id = self.wb.get_account_id()
+                                print(f"[WEBULL AUTH] After refresh, get_account_id() returned: {account_id}", flush=True)
+                                if account_id:
+                                    print(f"[WEBULL AUTH] ✓ Token refreshed and verified!", flush=True)
+                                else:
+                                    return {"success": False, "error": "Token refresh succeeded but account verification failed. Please get a fresh access token from Webull.", "token_expired": True}
+                            else:
+                                print(f"[WEBULL AUTH] refresh_login() returned no new token: {type(new_token)}", flush=True)
+                                return {"success": False, "error": "Access token expired and refresh failed. Please get a new access token from Webull (open https://app.webull.com, login, F12 → Console, copy new token).", "token_expired": True}
+                        except Exception as ref_err:
+                            print(f"[WEBULL AUTH] refresh_login() failed: {ref_err}", flush=True)
+                            return {"success": False, "error": "Access token expired and refresh failed. Please get a new access token from Webull (open https://app.webull.com, login, F12 → Console, copy new token).", "token_expired": True}
+                    else:
+                        return {"success": False, "error": "Access token expired and no refresh token available. Please get a new access token from Webull (open https://app.webull.com, login, F12 → Console, copy new token).", "token_expired": True}
                 
                 print(f"[WEBULL AUTH DEBUG] Calling get_account()...", flush=True)
                 account = self.wb.get_account()
