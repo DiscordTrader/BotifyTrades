@@ -2427,7 +2427,7 @@ class WebullBroker:
                 'os': 'Android',
                 'os-version': '13',
                 'app': 'global',
-                'app-version': '9.53.3',
+                'app-version': '12.14.0',
                 'accept-language': 'en-US',
                 'user-agent': safe_ua,
             })
@@ -2492,6 +2492,13 @@ class WebullBroker:
                 perms = raw_acct.get('userTradePermissionVOs', [])
                 perm_sec_ids = [p.get('secAccountId') for p in perms if p.get('secAccountId')] if perms else []
                 _original_print(f"[{self.name}] Raw account[{i}] brokerId={raw_acct.get('brokerId')} status={raw_acct.get('status')} rzone={raw_acct.get('rzone')} perm_secIds={perm_sec_ids}", flush=True)
+                acct_perms = raw_acct.get('accountPermissions', [])
+                if acct_perms:
+                    for j, ap in enumerate(acct_perms):
+                        _original_print(f"[{self.name}]   accountPermissions[{j}]: {json.dumps(ap, default=str)[:200]}", flush=True)
+                if perms:
+                    for j, p in enumerate(perms):
+                        _original_print(f"[{self.name}]   userTradePermissionVOs[{j}]: {json.dumps(p, default=str)[:200]}", flush=True)
                 if not raw_acct.get('secAccountId') and perm_sec_ids:
                     raw_acct['secAccountId'] = perm_sec_ids[0]
                     _original_print(f"[{self.name}]   → Promoted secAccountId from userTradePermissionVOs: {perm_sec_ids[0]}", flush=True)
@@ -2513,6 +2520,18 @@ class WebullBroker:
                     return
 
             if not valid_accounts:
+                all_unopen = all(a.get('status') == 'unopen' for a in accounts) if accounts else False
+                if all_unopen and accounts:
+                    print(f"[{self.name}] All {len(accounts)} accounts have status=unopen — trying UK/global account endpoints...")
+                    uk_account = self._try_uk_global_account_resolution(wb, headers, accounts)
+                    if uk_account:
+                        sec_id = str(uk_account.get('secAccountId', ''))
+                        rzone = str(uk_account.get('rzone', getattr(wb, 'zone_var', 'dc_core_r001')))
+                        wb._account_id = sec_id
+                        wb.zone_var = rzone
+                        print(f"[{self.name}] ✓ UK/global account resolved: secAccountId={sec_id}, rzone={rzone}")
+                        self._persist_resolved_account_id(sec_id, rzone)
+                        return
                 if saved_sec_id:
                     print(f"[{self.name}] ⚠️ No valid accounts in API — using saved ID: {saved_sec_id}")
                     wb._account_id = saved_sec_id
@@ -2542,6 +2561,111 @@ class WebullBroker:
                 wb.get_account_id()
             except Exception:
                 pass
+
+    def _try_uk_global_account_resolution(self, wb, headers, v5_accounts):
+        """Try alternative endpoints for UK/global Webull accounts where v5 returns all-unopen."""
+        import requests as _req
+
+        alt_endpoints = [
+            ('fintech-v6', f'{wb._urls.base_new_trade_url}/trading/v1/global/account/getSecAccountList'),
+            ('ustrade-v5', f'{wb._urls.base_ustrade_url}/trade/account/getSecAccountList/v5'),
+            ('ustradebroker-v5', f'{wb._urls.base_ustradebroker_url}/trade/account/getSecAccountList/v5'),
+        ]
+
+        for label, url in alt_endpoints:
+            try:
+                _original_print(f"[{self.name}] Trying {label}: {url[:80]}...", flush=True)
+                resp = _req.get(url, headers=headers, timeout=10)
+                if resp.status_code != 200:
+                    _original_print(f"[{self.name}]   {label} → HTTP {resp.status_code}", flush=True)
+                    continue
+                result = resp.json()
+                data_list = result.get('data', []) if isinstance(result, dict) else (result if isinstance(result, list) else [])
+                if not data_list:
+                    data_list = [result] if isinstance(result, dict) and result.get('secAccountId') else []
+                for entry in (data_list if isinstance(data_list, list) else [data_list]):
+                    if not isinstance(entry, dict):
+                        continue
+                    sec_id = entry.get('secAccountId', '')
+                    if sec_id:
+                        _original_print(f"[{self.name}]   {label} → found secAccountId={sec_id}", flush=True)
+                        return entry
+                    perms = entry.get('userTradePermissionVOs', [])
+                    for p in (perms or []):
+                        if p.get('secAccountId'):
+                            entry['secAccountId'] = p['secAccountId']
+                            _original_print(f"[{self.name}]   {label} → promoted secAccountId={p['secAccountId']} from permissions", flush=True)
+                            return entry
+                _original_print(f"[{self.name}]   {label} → no secAccountId found (entries={len(data_list) if isinstance(data_list, list) else 0})", flush=True)
+            except Exception as e:
+                _original_print(f"[{self.name}]   {label} → error: {e}", flush=True)
+
+        for acct in v5_accounts:
+            account_perms = acct.get('accountPermissions', [])
+            for ap in (account_perms or []):
+                sec_id = ap.get('secAccountId', '')
+                if sec_id:
+                    acct['secAccountId'] = sec_id
+                    _original_print(f"[{self.name}]   v5-accountPermissions → found secAccountId={sec_id}", flush=True)
+                    return acct
+
+        try:
+            user_url = f'{wb._urls.base_userbroker_url}/user'
+            _original_print(f"[{self.name}] Trying user endpoint: {user_url[:80]}...", flush=True)
+            resp = _req.get(user_url, headers=headers, timeout=10)
+            _original_print(f"[{self.name}]   user endpoint → HTTP {resp.status_code}", flush=True)
+            if resp.status_code == 200:
+                user_data = resp.json()
+                sec_id = ''
+                if isinstance(user_data, dict):
+                    sec_id = user_data.get('secAccountId', '') or user_data.get('brokerAccountId', '') or user_data.get('accountId', '')
+                    _original_print(f"[{self.name}]   user endpoint keys: {list(user_data.keys())[:20]}", flush=True)
+                    uuid = user_data.get('uuid', '') or user_data.get('userId', '') or user_data.get('id', '')
+                    _original_print(f"[{self.name}]   user endpoint uuid/userId: {uuid}", flush=True)
+                if sec_id:
+                    _original_print(f"[{self.name}]   user endpoint → found account ID: {sec_id}", flush=True)
+                    return {'secAccountId': str(sec_id), 'rzone': getattr(wb, 'zone_var', 'dc_core_r001')}
+        except Exception as e:
+            _original_print(f"[{self.name}]   user endpoint → error: {e}", flush=True)
+
+        for acct in v5_accounts:
+            broker_id = acct.get('brokerId', 0)
+            rzone = acct.get('rzone', 'dc_core_r001')
+            if broker_id == 8:
+                try:
+                    asset_url = f'{wb._urls.base_ustrade_url}/trade/v2/home/0'
+                    _original_print(f"[{self.name}] Trying asset summary with brokerId=8: {asset_url[:80]}...", flush=True)
+                    asset_headers = dict(headers)
+                    asset_headers['rzone'] = rzone
+                    resp = _req.get(asset_url, headers=asset_headers, timeout=10)
+                    _original_print(f"[{self.name}]   asset summary → HTTP {resp.status_code}, body[:200]={resp.text[:200]}", flush=True)
+                    if resp.status_code == 200:
+                        adata = resp.json()
+                        if isinstance(adata, dict):
+                            found_id = adata.get('secAccountId', '') or adata.get('accountId', '')
+                            if found_id:
+                                _original_print(f"[{self.name}]   asset summary → found secAccountId={found_id}", flush=True)
+                                return {'secAccountId': str(found_id), 'rzone': rzone}
+                except Exception as e:
+                    _original_print(f"[{self.name}]   asset summary → error: {e}", flush=True)
+
+        try:
+            fintech_user_url = f'{wb._urls.base_userfintech_url}/user'
+            _original_print(f"[{self.name}] Trying fintech user endpoint: {fintech_user_url[:80]}...", flush=True)
+            resp = _req.get(fintech_user_url, headers=headers, timeout=10)
+            _original_print(f"[{self.name}]   fintech user → HTTP {resp.status_code}", flush=True)
+            if resp.status_code == 200:
+                fdata = resp.json()
+                if isinstance(fdata, dict):
+                    _original_print(f"[{self.name}]   fintech user keys: {list(fdata.keys())[:20]}", flush=True)
+                    sec_id = fdata.get('secAccountId', '') or fdata.get('brokerAccountId', '') or fdata.get('accountId', '')
+                    if sec_id:
+                        return {'secAccountId': str(sec_id), 'rzone': getattr(wb, 'zone_var', 'dc_core_r001')}
+        except Exception as e:
+            _original_print(f"[{self.name}]   fintech user → error: {e}", flush=True)
+
+        _original_print(f"[{self.name}] UK/global account resolution: no secAccountId found via any endpoint", flush=True)
+        return None
 
     def _persist_resolved_account_id(self, sec_account_id, rzone=''):
         """Save the resolved account ID to the database for future fallback."""
