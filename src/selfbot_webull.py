@@ -16126,6 +16126,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
                                 signal_price = signal.get('signal_price') or entry_price
                                 limit_cap_price = signal.get('_limit_price') if signal.get('_limit_cap_enabled') else None
+                                bracket_sl = signal.get('stop_loss_price') or signal.get('stop_loss') or signal.get('stoploss') or signal.get('sl')
+                                bracket_pt = signal.get('profit_target_price') or signal.get('profit_target') or signal.get('take_profit') or signal.get('pt') or signal.get('tp')
                                 await order_chaser.track_entry_order(
                                     order_id=str(order_id),
                                     broker_id=broker_name,
@@ -16142,7 +16144,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     slippage_max_pct=slippage_max_pct,
                                     signal_price=float(signal_price) if signal_price else None,
                                     timeout_minutes=order_timeout_minutes,
-                                    limit_cap_price=limit_cap_price
+                                    limit_cap_price=limit_cap_price,
+                                    stop_loss_price=float(bracket_sl) if bracket_sl else None,
+                                    profit_target_price=float(bracket_pt) if bracket_pt else None
                                 )
                                 signal['_entry_chase_tracked'] = True
                                 resp['_entry_chase_tracked'] = True
@@ -16961,6 +16965,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             order_chaser = get_order_chaser()
                                             if order_chaser:
                                                 asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
+                                                bracket_sl2 = signal.get('stop_loss_price') or signal.get('stop_loss') or signal.get('stoploss') or signal.get('sl')
+                                                bracket_pt2 = signal.get('profit_target_price') or signal.get('profit_target') or signal.get('take_profit') or signal.get('pt') or signal.get('tp')
                                                 await order_chaser.track_entry_order(
                                                     order_id=str(order_id),
                                                     broker_id=broker_name,
@@ -16977,7 +16983,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     slippage_max_pct=slippage_max_pct,
                                                     signal_price=float(signal_price) if signal_price else None,
                                                     timeout_minutes=order_timeout_minutes,
-                                                    limit_cap_price=limit_cap_price
+                                                    limit_cap_price=limit_cap_price,
+                                                    stop_loss_price=float(bracket_sl2) if bracket_sl2 else None,
+                                                    profit_target_price=float(bracket_pt2) if bracket_pt2 else None
                                                 )
                                                 _original_print(f"[ORDER_CHASER] ✓ Fallback tracking {broker_name} entry order: {order_id}")
                                         except Exception as chase_err:

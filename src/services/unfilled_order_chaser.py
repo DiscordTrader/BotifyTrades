@@ -80,6 +80,8 @@ class TrackedEntryOrder:
     signal_price: Optional[float] = None  # Original signal price for slippage calc
     timeout_minutes: Optional[int] = None  # Per-channel timeout in minutes (order_timeout_minutes)
     limit_cap_price: Optional[float] = None  # Limit cap price (absolute ceiling from conditional order)
+    stop_loss_price: Optional[float] = None  # Bracket SL price (preserved for replacement orders)
+    profit_target_price: Optional[float] = None  # Bracket PT price (preserved for replacement orders)
     status: OrderChaseStatus = OrderChaseStatus.PENDING
     chase_attempts: int = 0
     last_chase_at: Optional[datetime] = None
@@ -460,7 +462,9 @@ class UnfilledOrderChaser:
         slippage_max_pct: Optional[float] = None,
         signal_price: Optional[float] = None,
         timeout_minutes: Optional[int] = None,
-        limit_cap_price: Optional[float] = None
+        limit_cap_price: Optional[float] = None,
+        stop_loss_price: Optional[float] = None,
+        profit_target_price: Optional[float] = None
     ) -> None:
         """
         Register an entry order (BTO) for monitoring.
@@ -471,6 +475,8 @@ class UnfilledOrderChaser:
             signal_price: Original signal price for slippage calculation
             timeout_minutes: Per-channel timeout in minutes (from order_timeout_minutes)
             limit_cap_price: Absolute ceiling price (from conditional order limit cap)
+            stop_loss_price: Bracket order SL price (preserved for replacement orders)
+            profit_target_price: Bracket order PT price (preserved for replacement orders)
         """
         async with self._lock:
             order = TrackedEntryOrder(
@@ -490,7 +496,9 @@ class UnfilledOrderChaser:
                 slippage_max_pct=slippage_max_pct,
                 signal_price=signal_price or price,
                 timeout_minutes=timeout_minutes,
-                limit_cap_price=limit_cap_price
+                limit_cap_price=limit_cap_price,
+                stop_loss_price=stop_loss_price,
+                profit_target_price=profit_target_price
             )
             self._tracked_entry_orders[order_id] = order
             
@@ -1244,6 +1252,8 @@ class UnfilledOrderChaser:
                         signal_price=order.signal_price,
                         timeout_minutes=order.timeout_minutes,
                         limit_cap_price=order.limit_cap_price,
+                        stop_loss_price=order.stop_loss_price,
+                        profit_target_price=order.profit_target_price,
                         chase_attempts=order.chase_attempts
                     )
                     self._tracked_entry_orders[new_order_id] = new_tracked
@@ -1276,6 +1286,8 @@ class UnfilledOrderChaser:
                             signal_price=order.signal_price,
                             timeout_minutes=order.timeout_minutes,
                             limit_cap_price=order.limit_cap_price,
+                            stop_loss_price=order.stop_loss_price,
+                            profit_target_price=order.profit_target_price,
                             chase_attempts=order.chase_attempts
                         )
                         self._tracked_entry_orders[retry_order_id] = new_tracked
@@ -1391,7 +1403,12 @@ class UnfilledOrderChaser:
         price: float,
         quantity_override: Optional[int] = None
     ) -> Optional[str]:
-        """Place a replacement entry order at the specified price"""
+        """Place a replacement entry order at the specified price.
+        
+        If the original order had bracket metadata (SL/PT), attempts to place
+        a bracket order to preserve risk protections. Falls back to simple
+        order if broker doesn't support bracket or if bracket placement fails.
+        """
         try:
             qty = quantity_override if quantity_override is not None else int(order.quantity)
             if qty <= 0:
@@ -1411,12 +1428,46 @@ class UnfilledOrderChaser:
                     option_type=order.call_put
                 )
             else:
-                result = await broker.place_stock_order(
-                    symbol=order.symbol,
-                    quantity=qty,
-                    price=price,
-                    action=order.action
-                )
+                has_bracket = order.stop_loss_price or order.profit_target_price
+                if has_bracket and hasattr(broker, 'place_bracket_order'):
+                    try:
+                        print(f"[ORDER_CHASER] Placing bracket replacement: SL=${order.stop_loss_price} PT=${order.profit_target_price}")
+                        result = await broker.place_bracket_order(
+                            symbol=order.symbol,
+                            action=order.action,
+                            quantity=qty,
+                            stop_loss_price=order.stop_loss_price,
+                            profit_target_price=order.profit_target_price,
+                            entry_price=price
+                        )
+                        bracket_ok = result and (
+                            (hasattr(result, 'success') and result.success) or
+                            (isinstance(result, dict) and result.get('orderId'))
+                        )
+                        if not bracket_ok:
+                            err_msg = getattr(result, 'message', str(result)) if result else 'No response'
+                            print(f"[ORDER_CHASER] Bracket replacement returned failure ({err_msg}), falling back to simple order")
+                            result = await broker.place_stock_order(
+                                symbol=order.symbol,
+                                quantity=qty,
+                                price=price,
+                                action=order.action
+                            )
+                    except Exception as bracket_err:
+                        print(f"[ORDER_CHASER] Bracket replacement exception ({bracket_err}), falling back to simple order")
+                        result = await broker.place_stock_order(
+                            symbol=order.symbol,
+                            quantity=qty,
+                            price=price,
+                            action=order.action
+                        )
+                else:
+                    result = await broker.place_stock_order(
+                        symbol=order.symbol,
+                        quantity=qty,
+                        price=price,
+                        action=order.action
+                    )
             
             return self._extract_order_id(result)
         except Exception as e:

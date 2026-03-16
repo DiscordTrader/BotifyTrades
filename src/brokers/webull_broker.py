@@ -1172,27 +1172,27 @@ class WebullBroker(BrokerInterface):
             
             side = 'BUY' if action == 'BTO' else 'SELL'
             
-            # Step 1: Place entry order
+            # Step 1: Place entry order (GTC + extended hours to match place_stock_order behavior)
             def execute_entry_order():
                 if entry_price is None:
-                    # Market order
                     return self.wb.place_order(
                         stock=symbol,
                         price=0.0,
                         action=side,
                         orderType='MKT',
-                        enforce='DAY',
-                        quant=quantity
+                        enforce='GTC',
+                        quant=quantity,
+                        outsideRegularTradingHour=True
                     )
                 else:
-                    # Limit order
                     return self.wb.place_order(
                         stock=symbol,
                         price=entry_price,
                         action=side,
                         orderType='LMT',
-                        enforce='DAY',
-                        quant=quantity
+                        enforce='GTC',
+                        quant=quantity,
+                        outsideRegularTradingHour=True
                     )
             
             entry_response = await asyncio.to_thread(execute_entry_order)

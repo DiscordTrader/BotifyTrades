@@ -630,13 +630,16 @@ class SchwabBroker(BrokerInterface):
         return response
     
     def _get_session_type(self) -> str:
-        """Get order session type based on extended hours setting.
+        """Get order session type based on extended hours setting and current market state.
         
         Schwab session types:
         - NORMAL: Regular market hours only (9:30 AM - 4:00 PM ET)
         - SEAMLESS: Extended hours (pre-market + regular + after-hours)
-        - AM: Pre-market only (7:00 AM - 9:28 AM ET)
-        - PM: After-hours only (4:02 PM - 8:00 PM ET)
+        
+        Policy: 
+        1. If user explicitly enabled extended hours → SEAMLESS
+        2. If currently outside regular market hours → SEAMLESS (auto-detect)
+        3. Otherwise → NORMAL
         
         Returns:
             Session type string for order payload
@@ -644,13 +647,31 @@ class SchwabBroker(BrokerInterface):
         try:
             from gui_app.database import get_broker_extended_hours
             if get_broker_extended_hours('schwab'):
-                print(f"[{self.name}] Extended hours ENABLED - using SEAMLESS session")
                 return "SEAMLESS"
         except ImportError:
             pass
         except Exception as e:
             print(f"[{self.name}] Error checking extended hours setting: {e}")
+        
+        if not self._is_regular_market_hours():
+            return "SEAMLESS"
+        
         return "NORMAL"
+
+    def _is_regular_market_hours(self) -> bool:
+        """Check if current time is within regular US market hours (9:30 AM - 4:00 PM ET)."""
+        try:
+            from datetime import datetime
+            import pytz
+            et = pytz.timezone('US/Eastern')
+            now = datetime.now(et)
+            if now.weekday() >= 5:
+                return False
+            market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+            market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+            return market_open <= now <= market_close
+        except Exception:
+            return True
 
     def _get_duration(self, duration_hint: Optional[str] = None, is_exit: bool = False, is_near_expiry: bool = False) -> str:
         """Get order duration/time-in-force.
@@ -911,7 +932,12 @@ class SchwabBroker(BrokerInterface):
             session = self._get_session_type()
             
             is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
-            duration = "GOOD_TILL_CANCEL" if is_exit else "DAY"
+            if is_exit:
+                duration = "GOOD_TILL_CANCEL"
+            elif session == "SEAMLESS":
+                duration = "GOOD_TILL_CANCEL"
+            else:
+                duration = "DAY"
             
             order_payload = {
                 "orderStrategyType": "SINGLE",
@@ -2389,12 +2415,13 @@ class SchwabBroker(BrokerInterface):
 
             session = self._get_session_type()
             entry_order_type = "LIMIT" if entry_price else "MARKET"
+            entry_duration = "GOOD_TILL_CANCEL" if session == "SEAMLESS" else "DAY"
 
             entry_payload = {
                 "orderStrategyType": "TRIGGER" if (stop_loss_price or profit_target_price) else "SINGLE",
                 "orderType": entry_order_type,
                 "session": session,
-                "duration": "DAY",
+                "duration": entry_duration,
                 "orderLegCollection": [{
                     "instruction": entry_instruction,
                     "quantity": quantity,
