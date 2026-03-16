@@ -15795,7 +15795,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             action=signal['action'],
                             broker=broker_name,
                             quantity=signal.get('qty', 1),
-                            price=signal.get('price', 0),
+                            price=signal.get('price') or 0,
                             order_id=placed_order_id,
                             strike=signal.get('strike'),
                             expiry=signal.get('expiry'),
@@ -16007,7 +16007,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             action=signal['action'],
                             broker=broker_name,
                             quantity=signal.get('qty', 1),
-                            price=signal.get('price', 0),
+                            price=signal.get('price') or 0,
                             order_id=stock_placed_id
                         )
                     except Exception as notify_err:
@@ -16194,13 +16194,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _stc_sym = signal.get('symbol', '')
                                 _stc_asset = signal.get('asset') or signal.get('asset_type', 'stock')
                                 stc_position_key = f"{broker_name}_{_stc_sym}_{_stc_asset}"
+                            _chase_price = signal.get('price')
+                            if _chase_price is None:
+                                _chase_price = 0
                             await order_chaser.track_exit_order(
                                 order_id=str(order_id),
                                 broker_id=broker_name,
                                 symbol=signal.get('symbol', ''),
                                 asset_type=signal.get('asset') or signal.get('asset_type', 'stock'),
                                 quantity=signal.get('qty', 1),
-                                price=signal.get('price', 0),
+                                price=_chase_price,
                                 action='STC',
                                 position_key=stc_position_key,
                                 strike=signal.get('strike'),
@@ -16898,7 +16901,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     action=signal['action'],
                                     broker=broker_label,
                                     quantity=success_resp.get('executed_qty', signal.get('qty', 1)),
-                                    price=signal.get('price', 0),
+                                    price=signal.get('price') or 0,
                                     order_id=placed_order_id,
                                     strike=signal.get('strike'),
                                     expiry=signal.get('expiry'),
@@ -17034,13 +17037,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     _stc_sym = signal.get('symbol', '')
                                                     _stc_asset = signal.get('asset') or signal.get('asset_type', 'stock')
                                                     stc_position_key = f"{broker_name}_{_stc_sym}_{_stc_asset}"
+                                                _chase_price2 = signal.get('price')
+                                                if _chase_price2 is None:
+                                                    _chase_price2 = 0
                                                 await order_chaser.track_exit_order(
                                                     order_id=str(order_id),
                                                     broker_id=broker_name,
                                                     symbol=signal.get('symbol', ''),
                                                     asset_type=signal.get('asset') or signal.get('asset_type', 'stock'),
                                                     quantity=signal.get('qty', 1),
-                                                    price=signal.get('price', 0),
+                                                    price=_chase_price2,
                                                     action='STC',
                                                     position_key=stc_position_key,
                                                     strike=signal.get('strike'),
@@ -17168,7 +17174,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     symbol=signal['symbol'],
                                                     asset_type=signal['asset'],
                                                     quantity=signal['qty'],
-                                                    price=signal.get('price', 0),
+                                                    price=signal.get('price') or 0,
                                                     action='STC',
                                                     position_key=signal.get('_position_key', ''),
                                                     strike=signal.get('strike'),
@@ -17277,7 +17283,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         symbol=signal['symbol'],
                                                         asset_type=signal['asset'],
                                                         closed_qty=signal['qty'],
-                                                        fill_price=signal.get('price', 0),
+                                                        fill_price=signal.get('price') or 0,
                                                         filled_at=datetime.now().isoformat(),
                                                         exit_source=exit_source,
                                                         strike=signal.get('strike'),
@@ -17380,7 +17386,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 _tt_cid, _tt_pnl = record_execution_closure_atomic(
                                                     broker=broker_label, symbol=signal['symbol'],
                                                     asset_type=signal.get('asset', 'stock'), closed_qty=signal['qty'],
-                                                    fill_price=signal.get('price', 0), filled_at=datetime.now().isoformat(),
+                                                    fill_price=signal.get('price') or 0, filled_at=datetime.now().isoformat(),
                                                     exit_source=_tt_exit_source, strike=signal.get('strike'),
                                                     expiry=signal.get('expiry'), call_put=signal.get('opt_type'),
                                                     broker_order_id=str(result.order_id) if result.order_id else None,
@@ -17663,7 +17669,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 action=signal['action'],
                                                 broker=paper_broker_label,
                                                 quantity=signal.get('qty', 1),
-                                                price=signal.get('price', 0),
+                                                price=signal.get('price') or 0,
                                                 order_id=result.order_id,
                                                 strike=signal.get('strike'),
                                                 expiry=signal.get('expiry'),
@@ -17985,7 +17991,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         action=signal['action'],
                                         broker=broker_name_used or 'Unknown',
                                         quantity=signal.get('qty', 1),
-                                        price=signal.get('price', 0),
+                                        price=signal.get('price') or 0,
                                         order_id=live_stock_order_id
                                     )
                                 except Exception as notify_err:
@@ -18511,7 +18517,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     symbol=signal['symbol'],
                                     asset_type=signal.get('asset', 'stock'),
                                     closed_qty=signal['qty'],
-                                    fill_price=signal.get('price', 0),
+                                    fill_price=signal.get('price') or 0,
                                     filled_at=datetime.now().isoformat(),
                                     exit_source=_rm_exit_source,
                                     strike=signal.get('strike'),

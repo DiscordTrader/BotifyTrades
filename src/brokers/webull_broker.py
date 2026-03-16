@@ -966,11 +966,20 @@ class WebullBroker(BrokerInterface):
             side = 'BUY' if action == 'BTO' else 'SELL'
             extended_hours_enabled = self._get_extended_hours_enabled()
             
-            if price is not None and action == 'BTO':
-                min_qty = self._get_min_lot_size(price)
-                if quantity < min_qty:
-                    print(f"[{self.name}] ⚠️ Webull requires minimum {min_qty} shares for ${price:.4f} stocks, adjusting {quantity} → {min_qty}")
-                    quantity = min_qty
+            if action == 'BTO':
+                _lot_check_price = price
+                if _lot_check_price is None or _lot_check_price <= 0:
+                    try:
+                        quote = self.wb.get_quote(stock=symbol)
+                        if quote:
+                            _lot_check_price = float(quote.get('close', 0) or quote.get('price', 0) or 0)
+                    except Exception:
+                        pass
+                if _lot_check_price and _lot_check_price > 0:
+                    min_qty = self._get_min_lot_size(_lot_check_price)
+                    if quantity < min_qty:
+                        print(f"[{self.name}] ⚠️ Webull requires minimum {min_qty} shares for ${_lot_check_price:.4f} stocks, adjusting {quantity} → {min_qty}")
+                        quantity = min_qty
             
             _effective_price = price
             _use_limit = price is not None

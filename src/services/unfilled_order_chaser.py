@@ -394,7 +394,8 @@ class UnfilledOrderChaser:
             )
             self._tracked_orders[order_id] = order
             _source = "risk" if is_risk_order else "signal"
-            print(f"[ORDER_CHASER] Tracking {_source} exit order: {order_id} | {symbol} {quantity}x @ ${price:.2f}")
+            _price_str = f"${price:.2f}" if price is not None else "MKT"
+            print(f"[ORDER_CHASER] Tracking {_source} exit order: {order_id} | {symbol} {quantity}x @ {_price_str}")
             try:
                 from gui_app.database import record_order_event
                 record_order_event('CHASER_TRACKING', symbol=symbol, broker=broker_id, direction='STC', quantity=quantity, price=price, order_id=order_id, reason=f"Tracking exit order for fill confirmation", severity='info', source='order_chaser', position_key=position_key)
@@ -627,7 +628,8 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] 🔄 CHASING ORDER (attempt {order.chase_attempts}/{self.max_chase_attempts})")
             print(f"[ORDER_CHASER]   Order ID: {order.order_id}")
             print(f"[ORDER_CHASER]   Symbol: {order.symbol}")
-            print(f"[ORDER_CHASER]   Original Price: ${order.original_price:.2f}")
+            _orig_price_str = f"${order.original_price:.2f}" if order.original_price is not None else "MKT"
+            print(f"[ORDER_CHASER]   Original Price: {_orig_price_str}")
             
             pending_orders = []
             if hasattr(broker, 'get_pending_orders'):
@@ -724,7 +726,8 @@ class UnfilledOrderChaser:
                 order.status = OrderChaseStatus.REPLACED
                 try:
                     from gui_app.database import record_order_event
-                    record_order_event('CHASER_REPLACED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=new_order_id, reason=f"Stale order replaced: ${order.original_price:.2f} → ${mid_price:.2f} (attempt {order.chase_attempts}, qty {replace_qty}/{int(order.quantity)})", severity='warning', source='order_chaser', position_key=order.position_key)
+                    _orig_p = f"${order.original_price:.2f}" if order.original_price is not None else "MKT"
+                    record_order_event('CHASER_REPLACED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=new_order_id, reason=f"Stale order replaced: {_orig_p} → ${mid_price:.2f} (attempt {order.chase_attempts}, qty {replace_qty}/{int(order.quantity)})", severity='warning', source='order_chaser', position_key=order.position_key)
                 except Exception:
                     pass
                 
@@ -1134,7 +1137,8 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] 🔄 CHASING ENTRY ORDER (attempt {order.chase_attempts}/{self.max_chase_attempts})")
             print(f"[ORDER_CHASER]   Order ID: {order.order_id}")
             print(f"[ORDER_CHASER]   Symbol: {order.symbol}")
-            print(f"[ORDER_CHASER]   Original Price: ${order.original_price:.2f}")
+            _entry_orig_str = f"${order.original_price:.2f}" if order.original_price is not None else "MKT"
+            print(f"[ORDER_CHASER]   Original Price: {_entry_orig_str}")
             if order.entry_range_high:
                 print(f"[ORDER_CHASER]   Max Entry Price: ${order.entry_range_high:.2f}")
             
