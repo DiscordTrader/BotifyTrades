@@ -596,7 +596,7 @@ class UnfilledOrderChaser:
                     if bot:
                         rm = getattr(bot, 'risk_manager', None) or getattr(bot, '_risk_manager', None)
                     if rm:
-                        rm.record_exit_failure(order.position_key, "Order chaser max attempts exhausted", is_stop_loss=True)
+                        rm.cache.record_exit_failure(order.position_key, "Order chaser max attempts exhausted", is_stop_loss=True)
                         print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
                 except Exception:
                     pass

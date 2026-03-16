@@ -664,7 +664,7 @@ class PositionCache:
         entry = self._cache.get(position_key)
         if entry:
             entry.reset_exit_retry_state()
-            entry.is_closing = False
+            entry.closing = False
             entry.use_market_order = True  # Use market order on retry after cancel
             print(f"[CACHE] ✓ Cleared retry state for {position_key} - ready for immediate retry")
     

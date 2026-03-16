@@ -17344,8 +17344,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             '_multi_broker_results': responses
                         }
                     
-                    # Skip to post-execution handling
-                    order_success = resp and ('orderId' in resp or resp.get('success') == True)
+                    order_success = resp and (resp.get('success') == True or ('orderId' in resp and resp.get('success') is not False))
                     
                 else:
                     # SINGLE BROKER EXECUTION (original behavior)
@@ -18260,8 +18259,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # OrderResult dataclass - check .success attribute
                             order_success = resp.success == True
                         elif isinstance(resp, dict):
-                            # Dict response - check orderId or success key
-                            order_success = 'orderId' in resp or resp.get('success') == True
+                            order_success = resp.get('success') == True or ('orderId' in resp and resp.get('success') is not False)
                         else:
                             order_success = False
                         _original_print(f"[DEBUG] After broker call, order_success: {order_success}, resp type: {type(resp).__name__}", flush=True)
@@ -18602,7 +18600,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if isinstance(resp, dict) and resp.get('_multi_broker_results'):
                             for mr in resp['_multi_broker_results']:
                                 oid = mr.get('orderId') or mr.get('order_id')
-                                if oid and (mr.get('success') or 'orderId' in mr):
+                                if oid and (mr.get('success') == True or ('orderId' in mr and mr.get('success') is not False)):
                                     meta_order_ids.append(str(oid))
                                     meta_broker_names.append(mr.get('broker', broker_name or 'Unknown'))
                         elif order_id_val:
@@ -18667,7 +18665,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if isinstance(resp, dict):
                                 multi_results = resp.get('_multi_broker_results', [])
                                 if multi_results:
-                                    success_brokers = [r.get('broker', 'Unknown') for r in multi_results if r.get('success') or 'orderId' in r]
+                                    success_brokers = [r.get('broker', 'Unknown') for r in multi_results if r.get('success') == True or ('orderId' in r and r.get('success') is not False)]
                                 else:
                                     success_brokers = [resp.get('broker', 'Unknown')]
                             else:
@@ -18809,7 +18807,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         multi_results = resp.get('_multi_broker_results', [])
                                         if multi_results:
                                             # Find first successful broker result
-                                            first_success = next((r for r in multi_results if r.get('success') or 'orderId' in r), None)
+                                            first_success = next((r for r in multi_results if r.get('success') == True or ('orderId' in r and r.get('success') is not False)), None)
                                             if first_success:
                                                 display_qty = first_success.get('executed_qty', signal['qty'])
                                                 order_id = first_success.get('orderId', 'N/A')
