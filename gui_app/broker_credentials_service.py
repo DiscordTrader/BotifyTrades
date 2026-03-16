@@ -330,13 +330,15 @@ def clear_schwab_credentials():
 def get_trading212_credentials() -> Dict[str, Any]:
     return load_config('trading212_credentials') or {
         'api_key': '',
+        'api_secret': '',
         'environment': 'demo',
     }
 
 
-def save_trading212_credentials(api_key: str, environment: str = 'demo'):
+def save_trading212_credentials(api_key: str, api_secret: str = '', environment: str = 'demo'):
     save_config('trading212_credentials', {
         'api_key': api_key,
+        'api_secret': api_secret,
         'environment': environment,
     })
 
@@ -344,6 +346,7 @@ def save_trading212_credentials(api_key: str, environment: str = 'demo'):
 def clear_trading212_credentials():
     save_config('trading212_credentials', {
         'api_key': '',
+        'api_secret': '',
         'environment': 'demo',
     })
 
@@ -418,6 +421,7 @@ def get_all_credentials_for_startup() -> Dict[str, Any]:
         'ROBINHOOD_DEVICE_TOKEN': get_robinhood_credentials().get('device_token', ''),
         
         'TRADING212_API_KEY': get_trading212_credentials().get('api_key', ''),
+        'TRADING212_API_SECRET': get_trading212_credentials().get('api_secret', ''),
         'TRADING212_ENVIRONMENT': get_trading212_credentials().get('environment', 'demo'),
         
         'OPENAI_API_KEY': api_keys.get('openai', ''),

@@ -20,6 +20,7 @@ class Trading212Broker(BrokerInterface):
         super().__init__(config)
         self.name = "Trading212"
         self._api_key = config.get('api_key', '')
+        self._api_secret = config.get('api_secret', '')
         self._environment = config.get('environment', 'demo')
         self.is_live = (self._environment == 'live')
         self._client = None
@@ -35,7 +36,7 @@ class Trading212Broker(BrokerInterface):
     async def connect(self) -> bool:
         try:
             from src.services.trading212_client import Trading212Client
-            self._client = Trading212Client(self._api_key, self._environment)
+            self._client = Trading212Client(self._api_key, self._environment, api_secret=self._api_secret)
 
             result = await self._client.get_account_summary()
             if not result.get('success'):
@@ -358,12 +359,12 @@ class Trading212Broker(BrokerInterface):
         return []
 
     @staticmethod
-    def test_connection(api_key: str, environment: str = 'demo') -> Dict[str, Any]:
+    def test_connection(api_key: str, environment: str = 'demo', api_secret: str = '') -> Dict[str, Any]:
         import asyncio
 
         async def _test():
             from src.services.trading212_client import Trading212Client
-            client = Trading212Client(api_key, environment)
+            client = Trading212Client(api_key, environment, api_secret=api_secret)
             try:
                 result = await client.get_account_summary()
                 if result.get('success') and result.get('data'):

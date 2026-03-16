@@ -140,6 +140,7 @@ class BrokerManager:
                     db_creds = get_trading212_credentials()
                     if db_creds and db_creds.get('api_key'):
                         t212_config['api_key'] = db_creds.get('api_key', '')
+                        t212_config['api_secret'] = db_creds.get('api_secret', '')
                         t212_config['environment'] = db_creds.get('environment', 'demo')
                 except ImportError:
                     pass

@@ -13838,12 +13838,15 @@ def register_routes(app):
             from .broker_credentials_service import get_trading212_credentials, get_broker_status
             creds = get_trading212_credentials()
             api_key = creds.get('api_key', '')
+            api_secret = creds.get('api_secret', '')
             environment = creds.get('environment', 'demo')
             status = get_broker_status('trading212')
             return jsonify({
                 'success': True,
                 'has_credentials': bool(api_key),
                 'api_key_masked': f"{'*' * (len(api_key) - 4)}{api_key[-4:]}" if len(api_key) > 4 else ('****' if api_key else ''),
+                'api_secret_masked': f"{'*' * (len(api_secret) - 4)}{api_secret[-4:]}" if len(api_secret) > 4 else ('****' if api_secret else ''),
+                'has_api_secret': bool(api_secret),
                 'environment': environment,
                 'status': status
             })
@@ -13858,6 +13861,7 @@ def register_routes(app):
             
             data = request.json
             api_key = data.get('api_key', '').strip()
+            api_secret = data.get('api_secret', '').strip()
             environment = data.get('environment', 'demo').strip()
             
             if not api_key:
@@ -13866,7 +13870,12 @@ def register_routes(app):
             if environment not in ('live', 'demo'):
                 return jsonify({'success': False, 'error': 'Environment must be "live" or "demo"'}), 400
             
-            save_trading212_credentials(api_key=api_key, environment=environment)
+            if not api_secret:
+                from .broker_credentials_service import get_trading212_credentials
+                existing = get_trading212_credentials()
+                api_secret = existing.get('api_secret', '')
+            
+            save_trading212_credentials(api_key=api_key, api_secret=api_secret, environment=environment)
             print(f"[API] Trading 212 credentials saved ({environment})")
             
             return jsonify({
@@ -14569,6 +14578,7 @@ def register_routes(app):
                     from .broker_credentials_service import get_trading212_credentials
                     t212_creds = get_trading212_credentials()
                     api_key = t212_creds.get('api_key', '') if t212_creds else ''
+                    api_secret = t212_creds.get('api_secret', '') if t212_creds else ''
                     environment = t212_creds.get('environment', 'demo') if t212_creds else 'demo'
                     
                     if not api_key:
@@ -14576,8 +14586,14 @@ def register_routes(app):
                         return jsonify({'success': False, 'error': 'No Trading 212 API key configured. Please save your API key first.'}), 400
                     
                     import requests as req
+                    import base64 as b64
                     base_url = 'https://live.trading212.com' if environment == 'live' else 'https://demo.trading212.com'
-                    headers = {'Authorization': api_key}
+                    if api_secret:
+                        encoded = b64.b64encode(f"{api_key}:{api_secret}".encode()).decode()
+                        auth_header = f"Basic {encoded}"
+                    else:
+                        auth_header = api_key
+                    headers = {'Authorization': auth_header}
                     resp = req.get(f'{base_url}/api/v0/equity/account/cash', headers=headers, timeout=10)
                     
                     if resp.status_code == 200:

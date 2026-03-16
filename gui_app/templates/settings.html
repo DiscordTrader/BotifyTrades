@@ -827,6 +827,11 @@ input:checked + .slider:before {
             <p class="help-text">Get from Trading 212 app → Settings → API</p>
         </div>
         <div class="form-group">
+            <label>API Secret</label>
+            <input type="password" id="trading212-api-secret" placeholder="Your Trading 212 API Secret">
+            <p class="help-text">Required for the updated API (Basic Auth). Found alongside your API Key.</p>
+        </div>
+        <div class="form-group">
             <label>Environment</label>
             <select id="trading212-environment" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(0, 163, 255, 0.3); border-radius: 8px; color: #fff; font-size: 14px;">
                 <option value="demo">Demo (Paper Trading)</option>
@@ -2197,6 +2202,10 @@ async function loadTrading212Settings() {
                 document.getElementById('trading212-api-key').value = data.api_key_masked;
                 document.getElementById('trading212-api-key').placeholder = 'API key saved (enter new to replace)';
             }
+            if (data.has_api_secret) {
+                document.getElementById('trading212-api-secret').value = data.api_secret_masked;
+                document.getElementById('trading212-api-secret').placeholder = 'API secret saved (enter new to replace)';
+            }
             if (data.environment) {
                 document.getElementById('trading212-environment').value = data.environment;
             }
@@ -2214,11 +2223,15 @@ loadTrading212Settings();
 
 document.getElementById('save-trading212').addEventListener('click', async () => {
     let apiKey = document.getElementById('trading212-api-key').value.trim();
+    let apiSecret = document.getElementById('trading212-api-secret').value.trim();
     const environment = document.getElementById('trading212-environment').value;
     
     if (!apiKey || apiKey.includes('****')) {
         showMessage('error', 'Please enter your actual API key (not the masked value)');
         return;
+    }
+    if (apiSecret && apiSecret.includes('****')) {
+        apiSecret = '';
     }
     
     try {
@@ -2227,6 +2240,7 @@ document.getElementById('save-trading212').addEventListener('click', async () =>
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 api_key: apiKey,
+                api_secret: apiSecret,
                 environment: environment
             })
         });

@@ -74,19 +74,28 @@ class Trading212Client:
     LIVE_BASE = 'https://live.trading212.com/api/v0'
     DEMO_BASE = 'https://demo.trading212.com/api/v0'
 
-    def __init__(self, api_key: str, environment: str = 'demo'):
+    def __init__(self, api_key: str, environment: str = 'demo', api_secret: str = ''):
         self._api_key = api_key
+        self._api_secret = api_secret
         self._environment = environment.lower()
         self._base_url = self.LIVE_BASE if self._environment == 'live' else self.DEMO_BASE
         self._session: Optional[aiohttp.ClientSession] = None
         self._rate_limiter = Trading212RateLimiter()
         self._throttle_detector = SoftThrottleDetector()
 
+    def _build_auth_header(self) -> str:
+        if self._api_secret:
+            import base64
+            credentials = f"{self._api_key}:{self._api_secret}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+            return f"Basic {encoded}"
+        return self._api_key
+
     async def _ensure_session(self):
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
                 headers={
-                    'Authorization': self._api_key,
+                    'Authorization': self._build_auth_header(),
                     'Content-Type': 'application/json',
                 },
                 timeout=aiohttp.ClientTimeout(total=15)

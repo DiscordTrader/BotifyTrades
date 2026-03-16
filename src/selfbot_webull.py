@@ -7871,6 +7871,7 @@ class SelfClient(discord.Client):
             from gui_app.broker_credentials_service import get_trading212_credentials, set_broker_status
             t212_creds = get_trading212_credentials()
             t212_api_key = t212_creds.get('api_key', '') if t212_creds else ''
+            t212_api_secret = t212_creds.get('api_secret', '') if t212_creds else ''
             t212_env = t212_creds.get('environment', 'demo') if t212_creds else 'demo'
             
             if t212_api_key:
@@ -7879,6 +7880,7 @@ class SelfClient(discord.Client):
                     from src.brokers.trading212_broker import Trading212Broker
                     self.trading212_broker = Trading212Broker({
                         'api_key': t212_api_key,
+                        'api_secret': t212_api_secret,
                         'environment': t212_env
                     })
                     connected = await asyncio.wait_for(self.trading212_broker.connect(), timeout=15.0)
