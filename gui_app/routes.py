@@ -3762,13 +3762,13 @@ def register_routes(app):
                             broker.get_account_info(),
                             _bot_instance.loop
                         )
-                        account_info = account_future.result(timeout=10)
+                        account_info = account_future.result(timeout=20)
 
                         positions_future = asyncio.run_coroutine_threadsafe(
                             broker.get_positions(),
                             _bot_instance.loop
                         )
-                        positions_raw = positions_future.result(timeout=10)
+                        positions_raw = positions_future.result(timeout=20)
 
                         positions_list = []
                         if isinstance(positions_raw, list):
@@ -3798,7 +3798,36 @@ def register_routes(app):
                         _api_cache[cache_key] = (result_data, time.time())
                         return jsonify(result_data)
                     except Exception as e:
-                        print(f"[API] Error using bot's Trading 212 broker: {e}")
+                        error_type = type(e).__name__
+                        print(f"[API] Error using bot's Trading 212 broker: {error_type}: {e}")
+                        cached = getattr(broker, '_account_cache', None)
+                        if cached:
+                            print(f"[API] Using cached T212 account data as fallback")
+                            result_data = {
+                                'buying_power': cached.get('buying_power', 0),
+                                'cash_balance': cached.get('cash', 0),
+                                'net_liquidation': cached.get('portfolio_value', 0),
+                                'equity': cached.get('portfolio_value', 0),
+                                'unrealized_pnl': cached.get('ppl', cached.get('result', 0)),
+                                'total_profit_loss': cached.get('ppl', cached.get('result', 0)),
+                                'invested': cached.get('invested', 0),
+                                'settled_cash': cached.get('cash', 0),
+                                'unsettled_cash': 0,
+                                'positions': [],
+                                'status': 'ok_cached'
+                            }
+                            return jsonify(result_data)
+
+                    return jsonify({
+                        'buying_power': 0,
+                        'cash_balance': 0,
+                        'net_liquidation': 0,
+                        'equity': 0,
+                        'unrealized_pnl': 0,
+                        'positions': [],
+                        'status': 'connected_no_data',
+                        'error': 'Trading 212 connected but could not fetch balance. The API may be slow — try refreshing.'
+                    })
 
             return jsonify({
                 'buying_power': 0,
@@ -16488,24 +16517,30 @@ def register_routes(app):
                     broker = _bot_instance.trading212_broker
                     import asyncio
                     loop = getattr(_bot_instance, 'loop', None)
-                    if loop and loop.is_running():
-                        if hasattr(broker, 'is_connected'):
+                    t212_connected = getattr(broker, 'connected', False)
+                    if not t212_connected and hasattr(broker, 'is_connected'):
+                        if loop and loop.is_running():
                             try:
                                 future = asyncio.run_coroutine_threadsafe(broker.is_connected(), loop)
                                 t212_connected = future.result(timeout=5)
                             except:
-                                t212_connected = getattr(broker, '_connected', False)
-                        if t212_connected:
-                            try:
-                                future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
-                                account = future.result(timeout=5)
-                                if account:
-                                    t212_buying_power = float(account.get('buying_power', 0) or 0)
-                                future = asyncio.run_coroutine_threadsafe(broker.get_positions(), loop)
-                                positions = future.result(timeout=5)
-                                t212_positions = len(positions) if positions else 0
-                            except:
                                 pass
+                    if loop and loop.is_running() and t212_connected:
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
+                            account = future.result(timeout=10)
+                            if account:
+                                t212_buying_power = float(account.get('buying_power', 0) or 0)
+                            future = asyncio.run_coroutine_threadsafe(broker.get_positions(), loop)
+                            positions = future.result(timeout=10)
+                            t212_positions = len(positions) if positions else 0
+                        except:
+                            cached = getattr(broker, '_account_cache', None)
+                            if cached:
+                                t212_buying_power = float(cached.get('buying_power', 0) or 0)
+                            cached_pos = getattr(broker, '_positions_cache', None)
+                            if cached_pos:
+                                t212_positions = len(cached_pos)
                 except:
                     pass
             
@@ -18999,7 +19034,7 @@ def register_routes(app):
                 # Use uppercase keys to match health monitor's normalization
                 for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE', 'TRADING212']:
                     state = health_monitor.get_broker_state(broker_key)
-                    if state:
+                    if state and state.get('status') != 'unknown':
                         health_states[broker_key.upper()] = state
             except Exception as e:
                 print(f"[BROKER STATES] Health monitor error: {e}")
@@ -19079,6 +19114,11 @@ def register_routes(app):
                                     balance = float(db_state.get('balance', 0) or 0)
                             except Exception:
                                 pass
+                    if is_connected and buying_power == 0 and balance == 0 and broker_instance:
+                        broker_cache = getattr(broker_instance, '_account_cache', None)
+                        if broker_cache:
+                            buying_power = float(broker_cache.get('buying_power', 0) or 0)
+                            balance = float(broker_cache.get('portfolio_value', broker_cache.get('balance', 0)) or 0)
                     
                     disconnect_reason = health.get('reason')
                     if not is_connected and not disconnect_reason and broker_instance:
@@ -19175,7 +19215,7 @@ def register_routes(app):
                         future = asyncio.run_coroutine_threadsafe(
                             broker_instance.get_account_info(), loop
                         )
-                        account_info = future.result(timeout=10)
+                        account_info = future.result(timeout=15)
                         print(f"[BROKER STATES] {broker_name} account_info: {account_info}")
                         state['balance'] = account_info.get('portfolio_value', 0) or account_info.get('net_liquidation', 0) or account_info.get('available_balance', 0)
                         state['buying_power'] = account_info.get('buying_power', 0) or account_info.get('cash', 0)
@@ -19183,6 +19223,12 @@ def register_routes(app):
                     except Exception as e:
                         state['sync_error'] = str(e)
                         print(f"[BROKER STATES] {broker_name} error: {e}")
+                        cached = getattr(broker_instance, '_account_cache', None)
+                        if cached:
+                            state['balance'] = cached.get('portfolio_value', 0) or cached.get('balance', 0) or 0
+                            state['buying_power'] = cached.get('buying_power', 0) or cached.get('cash', 0) or 0
+                            state['sync_error'] = None
+                            print(f"[BROKER STATES] {broker_name}: using cached data, balance=${state['balance']:,.2f}")
                 
                 if state['is_connected'] or brokers_initialized:
                     db.update_broker_state(broker_name, country, state)
