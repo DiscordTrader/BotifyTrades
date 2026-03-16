@@ -392,7 +392,7 @@ class SignalFormatRegistry:
             name="bronze_entered",
             description="Bronze Swings entered position",
             priority=47,
-            pattern=r'entered\s+\$?([A-Z]{1,5})\s*(?:@?\s*\$?([\d.]+))?\s*(?:average\s+price)?',
+            pattern=r'entered\s+\$?(?!LONG|SHORT|long|short)([A-Z]{1,5})\s*(?:@?\s*\$?([\d.]+))?\s*(?:average\s+price)?',
             parser=self._parse_bronze_entry,
             examples=["Entered LFST @$6.02 average price"]
         )
