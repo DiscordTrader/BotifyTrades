@@ -39,7 +39,9 @@ class Trading212Broker(BrokerInterface):
 
             result = await self._client.get_account_summary()
             if not result.get('success'):
-                print(f"[T212] Connection failed: {result.get('error', 'Unknown')}")
+                error_msg = result.get('error', 'Unknown')
+                print(f"[T212] Connection failed: {error_msg}")
+                await self._client.close()
                 self.connected = False
                 return False
 

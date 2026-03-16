@@ -117,7 +117,17 @@ class Trading212Client:
                 if resp.status == 204:
                     return {'success': True, 'data': None}
 
-                body = await resp.json() if resp.content_length != 0 else {}
+                content_type = resp.headers.get('Content-Type', '')
+                if resp.content_length == 0:
+                    body = {}
+                elif 'application/json' in content_type:
+                    body = await resp.json()
+                else:
+                    raw_text = await resp.text()
+                    if resp.status == 401:
+                        print(f"[T212-CLIENT] Authentication failed (401): {raw_text.strip()}")
+                        return {'success': False, 'error': 'Invalid API key', 'status': 401}
+                    body = {'message': raw_text.strip()}
 
                 if resp.status >= 400:
                     error_msg = body.get('message', '') if isinstance(body, dict) else str(body)
