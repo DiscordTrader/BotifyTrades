@@ -2456,8 +2456,10 @@ class WebullBroker:
             pass
 
         try:
+            print(f"[{self.name}] Resolving account ID (desired_type={desired_type}, saved_id={'yes' if saved_sec_id else 'no'})...")
             headers = wb.build_req_headers()
             url = wb._urls.account_id()
+            print(f"[{self.name}] Account list URL: {url[:80]}...")
 
             api_result = None
             for attempt in range(3):
@@ -2468,7 +2470,7 @@ class WebullBroker:
                         api_result = result
                         break
                     else:
-                        print(f"[{self.name}] ⚠️ Account list API returned non-success (attempt {attempt+1}/3)")
+                        print(f"[{self.name}] ⚠️ Account list API returned non-success (attempt {attempt+1}/3): success={result.get('success')}, keys={list(result.keys())[:5]}")
                 except Exception as api_err:
                     print(f"[{self.name}] ⚠️ Account list API error (attempt {attempt+1}/3): {api_err}")
                 if attempt < 2:
@@ -2486,6 +2488,13 @@ class WebullBroker:
                 return
 
             accounts = api_result['data']
+            for i, raw_acct in enumerate(accounts):
+                perms = raw_acct.get('userTradePermissionVOs', [])
+                perm_sec_ids = [p.get('secAccountId') for p in perms if p.get('secAccountId')] if perms else []
+                _original_print(f"[{self.name}] Raw account[{i}] brokerId={raw_acct.get('brokerId')} status={raw_acct.get('status')} rzone={raw_acct.get('rzone')} perm_secIds={perm_sec_ids}", flush=True)
+                if not raw_acct.get('secAccountId') and perm_sec_ids:
+                    raw_acct['secAccountId'] = perm_sec_ids[0]
+                    _original_print(f"[{self.name}]   → Promoted secAccountId from userTradePermissionVOs: {perm_sec_ids[0]}", flush=True)
             valid_accounts = [a for a in accounts if a.get('secAccountId')]
 
             print(f"[{self.name}] Found {len(accounts)} account(s) ({len(valid_accounts)} with secAccountId), resolving types...")
@@ -2519,8 +2528,11 @@ class WebullBroker:
             wb._account_id = str(valid_accounts[0].get('secAccountId', ''))
             self._persist_resolved_account_id(wb._account_id, wb.zone_var)
         except Exception as e:
+            import traceback
+            print(f"[{self.name}] ⚠️ Account resolution exception: {e}")
+            traceback.print_exc()
             if saved_sec_id:
-                print(f"[{self.name}] ⚠️ Account resolution failed ({e}) — using saved ID: {saved_sec_id}")
+                print(f"[{self.name}] ✓ Using saved account ID from database (fallback): {saved_sec_id}")
                 wb._account_id = saved_sec_id
                 if saved_rzone:
                     wb.zone_var = saved_rzone
@@ -2725,9 +2737,13 @@ class WebullBroker:
                             desired_account_type = wb_creds.get('account_type', 'margin').lower()
                         except Exception:
                             pass
+                    _original_print(f"[{self.name}] Calling _resolve_account_by_type_sync(desired={desired_account_type})...", flush=True)
                     self._resolve_account_by_type_sync(wb, desired_account_type)
+                    _original_print(f"[{self.name}] Account resolution complete. wb._account_id={getattr(wb, '_account_id', 'NOT SET')}", flush=True)
                 except Exception as e_acc:
-                    print(f"[{self.name}] get_account_id warning: {e_acc}")
+                    import traceback
+                    _original_print(f"[{self.name}] get_account_id warning: {e_acc}", flush=True)
+                    traceback.print_exc()
             try:
                 wb.get_trade_token(c_pin)
             except Exception as e_pin:

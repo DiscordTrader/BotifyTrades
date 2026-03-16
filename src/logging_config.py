@@ -88,7 +88,7 @@ class CleanConsoleFormatter(logging.Formatter):
         # Errors/Warnings
         '[ERROR]', '[CRITICAL]', '[WARNING]', '⚠️',
         # Broker initialization
-        '[Webull]', '[PAPER]', '[LIVE]', '[ASYNC]', '[Init]', '[Discord]',
+        '[Webull]', '[WEBULL]', '[PAPER]', '[LIVE]', '[ASYNC]', '[Init]', '[Discord]',
         '[ALPACA]', '[TASTYTRADE]', '[ROBINHOOD]', '[IBKR]', '[SCHWAB]',
         '[DHANQ]', '[ZERODHA]', '[UPSTOX]', '[OPTIONS API]',
         # System status
