@@ -2527,7 +2527,7 @@ class WebullBroker:
                         return
                     if getattr(self, '_uk_account_detected', False):
                         print(f"[{self.name}] ❌ UK/Global Webull account — not supported by current library")
-                        print(f"[{self.name}]    Register at https://developer.webull.hk for OpenAPI credentials")
+                        print(f"[{self.name}]    Apply at https://developer.webull.com/api-doc/prepare/api_apply/ for OpenAPI credentials")
                         self._set_uk_account_error_state()
                         return
                 if saved_sec_id:
@@ -2670,7 +2670,7 @@ class WebullBroker:
             _original_print(f"[{self.name}] ║  with developer credentials (app_key + app_secret).        ║", flush=True)
             _original_print(f"[{self.name}] ║                                                            ║", flush=True)
             _original_print(f"[{self.name}] ║  To get API access:                                        ║", flush=True)
-            _original_print(f"[{self.name}] ║  1. Register at https://developer.webull.hk                ║", flush=True)
+            _original_print(f"[{self.name}] ║  1. Apply at https://developer.webull.com/api-doc/          ║", flush=True)
             _original_print(f"[{self.name}] ║  2. Create an app and get app_key + app_secret             ║", flush=True)
             _original_print(f"[{self.name}] ║  3. Enter them in Settings → Brokers → Webull              ║", flush=True)
             _original_print(f"[{self.name}] ╚══════════════════════════════════════════════════════════════╝", flush=True)
@@ -2687,7 +2687,7 @@ class WebullBroker:
             health.update_broker_status(
                 'WEBULL',
                 is_connected=False,
-                reason='UK/Global Webull account detected. The current library only supports US accounts. Register at https://developer.webull.hk for OpenAPI credentials (app_key + app_secret), then enter them in Settings → Brokers → Webull.',
+                reason='UK/Global Webull account detected. The current library only supports US accounts. Apply at https://developer.webull.com/api-doc/prepare/api_apply/ for OpenAPI credentials (app_key + app_secret), then enter them in Settings → Brokers → Webull.',
                 error_code='UK_ACCOUNT_UNSUPPORTED'
             )
         except Exception as e:
