@@ -272,7 +272,8 @@ class RiskDBAdapter:
         strike: Optional[float] = None,
         expiry: Optional[str] = None,
         call_put: Optional[str] = None,
-        broker_name: Optional[str] = None
+        broker_name: Optional[str] = None,
+        trade_id: Optional[int] = None
     ) -> Optional[ChannelRiskSettings]:
         """Get per-channel risk settings for a position.
         
@@ -383,6 +384,34 @@ class RiskDBAdapter:
                     if row:
                         break
                 
+                if not row and trade_id:
+                    sym_placeholders = ','.join(['?' for _ in symbols_to_check])
+                    cursor.execute(f'''
+                        SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
+                               c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                               c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
+                               c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
+                               c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
+                               c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
+                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
+                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
+                               t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
+                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
+                               c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
+                               c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                        FROM trades t
+                        LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                            OR t.channel_id = CAST(c.id AS TEXT)
+                            OR t.channel_id = c.telegram_chat_id)
+                        WHERE t.id = ?
+                        AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                        ORDER BY t.id DESC LIMIT 1
+                    ''', (trade_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        print(f"[RISK] ✓ Channel settings resolved via trade_id #{trade_id} (direct lookup fallback)")
+
                 if not row:
                     return None
             else:
@@ -2337,6 +2366,14 @@ class RiskManager:
                 call_put=call_put
             )
             if trade_id:
+                enriched = self._enrich_position_from_trade(position, trade_id, pos_key, broker_position_keys)
+                if enriched:
+                    position = enriched[0]
+                    pos_key = enriched[1]
+                    cache = self.cache.get_or_create(
+                        position,
+                        db_price_targets=getattr(self, '_db_price_targets', None)
+                    )
                 self.cache.set_trade_id(pos_key, trade_id)
             else:
                 if not hasattr(self, '_auto_imported_keys'):
@@ -2374,7 +2411,8 @@ class RiskManager:
                 position.strike,
                 position.expiry,
                 call_put,
-                position.broker
+                position.broker,
+                trade_id=trade_id
             )
             self.cache.apply_settings_with_versioning(pos_key, channel_settings)
             
@@ -3814,6 +3852,75 @@ class RiskManager:
             option_id=option_id
         )
     
+    def _enrich_position_from_trade(
+        self, 
+        position: 'PositionSnapshot', 
+        trade_id: int, 
+        old_pos_key: str,
+        broker_position_keys: set
+    ) -> Optional[tuple]:
+        """Enrich a position snapshot with correct strike/direction/expiry from the DB trade.
+        
+        Called when fuzzy match found a trade_id but the position has bad metadata
+        (e.g. strike=0.0, no direction — common with Webull index options like SPX).
+        Returns (enriched_position, new_pos_key) or None if no enrichment needed/possible.
+        """
+        needs_enrichment = (
+            position.asset == 'option' and 
+            (not position.strike or position.strike == 0.0 or not position.direction)
+        )
+        if not needs_enrichment or not self.db_adapter or not self.db_adapter._db:
+            return None
+            
+        try:
+            conn = self.db_adapter._db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT strike, expiry, call_put FROM trades WHERE id = ?
+            ''', (trade_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+                
+            db_strike, db_expiry, db_call_put = row
+            if not db_strike or db_strike == 0.0:
+                return None
+                
+            position.strike = float(db_strike)
+            if db_call_put:
+                position.direction = self._normalize_call_put(db_call_put) or db_call_put.upper()
+            if db_expiry and not position.expiry:
+                position.expiry = db_expiry
+                
+            new_pos_key = position.position_key
+            
+            if old_pos_key != new_pos_key:
+                broker_position_keys.discard(old_pos_key)
+                broker_position_keys.add(new_pos_key)
+                
+                self.cache.rename_key(old_pos_key, new_pos_key, trade_id=trade_id)
+
+                if hasattr(self, '_webull_enrichment_cache'):
+                    enrich_keys = []
+                    if position.option_id:
+                        enrich_keys.append(f"oid_{position.option_id}")
+                    enrichment_data = {
+                        'strike': position.strike, 
+                        'direction': position.direction, 
+                        'expiry': position.expiry
+                    }
+                    for ek in enrich_keys:
+                        self._webull_enrichment_cache[ek] = enrichment_data
+
+                print(f"[RISK] ✓ DB enrichment: {old_pos_key} → {new_pos_key} "
+                      f"(trade #{trade_id}: strike={db_strike}, {db_call_put}, expiry={db_expiry})")
+                return (position, new_pos_key)
+            
+            return None
+        except Exception as e:
+            print(f"[RISK] ⚠️ DB enrichment failed for trade #{trade_id}: {e}")
+            return None
+
     def _normalize_call_put(self, direction: Optional[str]) -> Optional[str]:
         """Normalize CALL/PUT to C/P."""
         if not direction:

@@ -217,6 +217,17 @@ class PositionCache:
         """Store trade_id mapping for a position key."""
         self._trade_id_map[position_key] = trade_id
     
+    def rename_key(self, old_key: str, new_key: str, trade_id: int = None) -> None:
+        """Atomically migrate cache entry and trade_id mapping from old_key to new_key."""
+        with self._cache_lock:
+            if old_key in self._cache:
+                self._cache[new_key] = self._cache.pop(old_key)
+            if old_key in self._trade_id_map:
+                tid = self._trade_id_map.pop(old_key)
+                self._trade_id_map[new_key] = tid
+            if trade_id is not None:
+                self._trade_id_map[new_key] = trade_id
+    
     def load(self) -> int:
         """Load cache from file. Returns number of positions loaded."""
         try:
