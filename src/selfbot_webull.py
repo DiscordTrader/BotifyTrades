@@ -7385,11 +7385,6 @@ class SelfClient(discord.Client):
                     set_broker_status('webull_live', False, 'disconnected', error='Credentials not configured')
                 except Exception:
                     pass
-                try:
-                    from gui_app.discord_notifier import notify_broker_disconnected
-                    notify_broker_disconnected('Webull', 'Credentials not configured')
-                except Exception:
-                    pass
         except Exception as e:
             print("[Webull] ✗ Login failed:", e, flush=True)
             try:
@@ -7689,67 +7684,70 @@ class SelfClient(discord.Client):
         self.ibkr_broker = None
         try:
             if IBKR_AVAILABLE:
-                _original_print("[IBKR] Starting broker initialization...", flush=True)
-                _original_print("[IBKR] Note: Requires TWS or IB Gateway running", flush=True)
-                
                 from gui_app.broker_credentials_service import get_ibkr_credentials, set_broker_status
-                ibkr_creds = get_ibkr_credentials()
-                ibkr_host = ibkr_creds.get('host', '127.0.0.1')
-                ibkr_port_live = ibkr_creds.get('port_live', 7496)
-                ibkr_port_paper = ibkr_creds.get('port_paper', 7497)
-                ibkr_client_id = ibkr_creds.get('client_id', 1)
-                ibkr_paper_mode = ibkr_creds.get('paper_mode', True)
-                
-                # Select port based on paper/live mode
-                ibkr_port = ibkr_port_paper if ibkr_paper_mode else ibkr_port_live
-                
-                _original_print(f"[IBKR] ✓ Loaded credentials from DATABASE", flush=True)
-                _original_print(f"[IBKR]   Host: {ibkr_host}:{ibkr_port} (Client ID: {ibkr_client_id})", flush=True)
-                _original_print(f"[IBKR]   Mode: {'PAPER' if ibkr_paper_mode else 'LIVE'}", flush=True)
-                _original_print(f"[IBKR] Creating IBKRBroker instance...", flush=True)
-                
-                self.ibkr_broker = IBKRBroker({
-                    'host': ibkr_host,
-                    'port': ibkr_port,
-                    'client_id': ibkr_client_id,
-                    'paper_trade': ibkr_paper_mode
-                })
-                
-                # Add timeout - IBKR requires TWS/Gateway running
-                try:
-                    connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
-                except asyncio.TimeoutError:
-                    _original_print("[IBKR] ⚠️ Connection timeout (15s) - TWS/Gateway may not be running", flush=True)
-                    self.ibkr_broker = None
-                    connected = False
-                if connected:
-                    mode = "PAPER" if ibkr_paper_mode else "LIVE"
-                    _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)
-                    try:
-                        account_info = await self.ibkr_broker.get_account_info()
-                        broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
-                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
-                        _original_print(f"[IBKR] ✓ Broker status updated in GUI", flush=True)
-                        nlv = account_info.get('portfolio_value', 0)
-                        if nlv > 0:
-                            _original_print(f"[IBKR]   Net Liq: ${nlv:,.2f}", flush=True)
-                            _original_print(f"[IBKR]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
-                    except Exception as status_err:
-                        _original_print(f"[IBKR] ⚠️ Failed to update broker status: {status_err}", flush=True)
-                    try:
-                        from gui_app.discord_notifier import notify_broker_reconnected
-                        notify_broker_reconnected(f'IBKR {mode}')
-                    except Exception:
-                        pass
+                from gui_app.broker_credentials_service import load_config as _load_broker_config
+                _ibkr_raw = _load_broker_config('ibkr_credentials')
+                if not _ibkr_raw:
+                    _original_print("[IBKR] No credentials configured - broker disabled", flush=True)
                 else:
-                    _original_print("[IBKR] ⚠️ Connection failed - TWS/Gateway may not be running", flush=True)
-                    _original_print("[IBKR]   Make sure TWS or IB Gateway is running and API is enabled", flush=True)
-                    self.ibkr_broker = None
+                    _original_print("[IBKR] Starting broker initialization...", flush=True)
+                    _original_print("[IBKR] Note: Requires TWS or IB Gateway running", flush=True)
+                    
+                    ibkr_creds = get_ibkr_credentials()
+                    ibkr_host = ibkr_creds.get('host', '127.0.0.1')
+                    ibkr_port_live = ibkr_creds.get('port_live', 7496)
+                    ibkr_port_paper = ibkr_creds.get('port_paper', 7497)
+                    ibkr_client_id = ibkr_creds.get('client_id', 1)
+                    ibkr_paper_mode = ibkr_creds.get('paper_mode', True)
+                    
+                    ibkr_port = ibkr_port_paper if ibkr_paper_mode else ibkr_port_live
+                    
+                    _original_print(f"[IBKR] ✓ Loaded credentials from DATABASE", flush=True)
+                    _original_print(f"[IBKR]   Host: {ibkr_host}:{ibkr_port} (Client ID: {ibkr_client_id})", flush=True)
+                    _original_print(f"[IBKR]   Mode: {'PAPER' if ibkr_paper_mode else 'LIVE'}", flush=True)
+                    _original_print(f"[IBKR] Creating IBKRBroker instance...", flush=True)
+                    
+                    self.ibkr_broker = IBKRBroker({
+                        'host': ibkr_host,
+                        'port': ibkr_port,
+                        'client_id': ibkr_client_id,
+                        'paper_trade': ibkr_paper_mode
+                    })
+                    
                     try:
-                        from gui_app.discord_notifier import notify_broker_disconnected
-                        notify_broker_disconnected('IBKR', 'TWS/Gateway not running')
-                    except Exception:
-                        pass
+                        connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
+                    except asyncio.TimeoutError:
+                        _original_print("[IBKR] ⚠️ Connection timeout (15s) - TWS/Gateway may not be running", flush=True)
+                        self.ibkr_broker = None
+                        connected = False
+                    if connected:
+                        mode = "PAPER" if ibkr_paper_mode else "LIVE"
+                        _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)
+                        try:
+                            account_info = await self.ibkr_broker.get_account_info()
+                            broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
+                            set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                            _original_print(f"[IBKR] ✓ Broker status updated in GUI", flush=True)
+                            nlv = account_info.get('portfolio_value', 0)
+                            if nlv > 0:
+                                _original_print(f"[IBKR]   Net Liq: ${nlv:,.2f}", flush=True)
+                                _original_print(f"[IBKR]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
+                        except Exception as status_err:
+                            _original_print(f"[IBKR] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                        try:
+                            from gui_app.discord_notifier import notify_broker_reconnected
+                            notify_broker_reconnected(f'IBKR {mode}')
+                        except Exception:
+                            pass
+                    else:
+                        _original_print("[IBKR] ⚠️ Connection failed - TWS/Gateway may not be running", flush=True)
+                        _original_print("[IBKR]   Make sure TWS or IB Gateway is running and API is enabled", flush=True)
+                        self.ibkr_broker = None
+                        try:
+                            from gui_app.discord_notifier import notify_broker_disconnected
+                            notify_broker_disconnected('IBKR', 'TWS/Gateway not running')
+                        except Exception:
+                            pass
             else:
                 _original_print("[IBKR] IBKRBroker not available (ib_insync not installed)", flush=True)
         except Exception as e:
