@@ -173,6 +173,15 @@ def get_trade_source_display(trade: Dict) -> Dict[str, Any]:
             'full_name': 'Automated risk management exit'
         }
     
+    if source == 'risk_auto_import':
+        return {
+            'name': 'Manual Trade',
+            'type': 'manual',
+            'color': 'teal',
+            'icon': '✋',
+            'full_name': 'Manually placed trade (auto-detected from broker)'
+        }
+    
     # PRIORITY 3: No channel_id and no recognized source
     if not channel_id:
         return {

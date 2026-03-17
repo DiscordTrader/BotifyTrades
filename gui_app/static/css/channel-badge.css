@@ -107,6 +107,20 @@
     color: #d1d5db;
 }
 
+/* Manual Trade (auto-detected from broker) - Teal */
+.channel-badge--teal {
+    background: linear-gradient(135deg, rgba(20, 184, 166, 0.15) 0%, rgba(13, 148, 136, 0.25) 100%);
+    border: 1px solid rgba(20, 184, 166, 0.4);
+    color: #5eead4;
+    box-shadow: 0 0 12px rgba(20, 184, 166, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.channel-badge--teal:hover {
+    border-color: rgba(20, 184, 166, 0.6);
+    box-shadow: 0 0 20px rgba(20, 184, 166, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #99f6e4;
+}
+
 /* Unknown/Pre-tracking - Dark */
 .channel-badge--dark {
     background: linear-gradient(135deg, rgba(31, 41, 55, 0.5) 0%, rgba(17, 24, 39, 0.7) 100%);
