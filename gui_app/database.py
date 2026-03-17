@@ -11295,7 +11295,7 @@ def init_conditional_order_settings():
     cursor = conn.cursor()
     
     default_settings = [
-        ('conditional_order_enabled', 'false'),
+        ('conditional_order_enabled', 'true'),
         ('conditional_order_default_expiry', 'end_of_day'),
         ('conditional_order_finnhub_fallback', 'true'),
         ('conditional_order_rate_limit_threshold', '80'),
