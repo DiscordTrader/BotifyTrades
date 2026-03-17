@@ -1001,14 +1001,37 @@ class BaseConditionalOrderService(ABC):
                 if missing:
                     self._log(f"Broker wait timeout — still missing: {missing} (will use fallback)")
         
-        self._log(f"Restoring {len(market_orders)} active orders")
-        for order in market_orders:
+        executing_orders = [o for o in market_orders if o.get('status') == 'EXECUTING']
+        monitoring_orders = [o for o in market_orders if o.get('status') != 'EXECUTING']
+        
+        if executing_orders:
+            self._log(f"Found {len(executing_orders)} orders stuck in EXECUTING — re-executing")
+            for order in executing_orders:
+                order_id = order['id']
+                symbol = order.get('symbol', '?')
+                broker = order.get('broker_primary', '?')
+                self._log(f"Re-executing stuck order #{order_id} {symbol} on {broker}")
+                try:
+                    self.pending_orders[order_id] = order
+                    self._price_reset_needed[order_id] = False
+                    update_conditional_order_status(order_id, 'ACTIVE_MONITORING')
+                    await self._execute_order(order_id, order)
+                except Exception as e:
+                    self._log(f"Re-execution failed for #{order_id}: {e}")
+                    update_conditional_order_status(
+                        order_id, 'ERROR',
+                        event='RESTART_REEXEC_FAILED',
+                        error_message=f"Re-execution on restart failed: {e}"
+                    )
+        
+        self._log(f"Restoring {len(monitoring_orders)} active orders")
+        for order in monitoring_orders:
             order_id = order['id']
             self.pending_orders[order_id] = order
             self._price_reset_needed[order_id] = False
             await self._start_monitor(order_id, order)
         
-        self._log(f"Restored {len(market_orders)} orders")
+        self._log(f"Restored {len(monitoring_orders)} orders")
     
     async def _check_expirations(self):
         """Check and expire old orders."""
@@ -1473,12 +1496,32 @@ class BaseConditionalOrderService(ABC):
                 (trigger_type == 'under' and price <= adjusted_trigger)
             )
             if already_past:
-                self._log(
-                    f"#{order_id} reset pending — {price:.4f} already "
-                    f"{'above' if trigger_type == 'over' else 'below'} "
-                    f"trigger {adjusted_trigger}. Waiting for pullback."
-                )
-                return
+                created_at = order.get('created_at', '')
+                grace_expired = True
+                if created_at:
+                    try:
+                        if isinstance(created_at, str):
+                            ct = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                        else:
+                            ct = created_at
+                        age_seconds = (datetime.utcnow() - ct).total_seconds()
+                        if age_seconds < 10:
+                            grace_expired = False
+                            self._price_reset_needed[order_id] = False
+                            self._log(
+                                f"#{order_id} breakout reset SKIPPED — order only {age_seconds:.1f}s old, "
+                                f"price {price:.4f} already past trigger {adjusted_trigger}. "
+                                f"Allowing immediate trigger (multi-broker grace)."
+                            )
+                    except Exception:
+                        pass
+                if grace_expired:
+                    self._log(
+                        f"#{order_id} reset pending — {price:.4f} already "
+                        f"{'above' if trigger_type == 'over' else 'below'} "
+                        f"trigger {adjusted_trigger}. Waiting for pullback."
+                    )
+                    return
             else:
                 self._price_reset_needed[order_id] = False
                 self._log(

@@ -11721,7 +11721,7 @@ def get_active_conditional_orders(market: str = None) -> List[Dict[str, Any]]:
                        c.default_quantity, c.position_size_pct
                 FROM conditional_orders co
                 LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
-                WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+                WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING', 'EXECUTING')
                 AND (co.expires_at IS NULL OR co.expires_at > CURRENT_TIMESTAMP)
                 AND co.market = ?
                 ORDER BY co.created_at ASC
@@ -11732,7 +11732,7 @@ def get_active_conditional_orders(market: str = None) -> List[Dict[str, Any]]:
                        c.default_quantity, c.position_size_pct
                 FROM conditional_orders co
                 LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
-                WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+                WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING', 'EXECUTING')
                 AND (co.expires_at IS NULL OR co.expires_at > CURRENT_TIMESTAMP)
                 ORDER BY co.created_at ASC
             ''')
