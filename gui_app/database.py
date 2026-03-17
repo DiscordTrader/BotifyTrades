@@ -2246,6 +2246,7 @@ def init_db():
         ('1178749711163859025', 'jacob', 'EXECUTE', 1, 1, 1),
         ('1443262702515650713', 'pro-trader', 'EXECUTE', 1, 1, 1),
     ]
+    _jacob_freshly_inserted = False
     for _dc_id, _dc_name, _dc_cat, _dc_exec, _dc_track, _dc_active in _default_channels:
         cursor.execute("""
             INSERT OR IGNORE INTO channels (discord_channel_id, name, category, execute_enabled, track_enabled, is_active)
@@ -2253,6 +2254,32 @@ def init_db():
         """, (_dc_id, _dc_name, _dc_cat, _dc_exec, _dc_track, _dc_active))
         if cursor.rowcount > 0:
             print(f"[DATABASE] ✓ Created default channel: {_dc_name} ({_dc_id})")
+            if _dc_id == '1178749711163859025':
+                _jacob_freshly_inserted = True
+    
+    if _jacob_freshly_inserted:
+        cursor.execute("SELECT id FROM channels WHERE discord_channel_id = '1178749711163859025'")
+        _jacob_row = cursor.fetchone()
+        if _jacob_row:
+            _jacob_id = _jacob_row[0] if isinstance(_jacob_row, (tuple, list)) else _jacob_row['id']
+            cursor.execute("""
+                UPDATE channels SET
+                    position_size_pct = 10.0,
+                    stop_loss_pct = 8.0,
+                    profit_target_1_pct = 9.0,
+                    trailing_stop_pct = 3.0,
+                    trailing_activation_pct = 10.0,
+                    leave_runner_enabled = 1,
+                    leave_runner_pct = 10.0,
+                    trim_order_mode = 'market',
+                    sl_order_mode = 'market',
+                    exit_strategy_mode = 'risk',
+                    enable_early_trailing = 1,
+                    early_trailing_activation_pct = 10.0,
+                    early_trailing_step_pct = 3.0
+                WHERE id = ?
+            """, (_jacob_id,))
+            print("[DATABASE] ✓ Applied Jacob channel defaults: SL=8%, PT1=9%, Leave Runner=10%, Trailing=10%/3%, Market orders, Early Trailing")
     
     conn.commit()
     
