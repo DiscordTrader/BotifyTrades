@@ -933,6 +933,30 @@ class UnfilledOrderChaser:
                         return data
         except Exception:
             pass
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            ibkr_hub = get_ibkr_data_hub()
+            if ibkr_hub.is_streaming() and strike and expiry:
+                iso_expiry = expiry
+                if '/' in expiry:
+                    parts = expiry.split('/')
+                    if len(parts) == 3:
+                        iso_expiry = f"20{parts[2]}{parts[0].zfill(2)}{parts[1].zfill(2)}"
+                    elif len(parts) == 2:
+                        from datetime import datetime as dt
+                        iso_expiry = f"{dt.now().year}{parts[0].zfill(2)}{parts[1].zfill(2)}"
+                elif '-' in iso_expiry:
+                    iso_expiry = iso_expiry.replace('-', '')
+                opt_type = (call_put or 'C').upper()
+                if opt_type == 'CALL': opt_type = 'C'
+                elif opt_type == 'PUT': opt_type = 'P'
+                raw_key = f"{symbol}_{iso_expiry}_{strike}_{opt_type}"
+                data = ibkr_hub.get_quote_detailed(raw_key)
+                if data and (data.get('bid', 0) > 0 or data.get('ask', 0) > 0):
+                    print(f"[ORDER_CHASER] ⚡ Got option quote from IBKR hub (key={raw_key})")
+                    return data
+        except Exception:
+            pass
         return None
 
     def _check_streaming_hubs_stock(self, symbol: str) -> Optional[dict]:
@@ -953,6 +977,16 @@ class UnfilledOrderChaser:
                 data = hub.get_quote_detailed(symbol)
                 if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
                     print(f"[ORDER_CHASER] ⚡ Got stock quote from Schwab hub")
+                    return data
+        except Exception:
+            pass
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            hub = get_ibkr_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(symbol)
+                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                    print(f"[ORDER_CHASER] ⚡ Got stock quote from IBKR hub")
                     return data
         except Exception:
             pass

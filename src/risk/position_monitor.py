@@ -3257,10 +3257,13 @@ class RiskManager:
                             offset_display = f"${channel_settings.trim_limit_offset}"
                         print(f"[RISK] 📊 Trim Limit Order: market ${original_price:.2f} → limit ${trim_price:.2f} ({offset_display} offset)")
             
+            if not use_market and 'TRADING212' in position.broker.upper():
+                if is_sl_type_exit:
+                    use_market = True
+                    print(f"[RISK] 📊 Trading212 has no bid/ask streaming — using market order for {decision.risk_trigger}")
+
             if use_market:
                 stc_signal['_use_market_order'] = True
-                # Keep the current position price for options (Webull doesn't support market orders for options)
-                # For stocks, we could set to None for true market order but keeping price is safer
                 print(f"[RISK] 📊 Market order mode - using current price ${position.current_price:.2f}")
             
             stc_signal['_exit_marker_key'] = pos_key
@@ -3350,6 +3353,10 @@ class RiskManager:
             return
         
         try:
+            order_price = stc_signal['price']
+            if stc_signal.get('_use_market_order'):
+                order_price = None
+
             if asset_type == 'option':
                 option_kwargs = {
                     'symbol': stc_signal['symbol'],
@@ -3358,17 +3365,19 @@ class RiskManager:
                     'option_type': stc_signal.get('opt_type'),
                     'action': 'STC',
                     'quantity': stc_signal['qty'],
-                    'price': stc_signal['price'],
+                    'price': order_price,
                 }
                 if broker_upper in ('WEBULL', 'WEBULL_PAPER', 'SCHWAB'):
                     option_kwargs['option_id'] = stc_signal.get('option_id')
                     option_kwargs['_risk_management_order'] = True
+                    if order_price is None:
+                        option_kwargs['price'] = stc_signal['price']
                 result = await broker_instance.place_option_order(**option_kwargs)
             else:
                 result = await broker_instance.place_stock_order(
                     symbol=stc_signal['symbol'],
                     quantity=stc_signal['qty'],
-                    price=stc_signal['price'],
+                    price=order_price,
                     action='STC',
                 )
             
@@ -3405,7 +3414,7 @@ class RiskManager:
         
         Returns dict with 'bid', 'ask', 'mid', 'source' keys.
         bid/ask/mid are 0 when unavailable. Accepts partial quotes (bid-only).
-        Checks WebullDataHub first, then SchwabDataHub.
+        Checks WebullDataHub first, then SchwabDataHub, then IBKRDataHub.
         Hub staleness is enforced by the hubs themselves (QUOTE_STALE_THRESHOLD=120s).
         """
         result = {'bid': 0, 'ask': 0, 'mid': 0, 'source': ''}
@@ -3465,6 +3474,22 @@ class RiskManager:
                                 return q
                 elif position.asset != 'option':
                     q = _extract_quotes(schwab_hub.get_quote_detailed(position.symbol), 'schwab_hub')
+                    if q:
+                        return q
+        except Exception:
+            pass
+
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            ibkr_hub = get_ibkr_data_hub()
+            if ibkr_hub.is_streaming():
+                lookup_key = None
+                if position.asset == 'option':
+                    lookup_key = getattr(position, 'raw_symbol', None) or None
+                else:
+                    lookup_key = position.symbol
+                if lookup_key:
+                    q = _extract_quotes(ibkr_hub.get_quote_detailed(lookup_key), 'ibkr_hub')
                     if q:
                         return q
         except Exception:
