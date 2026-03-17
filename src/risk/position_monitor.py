@@ -1531,6 +1531,8 @@ class RiskManager:
         """
         return self.cache.invalidate_channel_settings(channel_id)
     
+    _PERIODIC_WEBULL_REFRESH_INTERVAL = 15
+
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
         check_and_process_invalidation_request()
@@ -1543,6 +1545,13 @@ class RiskManager:
                 return
             else:
                 print(f"[RISK] Per-channel risk ACTIVE for {channel_count} channel(s)")
+        
+        import time as _mc_time
+        _now = _mc_time.time()
+        _last_refresh = getattr(self, '_last_periodic_webull_rest_ts', 0)
+        if (_now - _last_refresh) > self._PERIODIC_WEBULL_REFRESH_INTERVAL:
+            self._force_webull_rest_refresh = True
+            self._last_periodic_webull_rest_ts = _now
         
         try:
             positions = await self._fetch_all_positions()
@@ -1710,10 +1719,16 @@ class RiskManager:
         
         webull_snapshots = None
         
+        _force_webull = getattr(self, '_force_webull_rest_refresh', False)
+        _force_global = getattr(self, '_force_rest_refresh', False)
+        _hub_max_age = 0 if (_force_webull or _force_global) else 20
+        if _force_webull:
+            self._force_webull_rest_refresh = False
+        
         try:
             from src.services.webull_data_hub import get_webull_data_hub
             hub = get_webull_data_hub()
-            hub_positions = hub.get_positions(max_age_seconds=60)
+            hub_positions = hub.get_positions(max_age_seconds=_hub_max_age)
             if hub_positions is not None and len(hub_positions) > 0:
                 fetched = []
                 for pos in hub_positions:
@@ -1837,7 +1852,6 @@ class RiskManager:
             pass
         
         _REST_CACHE_TTL = 10
-        _force_refresh = getattr(self, '_force_rest_refresh', False)
         if _force_refresh:
             self._force_rest_refresh = False
             _REST_CACHE_TTL = 0
@@ -1855,14 +1869,66 @@ class RiskManager:
                         return list(self._last_webull_positions)
                     return []
                 rate_manager.record_request('webull')
-            webull_positions = await self.position_fetcher() or []
-            webull_snapshots_rest = []
-            for pos in webull_positions:
-                pos['broker'] = 'Webull'
-                webull_snapshots_rest.append(self._to_snapshot(pos))
-            self._last_webull_positions = webull_snapshots_rest
-            self._webull_cache_ts = _time.time()
-            return webull_snapshots_rest
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                _hub = get_webull_data_hub()
+                wb_broker = None
+                if hasattr(self.position_fetcher, '__self__'):
+                    wb_broker = self.position_fetcher.__self__
+                if not wb_broker or not hasattr(wb_broker, 'wb'):
+                    wb_broker = getattr(self, '_webull_broker', None)
+                if not wb_broker or not hasattr(wb_broker, 'wb'):
+                    _bot = getattr(self, 'bot', None)
+                    if _bot:
+                        wb_broker = getattr(_bot, 'broker', None)
+                if wb_broker and hasattr(wb_broker, 'wb'):
+                    await _hub.refresh_positions_once(wb_broker.wb)
+                else:
+                    print("[RISK] ⚠️ Could not resolve Webull broker for REST refresh — using cached data")
+                _refreshed = _hub.get_positions(max_age_seconds=30)
+                if _refreshed is not None and len(_refreshed) > 0:
+                    fetched = []
+                    for pos in _refreshed:
+                        position_qty = float(pos.get('position', 0))
+                        if position_qty <= 0:
+                            continue
+                        symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+                        is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos)
+                        if not is_option:
+                            quantity = position_qty
+                            market_value = float(pos.get('marketValue', 0))
+                            current_price = market_value / quantity if quantity > 0 else 0
+                            snap_data = {
+                                'broker': 'Webull', 'asset': 'stock', 'symbol': symbol,
+                                'quantity': quantity, 'avg_cost': float(pos.get('costPrice', 0)),
+                                'current_price': current_price,
+                                'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                                'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
+                            }
+                            fetched.append(self._to_snapshot(snap_data))
+                        else:
+                            snap_data = {
+                                'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
+                                'quantity': position_qty, 'avg_cost': float(pos.get('costPrice', 0)),
+                                'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
+                                'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                                'option_id': pos.get('optionId', 0),
+                                'strike': float(pos.get('strikePrice', 0)),
+                                'expiry': pos.get('expireDate', ''),
+                                'direction': (pos.get('direction', '') or '').upper()[:1],
+                                'ticker_id': pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
+                            }
+                            fetched.append(self._to_snapshot(snap_data))
+                    if fetched:
+                        self._last_webull_positions = fetched
+                        self._webull_cache_ts = _time.time()
+                        print(f"[RISK] ✓ REST refresh: {len(fetched)} Webull positions updated via hub")
+                        return fetched
+            except Exception as rest_err:
+                print(f"[RISK] ⚠️ REST position refresh failed: {rest_err}")
+            if hasattr(self, '_last_webull_positions') and self._last_webull_positions and cache_age < 120:
+                return list(self._last_webull_positions)
+            return []
 
         async def _fetch_alpaca_cached():
             if not (self.alpaca_broker and getattr(self.alpaca_broker, 'connected', False)):
@@ -3839,6 +3905,37 @@ class RiskManager:
                 parts.append(f"CrossBroker({cross_updated})")
             print(f"[RISK] ✓ Streaming hub: updated {total} position prices [{', '.join(parts)}]")
             self._hub_update_logged = True
+
+        import time as _pt
+        _now = _pt.time()
+        if not hasattr(self, '_price_change_tracker'):
+            self._price_change_tracker = {}
+        _STUCK_THRESHOLD = 8
+        _STUCK_REFRESH_COOLDOWN = 15
+        any_stuck = False
+        _last_stuck_refresh = getattr(self, '_last_stuck_refresh_ts', 0)
+        for pos in positions:
+            key = pos.position_key
+            tracked = self._price_change_tracker.get(key)
+            if tracked is None:
+                self._price_change_tracker[key] = {'price': pos.current_price, 'last_change': _now}
+                continue
+            if abs(pos.current_price - tracked['price']) > 0.0001:
+                tracked['price'] = pos.current_price
+                tracked['last_change'] = _now
+            elif (_now - tracked['last_change']) > _STUCK_THRESHOLD:
+                any_stuck = True
+        active_keys = {p.position_key for p in positions}
+        for key in list(self._price_change_tracker.keys()):
+            if key not in active_keys:
+                del self._price_change_tracker[key]
+        if any_stuck and (_now - _last_stuck_refresh) > _STUCK_REFRESH_COOLDOWN:
+            if not getattr(self, '_force_webull_rest_refresh', False):
+                self._force_webull_rest_refresh = True
+                self._last_stuck_refresh_ts = _now
+                stuck_keys = [k for k, v in self._price_change_tracker.items() if (_now - v['last_change']) > _STUCK_THRESHOLD]
+                if stuck_keys:
+                    print(f"[RISK] ⚠️ Price stuck for {len(stuck_keys)} position(s) — forcing Webull REST refresh")
 
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:
         """Convert raw position dict to PositionSnapshot."""
