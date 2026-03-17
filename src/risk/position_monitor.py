@@ -1852,7 +1852,7 @@ class RiskManager:
             pass
         
         _REST_CACHE_TTL = 10
-        if _force_refresh:
+        if _force_global:
             self._force_rest_refresh = False
             _REST_CACHE_TTL = 0
 

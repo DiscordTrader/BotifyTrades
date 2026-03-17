@@ -14756,7 +14756,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stc_sym = stk.get('symbol')
                     if not stc_sym:
                         cursor.execute('''
-                            SELECT id, symbol, quantity, original_qty
+                            SELECT id, symbol, quantity, original_qty, broker
                             FROM trades 
                             WHERE channel_id = ? 
                             AND direction = 'BTO' 
@@ -14766,7 +14766,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         ''', (str(message.channel.id),))
                     else:
                         cursor.execute('''
-                            SELECT id, symbol, quantity, original_qty
+                            SELECT id, symbol, quantity, original_qty, broker
                             FROM trades 
                             WHERE symbol = ?
                             AND channel_id = ? 
@@ -14781,6 +14781,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             stk['symbol'] = open_pos['symbol']
                             stc_sym = open_pos['symbol']
                         our_qty = open_pos['quantity'] or 1
+                        pos_broker = open_pos['broker'] or ''
+                        if pos_broker and not stk.get('broker'):
+                            stk['broker'] = pos_broker
+                            print(f"[PHOENIX STC] ✓ Injected broker={pos_broker} from open trade for {stc_sym}")
                         if stk.get('_phoenix_exit') or stk.get('is_full_exit'):
                             stk['qty'] = our_qty
                             print(f"[PHOENIX EXIT] ✓ Full exit {stc_sym}: selling ALL {our_qty} shares")
@@ -16966,8 +16970,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if channel_cfg and channel_cfg.get('enabled_brokers'):
                                     import json
                                     try:
-                                        enabled_brokers = json.loads(channel_cfg['enabled_brokers'])
-                                        _original_print(f"[MULTI-BROKER] Using channel enabled_brokers: {enabled_brokers}")
+                                        _eb = channel_cfg['enabled_brokers']
+                                        if isinstance(_eb, list):
+                                            enabled_brokers = _eb
+                                        elif isinstance(_eb, str):
+                                            enabled_brokers = json.loads(_eb)
+                                        if enabled_brokers:
+                                            _original_print(f"[MULTI-BROKER] Using channel enabled_brokers: {enabled_brokers}")
                                     except:
                                         pass
                             except Exception as e:
