@@ -7892,6 +7892,13 @@ class SelfClient(discord.Client):
                             set_broker_status('trading212', True, 'connected', account_info=account_info)
                         except Exception:
                             pass
+                        try:
+                            from src.services.trading212_data_hub import get_trading212_data_hub
+                            t212_hub = get_trading212_data_hub(self.trading212_broker)
+                            t212_hub.start(loop=self.loop)
+                            _original_print(f"[TRADING212] ✓ DataHub polling started", flush=True)
+                        except Exception as hub_err:
+                            _original_print(f"[TRADING212] DataHub start error: {hub_err}", flush=True)
                     else:
                         _original_print("[TRADING212] ⚠️ Connection failed", flush=True)
                         self.trading212_broker = None

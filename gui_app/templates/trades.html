@@ -1839,9 +1839,57 @@ async function cancelConditionalOrder(orderId, symbol) {
     }
 }
 
+let _sseSource = null;
+let _sseConnected = false;
+let _sseFallbackTimer = null;
+
+function _initSSE() {
+    if (_sseSource) {
+        try { _sseSource.close(); } catch(e) {}
+    }
+    try {
+        _sseSource = new EventSource('/api/snapshot/stream');
+        _sseSource.onmessage = function(event) {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'connected') {
+                    _sseConnected = true;
+                    if (_sseFallbackTimer) {
+                        clearInterval(_sseFallbackTimer);
+                        _sseFallbackTimer = null;
+                    }
+                }
+                if (msg.type === 'update' && currentTab === 'live') {
+                    unifiedLivePoll();
+                }
+            } catch(e) {}
+        };
+        _sseSource.onerror = function() {
+            _sseConnected = false;
+            if (!_sseFallbackTimer) {
+                _sseFallbackTimer = setInterval(() => {
+                    if (currentTab === 'live') unifiedLivePoll();
+                }, 3000);
+            }
+            setTimeout(() => {
+                if (!_sseConnected) _initSSE();
+            }, 5000);
+        };
+    } catch(e) {
+        _sseConnected = false;
+        if (!_sseFallbackTimer) {
+            _sseFallbackTimer = setInterval(() => {
+                if (currentTab === 'live') unifiedLivePoll();
+            }, 3000);
+        }
+    }
+}
+
+_initSSE();
+
 riskPollInterval = setInterval(() => {
-    unifiedLivePoll();
-}, 4000);
+    if (!_sseConnected && currentTab === 'live') unifiedLivePoll();
+}, 3000);
 
 function _updateStreamingIndicator(streamingMeta) {
     const indicator = document.getElementById('streaming-indicator');
@@ -1850,16 +1898,20 @@ function _updateStreamingIndicator(streamingMeta) {
     const broker = (currentBroker || '').toUpperCase();
     const showWebull = status.webull && (!broker || broker.includes('WEBULL'));
     const showSchwab = status.schwab && (!broker || broker === 'SCHWAB');
-    const anyRelevant = showWebull || showSchwab;
+    const showT212Cross = (status.webull || status.schwab) && (!broker || broker.includes('TRADING212'));
+    const anyRelevant = showWebull || showSchwab || showT212Cross;
     indicator.style.display = anyRelevant ? 'inline' : 'none';
     if (anyRelevant) {
-        if (broker) {
+        if (broker && broker.includes('TRADING212')) {
+            indicator.textContent = '\u26A1 LIVE \u2022 T212 (cross-stream)';
+        } else if (broker) {
             const label = broker.replace('_PAPER', ' Paper').replace('_', ' ');
             indicator.textContent = '\u26A1 LIVE \u2022 ' + label;
         } else {
             const parts = [];
             if (showWebull) parts.push('Webull');
             if (showSchwab) parts.push('Schwab');
+            if (showT212Cross) parts.push('T212');
             indicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
         }
     }
@@ -1925,6 +1977,8 @@ window.addEventListener('beforeunload', () => {
     if (riskPollInterval) clearInterval(riskPollInterval);
     if (streamingPollInterval) clearInterval(streamingPollInterval);
     if (qtStreamingTimer) clearInterval(qtStreamingTimer);
+    if (_sseSource) { try { _sseSource.close(); } catch(e) {} }
+    if (_sseFallbackTimer) clearInterval(_sseFallbackTimer);
 });
 
 let eventFilterTimeout = null;

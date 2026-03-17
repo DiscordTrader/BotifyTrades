@@ -2031,6 +2031,34 @@ class RiskManager:
             if not getattr(self.trading212_broker, 'connected', False):
                 return []
             try:
+                try:
+                    from src.services.trading212_data_hub import get_trading212_data_hub
+                    hub = get_trading212_data_hub()
+                    hub_positions = hub.get_positions(max_age_seconds=10)
+                    if hub_positions is not None and not hub.is_stale:
+                        from src.risk.position_monitor import PositionSnapshot
+                        t212_snaps = []
+                        for pos in hub_positions:
+                            broker_label = 'TRADING212'
+                            if not getattr(self.trading212_broker, 'is_live', True):
+                                broker_label = 'TRADING212_PAPER'
+                            sym = pos.get('symbol', '')
+                            qty = float(pos.get('quantity', 0))
+                            avg = float(pos.get('avg_cost', 0))
+                            cur = float(pos.get('current_price', 0))
+                            snap = PositionSnapshot(
+                                symbol=sym, asset_type='stock',
+                                strike=None, expiry=None, option_type=None,
+                                quantity=qty, avg_cost=avg, current_price=cur,
+                                broker=broker_label, direction='long' if qty > 0 else 'short',
+                            )
+                            t212_snaps.append(snap)
+                        self._last_trading212_positions = t212_snaps
+                        self._trading212_cache_ts = _time.time()
+                        return t212_snaps
+                except Exception:
+                    pass
+
                 t212_cache_age = _time.time() - getattr(self, '_trading212_cache_ts', 0)
                 if hasattr(self, '_last_trading212_positions') and self._last_trading212_positions is not None and t212_cache_age < _REST_CACHE_TTL:
                     return list(self._last_trading212_positions)

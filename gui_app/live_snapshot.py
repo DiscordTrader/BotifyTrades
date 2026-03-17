@@ -31,6 +31,65 @@ _daemon_thread: Optional[threading.Thread] = None
 _daemon_stop_event = threading.Event()
 _daemon_started = False
 
+_snapshot_version = 0
+_snapshot_version_lock = threading.Lock()
+_sse_clients: List = []
+_sse_clients_lock = threading.Lock()
+
+_BROKER_INTERVALS = {
+    'WEBULL': 3,
+    'ALPACA_PAPER': 5,
+    'ROBINHOOD': 5,
+    'SCHWAB': 5,
+    'IBKR': 5,
+    'TASTYTRADE': 5,
+    'TRADING212': 6,
+}
+_broker_last_fetch: Dict[str, float] = {}
+_broker_last_fetch_lock = threading.Lock()
+
+_force_refresh_event = threading.Event()
+
+
+def request_force_refresh():
+    _force_refresh_event.set()
+
+
+def get_snapshot_version() -> int:
+    with _snapshot_version_lock:
+        return _snapshot_version
+
+
+def subscribe_sse():
+    import queue
+    q = queue.Queue(maxsize=50)
+    with _sse_clients_lock:
+        _sse_clients.append(q)
+    return q
+
+
+def unsubscribe_sse(q):
+    with _sse_clients_lock:
+        try:
+            _sse_clients.remove(q)
+        except ValueError:
+            pass
+
+
+def _notify_sse_clients(version: int):
+    with _sse_clients_lock:
+        dead = []
+        for q in _sse_clients:
+            try:
+                q.put_nowait(version)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            try:
+                _sse_clients.remove(q)
+            except ValueError:
+                pass
+
 
 _snapshot_log_verbose = False
 _snapshot_log_last_summary = 0
@@ -646,7 +705,27 @@ def _fetch_tastytrade(bot) -> List[Dict]:
         return []
 
 
+_t212_hub_cache: List[Dict] = []
+_t212_hub_cache_ts: float = 0
+_t212_hub_cache_lock = threading.Lock()
+
+
 def _fetch_trading212(bot) -> List[Dict]:
+    global _t212_hub_cache, _t212_hub_cache_ts
+    try:
+        from src.services.trading212_data_hub import get_trading212_data_hub
+        hub = get_trading212_data_hub()
+        if not hub.is_stale:
+            hub_positions = hub.get_positions(max_age_seconds=10)
+            if hub_positions is not None and not hub.is_stale:
+                positions = _convert_t212_raw(hub_positions)
+                with _t212_hub_cache_lock:
+                    _t212_hub_cache = positions
+                    _t212_hub_cache_ts = time.time()
+                return positions
+    except Exception:
+        pass
+
     try:
         t212_broker = None
         if hasattr(bot, 'trading212_broker') and bot.trading212_broker:
@@ -657,16 +736,22 @@ def _fetch_trading212(bot) -> List[Dict]:
             t212_broker = bot._broker_manager.trading212_broker
 
         if not t212_broker:
-            _log(f"T212 fetch: broker not found (has trading212_broker={hasattr(bot, 'trading212_broker')}, broker_manager={hasattr(bot, 'broker_manager')}, _broker_manager={hasattr(bot, '_broker_manager')})")
+            with _t212_hub_cache_lock:
+                if _t212_hub_cache and (time.time() - _t212_hub_cache_ts) < 30:
+                    return list(_t212_hub_cache)
             return []
 
         connected = getattr(t212_broker, 'connected', False)
         if not connected:
-            _log(f"T212 fetch: broker found but not connected (connected={connected})")
+            with _t212_hub_cache_lock:
+                if _t212_hub_cache and (time.time() - _t212_hub_cache_ts) < 30:
+                    return list(_t212_hub_cache)
             return []
 
         if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
-            _log(f"T212 fetch: no event loop available")
+            with _t212_hub_cache_lock:
+                if _t212_hub_cache and (time.time() - _t212_hub_cache_ts) < 30:
+                    return list(_t212_hub_cache)
             return []
 
         future = asyncio.run_coroutine_threadsafe(
@@ -674,38 +759,48 @@ def _fetch_trading212(bot) -> List[Dict]:
             bot.loop
         )
         raw = future.result(timeout=10) or []
-        _log(f"T212 fetch: got {len(raw)} raw positions")
 
-        positions = []
-        for pos in raw:
-            if isinstance(pos, dict):
-                qty = float(pos.get('quantity', 0))
-                avg_cost = float(pos.get('avg_cost', 0))
-                cur_price = float(pos.get('current_price', 0))
-                unrealized = float(pos.get('unrealized_pnl', 0))
-                pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
-
-                positions.append(_make_position(
-                    pos_id=f"T212_{pos.get('symbol', '')}",
-                    symbol=pos.get('symbol', ''),
-                    asset_type='stock',
-                    strike=None,
-                    expiry=None,
-                    call_put='',
-                    quantity=qty,
-                    entry_price=avg_cost,
-                    current_price=cur_price,
-                    last=cur_price,
-                    unrealized_pnl=unrealized,
-                    pnl_pct=pnl_pct,
-                    broker='TRADING212',
-                    source='live_brokerage',
-                ))
+        positions = _convert_t212_raw(raw)
+        with _t212_hub_cache_lock:
+            _t212_hub_cache = positions
+            _t212_hub_cache_ts = time.time()
         return positions
     except Exception as e:
         err_msg = str(e).strip() if str(e).strip() else type(e).__name__
         _log(f"T212 fetch error: {err_msg}")
+        with _t212_hub_cache_lock:
+            if _t212_hub_cache and (time.time() - _t212_hub_cache_ts) < 30:
+                return list(_t212_hub_cache)
         return []
+
+
+def _convert_t212_raw(raw: list) -> List[Dict]:
+    positions = []
+    for pos in raw:
+        if isinstance(pos, dict):
+            qty = float(pos.get('quantity', 0))
+            avg_cost = float(pos.get('avg_cost', 0))
+            cur_price = float(pos.get('current_price', 0))
+            unrealized = float(pos.get('unrealized_pnl', 0))
+            pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
+
+            positions.append(_make_position(
+                pos_id=f"T212_{pos.get('symbol', '')}",
+                symbol=pos.get('symbol', ''),
+                asset_type='stock',
+                strike=None,
+                expiry=None,
+                call_put='',
+                quantity=qty,
+                entry_price=avg_cost,
+                current_price=cur_price,
+                last=cur_price,
+                unrealized_pnl=unrealized,
+                pnl_pct=pnl_pct,
+                broker='TRADING212',
+                source='live_brokerage',
+            ))
+    return positions
 
 
 def _normalize_strike(val):
@@ -908,91 +1003,81 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
     return enriched
 
 
+def _apply_streaming_quote(pos, quote, streaming_meta):
+    if not quote or quote.get('last', 0) <= 0:
+        return
+    pos['current_price'] = quote['last']
+    pos['last'] = quote['last']
+    if quote.get('bid', 0) > 0:
+        pos['bid'] = quote['bid']
+    if quote.get('ask', 0) > 0:
+        pos['ask'] = quote['ask']
+    if pos.get('bid', 0) > 0 and pos.get('ask', 0) > 0:
+        pos['mid'] = round((pos['bid'] + pos['ask']) / 2, 4)
+    entry = pos.get('entry_price', 0)
+    qty = pos.get('quantity', 0)
+    if entry > 0:
+        pnl_pct = ((quote['last'] - entry) / entry) * 100
+        unrealized = (quote['last'] - entry) * qty
+        if pos.get('asset_type') == 'option':
+            unrealized *= 100
+        pos['pnl_pct'] = round(pnl_pct, 2)
+        pos['unrealized_pnl'] = round(unrealized, 2)
+    pid = pos.get('id')
+    if pid:
+        streaming_meta['sources'][str(pid)] = {
+            'source': 'stream',
+            'age': round(time.time() - quote.get('timestamp', 0), 1)
+        }
+
+
 def _overlay_streaming_prices(positions: List[Dict]) -> Dict[str, Any]:
     streaming_meta = {'webull': False, 'schwab': False, 'sources': {}}
+
+    wb_hub = None
+    wb_streaming = False
+    sch_hub = None
+    sch_streaming = False
+
     try:
         from src.services.webull_data_hub import get_webull_data_hub
         wb_hub = get_webull_data_hub()
-        if wb_hub.is_streaming():
+        wb_streaming = wb_hub.is_streaming()
+        if wb_streaming:
             streaming_meta['webull'] = True
-            for pos in positions:
-                broker = (pos.get('broker') or '').upper()
-                if 'WEBULL' not in broker:
-                    continue
-                if pos.get('asset_type') == 'option':
-                    continue
-                symbol = pos.get('symbol', '')
-                if not symbol:
-                    continue
-                quote = wb_hub.get_quote_detailed(symbol)
-                if quote and quote.get('last', 0) > 0:
-                    pos['current_price'] = quote['last']
-                    pos['last'] = quote['last']
-                    if quote.get('bid', 0) > 0:
-                        pos['bid'] = quote['bid']
-                    if quote.get('ask', 0) > 0:
-                        pos['ask'] = quote['ask']
-                    if pos['bid'] > 0 and pos['ask'] > 0:
-                        pos['mid'] = round((pos['bid'] + pos['ask']) / 2, 4)
-                    entry = pos.get('entry_price', 0)
-                    qty = pos.get('quantity', 0)
-                    if entry > 0:
-                        pnl_pct = ((quote['last'] - entry) / entry) * 100
-                        unrealized = (quote['last'] - entry) * qty
-                        if pos.get('asset_type') == 'option':
-                            unrealized *= 100
-                        pos['pnl_pct'] = round(pnl_pct, 2)
-                        pos['unrealized_pnl'] = round(unrealized, 2)
-                    pid = pos.get('id')
-                    if pid:
-                        streaming_meta['sources'][str(pid)] = {
-                            'source': 'stream',
-                            'age': round(time.time() - quote.get('timestamp', 0), 1)
-                        }
     except Exception:
         pass
 
     try:
         from src.services.schwab_data_hub import get_schwab_data_hub
         sch_hub = get_schwab_data_hub()
-        if sch_hub.is_streaming():
+        sch_streaming = sch_hub.is_streaming()
+        if sch_streaming:
             streaming_meta['schwab'] = True
-            for pos in positions:
-                broker = (pos.get('broker') or '').upper()
-                if broker != 'SCHWAB':
-                    continue
-                if pos.get('asset_type') == 'option':
-                    continue
-                symbol = pos.get('symbol', '')
-                if not symbol:
-                    continue
-                quote = sch_hub.get_quote_detailed(symbol)
-                if quote and quote.get('last', 0) > 0:
-                    pos['current_price'] = quote['last']
-                    pos['last'] = quote['last']
-                    if quote.get('bid', 0) > 0:
-                        pos['bid'] = quote['bid']
-                    if quote.get('ask', 0) > 0:
-                        pos['ask'] = quote['ask']
-                    if pos['bid'] > 0 and pos['ask'] > 0:
-                        pos['mid'] = round((pos['bid'] + pos['ask']) / 2, 4)
-                    entry = pos.get('entry_price', 0)
-                    qty = pos.get('quantity', 0)
-                    if entry > 0:
-                        pnl_pct = ((quote['last'] - entry) / entry) * 100
-                        unrealized = (quote['last'] - entry) * qty
-                        if pos.get('asset_type') == 'option':
-                            unrealized *= 100
-                        pos['pnl_pct'] = round(pnl_pct, 2)
-                        pos['unrealized_pnl'] = round(unrealized, 2)
-                    pid = pos.get('id')
-                    if pid:
-                        streaming_meta['sources'][str(pid)] = {
-                            'source': 'stream',
-                            'age': round(time.time() - quote.get('timestamp', 0), 1)
-                        }
     except Exception:
         pass
+
+    for pos in positions:
+        broker = (pos.get('broker') or '').upper()
+        if pos.get('asset_type') == 'option':
+            continue
+        symbol = pos.get('symbol', '')
+        if not symbol:
+            continue
+
+        quote = None
+
+        if 'WEBULL' in broker and wb_streaming:
+            quote = wb_hub.get_quote_detailed(symbol)
+        elif broker == 'SCHWAB' and sch_streaming:
+            quote = sch_hub.get_quote_detailed(symbol)
+        elif 'TRADING212' in broker:
+            if wb_streaming:
+                quote = wb_hub.get_quote_detailed(symbol)
+            if (not quote or quote.get('last', 0) <= 0) and sch_streaming:
+                quote = sch_hub.get_quote_detailed(symbol)
+
+        _apply_streaming_quote(pos, quote, streaming_meta)
 
     return streaming_meta
 
@@ -1011,12 +1096,15 @@ def _build_prices(positions: List[Dict]) -> Dict:
     return prices
 
 
-def _refresh_snapshot(bot_instance):
-    global _snapshot_cache
+_broker_position_cache: Dict[str, List[Dict]] = {}
+_broker_position_cache_lock = threading.Lock()
+
+
+def _refresh_snapshot(bot_instance, force_all: bool = False):
+    global _snapshot_cache, _snapshot_version
 
     with _snapshot_lock:
         if _snapshot_cache.get('updating'):
-            _log("Skipping refresh - already updating")
             return
         _snapshot_cache['updating'] = True
 
@@ -1039,34 +1127,60 @@ def _refresh_snapshot(bot_instance):
             'TRADING212': (_fetch_trading212, bot_instance),
         }
 
+        now = time.time()
+        brokers_due = {}
+        with _broker_last_fetch_lock:
+            for broker_name, (fetcher, bot) in broker_fetchers.items():
+                interval = _BROKER_INTERVALS.get(broker_name, 5)
+                last = _broker_last_fetch.get(broker_name, 0)
+                if force_all or (now - last) >= interval:
+                    brokers_due[broker_name] = (fetcher, bot)
+
         all_live_positions: List[Dict] = []
         broker_status: Dict[str, Dict] = {}
 
-        with ThreadPoolExecutor(max_workers=7, thread_name_prefix='snapshot') as executor:
-            future_map = {}
-            for broker_name, (fetcher, bot) in broker_fetchers.items():
-                f = executor.submit(fetcher, bot)
-                future_map[f] = broker_name
+        if brokers_due:
+            with ThreadPoolExecutor(max_workers=7, thread_name_prefix='snapshot') as executor:
+                future_map = {}
+                for broker_name, (fetcher, bot) in brokers_due.items():
+                    f = executor.submit(fetcher, bot)
+                    future_map[f] = broker_name
 
-            for f in as_completed(future_map, timeout=15):
-                broker_name = future_map[f]
-                try:
-                    result = f.result(timeout=10)
-                    all_live_positions.extend(result)
+                for f in as_completed(future_map, timeout=15):
+                    broker_name = future_map[f]
+                    try:
+                        result = f.result(timeout=10)
+                        with _broker_position_cache_lock:
+                            _broker_position_cache[broker_name] = result
+                        with _broker_last_fetch_lock:
+                            _broker_last_fetch[broker_name] = time.time()
+                        broker_status[broker_name] = {
+                            'connected': len(result) > 0 or True,
+                            'last_updated': time.time(),
+                            'error': None,
+                            'position_count': len(result),
+                        }
+                    except Exception as e:
+                        broker_status[broker_name] = {
+                            'connected': False,
+                            'last_updated': time.time(),
+                            'error': str(e),
+                            'position_count': 0,
+                        }
+                        _log(f"{broker_name} future error: {e}")
+
+        with _broker_position_cache_lock:
+            for broker_name in broker_fetchers:
+                if broker_name in _broker_position_cache:
+                    all_live_positions.extend(_broker_position_cache[broker_name])
+                if broker_name not in broker_status and broker_name in _broker_position_cache:
+                    cached = _broker_position_cache[broker_name]
                     broker_status[broker_name] = {
-                        'connected': len(result) > 0 or True,
-                        'last_updated': time.time(),
+                        'connected': True,
+                        'last_updated': _broker_last_fetch.get(broker_name, 0),
                         'error': None,
-                        'position_count': len(result),
+                        'position_count': len(cached),
                     }
-                except Exception as e:
-                    broker_status[broker_name] = {
-                        'connected': False,
-                        'last_updated': time.time(),
-                        'error': str(e),
-                        'position_count': 0,
-                    }
-                    _log(f"{broker_name} future error: {e}")
 
         merged = _enrich_with_db_trades(all_live_positions, db_trades, broker_status)
 
@@ -1093,6 +1207,12 @@ def _refresh_snapshot(bot_instance):
             _snapshot_cache['last_updated'] = time.time()
             _snapshot_cache['updating'] = False
 
+        with _snapshot_version_lock:
+            _snapshot_version += 1
+            ver = _snapshot_version
+
+        _notify_sse_clients(ver)
+
         broker_summary = ', '.join(
             f"{k}({v.get('position_count', 0)})" for k, v in broker_status.items()
         )
@@ -1106,10 +1226,17 @@ def _refresh_snapshot(bot_instance):
 
 
 def _daemon_loop(bot_instance, interval: int):
-    _log(f"Daemon started (interval={interval}s)")
+    _log(f"Daemon started (interval={interval}s, per-broker scheduling)")
+    _refresh_snapshot(bot_instance, force_all=True)
+
     while not _daemon_stop_event.is_set():
         try:
-            _refresh_snapshot(bot_instance)
+            forced = _force_refresh_event.is_set()
+            if forced:
+                _force_refresh_event.clear()
+                _refresh_snapshot(bot_instance, force_all=True)
+            else:
+                _refresh_snapshot(bot_instance)
         except Exception as e:
             _log(f"Daemon loop error: {e}")
             traceback.print_exc()
@@ -1119,7 +1246,7 @@ def _daemon_loop(bot_instance, interval: int):
     _log("Daemon stopped")
 
 
-def start_snapshot_daemon(bot_instance, interval: int = 5):
+def start_snapshot_daemon(bot_instance, interval: int = 2):
     global _daemon_thread, _daemon_started
 
     if _daemon_started and _daemon_thread and _daemon_thread.is_alive():

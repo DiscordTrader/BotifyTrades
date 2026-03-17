@@ -696,7 +696,7 @@ def set_bot_instance(bot: Any) -> None:
     sys.stdout.flush()
     try:
         from gui_app.live_snapshot import start_snapshot_daemon
-        start_snapshot_daemon(bot, interval=5)
+        start_snapshot_daemon(bot, interval=2)
         sys.stdout.write("[SNAPSHOT] ✓ Snapshot daemon started successfully\n")
         sys.stdout.flush()
     except Exception as e:
@@ -6975,6 +6975,44 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'positions': [], 'prices': {}, 'risk_states': {}, 'error': str(e)})
+
+    @app.route('/api/snapshot/stream', methods=['GET'])
+    @login_required
+    def api_snapshot_stream():
+        from gui_app.live_snapshot import subscribe_sse, unsubscribe_sse, get_snapshot_version
+        import queue as _queue
+
+        def event_stream():
+            q = subscribe_sse()
+            try:
+                yield f"data: {json.dumps({'type': 'connected', 'version': get_snapshot_version()})}\n\n"
+                while True:
+                    try:
+                        version = q.get(timeout=30)
+                        yield f"data: {json.dumps({'type': 'update', 'version': version})}\n\n"
+                    except _queue.Empty:
+                        yield f": keepalive\n\n"
+            except GeneratorExit:
+                pass
+            finally:
+                unsubscribe_sse(q)
+
+        return app.response_class(
+            event_stream(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive',
+            }
+        )
+
+    @app.route('/api/snapshot/force-refresh', methods=['POST'])
+    @login_required
+    def api_force_refresh():
+        from gui_app.live_snapshot import request_force_refresh
+        request_force_refresh()
+        return jsonify({'success': True, 'message': 'Force refresh requested'})
 
     @app.route('/api/streaming/quotes', methods=['GET'])
     @login_required

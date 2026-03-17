@@ -58,12 +58,43 @@ class Trading212Broker(BrokerInterface):
             await self._load_instruments()
 
             self.connected = True
+            try:
+                self._event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._event_loop = None
             return True
 
         except Exception as e:
             print(f"[T212] Connection error: {e}")
             self.connected = False
             return False
+
+    def _schedule_post_order_refresh(self):
+        import threading
+        _loop = getattr(self, '_event_loop', None)
+
+        def _do_refresh():
+            try:
+                self._positions_cache = []
+                self._positions_cache_ts = 0
+
+                try:
+                    from src.services.trading212_data_hub import get_trading212_data_hub
+                    hub = get_trading212_data_hub()
+                    target_loop = _loop
+                    if target_loop and not target_loop.is_closed():
+                        asyncio.run_coroutine_threadsafe(hub.poll_once(), target_loop)
+                except Exception:
+                    pass
+
+                try:
+                    from gui_app.live_snapshot import request_force_refresh
+                    request_force_refresh()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        threading.Timer(5.5, _do_refresh).start()
 
     async def _load_instruments(self):
         try:
@@ -233,6 +264,8 @@ class Trading212Broker(BrokerInterface):
                 order_id = str(order_data.get('id', ''))
                 fill_qty = order_data.get('filledQuantity', 0)
                 status = order_data.get('status', 'UNKNOWN')
+
+                self._schedule_post_order_refresh()
 
                 return OrderResult(
                     success=True,
