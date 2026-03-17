@@ -17423,8 +17423,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # Use Alpaca paper broker
                             if self.paper_broker and self.paper_broker.connected:
                                 try:
+                                    _alpaca_risk_price = None if signal.get('_use_market_order') else signal.get('price')
                                     if signal['asset'] == 'option':
-                                        # Use raw_symbol for Alpaca option orders
                                         raw_symbol = signal.get('raw_symbol') or signal['symbol']
                                         _original_print(f"[RISK] Closing Alpaca option position: {raw_symbol}")
                                         result = await self.paper_broker.place_option_order(
@@ -17434,8 +17434,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             option_type=signal.get('opt_type', 'C'),
                                             action=signal.get('action', 'STC'),
                                             quantity=signal['qty'],
-                                            price=signal.get('price'),
-                                            opt_type=signal.get('opt_type', 'C') # Pass both to be safe
+                                            price=_alpaca_risk_price,
+                                            opt_type=signal.get('opt_type', 'C')
                                         )
                                     else:
                                         _original_print(f"[RISK] Closing Alpaca stock position: {signal['symbol']}")
@@ -17443,7 +17443,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             symbol=signal['symbol'],
                                             action='STC',
                                             quantity=signal['qty'],
-                                            price=signal.get('price')
+                                            price=_alpaca_risk_price
                                         )
                                     
                                     if result and (result.success or result.order_id):
@@ -17656,6 +17656,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # Use Tastytrade broker for risk exit
                             if self.tastytrade_broker and self.tastytrade_broker.connected:
                                 try:
+                                    _tt_risk_price = None if signal.get('_use_market_order') else signal.get('price')
                                     if signal['asset'] == 'option':
                                         _original_print(f"[RISK] Closing Tastytrade option position: {signal['symbol']}")
                                         result = await self.tastytrade_broker.place_option_order(
@@ -17665,7 +17666,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             option_type=signal.get('opt_type', 'C'),
                                             action='STC',
                                             quantity=signal['qty'],
-                                            price=signal.get('price')
+                                            price=_tt_risk_price
                                         )
                                     else:
                                         _original_print(f"[RISK] Closing Tastytrade stock position: {signal['symbol']}")
@@ -17673,7 +17674,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             symbol=signal['symbol'],
                                             action='STC',
                                             quantity=signal['qty'],
-                                            price=signal.get('price')
+                                            price=_tt_risk_price
                                         )
                                     
                                     broker_label = 'TASTYTRADE_LIVE' if self.tastytrade_broker.is_live else 'TASTYTRADE_PAPER'
