@@ -7951,19 +7951,18 @@ class SelfClient(discord.Client):
                         'paper_trade': ibkr_paper_mode
                     })
                     
+                    ibkr_broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
                     try:
                         connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
                     except asyncio.TimeoutError:
                         _original_print("[IBKR] ⚠️ Connection timeout (15s) - TWS/Gateway may not be running", flush=True)
-                        self.ibkr_broker = None
                         connected = False
                     if connected:
                         mode = "PAPER" if ibkr_paper_mode else "LIVE"
                         _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)
                         try:
                             account_info = await self.ibkr_broker.get_account_info()
-                            broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
-                            set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                            set_broker_status(ibkr_broker_id, True, 'connected', account_info=account_info)
                             _original_print(f"[IBKR] ✓ Broker status updated in GUI", flush=True)
                             nlv = account_info.get('portfolio_value', 0)
                             if nlv > 0:
@@ -7979,7 +7978,7 @@ class SelfClient(discord.Client):
                     else:
                         _original_print("[IBKR] ⚠️ Connection failed - TWS/Gateway may not be running", flush=True)
                         _original_print("[IBKR]   Make sure TWS or IB Gateway is running and API is enabled", flush=True)
-                        self.ibkr_broker = None
+                        set_broker_status(ibkr_broker_id, False, 'disconnected', error='TWS/Gateway not running or unreachable')
                         try:
                             from gui_app.discord_notifier import notify_broker_disconnected
                             notify_broker_disconnected('IBKR', 'TWS/Gateway not running')

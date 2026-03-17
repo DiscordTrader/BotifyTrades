@@ -1685,8 +1685,7 @@ def register_routes(app):
                 status = all_status.get(broker_id, {})
                 is_connected = status.get('connected', False)
                 
-                # Only include brokers that have been configured (have non-default status or are connected)
-                if is_connected or status.get('status') not in ['disconnected', 'unknown']:
+                if is_connected or status.get('status') not in ['disconnected', 'unknown'] or status.get('error'):
                     broker_states[config['region']].append({
                         'broker_name': config['display_name'],
                         'is_connected': is_connected,
@@ -19136,9 +19135,43 @@ def register_routes(app):
                     ('TRADING212', 'trading212_broker', 'UK_EU', 'GBP', False),
                 ]
                 
+                creds_check_map = {
+                    'WEBULL': 'webull_credentials',
+                    'ALPACA_PAPER': 'alpaca_credentials',
+                    'IBKR': 'ibkr_credentials',
+                    'SCHWAB': 'schwab_credentials',
+                    'ROBINHOOD': 'robinhood_credentials',
+                    'TASTYTRADE': 'tastytrade_credentials',
+                    'QUESTRADE': 'questrade_credentials',
+                    'TRADING212': 'trading212_credentials',
+                }
                 for broker_name, attr_name, region, currency, is_paper in broker_mappings:
                     broker_instance = getattr(_bot_instance, attr_name, None)
                     if broker_instance is None:
+                        creds_key = creds_check_map.get(broker_name)
+                        if creds_key:
+                            try:
+                                from gui_app.config_service import load_config as _load_creds_cfg
+                                creds_data = _load_creds_cfg(creds_key)
+                                if creds_data:
+                                    fallback_paper = is_paper
+                                    if isinstance(creds_data, dict):
+                                        fallback_paper = creds_data.get('paper_mode', is_paper)
+                                    configured_brokers.append({
+                                        'broker_name': broker_name,
+                                        'region': region,
+                                        'is_connected': False,
+                                        'balance': 0,
+                                        'buying_power': 0,
+                                        'currency': currency,
+                                        'is_paper': fallback_paper,
+                                        'status': 'disconnected',
+                                        'reason': 'Broker configured but not connected — check gateway/TWS or credentials',
+                                        'error_code': None,
+                                        'last_check': None
+                                    })
+                            except Exception:
+                                pass
                         continue
                     
                     if broker_name in ('WEBULL',):
