@@ -1104,6 +1104,27 @@ def init_db():
         except:
             pass
     
+    # Add broker fill columns to signal_lots for fill-based P&L
+    sl_fill_cols = {
+        'entry_fill_price': 'REAL',
+        'entry_fill_broker': 'TEXT',
+        'entry_fill_order_id': 'TEXT',
+        'entry_filled_at': 'TIMESTAMP'
+    }
+    cursor.execute("PRAGMA table_info(signal_lots)")
+    existing_sl_cols = {row[1] for row in cursor.fetchall()}
+    sl_added = 0
+    for col_name, col_type in sl_fill_cols.items():
+        if col_name not in existing_sl_cols:
+            try:
+                cursor.execute(f"ALTER TABLE signal_lots ADD COLUMN {col_name} {col_type}")
+                sl_added += 1
+            except Exception as e:
+                print(f"[DATABASE] ⚠ Failed to add signal_lots.{col_name}: {e}")
+    if sl_added > 0:
+        conn.commit()
+        print(f"[DATABASE] ✓ Added {sl_added} broker fill columns to signal_lots")
+    
     # Lot closures (STC matching records with PNL)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS lot_closures (
@@ -1126,6 +1147,28 @@ def init_db():
             FOREIGN KEY (trade_id) REFERENCES trades(id)
         )
     ''')
+    
+    # Add broker fill columns to lot_closures for fill-based P&L
+    lc_fill_cols = {
+        'exit_fill_price': 'REAL',
+        'exit_fill_broker': 'TEXT',
+        'exit_fill_order_id': 'TEXT',
+        'exit_filled_at': 'TIMESTAMP',
+        'exit_source': 'TEXT'
+    }
+    cursor.execute("PRAGMA table_info(lot_closures)")
+    existing_lc_cols = {row[1] for row in cursor.fetchall()}
+    lc_added = 0
+    for col_name, col_type in lc_fill_cols.items():
+        if col_name not in existing_lc_cols:
+            try:
+                cursor.execute(f"ALTER TABLE lot_closures ADD COLUMN {col_name} {col_type}")
+                lc_added += 1
+            except Exception as e:
+                print(f"[DATABASE] ⚠ Failed to add lot_closures.{col_name}: {e}")
+    if lc_added > 0:
+        conn.commit()
+        print(f"[DATABASE] ✓ Added {lc_added} broker fill columns to lot_closures")
     
     # Performance snapshots (pre-calculated metrics)
     cursor.execute('''
@@ -4611,6 +4654,131 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     
     conn.commit()
     return cursor.lastrowid
+
+
+# ============================================
+# FILL-BASED P&L UPDATE FUNCTIONS
+# ============================================
+
+def update_lot_entry_fill(lot_id: int, fill_price: float, broker: str, order_id: str = None, filled_at = None):
+    """Update a signal lot with actual broker entry fill data.
+    
+    Also recalculates P&L on any existing closures for this lot using the fill price
+    instead of the original signal price, so P&L reflects real execution.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE signal_lots 
+        SET entry_fill_price = ?, entry_fill_broker = ?, entry_fill_order_id = ?, entry_filled_at = ?
+        WHERE id = ?
+    ''', (fill_price, broker, order_id, filled_at, lot_id))
+    
+    if cursor.rowcount > 0:
+        cursor.execute('SELECT asset_type FROM signal_lots WHERE id = ?', (lot_id,))
+        lot_row = cursor.fetchone()
+        multiplier = 100 if lot_row and lot_row['asset_type'] == 'option' else 1
+        
+        cursor.execute('SELECT id, closed_qty, close_price, exit_fill_price FROM lot_closures WHERE lot_id = ?', (lot_id,))
+        closures = cursor.fetchall()
+        for c in closures:
+            exit_price = c['exit_fill_price'] if c['exit_fill_price'] is not None else c['close_price']
+            cost_basis = fill_price * c['closed_qty'] * multiplier
+            proceeds = exit_price * c['closed_qty'] * multiplier
+            pnl = round(proceeds - cost_basis, 2)
+            pnl_percent = round((pnl / cost_basis * 100), 4) if cost_basis > 0 else 0
+            cursor.execute('UPDATE lot_closures SET pnl = ?, pnl_percent = ? WHERE id = ?', (pnl, pnl_percent, c['id']))
+        
+        conn.commit()
+        print(f"[DATABASE] ✓ Updated lot #{lot_id} entry fill: ${fill_price:.2f} via {broker}")
+        return True
+    
+    conn.commit()
+    return False
+
+
+def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, order_id: str = None, filled_at = None, exit_source: str = None):
+    """Update a lot closure with actual broker exit fill data and recalculate P&L."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT lc.lot_id, lc.closed_qty, sl.open_price, sl.entry_fill_price, sl.asset_type
+        FROM lot_closures lc
+        JOIN signal_lots sl ON lc.lot_id = sl.id
+        WHERE lc.id = ?
+    ''', (closure_id,))
+    row = cursor.fetchone()
+    
+    if not row:
+        return False
+    
+    entry_price = row['entry_fill_price'] if row['entry_fill_price'] is not None else row['open_price']
+    multiplier = 100 if row['asset_type'] == 'option' else 1
+    cost_basis = entry_price * row['closed_qty'] * multiplier
+    proceeds = fill_price * row['closed_qty'] * multiplier
+    pnl = round(proceeds - cost_basis, 2)
+    pnl_percent = round((pnl / cost_basis * 100), 4) if cost_basis > 0 else 0
+    
+    update_fields = 'exit_fill_price = ?, exit_fill_broker = ?, exit_fill_order_id = ?, exit_filled_at = ?, pnl = ?, pnl_percent = ?'
+    params = [fill_price, broker, order_id, filled_at, pnl, pnl_percent]
+    
+    if exit_source:
+        update_fields += ', exit_source = ?'
+        params.append(exit_source)
+    
+    params.append(closure_id)
+    cursor.execute(f'UPDATE lot_closures SET {update_fields} WHERE id = ?', params)
+    conn.commit()
+    
+    pnl_sign = '+' if pnl >= 0 else ''
+    print(f"[DATABASE] ✓ Updated closure #{closure_id} exit fill: ${fill_price:.2f} via {broker} = {pnl_sign}${pnl:.2f}")
+    return True
+
+
+def find_lot_by_trade_id(trade_id: int):
+    """Find a signal lot by its linked trade_id."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM signal_lots WHERE trade_id = ?', (trade_id,))
+    return cursor.fetchone()
+
+
+def find_lot_by_symbol_and_channel(channel_id, symbol: str, asset_type: str, 
+                                     strike: float = None, expiry: str = None, call_put: str = None,
+                                     status: str = None):
+    """Find signal lots by symbol and channel, optionally filtered by status."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = 'SELECT * FROM signal_lots WHERE channel_id = ? AND symbol = ? AND asset_type = ?'
+    params = [channel_id, symbol, asset_type]
+    
+    if strike is not None:
+        query += ' AND strike = ?'
+        params.append(strike)
+    if expiry:
+        query += ' AND expiry = ?'
+        params.append(expiry)
+    if call_put:
+        query += ' AND call_put = ?'
+        params.append(call_put)
+    if status:
+        query += ' AND status = ?'
+        params.append(status)
+    
+    query += ' ORDER BY opened_at ASC'
+    cursor.execute(query, params)
+    return cursor.fetchall()
+
+
+def find_recent_closures_for_lot(lot_id: int, limit: int = 10):
+    """Find recent closures for a given lot."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM lot_closures WHERE lot_id = ? ORDER BY closed_at DESC LIMIT ?', (lot_id, limit))
+    return cursor.fetchall()
 
 
 # ============================================

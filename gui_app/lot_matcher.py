@@ -142,6 +142,34 @@ class LotMatcher:
             print(f"[LOT_MATCHER] ⚠ Orphaned STC: {remaining_qty} shares of {signal['symbol']} have no matching BTO")
         
         return closed_lots
+    
+    def record_entry_fill(self, lot_id: int, fill_price: float, broker: str, 
+                          order_id: str = None, filled_at = None) -> bool:
+        """Record actual broker fill price for an entry (BTO).
+        Updates the signal lot with real fill data and recalculates any existing closure P&L.
+        """
+        try:
+            result = db.update_lot_entry_fill(lot_id, fill_price, broker, order_id, filled_at)
+            if result:
+                print(f"[LOT_MATCHER] ✓ Entry fill recorded: lot #{lot_id} filled @${fill_price:.2f} via {broker}")
+            return result
+        except Exception as e:
+            print(f"[LOT_MATCHER] Error recording entry fill: {e}")
+            return False
+    
+    def record_exit_fill(self, closure_id: int, fill_price: float, broker: str,
+                         order_id: str = None, filled_at = None, exit_source: str = None) -> bool:
+        """Record actual broker fill price for an exit (STC).
+        Updates the closure with real fill data and recalculates P&L.
+        """
+        try:
+            result = db.update_closure_exit_fill(closure_id, fill_price, broker, order_id, filled_at, exit_source)
+            if result:
+                print(f"[LOT_MATCHER] ✓ Exit fill recorded: closure #{closure_id} filled @${fill_price:.2f} via {broker}")
+            return result
+        except Exception as e:
+            print(f"[LOT_MATCHER] Error recording exit fill: {e}")
+            return False
 
 
 # Global instance

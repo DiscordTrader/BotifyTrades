@@ -2642,6 +2642,22 @@ class BrokerSyncService:
             result = await asyncio.to_thread(_insert_lot)
             if result:
                 print(f"[EXEC] ✓ Recorded execution lot: {symbol} {quantity}x @${fill_price:.2f}")
+            
+            if final_signal_lot_id:
+                try:
+                    def _update_signal_lot_fill():
+                        from gui_app.database import update_lot_entry_fill
+                        update_lot_entry_fill(
+                            lot_id=final_signal_lot_id,
+                            fill_price=fill_price,
+                            broker=broker,
+                            order_id=broker_order_id,
+                            filled_at=filled_at
+                        )
+                    await asyncio.to_thread(_update_signal_lot_fill)
+                except Exception as fill_err:
+                    print(f"[EXEC] ⚠️ Could not update signal lot fill: {fill_err}")
+            
             return result
             
         except Exception as e:
@@ -2689,6 +2705,41 @@ class BrokerSyncService:
                 return closure_id
             
             result = await asyncio.to_thread(_insert_closure)
+            
+            if result:
+                try:
+                    def _update_lot_closure_fill():
+                        from gui_app.database import get_connection
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            SELECT el.signal_lot_id FROM execution_lots el
+                            JOIN execution_closures ec ON ec.execution_lot_id = el.id
+                            WHERE ec.id = ?
+                        ''', (result,))
+                        row = cursor.fetchone()
+                        if row and row['signal_lot_id']:
+                            signal_lot_id = row['signal_lot_id']
+                            cursor.execute('''
+                                SELECT id FROM lot_closures 
+                                WHERE lot_id = ? AND exit_fill_price IS NULL
+                                ORDER BY closed_at DESC LIMIT 1
+                            ''', (signal_lot_id,))
+                            closure_row = cursor.fetchone()
+                            if closure_row:
+                                from gui_app.database import update_closure_exit_fill
+                                update_closure_exit_fill(
+                                    closure_id=closure_row['id'],
+                                    fill_price=fill_price,
+                                    broker=broker,
+                                    order_id=broker_order_id,
+                                    filled_at=filled_at,
+                                    exit_source=exit_source
+                                )
+                    await asyncio.to_thread(_update_lot_closure_fill)
+                except Exception as fill_err:
+                    print(f"[EXEC] ⚠️ Could not update lot closure fill: {fill_err}")
+            
             return result
             
         except Exception as e:

@@ -11055,6 +11055,9 @@ def register_routes(app):
                     sl.opened_at,
                     sl.author_name,
                     sl.status,
+                    sl.entry_fill_price,
+                    sl.entry_fill_broker,
+                    sl.entry_filled_at,
                     
                     -- Closure details
                     lc.id as closure_id,
@@ -11065,6 +11068,10 @@ def register_routes(app):
                     lc.pnl_percent,
                     lc.holding_days,
                     lc.exit_reason,
+                    lc.exit_fill_price,
+                    lc.exit_fill_broker,
+                    lc.exit_filled_at,
+                    lc.exit_source,
                     
                     -- Channel info
                     c.name as channel_name,
@@ -11123,6 +11130,7 @@ def register_routes(app):
                     if row['asset_type'] == 'option':
                         option_desc = f" {display_strike}{row['call_put']} {row['expiry']}"
                     
+                    entry_fill = row['entry_fill_price']
                     positions[lot_id] = {
                         'lot_id': lot_id,
                         'symbol': display_symbol,
@@ -11133,7 +11141,12 @@ def register_routes(app):
                         'expiry': row['expiry'],
                         'call_put': row['call_put'],
                         'bto_qty': row['original_qty'],
-                        'entry_price': row['open_price'],
+                        'entry_price': entry_fill if entry_fill is not None else row['open_price'],
+                        'signal_entry_price': row['open_price'],
+                        'entry_fill_price': entry_fill,
+                        'entry_fill_broker': row['entry_fill_broker'],
+                        'entry_filled_at': row['entry_filled_at'],
+                        'has_fill_data': entry_fill is not None,
                         'opened_at': row['opened_at'],
                         'author': row['author_name'] or 'Unknown',
                         'status': row['status'],
@@ -11148,15 +11161,22 @@ def register_routes(app):
                 
                 # Add closure if exists
                 if row['closure_id']:
+                    exit_fill = row['exit_fill_price']
                     positions[lot_id]['closures'].append({
                         'closure_id': row['closure_id'],
                         'stc_qty': row['closed_qty'],
-                        'exit_price': row['close_price'],
+                        'exit_price': exit_fill if exit_fill is not None else row['close_price'],
+                        'signal_exit_price': row['close_price'],
+                        'exit_fill_price': exit_fill,
+                        'exit_fill_broker': row['exit_fill_broker'],
+                        'exit_filled_at': row['exit_filled_at'],
+                        'exit_source': row['exit_source'],
+                        'has_fill_data': exit_fill is not None,
                         'closed_at': row['closed_at'],
                         'pnl': row['pnl'],
                         'pnl_percent': row['pnl_percent'],
                         'holding_days': row['holding_days'],
-                        'exit_reason': row['exit_reason']
+                        'exit_reason': row['exit_reason'] or row['exit_source']
                     })
                     positions[lot_id]['total_closed_qty'] += row['closed_qty']
                     positions[lot_id]['total_pnl'] += row['pnl']
