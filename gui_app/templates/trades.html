@@ -574,7 +574,7 @@ function updateSummaryStats() {
     
     let unrealizedPnl = 0;
     openTrades.forEach(t => {
-        const entry = parseFloat(t.entry_price) || parseFloat(t.executed_price) || 0;
+        const entry = parseFloat(t.entry_price) || parseFloat(t.executed_price) || parseFloat(t.intended_price) || 0;
         const current = parseFloat(t.current_price) || entry;
         const qty = parseInt(t.quantity) || 0;
         const multiplier = t.asset_type === 'option' ? 100 : 1;
@@ -674,8 +674,8 @@ function updatePricesInTable(prices, streamingMeta) {
 
         const trade = currentTrades.find(t => t.id == tradeId);
         if (trade) {
-            const entryPrice = trade.entry_price || trade.executed_price;
-            if (entryPrice) {
+            const entryPrice = parseFloat(trade.entry_price) || parseFloat(trade.executed_price) || parseFloat(trade.intended_price) || 0;
+            if (entryPrice > 0) {
                 const currentPrice = priceData.mid || priceData.last || entryPrice;
                 const quantity = trade.quantity;
 
@@ -725,7 +725,7 @@ function displayTradesTable(trades) {
     tableHTML += '</tr></thead><tbody>';
     
     trades.forEach(trade => {
-        const entry = parseFloat(trade.entry_price) || parseFloat(trade.executed_price) || 0;
+        const entry = parseFloat(trade.entry_price) || parseFloat(trade.executed_price) || parseFloat(trade.intended_price) || 0;
         const current = parseFloat(trade.current_price) || entry;
         const qty = parseInt(trade.quantity) || 0;
         const multiplier = trade.asset_type === 'option' ? 100 : 1;

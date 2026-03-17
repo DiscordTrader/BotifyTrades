@@ -897,8 +897,10 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             pos['order_id'] = matched_trade.get('order_id')
             pos['fill_status'] = matched_trade.get('fill_status')
 
-            if not pos.get('entry_price') and matched_trade.get('entry_price'):
-                pos['entry_price'] = float(matched_trade['entry_price'])
+            if not pos.get('entry_price'):
+                db_entry = matched_trade.get('entry_price') or matched_trade.get('executed_price') or matched_trade.get('intended_price')
+                if db_entry:
+                    pos['entry_price'] = float(db_entry)
 
             try:
                 remaining = db.get_trade_remaining_qty(trade_id)
@@ -962,7 +964,7 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
                     _log(f"[ENRICH] Skipping stale DB trade #{tid} ({t.get('symbol')}) - broker {trade_broker} synced with no matching live position")
                     continue
 
-            entry_price = float(t.get('entry_price') or 0)
+            entry_price = float(t.get('entry_price') or t.get('executed_price') or t.get('intended_price') or 0)
             cur_price = float(t.get('current_price') or entry_price)
             pnl_pct = ((cur_price - entry_price) / entry_price * 100) if entry_price > 0 else 0.0
             unrealized = float(t.get('unrealized_pnl') or (cur_price - entry_price) * float(t.get('quantity') or 0))
