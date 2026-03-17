@@ -963,6 +963,101 @@ class SchwabBroker(BrokerInterface):
             print(f"[{self.name}] ⚠️ Aggressive exit price lookup failed: {e}")
         return None
 
+    async def _cancel_conflicting_sell_orders(self, symbol: str, asset_type: str = 'EQUITY', option_symbol: str = None):
+        """Cancel any pending sell orders for a symbol before placing a new STC.
+        
+        When bracket orders (BUY + OCO SL/PT) are active, Schwab will reject
+        a new sell order for the same position. This method cancels those
+        bracket child legs first so the risk engine STC can go through.
+        """
+        try:
+            if self.dry_run:
+                return
+            
+            if not self.account_hash:
+                return
+            
+            if not await self._ensure_valid_token():
+                return
+            
+            from datetime import datetime, timedelta
+            import asyncio
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=7)
+            
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                params={
+                    'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'status': 'WORKING'
+                }
+            )
+            
+            if response.status_code != 200:
+                return
+            
+            orders = response.json()
+            cancelled_count = 0
+            
+            if asset_type == 'EQUITY':
+                sell_instructions = {'SELL', 'SELL_SHORT'}
+            else:
+                sell_instructions = {'SELL_TO_CLOSE'}
+            
+            for order in orders:
+                order_legs = order.get('orderLegCollection', [])
+                if not order_legs:
+                    continue
+                
+                leg = order_legs[0]
+                instrument = leg.get('instrument', {})
+                order_symbol = instrument.get('symbol', '')
+                instruction = leg.get('instruction', '')
+                order_asset = instrument.get('assetType', 'EQUITY')
+                
+                if order_asset == 'EQUITY' and asset_type != 'EQUITY':
+                    continue
+                if order_asset == 'OPTION' and asset_type != 'OPTION':
+                    continue
+                
+                if asset_type == 'EQUITY':
+                    sym_match = order_symbol.upper() == symbol.upper()
+                elif option_symbol:
+                    sym_match = order_symbol.upper() == option_symbol.upper()
+                else:
+                    sym_match = order_symbol.upper().startswith(symbol.upper())
+                
+                if sym_match and instruction in sell_instructions:
+                    oid = str(order.get('orderId', ''))
+                    order_type = order.get('orderType', '')
+                    stop_price = order.get('stopPrice', '')
+                    limit_price = order.get('price', '')
+                    price_info = f"stop=${stop_price}" if stop_price else f"limit=${limit_price}" if limit_price else "MARKET"
+                    print(f"[{self.name}] 🔄 Cancelling conflicting {instruction} order {oid} for {order_symbol} ({order_type} {price_info}) — clearing for new STC")
+                    
+                    cancel_resp = await self._make_request(
+                        'DELETE',
+                        f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{oid}",
+                        is_exit_order=True
+                    )
+                    
+                    if cancel_resp.status_code in [200, 201, 202, 204]:
+                        cancelled_count += 1
+                        print(f"[{self.name}] ✓ Cancelled bracket leg {oid}")
+                    else:
+                        print(f"[{self.name}] ⚠️ Cancel failed for {oid}: {cancel_resp.status_code}")
+            
+            if cancelled_count > 0:
+                if self._data_hub:
+                    self._data_hub.invalidate_all()
+                print(f"[{self.name}] ✓ Cleared {cancelled_count} conflicting sell order(s) for {symbol}")
+                await asyncio.sleep(0.3)
+                
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Error cancelling conflicting orders for {symbol}: {e}")
+
     async def place_stock_order(
         self,
         symbol: str,
@@ -980,6 +1075,9 @@ class SchwabBroker(BrokerInterface):
                     symbol=symbol,
                     action=action
                 )
+            
+            if action.upper() in ("STC", "SELL"):
+                await self._cancel_conflicting_sell_orders(symbol, 'EQUITY')
             
             if action.upper() == "BTO":
                 instruction = "BUY"
@@ -1141,6 +1239,9 @@ class SchwabBroker(BrokerInterface):
             
             _fallback_price = kwargs.get('_signal_price_fallback')
             is_stc = action.upper() in ('STC', 'SELL_TO_CLOSE')
+            
+            if is_stc:
+                await self._cancel_conflicting_sell_orders(symbol, 'OPTION', option_symbol=option_symbol)
             
             if not price:
                 print(f"[{self.name}] ⚠️ Options require LIMIT orders on Schwab - no price provided, attempting mid-price lookup")
