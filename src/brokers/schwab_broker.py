@@ -1132,6 +1132,9 @@ class SchwabBroker(BrokerInterface):
             
             call_put = "C" if option_type.upper().startswith("C") else "P"
             
+            original_strike = strike
+            strike = self._snap_index_strike(symbol, strike)
+            
             option_symbol = self._build_option_symbol(symbol, expiry_formatted, strike, call_put)
             
             instruction = "BUY_TO_OPEN" if action.upper() == "BTO" else "SELL_TO_CLOSE"
@@ -1322,6 +1325,66 @@ class SchwabBroker(BrokerInterface):
                 )
             else:
                 error_msg = response.text
+                
+                is_index = symbol.upper() in self._INDEX_OPTION_MAP or symbol.upper() in self._INDEX_STRIKE_INCREMENT
+                is_entry = (instruction == "BUY_TO_OPEN")
+                if 'Could not resolve instrument' in error_msg and is_index and is_entry:
+                    increment = self._INDEX_STRIKE_INCREMENT.get(symbol.upper(), 5.0)
+                    nearby_strikes = [
+                        round(strike - increment, 2),
+                        round(strike + increment, 2),
+                    ]
+                    if original_strike != strike:
+                        nearby_strikes = [round(original_strike, 2)] + nearby_strikes
+                    
+                    for alt_strike in nearby_strikes:
+                        alt_symbol = self._build_option_symbol(symbol, expiry_formatted, alt_strike, call_put)
+                        print(f"[{self.name}] ⚠️ Strike ${strike} not found on Schwab, trying nearest ${alt_strike} ({alt_symbol})")
+                        alt_payload = dict(order_payload)
+                        alt_payload['orderLegCollection'] = [{
+                            'instruction': instruction,
+                            'quantity': quantity,
+                            'instrument': {
+                                'symbol': alt_symbol,
+                                'assetType': 'OPTION'
+                            }
+                        }]
+                        retry_resp = await self._make_request(
+                            'POST',
+                            f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                            is_exit_order=(instruction == "SELL_TO_CLOSE"),
+                            is_entry_order=(instruction == "BUY_TO_OPEN"),
+                            headers=headers,
+                            json=alt_payload
+                        )
+                        if retry_resp.status_code in [200, 201, 202]:
+                            order_id = retry_resp.headers.get('Location', '').split('/')[-1]
+                            print(f"[{self.name}] ✅ Order accepted with alt strike ${alt_strike} (order_id={order_id})")
+                            if self._data_hub:
+                                self._data_hub.invalidate_all()
+                            if instruction == "SELL_TO_CLOSE":
+                                self._position_cache_invalidated = True
+                                self._consecutive_zero_positions = 0
+                            _pos_key = kwargs.get('position_key') or kwargs.get('_exit_marker_key')
+                            try:
+                                loop = asyncio.get_running_loop()
+                                loop.create_task(
+                                    self._background_verify_order(order_id, action, alt_symbol, symbol, price, quantity, position_key=_pos_key)
+                                )
+                            except Exception:
+                                pass
+                            return OrderResult(
+                                success=True,
+                                order_id=order_id,
+                                message=f"Option order placed (alt strike ${alt_strike}): {action} {quantity} {alt_symbol} @ ${price:.2f}" if price else f"Option order placed (alt strike ${alt_strike}): {action} {quantity} {alt_symbol}",
+                                price=price,
+                                quantity=quantity,
+                                symbol=symbol,
+                                action=action
+                            )
+                    
+                    print(f"[{self.name}] ❌ All nearby strikes also failed for {symbol}")
+                
                 return OrderResult(
                     success=False,
                     message=f"Order failed: {response.status_code} - {error_msg}",
@@ -1461,6 +1524,31 @@ class SchwabBroker(BrokerInterface):
         'RUT': 'RUTW',
         'DJX': 'DJXW',
     }
+
+    _INDEX_STRIKE_INCREMENT = {
+        'SPX': 5.0,
+        'SPXW': 5.0,
+        'NDX': 5.0,
+        'NDXP': 5.0,
+        'RUT': 5.0,
+        'RUTW': 5.0,
+        'DJX': 1.0,
+        'DJXW': 1.0,
+    }
+
+    def _snap_index_strike(self, underlying: str, strike: float) -> float:
+        key = underlying.upper()
+        increment = self._INDEX_STRIKE_INCREMENT.get(key)
+        if increment is None:
+            mapped = self._INDEX_OPTION_MAP.get(key)
+            if mapped:
+                increment = self._INDEX_STRIKE_INCREMENT.get(mapped)
+        if increment and increment >= 1:
+            snapped = round(round(strike / increment) * increment, 2)
+            if snapped != strike:
+                print(f"[{self.name}] ⚠️ Index strike snap: {underlying} ${strike} → ${snapped} (nearest ${increment} increment)")
+            return snapped
+        return strike
 
     def _build_option_symbol(self, underlying: str, expiry: str, strike: float, call_put: str) -> str:
         """Build OCC option symbol format
