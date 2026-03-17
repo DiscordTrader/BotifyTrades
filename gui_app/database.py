@@ -2246,7 +2246,7 @@ def init_db():
         ('1178749711163859025', 'jacob', 'EXECUTE', 1, 1, 1),
         ('1443262702515650713', 'pro-trader', 'EXECUTE', 1, 1, 1),
     ]
-    _jacob_freshly_inserted = False
+    _freshly_inserted = set()
     for _dc_id, _dc_name, _dc_cat, _dc_exec, _dc_track, _dc_active in _default_channels:
         cursor.execute("""
             INSERT OR IGNORE INTO channels (discord_channel_id, name, category, execute_enabled, track_enabled, is_active)
@@ -2254,10 +2254,9 @@ def init_db():
         """, (_dc_id, _dc_name, _dc_cat, _dc_exec, _dc_track, _dc_active))
         if cursor.rowcount > 0:
             print(f"[DATABASE] ✓ Created default channel: {_dc_name} ({_dc_id})")
-            if _dc_id == '1178749711163859025':
-                _jacob_freshly_inserted = True
+            _freshly_inserted.add(_dc_id)
     
-    if _jacob_freshly_inserted:
+    if '1178749711163859025' in _freshly_inserted:
         cursor.execute("SELECT id FROM channels WHERE discord_channel_id = '1178749711163859025'")
         _jacob_row = cursor.fetchone()
         if _jacob_row:
@@ -2280,6 +2279,28 @@ def init_db():
                 WHERE id = ?
             """, (_jacob_id,))
             print("[DATABASE] ✓ Applied Jacob channel defaults: SL=8%, PT1=9%, Leave Runner=10%, Trailing=10%/3%, Market orders, Early Trailing")
+    
+    if '1293555678111072347' in _freshly_inserted:
+        cursor.execute("SELECT id FROM channels WHERE discord_channel_id = '1293555678111072347'")
+        _phoenix_row = cursor.fetchone()
+        if _phoenix_row:
+            _phoenix_id = _phoenix_row[0] if isinstance(_phoenix_row, (tuple, list)) else _phoenix_row['id']
+            cursor.execute("""
+                UPDATE channels SET
+                    position_size_pct = 15.0,
+                    stop_loss_pct = 7.0,
+                    profit_target_1_pct = 6.0,
+                    trailing_stop_pct = 3.0,
+                    trailing_activation_pct = 7.0,
+                    leave_runner_enabled = 1,
+                    leave_runner_pct = 15.0,
+                    trim_order_mode = 'market',
+                    sl_order_mode = 'market',
+                    exit_strategy_mode = 'hybrid',
+                    entry_confirmation_pct = 2.0
+                WHERE id = ?
+            """, (_phoenix_id,))
+            print("[DATABASE] ✓ Applied Phoenix channel defaults: SL=7%, PT1=6%, Sizing=15%, Confirm=2%, Leave Runner=15%, Trailing=7%/3%, Market orders")
     
     conn.commit()
     
