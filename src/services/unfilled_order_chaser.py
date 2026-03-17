@@ -646,6 +646,11 @@ class UnfilledOrderChaser:
             if not order_still_pending:
                 print(f"[ORDER_CHASER] Order {order.order_id} no longer pending — verifying fill status...")
                 verified = await self._verify_order_fill(broker, order.order_id, order.symbol, order.asset_type, order.action)
+                if verified == 'PENDING_ACTIVATION':
+                    print(f"[ORDER_CHASER] Order {order.order_id} is PENDING_ACTIVATION — waiting for market open, not chasing")
+                    order.status = OrderChaseStatus.PENDING
+                    order.chase_attempts = max(0, order.chase_attempts - 1)
+                    return
                 if verified == 'CANCELLED':
                     print(f"[ORDER_CHASER] Order {order.order_id} was CANCELLED/REJECTED by broker — not marking as filled")
                     async with self._lock:
@@ -1157,6 +1162,11 @@ class UnfilledOrderChaser:
             if not order_still_pending:
                 print(f"[ORDER_CHASER] Entry order {order.order_id} no longer pending — verifying fill status...")
                 verified = await self._verify_order_fill(broker, order.order_id, order.symbol, order.asset_type, order.action)
+                if verified == 'PENDING_ACTIVATION':
+                    print(f"[ORDER_CHASER] Entry order {order.order_id} is PENDING_ACTIVATION — waiting for market open, not chasing")
+                    order.status = OrderChaseStatus.PENDING
+                    order.chase_attempts = max(0, order.chase_attempts - 1)
+                    return
                 if verified == 'CANCELLED':
                     print(f"[ORDER_CHASER] Entry order {order.order_id} was CANCELLED/REJECTED by broker — not marking as filled")
                     async with self._lock:
@@ -1554,6 +1564,9 @@ class UnfilledOrderChaser:
                         elif status_str in ('CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED', 'FAILED'):
                             print(f"[ORDER_CHASER] Order {order_id} verified as {status_str} via get_order_status")
                             return 'CANCELLED'
+                        elif status_str in ('PENDING_ACTIVATION',):
+                            print(f"[ORDER_CHASER] Order {order_id} is PENDING_ACTIVATION — parked until regular market hours, do not chase")
+                            return 'PENDING_ACTIVATION'
         except Exception as e:
             print(f"[ORDER_CHASER] get_order_status check failed for {order_id}: {e}")
 

@@ -899,6 +899,70 @@ class SchwabBroker(BrokerInterface):
             return dict(self._last_positions_simple)
         return {}
     
+    async def _get_aggressive_exit_price(self, symbol: str, asset_type: str = 'stock', 
+                                         strike: float = None, expiry: str = None, 
+                                         call_put: str = None) -> Optional[float]:
+        """Get aggressive exit price for STC orders — bid * 0.95 for instant fill.
+        
+        Schwab rejects MARKET orders in SEAMLESS session and for OTC stocks.
+        Using an aggressive LIMIT at/below bid fills instantly like a market order
+        but works in all session types and for all stock classes.
+        """
+        import math
+        try:
+            if asset_type == 'option' and strike and expiry and call_put:
+                quote = await self.get_option_quote(symbol, strike, expiry, call_put, max_age=10)
+                if quote:
+                    bid = float(quote.get('bid', 0) or 0)
+                    if bid > 0:
+                        aggressive = max(0.01, round(bid * 0.95, 2))
+                        aggressive = self._round_to_cboe_increment(aggressive, is_sell=True)
+                        print(f"[{self.name}] 💰 Option exit: bid=${bid:.2f} → aggressive LIMIT ${aggressive:.2f}")
+                        return aggressive
+                    last = float(quote.get('last', 0) or 0)
+                    if last > 0:
+                        aggressive = max(0.01, round(last * 0.90, 2))
+                        aggressive = self._round_to_cboe_increment(aggressive, is_sell=True)
+                        print(f"[{self.name}] 💰 Option exit: last=${last:.2f} → aggressive LIMIT ${aggressive:.2f}")
+                        return aggressive
+            else:
+                hub_price = self.get_hub_quote(symbol)
+                if hub_price and hub_price > 0:
+                    hub_detailed = self.get_hub_quote_detailed(symbol, max_age=10)
+                    if hub_detailed:
+                        bid = float(hub_detailed.get('bid', 0) or 0)
+                        if bid > 0:
+                            aggressive = round(bid * 0.95, 4)
+                            if aggressive < 1.0:
+                                aggressive = math.floor(aggressive * 10000) / 10000
+                            else:
+                                aggressive = math.floor(aggressive * 100) / 100
+                            print(f"[{self.name}] 💰 Stock exit: bid=${bid:.4f} → aggressive LIMIT ${aggressive:.4f} (hub)")
+                            return max(0.0001, aggressive)
+                    aggressive = round(hub_price * 0.95, 4)
+                    if aggressive < 1.0:
+                        aggressive = math.floor(aggressive * 10000) / 10000
+                    else:
+                        aggressive = math.floor(aggressive * 100) / 100
+                    print(f"[{self.name}] 💰 Stock exit: hub=${hub_price:.4f} → aggressive LIMIT ${aggressive:.4f}")
+                    return max(0.0001, aggressive)
+                
+                try:
+                    rest_price = await self.get_quote(symbol)
+                    if rest_price and rest_price > 0:
+                        aggressive = round(rest_price * 0.95, 4)
+                        if aggressive < 1.0:
+                            aggressive = math.floor(aggressive * 10000) / 10000
+                        else:
+                            aggressive = math.floor(aggressive * 100) / 100
+                        print(f"[{self.name}] 💰 Stock exit: REST=${rest_price:.4f} → aggressive LIMIT ${aggressive:.4f}")
+                        return max(0.0001, aggressive)
+                except Exception as rest_err:
+                    print(f"[{self.name}] ⚠️ REST quote for exit price failed: {rest_err}")
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Aggressive exit price lookup failed: {e}")
+        return None
+
     async def place_stock_order(
         self,
         symbol: str,
@@ -927,13 +991,25 @@ class SchwabBroker(BrokerInterface):
                 instruction = "BUY_TO_COVER"
             else:
                 instruction = "SELL" if "SELL" in action.upper() or "STC" in action.upper() else "BUY"
-            order_type = "LIMIT" if price else "MARKET"
             
             session = self._get_session_type()
-            
             is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
+            
+            if not price and is_exit:
+                aggressive_price = await self._get_aggressive_exit_price(symbol, 'stock')
+                if aggressive_price and aggressive_price > 0:
+                    price = aggressive_price
+                    print(f"[{self.name}] 🎯 STC MARKET→aggressive LIMIT ${price:.4f} (session={session}, fills instantly at bid)")
+                elif session == "SEAMLESS":
+                    print(f"[{self.name}] ⚠️ STC MARKET in SEAMLESS session with no quote — may pend as PENDING_ACTIVATION")
+            
+            order_type = "LIMIT" if price else "MARKET"
+            
             if is_exit:
-                duration = "GOOD_TILL_CANCEL"
+                if session == "SEAMLESS" and order_type == "LIMIT":
+                    duration = "DAY"
+                else:
+                    duration = "GOOD_TILL_CANCEL"
             elif session == "SEAMLESS":
                 duration = "GOOD_TILL_CANCEL"
             else:
@@ -1311,6 +1387,8 @@ class SchwabBroker(BrokerInterface):
                     if desc:
                         reason_str += f' ({desc})'
                     return {'status': 'expired', 'reason': reason_str}
+                elif status == 'pending_activation':
+                    return {'status': 'pending_activation', 'reason': f'Order parked in PENDING_ACTIVATION (waiting for regular market hours)'}
                 elif status == 'pending':
                     if check_num < max_checks:
                         await _aio.sleep(interval)
@@ -1351,6 +1429,8 @@ class SchwabBroker(BrokerInterface):
             fill_price = verified.get('average_price', price)
             filled_qty = verified.get('filled_quantity', quantity)
             print(f"[{self.name}] ✅ Background verify: Order {order_id} FILLED {filled_qty}x @ ${fill_price:.2f}")
+        elif status == 'pending_activation':
+            print(f"[{self.name}] ⏳ Background verify: Order {order_id} PENDING_ACTIVATION — parked until regular market hours, chaser will handle")
         elif status in ('rejected', 'cancelled', 'expired'):
             reason = verified.get('reason', status)
             print(f"[{self.name}] ❌ Background verify: Order {order_id} {status.upper()}: {reason}")
@@ -2686,7 +2766,7 @@ class SchwabBroker(BrokerInterface):
                     'CANCELED': 'cancelled',
                     'REJECTED': 'rejected',
                     'EXPIRED': 'expired',
-                    'PENDING_ACTIVATION': 'pending',
+                    'PENDING_ACTIVATION': 'pending_activation',
                     'QUEUED': 'pending',
                     'ACCEPTED': 'pending',
                     'PENDING_CANCEL': 'pending',
