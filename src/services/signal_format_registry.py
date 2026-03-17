@@ -574,9 +574,9 @@ class SignalFormatRegistry:
         # Phoenix trim: selling/sold X% here SYMBOL
         self.register(
             name="phoenix_trim_here",
-            description="Phoenix partial exit - selling X% here",
+            description="Phoenix partial exit - selling X% here SYMBOL",
             priority=63,
-            pattern=r'(?:selling|sold)\s+(\d+)%\s+here\s+\$?([A-Z]{1,5})(?![a-z])',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+here\s+(?:(?:at|for|in)\s+[\d.]+\s+)?\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_trim,
             examples=["selling 80% here PAVM", "selling 80% here IBRX", "sold 80% here PAVM"],
             flags=re.IGNORECASE
@@ -593,14 +593,14 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
         
-        # Phoenix trim: selling/sold X% more SYMBOL (skip "here" before symbol)
+        # Phoenix trim: selling/sold X% more SYMBOL (skip "here"/"for" before symbol)
         self.register(
             name="phoenix_trim_more",
             description="Phoenix partial exit - selling X% more",
             priority=64,
-            pattern=r'(?:selling|sold)\s+(\d+)%\s+more\s+(?:here\s+)?\$?((?!HERE|MORE|NOW)[A-Z]{1,5})(?![a-z])',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+more\s+(?:(?:here|for)\s+)?\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b|EARLY\b|LATE\b|IF\b|AND\b|BUT\b|THEN\b|ALSO\b|JUST\b|WHEN\b|THIS\b|THAT\b|THEM\b|BEEN\b|WILL\b|FROM\b)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_trim,
-            examples=["selling 10% more GITS", "selling 10% more CRVS", "selling 10% more here ARTV"],
+            examples=["selling 10% more GITS", "selling 10% more CRVS", "selling 10% more here ARTV", "selling 10% more for CHOW"],
             flags=re.IGNORECASE
         )
         
@@ -620,7 +620,7 @@ class SignalFormatRegistry:
             name="phoenix_trim_simple",
             description="Phoenix partial exit - selling X% SYMBOL (simple format)",
             priority=65,
-            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF|ALL|REST|AT|FIRST|IN|TO|FOR|WITH|PROFIT|SOME|EARLY|LATE|IF|AND|BUT|THEN|ALSO|JUST|WHEN|THIS|THAT|THEM|BEEN|WILL|FROM)[A-Z]{1,5})(?:\s|$)',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b|EARLY\b|LATE\b|IF\b|AND\b|BUT\b|THEN\b|ALSO\b|JUST\b|WHEN\b|THIS\b|THAT\b|THEM\b|BEEN\b|WILL\b|FROM\b)[A-Z]{1,5})(?:\s|$)',
             parser=self._parse_phoenix_trim,
             examples=["selling 80% XHLD", "selling 10% GITS", "sold 50% ENVB"],
             flags=re.IGNORECASE
@@ -642,7 +642,7 @@ class SignalFormatRegistry:
             name="phoenix_trimming",
             description="Phoenix partial exit - trimming SYMBOL",
             priority=65,
-            pattern=r'trimm?(?:ing|ed)\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF)[A-Z]{1,5})(?![a-z])',
+            pattern=r'trimm?(?:ing|ed)\s+\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_trimming,
             examples=["trimming GITS", "trimmed PAVM"],
             flags=re.IGNORECASE
@@ -653,7 +653,7 @@ class SignalFormatRegistry:
             name="phoenix_leaving",
             description="Phoenix partial exit - leaving X% (meaning selling rest)",
             priority=66,
-            pattern=r'leaving\s+(\d+)%\s+(?:here\s+)?(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?\$?((?!HERE|NOW|ON|MORE|THE|MY)[A-Z]{1,5})(?![a-z])',
+            pattern=r'leaving\s+(\d+)%\s+(?:here\s+)?(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?\$?((?!HERE\b|NOW\b|ON\b|MORE\b|THE\b|MY\b)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_leaving,
             examples=["leaving 10% here GITS", "leaving 20% PAVM"],
             flags=re.IGNORECASE
@@ -708,7 +708,7 @@ class SignalFormatRegistry:
             name="phoenix_out_of",
             description="Phoenix exit - out of SYMBOL",
             priority=70,
-            pattern=r'out\s+(?:of\s+)?\$?((?!WITH|ON\b)[A-Z]{1,5})(?![a-z])',
+            pattern=r'\bout\s+(?:of\s+)?\$?((?!WITH|ON\b)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_exit,
             examples=["out of PHGE", "out of PHGE with a loss", "out PAVM"],
             flags=re.IGNORECASE
@@ -736,16 +736,6 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
         
-        # Phoenix trim: selling X% more SYMBOL
-        self.register(
-            name="phoenix_trim_more",
-            description="Phoenix partial exit - selling X% more SYMBOL",
-            priority=64,
-            pattern=r'selling\s+(\d+)%\s+more\s+\$?([A-Z]{1,5})(?![a-z])',
-            parser=self._parse_phoenix_trim_with_sym,
-            examples=["selling 10% more AGRZ", "selling 20% more LWLG"],
-            flags=re.IGNORECASE
-        )
         
         # Phoenix exit: got a loss with SYMBOL
         self.register(
@@ -846,7 +836,7 @@ class SignalFormatRegistry:
             name="phoenix_selling_full",
             description="Phoenix full exit - selling SYMBOL (no percentage)",
             priority=66,
-            pattern=r"(?:i['\u2019]?m\s+)?selling\s+\$?((?!HERE|NOW|MORE|SOON|MOST|HALF)[A-Z]{1,5})(?:\s+here)?(?:\s|$|[.,!])",
+            pattern=r"(?:i['\u2019]?m\s+)?selling\s+(?:now\s+)?\$?((?!HERE\b|NOW\b|MORE\b|SOON\b|MOST\b|HALF\b)[A-Z]{1,5})(?:\s+here)?(?:\s|$|[.,!])",
             parser=self._parse_phoenix_selling_full,
             examples=["selling TPET", "Im selling MOBX here", "selling CHOW",
                        "im selling LIMN", "im selling now AGAE", "selling ABP"],
@@ -858,7 +848,7 @@ class SignalFormatRegistry:
             name="phoenix_selling_here_sym",
             description="Phoenix full exit - selling here SYMBOL",
             priority=66,
-            pattern=r'selling\s+(?:here\s+)\$?((?!AT|NOW|MORE)[A-Z]{1,5})(?![a-z])',
+            pattern=r'selling\s+(?:here\s+)\$?((?!AT\b|NOW\b|MORE\b)[A-Z]{1,5})(?![a-z])',
             parser=self._parse_phoenix_selling_full,
             examples=["selling here  SYNX"],
             flags=re.IGNORECASE
@@ -869,7 +859,7 @@ class SignalFormatRegistry:
             name="phoenix_trim_reversed",
             description="Phoenix trim - selling SYMBOL X% (reversed)",
             priority=65,
-            pattern=r'(?:selling|sold)\s+\$?((?!HERE|MORE|NOW)[A-Z]{1,5})\s+(?:here\s+)?(\d+)%',
+            pattern=r'(?:selling|sold)\s+\$?((?!HERE\b|MORE\b|NOW\b)[A-Z]{1,5})\s+(?:here\s+)?(\d+)%',
             parser=self._parse_phoenix_trim_reversed,
             examples=["selling SUNE 70%", "selling FUSE 70%", "selling GXAI here 80%"],
             flags=re.IGNORECASE
@@ -936,7 +926,7 @@ class SignalFormatRegistry:
             name="phoenix_adding",
             description="Phoenix adding to position",
             priority=67,
-            pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?(?:\$?((?!HERE|MORE|AT|SHARES)[A-Z]{2,5}))(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
+            pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?(?:\$?((?!HERE\b|MORE\b|AT\b|SHARES\b)[A-Z]{2,5}))(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
             parser=self._parse_phoenix_adding_v2,
             examples=["adding here SMX at 11.50", "adding more PHOE shares", "buying more shares JBDI"],
             flags=re.IGNORECASE
@@ -951,7 +941,7 @@ class SignalFormatRegistry:
             name="jacob_cutting",
             description="Jacob exit - cutting SYMBOL (full exit)",
             priority=55,
-            pattern=r'(?:^|[.!?\n]\s*)(?:personally\s+)?cutting\s+\$?((?!IT|MY|THE|AND|OUT|THIS|VERY|TOO|ALL|HALF|SOME|IF|AT|AROUND|HERE|NOW)[A-Z]{2,5})(?![a-z])',
+            pattern=r'(?:^|[.!?\n]\s*)(?:personally\s+)?cutting\s+\$?((?!IT\b|MY\b|THE\b|AND\b|OUT\b|THIS\b|VERY\b|TOO\b|ALL\b|HALF\b|SOME\b|IF\b|AT\b|AROUND\b|HERE\b|NOW\b)[A-Z]{2,5})(?![a-z])',
             parser=self._parse_jacob_exit,
             examples=["cutting EONR", "Cutting NVTS", "personally cutting IBRX",
                        "Personally cutting PDYN", "Cutting AIM", "personally cutting RILY here"],
@@ -985,7 +975,7 @@ class SignalFormatRegistry:
             name="jacob_sold_pct_sym_direct",
             description="Jacob trim - sold/selling X% SYMBOL (before 'at' catches it)",
             priority=53,
-            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF|ALL|REST|AT|FIRST|IN|TO|FOR|WITH|PROFIT|SOME|EARLY|LATE|IF|AND|BUT|THEN|ALSO|JUST|WHEN|THIS|THAT|THEM|BEEN|WILL|FROM)[A-Z]{2,5})(?:\s|$|[.,!])',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b|EARLY\b|LATE\b|IF\b|AND\b|BUT\b|THEN\b|ALSO\b|JUST\b|WHEN\b|THIS\b|THAT\b|THEM\b|BEEN\b|WILL\b|FROM\b)[A-Z]{2,5})(?:\s|$|[.,!])',
             parser=self._parse_phoenix_trim,
             examples=["Selling 90% HCWC", "Selling 90% POLA at first target also"],
             flags=re.IGNORECASE
@@ -1016,7 +1006,7 @@ class SignalFormatRegistry:
             name="jacob_plan_cut_breakeven",
             description="Jacob planning to cut at breakeven",
             priority=54,
-            pattern=r'(?:planning\s+to\s+cut|plan\s+on\s+cutting)\s+\$?((?!IT|MY|THE)[A-Z]{2,5})\s+(?:at\s+|around\s+)?(?:breakeven|break\s*even|b/e)',
+            pattern=r'(?:planning\s+to\s+cut|plan\s+on\s+cutting)\s+\$?((?!IT\b|MY\b|THE\b)[A-Z]{2,5})\s+(?:at\s+|around\s+)?(?:breakeven|break\s*even|b/e)',
             parser=self._parse_jacob_exit,
             examples=["planning to cut UOKA around breakeven", "plan on cutting BANL at breakeven"],
             flags=re.IGNORECASE
