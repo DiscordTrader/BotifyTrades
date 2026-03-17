@@ -4051,5 +4051,5 @@ class RiskManager:
                   f"{channel_settings.profit_target_2_pct}/{channel_settings.profit_target_3_pct}% | "
                   f"SL: {sl_display} | {trailing_display} | Qty: {qty}{trailing_status}{enhanced_status}")
         else:
-            print(f"[RISK] [Global] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
+            print(f"[RISK] [Manual Trade] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Qty: {qty}{trailing_status}")
