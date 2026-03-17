@@ -7445,9 +7445,10 @@ def register_routes(app):
                         except:
                             pass
                     
+                    live_qty = live_pos['quantity']
                     merged.append({
                         **first_trade,
-                        'quantity': int(live_pos['quantity']),
+                        'quantity': int(live_qty) if live_qty == int(live_qty) else live_qty,
                         'entry_price': broker_avg_cost,
                         'current_price': live_pos['current_price'],
                         'pnl': live_pos['unrealized_pl'],

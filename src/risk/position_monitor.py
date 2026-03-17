@@ -902,7 +902,7 @@ class RiskDBAdapter:
             trade_data = {
                 'symbol': position.symbol,
                 'direction': 'BTO',
-                'quantity': int(quantity),
+                'quantity': quantity,
                 'intended_price': entry_price,
                 'executed_price': entry_price,
                 'current_price': current_price,

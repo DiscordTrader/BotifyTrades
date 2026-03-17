@@ -1337,8 +1337,9 @@ class BrokerSyncService:
                     broker_quantity = float(position.get('quantity', 0))
                     db_quantity = float(trade.get('quantity') or 0)
                     
-                    # Get entry price for P&L calculation
-                    entry_price = float(trade.get('executed_price') or trade.get('price') or 0)
+                    db_entry_price = float(trade.get('executed_price') or trade.get('price') or 0)
+                    broker_avg_cost = float(position.get('avg_price', 0) or position.get('avg_cost', 0) or 0)
+                    entry_price = broker_avg_cost if broker_avg_cost > 0 else db_entry_price
                     asset_type = trade.get('asset_type', 'option')
                     
                     # Use broker quantity for P&L calculation (source of truth), always positive
@@ -1357,6 +1358,12 @@ class BrokerSyncService:
                     update_fields = {'pnl': pnl, 'pnl_percent': pnl_percent}
                     if current_price:
                         update_fields['current_price'] = current_price
+                    
+                    # Sync entry price from broker if it changed (user averaged up/down)
+                    if broker_avg_cost > 0 and abs(broker_avg_cost - db_entry_price) > 0.0001:
+                        update_fields['executed_price'] = broker_avg_cost
+                        update_fields['intended_price'] = broker_avg_cost
+                        print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) entry price synced: DB=${db_entry_price:.4f} → Broker=${broker_avg_cost:.4f}")
                     
                     # CRITICAL: Sync quantity from broker if different
                     if broker_quantity > 0 and abs(broker_quantity - db_quantity) > 0.001:
