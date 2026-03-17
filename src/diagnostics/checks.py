@@ -357,14 +357,11 @@ def check_webull_broker() -> CheckResult:
 def check_alpaca_broker() -> CheckResult:
     """Verify Alpaca broker connectivity."""
     try:
-        from gui_app import database as db
+        from gui_app.broker_credentials_service import load_config
         
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT api_key, api_secret FROM broker_credentials WHERE broker_name = 'alpaca'")
-        row = cursor.fetchone()
+        creds = load_config('alpaca_credentials') or {}
         
-        if not row or not row['api_key']:
+        if not creds.get('api_key'):
             return CheckResult(
                 name="Alpaca Broker",
                 category=DiagnosticCategory.BROKER_ALPACA,
@@ -443,7 +440,7 @@ def check_monitored_channels() -> CheckResult:
         
         conn = db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM channels WHERE enabled = 1")
+        cursor.execute("SELECT COUNT(*) FROM channels WHERE is_active = 1")
         enabled_count = cursor.fetchone()[0]
         
         cursor.execute("SELECT COUNT(*) FROM channels")
@@ -523,14 +520,12 @@ def check_options_chain_availability() -> CheckResult:
 def check_ibkr_broker() -> CheckResult:
     """Verify Interactive Brokers connectivity."""
     try:
-        from gui_app import database as db
+        from gui_app.broker_credentials_service import get_ibkr_credentials
         
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT api_key, api_secret FROM broker_credentials WHERE broker_name = 'ibkr'")
-        row = cursor.fetchone()
+        creds = get_ibkr_credentials() or {}
+        host = creds.get('host', '')
         
-        if not row or (not row['api_key'] and not row['api_secret']):
+        if not host:
             return CheckResult(
                 name="IBKR Broker",
                 category=DiagnosticCategory.BROKER_IBKR,
@@ -539,12 +534,17 @@ def check_ibkr_broker() -> CheckResult:
                 remediation="Add IBKR credentials in Settings if using Interactive Brokers"
             )
         
+        paper = creds.get('paper_mode', True)
+        port = creds.get('port_paper', 7497) if paper else creds.get('port_live', 7496)
+        client_id = creds.get('client_id', 1)
+        mode = "paper" if paper else "live"
+        
         return CheckResult(
             name="IBKR Broker",
             category=DiagnosticCategory.BROKER_IBKR,
             status=CheckStatus.PASS,
-            message="Credentials configured",
-            details={'has_credentials': True}
+            message=f"Configured ({mode} mode, {host}:{port}, clientId={client_id})",
+            details={'host': host, 'port': port, 'client_id': client_id, 'paper_mode': paper}
         )
     except Exception as e:
         return CheckResult(

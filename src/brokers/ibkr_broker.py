@@ -7,6 +7,13 @@ import sys
 import os
 import asyncio
 from typing import Optional, Dict, Any
+
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except ImportError:
+    print("[IBKR] ⚠️ nest_asyncio not available — IBKR may fail if event loop is already running")
+
 from ib_insync import IB, Stock, Option, MarketOrder, LimitOrder, util
 from datetime import datetime
 
@@ -79,12 +86,14 @@ class IBKRBroker(BrokerInterface):
                 mode = "PAPER" if self.paper_trade else "LIVE"
                 print(f"[{self.name}] ✓ Connected successfully ({mode} trading)")
                 
-                # Get account summary
-                account_summary = self.ib.accountSummary()
-                for item in account_summary:
-                    if item.tag == 'BuyingPower':
-                        print(f"[{self.name}]   Buying power: ${float(item.value):,.2f}")
-                        break
+                try:
+                    account_summary = self.ib.accountSummary()
+                    for item in account_summary:
+                        if item.tag == 'BuyingPower':
+                            print(f"[{self.name}]   Buying power: ${float(item.value):,.2f}")
+                            break
+                except Exception as e_summary:
+                    print(f"[{self.name}] ⚠️ Connected but could not fetch account summary: {e_summary}")
                 
                 return True
             
