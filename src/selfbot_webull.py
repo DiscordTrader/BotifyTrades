@@ -8518,11 +8518,15 @@ class SelfClient(discord.Client):
                         schwab_broker = self.schwab_broker
                 except Exception:
                     pass
+            ibkr_broker_for_verify = self.ibkr_broker if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False) else None
+            robinhood_for_verify = self.robinhood_broker if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False) else None
             set_broker_clients(
                 webull_client=webull_client, 
                 tastytrade_session=tastytrade_session,
                 alpaca_broker=alpaca_broker,
-                schwab_broker=schwab_broker
+                schwab_broker=schwab_broker,
+                ibkr_broker=ibkr_broker_for_verify,
+                robinhood_broker=robinhood_for_verify
             )
         except Exception as e:
             print(f"[VERIFY] ⚠️ Could not initialize real-time verification: {e}")
@@ -8573,6 +8577,9 @@ class SelfClient(discord.Client):
             if self.trading212_broker and getattr(self.trading212_broker, 'connected', False):
                 conditional_order_router.set_broker_instance('Trading212', self.trading212_broker)
                 _original_print("[CONDITIONAL] ✓ Trading212 registered for price monitoring (portfolio quotes)", flush=True)
+            if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
+                conditional_order_router.set_broker_instance('IBKR', self.ibkr_broker)
+                _original_print("[CONDITIONAL] ✓ IBKR registered for price monitoring", flush=True)
             
             webull_hub = None
             if self.broker and hasattr(self.broker, '_data_hub') and self.broker._data_hub:

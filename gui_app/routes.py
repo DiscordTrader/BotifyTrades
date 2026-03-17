@@ -14453,6 +14453,27 @@ def register_routes(app):
                             connected = await asyncio.wait_for(_bot_instance.ibkr_broker.connect(), timeout=15.0)
                             if connected:
                                 acct_info = await _bot_instance.ibkr_broker.get_account_info()
+                                if hasattr(_bot_instance, '_broker_manager') and _bot_instance._broker_manager:
+                                    _bot_instance._broker_manager.ibkr_broker = _bot_instance.ibkr_broker
+                                try:
+                                    from src.services.signal_verification import set_broker_clients
+                                    import src.services.signal_verification as sv
+                                    sv._ibkr_broker = _bot_instance.ibkr_broker
+                                    print("[IBKR] ✓ Signal verification updated with new broker instance")
+                                except Exception:
+                                    pass
+                                try:
+                                    from src.services.quote_aggregator import register_broker_with_aggregator
+                                    register_broker_with_aggregator('ibkr', _bot_instance.ibkr_broker)
+                                    print("[IBKR] ✓ Quote aggregator updated with new broker instance")
+                                except Exception:
+                                    pass
+                                try:
+                                    from src.services.conditional_orders.router import conditional_order_router
+                                    conditional_order_router.set_broker_instance('IBKR', _bot_instance.ibkr_broker)
+                                    print("[IBKR] ✓ Conditional order router updated with new broker instance")
+                                except Exception:
+                                    pass
                                 return True, acct_info
                             return False, {}
                         
