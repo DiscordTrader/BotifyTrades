@@ -653,11 +653,20 @@ def _fetch_trading212(bot) -> List[Dict]:
             t212_broker = bot.trading212_broker
         elif hasattr(bot, 'broker_manager') and hasattr(bot.broker_manager, 'trading212_broker'):
             t212_broker = bot.broker_manager.trading212_broker
+        elif hasattr(bot, '_broker_manager') and hasattr(bot._broker_manager, 'trading212_broker'):
+            t212_broker = bot._broker_manager.trading212_broker
 
         if not t212_broker:
+            _log(f"T212 fetch: broker not found (has trading212_broker={hasattr(bot, 'trading212_broker')}, broker_manager={hasattr(bot, 'broker_manager')}, _broker_manager={hasattr(bot, '_broker_manager')})")
+            return []
+
+        connected = getattr(t212_broker, 'connected', False)
+        if not connected:
+            _log(f"T212 fetch: broker found but not connected (connected={connected})")
             return []
 
         if not hasattr(bot, 'loop') or bot.loop is None or bot.loop.is_closed():
+            _log(f"T212 fetch: no event loop available")
             return []
 
         future = asyncio.run_coroutine_threadsafe(
@@ -665,6 +674,7 @@ def _fetch_trading212(bot) -> List[Dict]:
             bot.loop
         )
         raw = future.result(timeout=10) or []
+        _log(f"T212 fetch: got {len(raw)} raw positions")
 
         positions = []
         for pos in raw:
@@ -693,7 +703,8 @@ def _fetch_trading212(bot) -> List[Dict]:
                 ))
         return positions
     except Exception as e:
-        _log(f"T212 fetch error: {e}")
+        err_msg = str(e).strip() if str(e).strip() else type(e).__name__
+        _log(f"T212 fetch error: {err_msg}")
         return []
 
 
@@ -784,7 +795,8 @@ def _enrich_with_db_trades(positions: List[Dict], db_trades: List[Dict], broker_
             matched_trade = min(all_matching, key=_trade_rank)
             trade_id = matched_trade.get('id')
             pos['id'] = str(trade_id) if trade_id is not None else trade_id
-            pos['source'] = 'database'
+            if pos.get('source') != 'live_brokerage':
+                pos['source'] = 'database'
             pos['status'] = matched_trade.get('status', 'OPEN')
             pos['direction'] = matched_trade.get('direction', pos.get('direction', ''))
             pos['order_id'] = matched_trade.get('order_id')

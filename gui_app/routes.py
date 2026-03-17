@@ -7516,12 +7516,13 @@ def register_routes(app):
                     
                     pos_broker = pos.get('broker', 'Webull')
                     
+                    untracked_qty = pos['quantity']
                     live_pos_trade = {
                         'id': stable_id,
                         'symbol': pos['symbol'],
                         'asset_type': pos_asset,
                         'side': 'BTO',
-                        'quantity': int(pos['quantity']),
+                        'quantity': int(untracked_qty) if untracked_qty == int(untracked_qty) else untracked_qty,
                         'entry_price': pos['avg_cost'],
                         'current_price': pos['current_price'],
                         'pnl': pos['unrealized_pl'],
