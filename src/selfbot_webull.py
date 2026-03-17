@@ -10196,7 +10196,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap active: max buy price ${limit_price:.4f}\n")
                             sys.stderr.flush()
                         elif limit_cap_enabled and not limit_price:
-                            if limit_cap_pct and float(limit_cap_pct) > 0:
+                            if limit_cap_pct is not None and float(limit_cap_pct) != 0:
                                 computed_limit = triggered_price * (1 + float(limit_cap_pct) / 100)
                                 effective_limit_price = computed_limit
                                 sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap computed: ${computed_limit:.4f} (trigger ${triggered_price:.2f} + {limit_cap_pct}%)\n")

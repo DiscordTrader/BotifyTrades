@@ -1875,14 +1875,17 @@ class RiskManager:
                 wb_broker = None
                 if hasattr(self.position_fetcher, '__self__'):
                     wb_broker = self.position_fetcher.__self__
-                if not wb_broker or not hasattr(wb_broker, 'wb'):
+                if not wb_broker or not (hasattr(wb_broker, 'wb') or hasattr(wb_broker, '_client')):
                     wb_broker = getattr(self, '_webull_broker', None)
-                if not wb_broker or not hasattr(wb_broker, 'wb'):
+                if not wb_broker or not (hasattr(wb_broker, 'wb') or hasattr(wb_broker, '_client')):
                     _bot = getattr(self, 'bot', None)
                     if _bot:
                         wb_broker = getattr(_bot, 'broker', None)
-                if wb_broker and hasattr(wb_broker, 'wb'):
-                    await _hub.refresh_positions_once(wb_broker.wb)
+                _raw_wb = None
+                if wb_broker:
+                    _raw_wb = getattr(wb_broker, 'wb', None) or getattr(wb_broker, '_client', None)
+                if _raw_wb:
+                    await _hub.refresh_positions_once(_raw_wb)
                 else:
                     print("[RISK] ⚠️ Could not resolve Webull broker for REST refresh — using cached data")
                 _refreshed = _hub.get_positions(max_age_seconds=30)

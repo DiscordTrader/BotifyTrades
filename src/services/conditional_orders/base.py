@@ -1198,7 +1198,7 @@ class BaseConditionalOrderService(ABC):
         # For BUY orders: limit_price = trigger + cap% (ceiling)
         # For SELL orders: limit_price = trigger - cap% (floor)
         limit_price = None
-        if limit_cap_enabled and limit_cap_pct and limit_cap_pct > 0 and adjusted_price:
+        if limit_cap_enabled and limit_cap_pct and limit_cap_pct != 0 and adjusted_price:
             if trigger_type in ('over', 'ABOVE', 'PRICE_ABOVE', 'BTO'):
                 # Buy: max price = trigger + cap%
                 limit_price = round(adjusted_price * (1 + limit_cap_pct / 100), 4)
