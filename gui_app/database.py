@@ -2273,7 +2273,7 @@ def init_db():
                     leave_runner_pct = 10.0,
                     trim_order_mode = 'market',
                     sl_order_mode = 'market',
-                    exit_strategy_mode = 'risk',
+                    exit_strategy_mode = 'hybrid',
                     enable_early_trailing = 1,
                     early_trailing_activation_pct = 10.0,
                     early_trailing_step_pct = 3.0
