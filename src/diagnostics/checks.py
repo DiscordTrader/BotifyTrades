@@ -62,7 +62,7 @@ def check_database_functions() -> CheckResult:
     """Verify all required database functions are accessible."""
     required_functions = [
         'get_connection', 'get_risk_management_settings', 'find_open_bto_trade',
-        'get_ai_settings', 'log_trade', 'get_all_channels'
+        'get_ai_settings', 'get_channels'
     ]
     
     try:
@@ -390,14 +390,12 @@ def check_alpaca_broker() -> CheckResult:
 def check_discord_token() -> CheckResult:
     """Verify Discord token is configured."""
     try:
-        from gui_app import database as db
+        from gui_app.broker_credentials_service import get_discord_credentials
         
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM settings WHERE key = 'discord_token'")
-        row = cursor.fetchone()
+        discord_creds = get_discord_credentials()
+        token = discord_creds.get('token', '').strip()
         
-        if not row or not row['value']:
+        if not token:
             return CheckResult(
                 name="Discord Token",
                 category=DiagnosticCategory.DISCORD,
@@ -406,7 +404,6 @@ def check_discord_token() -> CheckResult:
                 remediation="Add Discord token in Settings"
             )
         
-        token = row['value']
         if len(token) < 50:
             return CheckResult(
                 name="Discord Token",
