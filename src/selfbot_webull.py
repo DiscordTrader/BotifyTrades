@@ -4273,82 +4273,84 @@ class WebullBroker:
                 
                 if order_ok and order_id:
                     import time as _time
-                    buffers = market_buy_buffers if side == 'BUY' else market_sell_buffers
-                    _chase_wait = 2.5
+                    _chase_wait = 5
+                    _order_is_live = True
                     
-                    for retry_idx in range(1, len(buffers)):
-                        _time.sleep(_chase_wait)
+                    _time.sleep(_chase_wait)
+                    try:
+                        orders_list = None
                         try:
-                            orders_list = None
-                            try:
-                                from src.services.webull_data_hub import get_webull_data_hub
-                                hub = get_webull_data_hub()
-                                hub.invalidate_orders()
-                                cached_orders = hub.get_pending_orders(max_age_seconds=2)
-                                if cached_orders is not None:
-                                    orders_list = cached_orders
-                            except Exception:
-                                pass
-                            if orders_list is None:
-                                orders_list = wb.get_current_orders() or []
-                            order_status = None
-                            for o in orders_list:
-                                if str(o.get('orderId', '')) == str(order_id):
-                                    order_status = o.get('status', '').upper()
-                                    break
-                            
-                            if order_status == 'FILLED':
-                                print(f"[{self.name}] ✅ MARKET ORDER FILLED on attempt {retry_idx}", flush=True)
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            hub = get_webull_data_hub()
+                            hub.invalidate_orders()
+                            cached_orders = hub.get_pending_orders(max_age_seconds=2)
+                            if cached_orders is not None:
+                                orders_list = cached_orders
+                        except Exception:
+                            pass
+                        if orders_list is None:
+                            orders_list = wb.get_current_orders() or []
+                        order_status = None
+                        for o in orders_list:
+                            if str(o.get('orderId', '')) == str(order_id):
+                                order_status = o.get('status', '').upper()
                                 break
-                            elif order_status == 'PARTIAL_FILLED':
-                                print(f"[{self.name}] ✅ MARKET ORDER PARTIALLY FILLED - keeping order active", flush=True)
-                                break
-                            elif order_status is None:
-                                print(f"[{self.name}] ⚠️ Could not find order {order_id} in active orders - may have filled already", flush=True)
-                                break
+                        
+                        if order_status == 'FILLED':
+                            print(f"[{self.name}] ✅ MARKET ORDER FILLED after {_chase_wait}s", flush=True)
+                        elif order_status == 'PARTIAL_FILLED':
+                            print(f"[{self.name}] ✅ MARKET ORDER PARTIALLY FILLED - keeping order active", flush=True)
+                        elif order_status is None:
+                            print(f"[{self.name}] ⚠️ Could not find order {order_id} in active orders - may have filled already", flush=True)
+                        elif order_status in ('SUBMITTED', 'PENDING', 'WORKING'):
+                            chase_buffer = market_buy_buffers[-1] if side == 'BUY' else market_sell_buffers[-1]
+                            print(f"[{self.name}] ⏳ Order not filled (status={order_status}) after {_chase_wait}s, chasing with +{chase_buffer*100:.0f}% buffer...", flush=True)
                             
-                            new_buffer = buffers[retry_idx]
-                            print(f"[{self.name}] ⏳ Order not filled (status={order_status}) after {_chase_wait}s, chasing with +{new_buffer*100:.0f}% buffer...", flush=True)
-                            
-                            new_price, _ = _get_market_price(wb, broker_sym, option_id, side, new_buffer)
+                            new_price, _ = _get_market_price(wb, broker_sym, option_id, side, chase_buffer)
                             if not new_price or new_price <= 0:
                                 print(f"[{self.name}] ⚠️ Could not get updated price for chase — keeping existing order alive", flush=True)
-                                break
-                            
-                            try:
-                                cancel_resp = wb.cancel_order(order_id)
-                                _cancel_ok = True
-                                if isinstance(cancel_resp, dict) and cancel_resp.get('success') == False:
-                                    _cancel_ok = False
-                                if _cancel_ok:
-                                    print(f"[{self.name}] 🔄 Cancelled order {order_id} for re-price", flush=True)
-                                else:
-                                    print(f"[{self.name}] ⚠️ Cancel returned failure — keeping existing order", flush=True)
-                                    break
-                            except Exception as cancel_err:
-                                print(f"[{self.name}] ⚠️ Cancel attempt failed: {cancel_err} — keeping existing order", flush=True)
-                                break
-                            
-                            _time.sleep(0.3)
-                            effective_price = new_price
-                            result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, f"[Chase {retry_idx+1}/{len(buffers)}] ")
-                            new_order_id = (result or {}).get('orderId')
-                            if new_order_id:
-                                order_id = new_order_id
                             else:
-                                print(f"[{self.name}] ⚠️ Chase replacement failed — retrying at same price", flush=True)
-                                _time.sleep(0.3)
-                                result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, f"[Chase {retry_idx+1}/{len(buffers)} RETRY] ")
-                                new_order_id = (result or {}).get('orderId')
-                                if new_order_id:
-                                    order_id = new_order_id
-                                else:
-                                    print(f"[{self.name}] ❌ Chase replacement retry also failed — order may be lost", flush=True)
-                        except Exception as chase_err:
-                            print(f"[{self.name}] ⚠️ Chase check error: {chase_err}", flush=True)
-                            break
+                                try:
+                                    cancel_resp = wb.cancel_order(order_id)
+                                    _cancel_ok = True
+                                    if isinstance(cancel_resp, dict) and cancel_resp.get('success') == False:
+                                        _cancel_ok = False
+                                    if not _cancel_ok:
+                                        print(f"[{self.name}] ⚠️ Cancel returned failure — keeping existing order", flush=True)
+                                    else:
+                                        print(f"[{self.name}] 🔄 Cancelled order {order_id} for re-price", flush=True)
+                                        _order_is_live = False
+                                        _time.sleep(0.3)
+                                        effective_price = new_price
+                                        result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, "[Chase] ")
+                                        new_order_id = (result or {}).get('orderId') or ((result or {}).get('data', {}) or {}).get('orderId')
+                                        if new_order_id:
+                                            order_id = new_order_id
+                                            _order_is_live = True
+                                            print(f"[{self.name}] ✅ Chase replacement placed: {new_order_id} @ ${effective_price:.2f}", flush=True)
+                                        else:
+                                            print(f"[{self.name}] ⚠️ Chase replacement failed — retrying at same price", flush=True)
+                                            _time.sleep(0.3)
+                                            result = _place_single_order(wb, option_id, side, adjusted_qty, effective_price, "[Chase RETRY] ")
+                                            new_order_id = (result or {}).get('orderId') or ((result or {}).get('data', {}) or {}).get('orderId')
+                                            if new_order_id:
+                                                order_id = new_order_id
+                                                _order_is_live = True
+                                                print(f"[{self.name}] ✅ Chase retry placed: {new_order_id} @ ${effective_price:.2f}", flush=True)
+                                            else:
+                                                print(f"[{self.name}] ❌ Chase replacement failed — original order was cancelled, NO active order", flush=True)
+                                                result = {'success': False, 'msg': 'Chase cancelled original but replacement failed', 'error': 'CHASE_FAILED', '_chase_cancelled': True}
+                                except Exception as cancel_err:
+                                    print(f"[{self.name}] ⚠️ Cancel attempt failed: {cancel_err} — keeping existing order", flush=True)
+                        else:
+                            print(f"[{self.name}] ⚠️ Order in unexpected status: {order_status} — leaving as-is", flush=True)
+                    except Exception as chase_err:
+                        print(f"[{self.name}] ⚠️ Chase check error: {chase_err} — order may still be live", flush=True)
                     
-                    print(f"[{self.name}] 🏁 Market order chase complete. Final price: ${effective_price:.2f}", flush=True)
+                    if _order_is_live:
+                        print(f"[{self.name}] 🏁 Market order complete. Final price: ${effective_price:.2f}", flush=True)
+                    else:
+                        print(f"[{self.name}] 🏁 Market order chase FAILED — no active order remains", flush=True)
             
             if not result or (isinstance(result, dict) and not result.get('orderId') and result.get('success') == False):
                 error_msg = (result or {}).get('msg', 'Unknown error')
