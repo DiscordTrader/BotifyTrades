@@ -768,6 +768,7 @@ function displayTradesTable(trades) {
                         <button class="btn-quick-close btn-bid" data-close-btn="${trade.id}" onclick="quickClose(event, '${trade.id}', '${trade.symbol}', ${qty}, 'bid')" title="Close at Bid">Bid</button>
                         <button class="btn-quick-close btn-mid" data-close-btn="${trade.id}" onclick="quickClose(event, '${trade.id}', '${trade.symbol}', ${qty}, 'mid')" title="Close at Mid">Mid</button>
                         <button class="btn-quick-close btn-market" data-close-btn="${trade.id}" onclick="quickClose(event, '${trade.id}', '${trade.symbol}', ${qty}, 'market')" title="Close at Market">Mkt</button>
+                        <button class="btn-quick-close" data-close-btn="${trade.id}" onclick="forceCloseDB(event, '${trade.id}', '${trade.symbol}')" title="Clear from DB only (no broker order)" style="background: rgba(255,165,0,0.15); color: #f0a030; border-color: rgba(255,165,0,0.3); font-size: 9px;">DB</button>
                     </div>
                 ` : trade.status === 'PENDING' ? `<button class="btn btn-danger btn-small" onclick="cancelOrder('${trade.order_id}', '${trade.symbol}', '${trade.broker || currentBroker}')">Cancel</button>` : '-'}
             </td>
@@ -1526,6 +1527,29 @@ function showTradeToast(type, message) {
         toast.classList.remove('show');
         setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
     }, 3000);
+}
+
+async function forceCloseDB(evt, tradeId, symbol) {
+    if (evt) { evt.preventDefault(); evt.stopPropagation(); }
+    if (!confirm(`Clear "${symbol}" (Trade #${tradeId}) from the database?\n\nThis will NOT send any order to the broker. Use this only if the position was already closed on the broker side (e.g. manual close, ticker rename).`)) {
+        return;
+    }
+    const btns = document.querySelectorAll(`[data-close-btn="${tradeId}"]`);
+    btns.forEach(b => b.disabled = true);
+    try {
+        const resp = await fetch(`/api/trades/${tradeId}/force-close-db`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const data = await resp.json();
+        if (data.success) {
+            showTradeToast('success', `${symbol} cleared from database`);
+            setTimeout(() => fetchTrades(), 500);
+        } else {
+            showTradeToast('error', data.error || 'Failed to clear trade');
+            btns.forEach(b => b.disabled = false);
+        }
+    } catch (e) {
+        showTradeToast('error', `Error: ${e.message}`);
+        btns.forEach(b => b.disabled = false);
+    }
 }
 
 async function quickClose(evt, tradeId, symbol, maxQuantity, priceType) {

@@ -5986,6 +5986,46 @@ def register_routes(app):
         
         return jsonify({'success': False, 'error': 'Unexpected error'}), 500
     
+    @app.route('/api/trades/<trade_id>/force-close-db', methods=['POST'])
+    def force_close_trade_db(trade_id):
+        """Force close a trade in the DB only — no broker order sent.
+        Used for stale positions (manual broker close, ticker rename, etc.)."""
+        try:
+            from datetime import datetime
+            db = get_db()
+            numeric_id = int(trade_id)
+            trade = db.get_trade(numeric_id)
+            if not trade:
+                return jsonify({'success': False, 'error': 'Trade not found'}), 404
+            if trade.get('status') not in ('OPEN', 'PENDING'):
+                return jsonify({'success': False, 'error': f'Trade is already {trade.get("status")}'}), 400
+
+            symbol = trade.get('symbol', '?')
+            broker = trade.get('broker', '?')
+            print(f"[API] Force-closing trade #{numeric_id} ({symbol} on {broker}) — DB only, no broker order")
+
+            db.update_trade(
+                numeric_id,
+                status='CLOSED',
+                closed_at=datetime.now().isoformat(),
+                close_reason='manual_db_close'
+            )
+
+            try:
+                from src.risk.position_cache import PositionCache
+                cache = PositionCache.get_instance() if hasattr(PositionCache, 'get_instance') else None
+                if cache:
+                    pos_key = f"{broker}_{symbol}_{trade.get('asset_type', 'stock')}"
+                    cache.remove(pos_key)
+            except Exception:
+                pass
+
+            print(f"[API] ✓ Trade #{numeric_id} ({symbol}) force-closed in DB")
+            return jsonify({'success': True, 'message': f'{symbol} cleared from database'})
+        except Exception as e:
+            print(f"[API] Force-close DB error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/trades/<trade_id>/close', methods=['POST'])
     def close_position_by_id(trade_id):
         """Close a position by trade ID (used by Dashboard) - Uses LIVE broker quantity"""
