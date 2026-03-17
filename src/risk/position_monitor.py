@@ -1430,6 +1430,16 @@ class RiskManager:
                         except Exception:
                             pass
                         try:
+                            from src.services.ibkr_data_hub import get_ibkr_data_hub
+                            _ibkr_h = get_ibkr_data_hub()
+                            if _ibkr_h.is_streaming() and _ibkr_h.check_risk_eval_requested():
+                                print("[RISK] ⚡ Early wake: order event from IBKR stream")
+                                self._force_rest_refresh = True
+                                _order_event_woke = True
+                                break
+                        except Exception:
+                            pass
+                        try:
                             await asyncio.wait_for(
                                 self._price_wake_event.wait(),
                                 timeout=min(0.05, _remaining)

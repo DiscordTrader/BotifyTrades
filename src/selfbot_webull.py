@@ -8475,6 +8475,8 @@ class SelfClient(discord.Client):
                     schwab_broker=self.schwab_broker,
                     robinhood_broker=self.robinhood_broker,
                     trading212_broker=getattr(self, 'trading212_broker', None),
+                    ibkr_broker=getattr(self, 'ibkr_broker', None),
+                    tastytrade_broker=getattr(self, 'tastytrade_broker', None),
                     loop=self.loop
                 )
                 

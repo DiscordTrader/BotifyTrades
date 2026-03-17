@@ -14483,6 +14483,12 @@ def register_routes(app):
                                     print("[IBKR] ✓ IBKRDataHub re-attached to new broker instance")
                                 except Exception as hub_err:
                                     print(f"[IBKR] ⚠️ IBKRDataHub re-attach error: {hub_err}")
+                                try:
+                                    if hasattr(_bot_instance, 'risk_manager') and _bot_instance.risk_manager:
+                                        _bot_instance.risk_manager.ibkr_broker = _bot_instance.ibkr_broker
+                                        print("[IBKR] ✓ RiskManager updated with new broker instance")
+                                except Exception:
+                                    pass
                                 return True, acct_info
                             return False, {}
                         

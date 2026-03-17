@@ -327,10 +327,10 @@ class IBKRDataHub:
         self._risk_eval_requested.set()
 
     def check_risk_eval_requested(self) -> bool:
-        return self._risk_eval_requested.is_set()
-
-    def clear_risk_eval_request(self):
-        self._risk_eval_requested.clear()
+        if self._risk_eval_requested.is_set():
+            self._risk_eval_requested.clear()
+            return True
+        return False
 
     def subscribe_symbol(self, symbol: str, contract=None):
         if symbol in self._subscribed_symbols:
