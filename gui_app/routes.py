@@ -19226,6 +19226,16 @@ def register_routes(app):
                                     fallback_paper = is_paper
                                     if isinstance(creds_data, dict):
                                         fallback_paper = creds_data.get('paper_mode', is_paper)
+                                    broker_reason_map = {
+                                        'IBKR': 'Broker configured but not connected — check gateway/TWS is running',
+                                        'ROBINHOOD': 'Broker configured but not connected — check login credentials',
+                                        'WEBULL': 'Broker configured but not connected — check credentials or tokens',
+                                        'SCHWAB': 'Broker configured but not connected — check OAuth tokens',
+                                        'ALPACA_PAPER': 'Broker configured but not connected — check API keys',
+                                        'TASTYTRADE': 'Broker configured but not connected — check login credentials',
+                                        'QUESTRADE': 'Broker configured but not connected — check API tokens',
+                                        'TRADING212': 'Broker configured but not connected — check API key',
+                                    }
                                     configured_brokers.append({
                                         'broker_name': broker_name,
                                         'region': region,
@@ -19235,7 +19245,7 @@ def register_routes(app):
                                         'currency': currency,
                                         'is_paper': fallback_paper,
                                         'status': 'disconnected',
-                                        'reason': 'Broker configured but not connected — check gateway/TWS or credentials',
+                                        'reason': broker_reason_map.get(broker_name, 'Broker configured but not connected — check credentials'),
                                         'error_code': None,
                                         'last_check': None
                                     })
