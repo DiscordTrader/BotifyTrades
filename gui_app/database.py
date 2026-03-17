@@ -2189,8 +2189,10 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_channel ON signals(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_lots_channel_symbol ON signal_lots(channel_id, asset_type, symbol, status)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_lots_opened_at ON signal_lots(opened_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_lots_signal_id ON signal_lots(signal_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_lot_closures_channel ON lot_closures(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_lot_closures_closed_at ON lot_closures(closed_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_lot_closures_lot_id ON lot_closures(lot_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_channel_allowed_users_channel ON channel_allowed_users(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_channel_allowed_users_user ON channel_allowed_users(discord_user_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist(email)')
@@ -4592,7 +4594,10 @@ def get_converted_position_by_original_symbol(channel_id: int, original_symbol: 
 
 
 def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, close_price: float, closed_at, exit_reason: str = None):
-    """Close a lot (fully or partially) and record PNL
+    """Close a lot (fully or partially) and record PNL.
+    
+    Uses BEGIN IMMEDIATE for transaction safety — prevents concurrent STC/risk actions
+    from over-closing or creating inconsistent remaining quantities.
     
     Args:
         exit_reason: Why the position was closed (e.g., 'PT1', 'STOP_LOSS', 'TRAILING_STOP', 'MANUAL')
@@ -4600,60 +4605,78 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Get lot details
-    cursor.execute('SELECT * FROM signal_lots WHERE id = ?', (lot_id,))
-    lot = cursor.fetchone()
+    try:
+        cursor.execute('BEGIN IMMEDIATE')
+    except Exception:
+        pass
     
-    if not lot:
-        return None
-    
-    if close_price is None:
-        print(f"[LOT_MATCHER] ⚠️ close_price is None for lot {lot_id} — skipping P&L calculation")
-        return None
-    
-    cost_basis = lot['open_price'] * close_qty
-    if lot['asset_type'] == 'option':
-        cost_basis *= 100
-        proceeds = close_price * close_qty * 100
-    else:
-        proceeds = close_price * close_qty
-    
-    pnl = round(proceeds - cost_basis, 2)  # Round to 2 decimal places
-    pnl_percent = round((pnl / cost_basis * 100), 4) if cost_basis > 0 else 0  # Round to 4 decimal places
-    
-    # Calculate holding period
-    from datetime import datetime
-    if isinstance(closed_at, str):
-        closed_dt = datetime.fromisoformat(closed_at)
-    else:
-        closed_dt = closed_at
-    
-    if isinstance(lot['opened_at'], str):
-        opened_dt = datetime.fromisoformat(lot['opened_at'])
-    else:
-        opened_dt = lot['opened_at']
-    
-    holding_days = (closed_dt - opened_dt).total_seconds() / 86400
-    
-    # Record closure (inherit author_name and user_id from lot for attribution)
-    author_name = lot['author_name'] if 'author_name' in lot.keys() else None
-    user_id = lot['user_id'] if 'user_id' in lot.keys() else None
-    cursor.execute('''
-        INSERT INTO lot_closures (
-            lot_id, channel_id, signal_id, closed_qty, close_price,
-            closed_at, pnl, pnl_percent, holding_days, author_name, user_id, exit_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (lot_id, channel_id, signal_id, close_qty, close_price, closed_at, pnl, pnl_percent, holding_days, author_name, user_id, exit_reason))
-    
-    # Update lot status
-    new_remaining = lot['remaining_qty'] - close_qty
-    if new_remaining <= 0:
-        cursor.execute('UPDATE signal_lots SET remaining_qty = 0, status = "CLOSED" WHERE id = ?', (lot_id,))
-    else:
-        cursor.execute('UPDATE signal_lots SET remaining_qty = ?, status = "PARTIAL" WHERE id = ?', (new_remaining, lot_id))
-    
-    conn.commit()
-    return cursor.lastrowid
+    try:
+        cursor.execute('SELECT * FROM signal_lots WHERE id = ?', (lot_id,))
+        lot = cursor.fetchone()
+        
+        if not lot:
+            conn.rollback()
+            return None
+        
+        if close_price is None:
+            print(f"[LOT_MATCHER] ⚠️ close_price is None for lot {lot_id} — skipping P&L calculation")
+            conn.rollback()
+            return None
+        
+        if lot['remaining_qty'] <= 0:
+            print(f"[LOT_MATCHER] ⚠️ Lot #{lot_id} already fully closed (remaining=0) — skipping duplicate close")
+            conn.rollback()
+            return None
+        
+        actual_close_qty = min(close_qty, lot['remaining_qty'])
+        
+        entry_price = lot['open_price']
+        cost_basis = entry_price * actual_close_qty
+        if lot['asset_type'] == 'option':
+            cost_basis *= 100
+            proceeds = close_price * actual_close_qty * 100
+        else:
+            proceeds = close_price * actual_close_qty
+        
+        pnl = round(proceeds - cost_basis, 2)
+        pnl_percent = round((pnl / cost_basis * 100), 4) if cost_basis > 0 else 0
+        
+        from datetime import datetime
+        if isinstance(closed_at, str):
+            closed_dt = datetime.fromisoformat(closed_at)
+        else:
+            closed_dt = closed_at
+        
+        if isinstance(lot['opened_at'], str):
+            opened_dt = datetime.fromisoformat(lot['opened_at'])
+        else:
+            opened_dt = lot['opened_at']
+        
+        holding_days = (closed_dt - opened_dt).total_seconds() / 86400
+        
+        author_name = lot['author_name'] if 'author_name' in lot.keys() else None
+        user_id = lot['user_id'] if 'user_id' in lot.keys() else None
+        cursor.execute('''
+            INSERT INTO lot_closures (
+                lot_id, channel_id, signal_id, closed_qty, close_price,
+                closed_at, pnl, pnl_percent, holding_days, author_name, user_id, exit_reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (lot_id, channel_id, signal_id, actual_close_qty, close_price, closed_at, pnl, pnl_percent, holding_days, author_name, user_id, exit_reason))
+        
+        closure_id = cursor.lastrowid
+        
+        new_remaining = lot['remaining_qty'] - actual_close_qty
+        if new_remaining <= 0:
+            cursor.execute('UPDATE signal_lots SET remaining_qty = 0, status = "CLOSED" WHERE id = ?', (lot_id,))
+        else:
+            cursor.execute('UPDATE signal_lots SET remaining_qty = ?, status = "PARTIAL" WHERE id = ?', (new_remaining, lot_id))
+        
+        conn.commit()
+        return closure_id
+    except Exception as e:
+        conn.rollback()
+        print(f"[LOT_MATCHER] ⚠️ close_lot transaction failed for lot #{lot_id}: {e}")
+        raise
 
 
 # ============================================
@@ -4663,22 +4686,33 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
 def update_lot_entry_fill(lot_id: int, fill_price: float, broker: str, order_id: str = None, filled_at = None):
     """Update a signal lot with actual broker entry fill data.
     
+    First-write-wins: if a fill is already recorded (from another broker), skip the update
+    to prevent multi-broker last-write-wins corruption. The first broker to fill becomes
+    the canonical entry fill for P&L purposes.
+    
     Also recalculates P&L on any existing closures for this lot using the fill price
     instead of the original signal price, so P&L reflects real execution.
     """
     conn = get_connection()
     cursor = conn.cursor()
     
+    cursor.execute('SELECT entry_fill_price, asset_type FROM signal_lots WHERE id = ?', (lot_id,))
+    lot_row = cursor.fetchone()
+    if not lot_row:
+        return False
+    
+    if lot_row['entry_fill_price'] is not None:
+        print(f"[DATABASE] ℹ Lot #{lot_id} already has entry fill ${lot_row['entry_fill_price']:.2f} — skipping {broker} fill ${fill_price:.2f} (first-write-wins)")
+        return False
+    
     cursor.execute('''
         UPDATE signal_lots 
         SET entry_fill_price = ?, entry_fill_broker = ?, entry_fill_order_id = ?, entry_filled_at = ?
-        WHERE id = ?
+        WHERE id = ? AND entry_fill_price IS NULL
     ''', (fill_price, broker, order_id, filled_at, lot_id))
     
     if cursor.rowcount > 0:
-        cursor.execute('SELECT asset_type FROM signal_lots WHERE id = ?', (lot_id,))
-        lot_row = cursor.fetchone()
-        multiplier = 100 if lot_row and lot_row['asset_type'] == 'option' else 1
+        multiplier = 100 if lot_row['asset_type'] == 'option' else 1
         
         cursor.execute('SELECT id, closed_qty, close_price, exit_fill_price FROM lot_closures WHERE lot_id = ?', (lot_id,))
         closures = cursor.fetchall()
@@ -4699,12 +4733,16 @@ def update_lot_entry_fill(lot_id: int, fill_price: float, broker: str, order_id:
 
 
 def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, order_id: str = None, filled_at = None, exit_source: str = None):
-    """Update a lot closure with actual broker exit fill data and recalculate P&L."""
+    """Update a lot closure with actual broker exit fill data and recalculate P&L.
+    
+    First-write-wins: if an exit fill is already recorded (from another broker), skip
+    to prevent multi-broker last-write-wins corruption.
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT lc.lot_id, lc.closed_qty, sl.open_price, sl.entry_fill_price, sl.asset_type
+        SELECT lc.lot_id, lc.closed_qty, lc.exit_fill_price, sl.open_price, sl.entry_fill_price, sl.asset_type
         FROM lot_closures lc
         JOIN signal_lots sl ON lc.lot_id = sl.id
         WHERE lc.id = ?
@@ -4712,6 +4750,10 @@ def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, or
     row = cursor.fetchone()
     
     if not row:
+        return False
+    
+    if row['exit_fill_price'] is not None:
+        print(f"[DATABASE] ℹ Closure #{closure_id} already has exit fill ${row['exit_fill_price']:.2f} — skipping {broker} fill ${fill_price:.2f} (first-write-wins)")
         return False
     
     entry_price = row['entry_fill_price'] if row['entry_fill_price'] is not None else row['open_price']
@@ -4729,12 +4771,16 @@ def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, or
         params.append(exit_source)
     
     params.append(closure_id)
-    cursor.execute(f'UPDATE lot_closures SET {update_fields} WHERE id = ?', params)
-    conn.commit()
+    cursor.execute(f'UPDATE lot_closures SET {update_fields} WHERE id = ? AND exit_fill_price IS NULL', params)
     
-    pnl_sign = '+' if pnl >= 0 else ''
-    print(f"[DATABASE] ✓ Updated closure #{closure_id} exit fill: ${fill_price:.2f} via {broker} = {pnl_sign}${pnl:.2f}")
-    return True
+    if cursor.rowcount > 0:
+        conn.commit()
+        pnl_sign = '+' if pnl >= 0 else ''
+        print(f"[DATABASE] ✓ Updated closure #{closure_id} exit fill: ${fill_price:.2f} via {broker} = {pnl_sign}${pnl:.2f}")
+        return True
+    
+    conn.commit()
+    return False
 
 
 def find_lot_by_trade_id(trade_id: int):

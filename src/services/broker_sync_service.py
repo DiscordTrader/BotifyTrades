@@ -2721,10 +2721,11 @@ class BrokerSyncService:
                         if row and row['signal_lot_id']:
                             signal_lot_id = row['signal_lot_id']
                             cursor.execute('''
-                                SELECT id FROM lot_closures 
+                                SELECT id, closed_qty, close_price FROM lot_closures 
                                 WHERE lot_id = ? AND exit_fill_price IS NULL
-                                ORDER BY closed_at DESC LIMIT 1
-                            ''', (signal_lot_id,))
+                                ORDER BY ABS(closed_qty - ?) ASC, ABS(close_price - ?) ASC, closed_at DESC 
+                                LIMIT 1
+                            ''', (signal_lot_id, quantity, fill_price))
                             closure_row = cursor.fetchone()
                             if closure_row:
                                 from gui_app.database import update_closure_exit_fill

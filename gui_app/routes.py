@@ -11027,6 +11027,8 @@ def register_routes(app):
             - start_date: Filter positions opened on or after this date (YYYY-MM-DD)
             - end_date: Filter positions opened on or before this date (YYYY-MM-DD)
             - market: Filter by market ('US' or 'INDIA')
+            - page: Page number for pagination (default: 1)
+            - per_page: Items per page (default: 100, max: 500)
         """
         channel_id = request.args.get('channel_id', type=int)
         author_filter = request.args.get('author', '').strip()
@@ -11034,6 +11036,8 @@ def register_routes(app):
         start_date = request.args.get('start_date', '').strip()
         end_date = request.args.get('end_date', '').strip()
         market = request.args.get('market', 'US').strip().upper()
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 100, type=int), 500)
         
         try:
             conn = db.get_connection()
@@ -11190,14 +11194,25 @@ def register_routes(app):
                     total_pnl_weighted = sum(c['pnl_percent'] * c['stc_qty'] for c in pos['closures'])
                     pos['avg_pnl_percent'] = total_pnl_weighted / pos['total_closed_qty'] if pos['total_closed_qty'] > 0 else 0
             
-            # Convert to list and sort
             positions_list = list(positions.values())
             positions_list.sort(key=lambda x: x['opened_at'], reverse=True)
             
+            total_positions = len(positions_list)
+            total_pages = max(1, (total_positions + per_page - 1) // per_page)
+            page = max(1, min(page, total_pages))
+            start_idx = (page - 1) * per_page
+            end_idx = start_idx + per_page
+            paginated = positions_list[start_idx:end_idx]
+            
             return jsonify({
                 'success': True,
-                'positions': positions_list,
-                'total_positions': len(positions_list)
+                'positions': paginated,
+                'total_positions': total_positions,
+                'page': page,
+                'per_page': per_page,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_prev': page > 1
             })
             
         except Exception as e:
