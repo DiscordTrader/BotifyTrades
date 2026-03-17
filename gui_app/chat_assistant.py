@@ -891,7 +891,7 @@ Use the leaderboard to identify the best signal providers before enabling execut
     
     "settings_discord": {
         "keywords": ["discord token", "discord setup", "self bot", "user token", "how to get token"],
-        "title": "Discord Self-Bot Setup",
+        "title": "Discord Setup",
         "content": """Setting up Discord monitoring:
 
 **Important: This is a Self-Bot**
@@ -1133,7 +1133,7 @@ Check the console logs for detailed error messages."""
         "content": """How BotifyTrades works under the hood:
 
 **Core Components:**
-• **Discord Self-Bot** - Monitors channels using discord.py-self
+• **Discord** - Monitors channels using discord.py-self
 • **Flask Web GUI** - Control panel running on port 5000
 • **SQLite Database** - Stores channels, trades, settings
 • **Broker Abstraction** - Unified interface for multiple brokers
