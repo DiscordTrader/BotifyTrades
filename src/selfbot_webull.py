@@ -18395,12 +18395,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # Webull error: ORDER_NOT_SUPPORT_REVERSE_OPTION means there's already a pending order
                     # Cancel it and schedule immediate retry
-                    if 'ORDER_NOT_SUPPORT_REVERSE' in str(error_type) or 'reverse' in error_msg.lower():
+                    if 'ORDER_NOT_SUPPORT_REVERSE' in str(error_type) or 'reverse' in error_msg.lower() or 'SHORT_POSITION' in str(error_type) or 'short stock positions' in error_msg.lower():
                         _original_print(f"[EXIT-CHASER] ⚡ Conflicting pending order detected for {signal['symbol']}", flush=True)
                         try:
-                            # Find and cancel pending orders for this symbol on Webull
-                            if webull_broker and webull_broker.connected:
-                                wb = webull_broker._client
+                            _wb_broker = getattr(self, 'broker', None)
+                            if _wb_broker and getattr(_wb_broker, 'connected', False):
+                                wb = getattr(_wb_broker, '_client', None)
                                 if wb:
                                     pending_orders = None
                                     try:
