@@ -4966,8 +4966,9 @@ class WebullBroker:
                     'orderType': 'MKT',
                     'enforce': 'DAY',
                     'quant': int(adjusted_qty),
+                    'outsideRegularTradingHour': True,
                 }
-                print(f"[WEBULL] ⚡ Placing MARKET ORDER for {side} {adjusted_qty} {base_sym} (enforce=DAY)")
+                print(f"[WEBULL] ⚡ Placing MARKET ORDER for {side} {adjusted_qty} {base_sym} (enforce=DAY, extHours=True)")
             else:
                 base_payload = {
                     'stock': base_sym,

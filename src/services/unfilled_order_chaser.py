@@ -122,6 +122,26 @@ class TrackedEntryOrder:
         return None
 
 
+def _to_price(value) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        for key in ('price', 'bid', 'last', 'mid', 'close', 'latestPrice'):
+            v = value.get(key)
+            if v is not None and not isinstance(v, dict):
+                try:
+                    f = float(v)
+                    if f > 0:
+                        return f
+                except (TypeError, ValueError):
+                    continue
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class UnfilledOrderChaser:
     """
     Industry-grade unfilled order management service.
@@ -376,6 +396,7 @@ class UnfilledOrderChaser:
         Register an exit order for monitoring.
         Called after placing any STC order (risk management or signal-initiated).
         """
+        price = _to_price(price)
         async with self._lock:
             order = TrackedExitOrder(
                 order_id=order_id,
@@ -479,6 +500,10 @@ class UnfilledOrderChaser:
             stop_loss_price: Bracket order SL price (preserved for replacement orders)
             profit_target_price: Bracket order PT price (preserved for replacement orders)
         """
+        price = _to_price(price) or 0.0
+        entry_range_high = _to_price(entry_range_high)
+        signal_price = _to_price(signal_price)
+        limit_cap_price = _to_price(limit_cap_price)
         async with self._lock:
             order = TrackedEntryOrder(
                 order_id=order_id,
@@ -503,7 +528,7 @@ class UnfilledOrderChaser:
             )
             self._tracked_entry_orders[order_id] = order
             
-            max_price = order.max_chase_price
+            max_price = _to_price(order.max_chase_price)
             max_info = f"max ${max_price:.2f}" if max_price else "no limit"
             if limit_cap_price:
                 max_info += f" (limit cap ${limit_cap_price:.2f})"
@@ -628,7 +653,9 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] 🔄 CHASING ORDER (attempt {order.chase_attempts}/{self.max_chase_attempts})")
             print(f"[ORDER_CHASER]   Order ID: {order.order_id}")
             print(f"[ORDER_CHASER]   Symbol: {order.symbol}")
-            _orig_price_str = f"${order.original_price:.2f}" if order.original_price is not None else "MKT"
+            _orig_p = _to_price(order.original_price)
+            order.original_price = _orig_p
+            _orig_price_str = f"${_orig_p:.2f}" if _orig_p is not None else "MKT"
             print(f"[ORDER_CHASER]   Original Price: {_orig_price_str}")
             
             pending_orders = []
@@ -704,8 +731,8 @@ class UnfilledOrderChaser:
                 await self.mark_filled(order.order_id)
                 return
 
-            mid_price = await self._get_mid_price(broker, order)
-            if not mid_price:
+            mid_price = _to_price(await self._get_mid_price(broker, order))
+            if not mid_price or mid_price <= 0:
                 print(f"[ORDER_CHASER] ⚠️ Could not get exit price for {order.symbol} — keeping existing order alive")
                 order.status = OrderChaseStatus.PENDING
                 return
@@ -944,9 +971,9 @@ class UnfilledOrderChaser:
                     return None
                 hub_data = self._check_streaming_hubs_option(order.symbol, order.strike, order.expiry, order.call_put)
                 if hub_data:
-                    bid = float(hub_data.get('bid', 0) or 0)
-                    ask = float(hub_data.get('ask', 0) or 0)
-                    last = float(hub_data.get('last', 0) or 0)
+                    bid = _to_price(hub_data.get('bid')) or 0
+                    ask = _to_price(hub_data.get('ask')) or 0
+                    last = _to_price(hub_data.get('last')) or 0
                     if bid > 0:
                         print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}, last ${last:.2f}) — fills instantly")
                         return bid
@@ -954,21 +981,21 @@ class UnfilledOrderChaser:
                         return last
                 quote = await self._safe_get_option_quote(broker, order.symbol, order.strike, order.expiry, order.call_put)
                 if quote:
-                    bid = quote.get('bid', 0)
-                    ask = quote.get('ask', 0)
-                    if bid and bid > 0:
+                    bid = _to_price(quote.get('bid')) or 0
+                    ask = _to_price(quote.get('ask')) or 0
+                    if bid > 0:
                         print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}) via REST — fills instantly")
                         return bid
-                    last = quote.get('last')
+                    last = _to_price(quote.get('last'))
                     if last and last > 0:
                         return last
                 return None
             else:
                 hub_data = self._check_streaming_hubs_stock(order.symbol)
                 if hub_data:
-                    bid = float(hub_data.get('bid', 0) or 0)
-                    close = float(hub_data.get('close', 0) or 0)
-                    last = float(hub_data.get('last', 0) or 0)
+                    bid = _to_price(hub_data.get('bid')) or 0
+                    close = _to_price(hub_data.get('close')) or 0
+                    last = _to_price(hub_data.get('last')) or 0
                     if bid > 0:
                         print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} — fills instantly")
                         return bid
@@ -984,14 +1011,14 @@ class UnfilledOrderChaser:
                         quote = await result
                     else:
                         quote = result
-                    if quote:
-                        bid = float(quote.get('bid', 0) or 0)
-                        if bid > 0:
+                    if quote and isinstance(quote, dict):
+                        bid = _to_price(quote.get('bid'))
+                        if bid and bid > 0:
                             return bid
-                        close = float(quote.get('close', 0) or 0)
-                        if close > 0:
+                        close = _to_price(quote.get('close'))
+                        if close and close > 0:
                             return close
-                        return quote.get('last') or quote.get('mid')
+                        return _to_price(quote.get('last')) or _to_price(quote.get('mid'))
                 
                 if hasattr(broker, 'get_quote'):
                     method = broker.get_quote
@@ -1001,15 +1028,15 @@ class UnfilledOrderChaser:
                     else:
                         price = result
                     if isinstance(price, dict):
-                        bid_val = float(price.get('bid', 0) or 0)
-                        if bid_val > 0:
+                        bid_val = _to_price(price.get('bid'))
+                        if bid_val and bid_val > 0:
                             return bid_val
-                        close_val = float(price.get('close', 0) or 0)
-                        if close_val > 0:
+                        close_val = _to_price(price.get('close'))
+                        if close_val and close_val > 0:
                             return close_val
                         price = (price.get('last') or
                                  price.get('price') or price.get('latestPrice'))
-                    return float(price) if price is not None else None
+                    return _to_price(price)
             
             return None
         except Exception as e:
@@ -1142,10 +1169,13 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] 🔄 CHASING ENTRY ORDER (attempt {order.chase_attempts}/{self.max_chase_attempts})")
             print(f"[ORDER_CHASER]   Order ID: {order.order_id}")
             print(f"[ORDER_CHASER]   Symbol: {order.symbol}")
-            _entry_orig_str = f"${order.original_price:.2f}" if order.original_price is not None else "MKT"
+            _entry_orig = _to_price(order.original_price)
+            order.original_price = _entry_orig if _entry_orig else order.original_price
+            _entry_orig_str = f"${_entry_orig:.2f}" if _entry_orig is not None else "MKT"
             print(f"[ORDER_CHASER]   Original Price: {_entry_orig_str}")
-            if order.entry_range_high:
-                print(f"[ORDER_CHASER]   Max Entry Price: ${order.entry_range_high:.2f}")
+            _erh = _to_price(order.entry_range_high)
+            if _erh:
+                print(f"[ORDER_CHASER]   Max Entry Price: ${_erh:.2f}")
             
             pending_orders = []
             if hasattr(broker, 'get_pending_orders'):
