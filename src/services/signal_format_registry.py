@@ -620,7 +620,7 @@ class SignalFormatRegistry:
             name="phoenix_trim_simple",
             description="Phoenix partial exit - selling X% SYMBOL (simple format)",
             priority=65,
-            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF|ALL|REST)[A-Z]{1,5})(?:\s|$)',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF|ALL|REST|AT|FIRST|IN|TO|FOR|WITH|PROFIT|SOME|EARLY|LATE|IF|AND|BUT|THEN|ALSO|JUST|WHEN|THIS|THAT|THEM|BEEN|WILL|FROM)[A-Z]{1,5})(?:\s|$)',
             parser=self._parse_phoenix_trim,
             examples=["selling 80% XHLD", "selling 10% GITS", "sold 50% ENVB"],
             flags=re.IGNORECASE
@@ -939,6 +939,106 @@ class SignalFormatRegistry:
             pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?(?:\$?((?!HERE|MORE|AT|SHARES)[A-Z]{2,5}))(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
             parser=self._parse_phoenix_adding_v2,
             examples=["adding here SMX at 11.50", "adding more PHOE shares", "buying more shares JBDI"],
+            flags=re.IGNORECASE
+        )
+
+        # =====================================================================
+        # JACOB FORMAT (Stock signals — exits, trims, SL updates)
+        # Priority 52-55 — before Phoenix entries but after Phoenix SL patterns
+        # =====================================================================
+
+        self.register(
+            name="jacob_cutting",
+            description="Jacob exit - cutting SYMBOL (full exit)",
+            priority=55,
+            pattern=r'(?:^|[.!?\n]\s*)(?:personally\s+)?cutting\s+\$?((?!IT|MY|THE|AND|OUT|THIS|VERY|TOO|ALL|HALF|SOME|IF|AT|AROUND|HERE|NOW)[A-Z]{2,5})(?![a-z])',
+            parser=self._parse_jacob_exit,
+            examples=["cutting EONR", "Cutting NVTS", "personally cutting IBRX",
+                       "Personally cutting PDYN", "Cutting AIM", "personally cutting RILY here"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_sold_pct_at_target",
+            description="Jacob trim - sold/selling X% at first target (on SYMBOL)",
+            priority=53,
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+(?:at\s+)?(?:first|1st|second|2nd|third|3rd)?\s*(?:target|targ)[\s!]*(?:on\s+\$?((?!THE|MY|OF|THIS)[A-Z]{2,5})(?![a-z]))?',
+            parser=self._parse_jacob_trim_at_target,
+            examples=["Selling 90% at First Target!", "Sold 90% at First Target on FEED",
+                       "selling 90% at first target", "Selling 90% at first target!",
+                       "Sold 90% at first target"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_sold_pct_of_sym",
+            description="Jacob trim - selling/sold X% of SYMBOL",
+            priority=53,
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+(?:of\s+)\$?((?!MY|THE|THIS|ALL)[A-Z]{2,5})(?![a-z])',
+            parser=self._parse_phoenix_trim,
+            examples=["Selling 50% of SKYQ to mitigate", "Selling 90% of SLGB",
+                       "Selling 90% of IVF", "Sold 90% of IMTE at first target"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_sold_pct_sym_direct",
+            description="Jacob trim - sold/selling X% SYMBOL (before 'at' catches it)",
+            priority=53,
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE|MORE|NOW|ON|THE|MY|OF|ALL|REST|AT|FIRST|IN|TO|FOR|WITH|PROFIT|SOME|EARLY|LATE|IF|AND|BUT|THEN|ALSO|JUST|WHEN|THIS|THAT|THEM|BEEN|WILL|FROM)[A-Z]{2,5})(?:\s|$|[.,!])',
+            parser=self._parse_phoenix_trim,
+            examples=["Selling 90% HCWC", "Selling 90% POLA at first target also"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_moved_stoploss",
+            description="Jacob SL update - moved/moving/amended stoploss to PRICE",
+            priority=54,
+            pattern=r'(?:mov(?:ed|ing)|amended)\s+(?:my\s+)?stoploss\s+(?:to\s+)?\$?([\d.]+)',
+            parser=self._parse_jacob_stoploss_update,
+            examples=["Moving Stoploss to 8.90", "Amended stoploss to 2.73",
+                       "Moving stoploss to 9.60", "Moved stoploss to 5.84"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_stoploss_price",
+            description="Jacob SL info - stoploss PRICE (standalone SL reference)",
+            priority=54,
+            pattern=r'(?:^|\n)\s*(?:stoploss|stop\s*loss)\s+\$?([\d.]+)',
+            parser=self._parse_jacob_stoploss_update,
+            examples=["Stoploss 0.3780", "stoploss 3.60"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_plan_cut_breakeven",
+            description="Jacob planning to cut at breakeven",
+            priority=54,
+            pattern=r'(?:planning\s+to\s+cut|plan\s+on\s+cutting)\s+\$?((?!IT|MY|THE)[A-Z]{2,5})\s+(?:at\s+|around\s+)?(?:breakeven|break\s*even|b/e)',
+            parser=self._parse_jacob_exit,
+            examples=["planning to cut UOKA around breakeven", "plan on cutting BANL at breakeven"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_selling_to_safe",
+            description="Jacob trim - selling X% in profit to be safe",
+            priority=53,
+            pattern=r'(?:^|[.!?\n]\s*)(?:selling|sold)\s+(\d+)%\s+(?:in\s+profit|to\s+(?:be\s+)?safe|to\s+mitigate)',
+            parser=self._parse_phoenix_trim_no_sym,
+            examples=["Selling 50% in profit to be safe", "selling 50% to mitigate"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="jacob_out_and_all",
+            description="Jacob exit - out of SYMBOL, and all other positions",
+            priority=38,
+            pattern=r'[Oo]ut\s+of\s+\$?([A-Z]{2,5}),?\s+and\s+all\s+other\s+positions',
+            parser=self._parse_foxtrades_exit,
+            examples=["Out of AIOS, and all other positions"],
             flags=re.IGNORECASE
         )
 
@@ -1314,6 +1414,89 @@ class SignalFormatRegistry:
             "_foxtrades_trim": True
         }
     
+    # =========================================================================
+    # JACOB PARSER IMPLEMENTATIONS
+    # =========================================================================
+
+    def _parse_jacob_exit(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jacob exit: cutting SYMBOL, personally cutting SYMBOL"""
+        groups = match.groups()
+        symbol = None
+        for g in groups:
+            if g and g.upper() not in ('IT', 'MY', 'THE', 'AND', 'OUT', 'THIS', 'VERY', 'TOO', 'ALL', 'HALF', 'SOME'):
+                symbol = g.upper()
+                break
+
+        if not symbol:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "confidence": 1.0,
+            "_jacob_exit": True
+        }
+
+    def _parse_jacob_trim_at_target(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jacob trim at target: Sold 90% at First Target on FEED"""
+        groups = match.groups()
+        percentage = float(groups[0]) if groups[0] else 90.0
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": percentage,
+            "confidence": 0.9 if symbol else 0.7,
+            "_jacob_trim": True,
+            "_needs_position_context": symbol is None
+        }
+
+    def _parse_jacob_stoploss_update(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jacob SL update: Moving Stoploss to 8.90"""
+        groups = match.groups()
+        price = float(groups[0]) if groups[0] else None
+
+        if not price:
+            return None
+
+        return {
+            "asset": "stock",
+            "action": "SL_UPDATE",
+            "qty": 0,
+            "qty_specified": False,
+            "symbol": None,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "stop_loss": price,
+            "is_market_order": False,
+            "is_sl_update": True,
+            "confidence": 0.8,
+            "_jacob_sl_update": True,
+            "_needs_position_context": True
+        }
+
     # =========================================================================
     # BRONZE SWINGS PARSER IMPLEMENTATIONS
     # =========================================================================
