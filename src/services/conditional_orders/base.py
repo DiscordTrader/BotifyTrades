@@ -1675,18 +1675,78 @@ class BaseConditionalOrderService(ABC):
             
             self._log(f"✓ Slippage check: ${trigger_price:.2f} vs trigger ${original_trigger:.2f} (threshold {slippage_max_pct}%) — enforcement deferred to broker pipeline")
         
-        # Stop the monitor (trigger condition met)
-        if order_id in self.monitors:
-            await self.monitors[order_id].stop()
-            del self.monitors[order_id]
+        cur_monitor = self.monitors.get(order_id)
+        is_fallback_source = isinstance(cur_monitor, (FinnhubPriceMonitor, YFinancePriceMonitor)) if cur_monitor else False
+        broker_primary = order.get('broker_primary', '')
         
-        if order_id in self.monitor_tasks:
-            self.monitor_tasks[order_id].cancel()
-            del self.monitor_tasks[order_id]
-        
-        if order_id in self.pending_orders:
-            del self.pending_orders[order_id]
-        self._price_reset_needed.pop(order_id, None)
+        if is_fallback_source and broker_primary:
+            source_name = 'Finnhub' if isinstance(cur_monitor, FinnhubPriceMonitor) else 'YFinance'
+            self._log(f"⚠️ #{order_id} {symbol} triggered on {source_name} fallback — stopping monitor and waiting up to 5s for broker {broker_primary} recovery")
+            
+            if order_id in self.monitors:
+                await self.monitors[order_id].stop()
+                del self.monitors[order_id]
+            if order_id in self.monitor_tasks:
+                self.monitor_tasks[order_id].cancel()
+                del self.monitor_tasks[order_id]
+            
+            broker_recovered = False
+            broker_key = broker_primary.lower().replace(' ', '_')
+            for _ in range(20):
+                if broker_key in self.broker_instances:
+                    hub = self.data_hubs.get(broker_key)
+                    is_streaming = hub.is_streaming() if hub and callable(getattr(hub, 'is_streaming', None)) else False
+                    if is_streaming:
+                        self._log(f"✓ #{order_id} {symbol} broker {broker_primary} streaming recovered — proceeding with execution")
+                        broker_recovered = True
+                        break
+                    else:
+                        self._log(f"✓ #{order_id} {symbol} broker {broker_primary} REST available — proceeding with execution")
+                        broker_recovered = True
+                        break
+                await asyncio.sleep(0.25)
+            
+            if not broker_recovered:
+                reason = f"Broker {broker_primary} API/streaming unavailable after 5s wait — order cancelled for safety"
+                self._log(f"❌ #{order_id} {symbol}: {reason}")
+                
+                if order_id in self.pending_orders:
+                    del self.pending_orders[order_id]
+                self._price_reset_needed.pop(order_id, None)
+                
+                update_conditional_order_status(
+                    order_id, 'CANCELLED',
+                    event='BROKER_UNAVAILABLE',
+                    details=reason
+                )
+                try:
+                    notify_conditional_failed(
+                        symbol=symbol,
+                        trigger_price=order.get('trigger_price', 0),
+                        broker=broker_primary,
+                        order_id=order_id,
+                        stage='monitoring',
+                        error=reason
+                    )
+                except Exception:
+                    pass
+                return
+            
+            if order_id in self.pending_orders:
+                del self.pending_orders[order_id]
+            self._price_reset_needed.pop(order_id, None)
+        else:
+            if order_id in self.monitors:
+                await self.monitors[order_id].stop()
+                del self.monitors[order_id]
+            
+            if order_id in self.monitor_tasks:
+                self.monitor_tasks[order_id].cancel()
+                del self.monitor_tasks[order_id]
+            
+            if order_id in self.pending_orders:
+                del self.pending_orders[order_id]
+            self._price_reset_needed.pop(order_id, None)
         
         update_conditional_order_status(
             order_id,

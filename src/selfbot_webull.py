@@ -16810,17 +16810,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if is_risk_order:
                     is_platform_signal = False  # Bypass permanent blocking for risk exits
                 
-                # Check for order_id (from conditional orders) to prevent duplicate execution of triggers
-                trigger_id = signal.get('order_id') or signal.get('signal_uuid')
+                trigger_id = signal.get('order_id') or signal.get('_conditional_order_id') or signal.get('signal_uuid')
                 
                 if is_platform_signal:
                     signal_id = original_message_id
                 elif trigger_id:
-                    # Use existing ID for conditional/triggered orders
                     signal_id = trigger_id
                 else:
-                    # For manual/relay trades without message_id, create a hash-based key
-                    hash_content = f"{signal.get('action', '')}_{signal.get('symbol', '')}_{signal.get('strike', '')}_{signal.get('expiry', '')}_{signal.get('qty', '')}_{signal.get('price', '')}_{signal.get('channel_id', '')}"
+                    hash_content = f"{signal.get('action', '')}_{signal.get('symbol', '')}_{signal.get('strike', '')}_{signal.get('expiry', '')}_{signal.get('qty', '')}_{signal.get('price', '')}_{signal.get('channel_id', '')}_{signal.get('_broker_override', '')}"
                     signal_id = f"HASH_{hashlib.md5(hash_content.encode()).hexdigest()[:16]}"
                     signal['signal_uuid'] = signal_id
                 
