@@ -643,15 +643,17 @@ class BrokerSyncService:
                                     'asset_type': 'stock'
                                 })
                         
-                        raw_orders = await asyncio.to_thread(ib.openOrders)
-                        for order in raw_orders:
+                        raw_trades = await asyncio.to_thread(ib.openTrades)
+                        for trade in raw_trades:
+                            order = trade.order
+                            contract = trade.contract
                             result['pending_orders'].append({
                                 'broker_order_id': str(order.orderId),
-                                'symbol': order.contract.symbol if hasattr(order, 'contract') else '',
+                                'symbol': contract.symbol if contract else '',
                                 'quantity': order.totalQuantity if hasattr(order, 'totalQuantity') else 0,
                                 'limit_price': order.lmtPrice if hasattr(order, 'lmtPrice') else None,
                                 'order_type': order.action if hasattr(order, 'action') else '',
-                                'status': 'PENDING'
+                                'status': trade.orderStatus.status if trade.orderStatus else 'PENDING'
                             })
                     except Exception as e:
                         print(f"[SYNC] IBKR fetch error: {e}")
@@ -991,13 +993,14 @@ class BrokerSyncService:
                         }
             
             elif broker_name.startswith('IBKR'):
-                if hasattr(broker_instance, 'get_account_summary'):
-                    raw = await broker_instance.get_account_summary()
+                if hasattr(broker_instance, 'get_account_info'):
+                    raw = await broker_instance.get_account_info()
                     if raw:
                         account_info = {
-                            'portfolio_value': float(raw.get('NetLiquidation', 0) or 0),
-                            'AvailableFunds': float(raw.get('AvailableFunds', 0) or 0),
-                            'BuyingPower': float(raw.get('BuyingPower', 0) or 0)
+                            'portfolio_value': float(raw.get('portfolio_value', 0) or 0),
+                            'buying_power': float(raw.get('buying_power', 0) or 0),
+                            'options_buying_power': float(raw.get('options_buying_power', 0) or 0),
+                            'cash': float(raw.get('cash', 0) or 0)
                         }
             
             elif broker_name.startswith('TASTYTRADE'):

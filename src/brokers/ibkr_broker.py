@@ -189,6 +189,118 @@ class IBKRBroker(BrokerInterface):
             print(f"[{self.name}] Cancel order {order_id} error: {e}")
             return {'success': False, 'msg': str(e)}
 
+    async def get_pending_orders(self) -> list:
+        """Get all pending/open orders from TWS/Gateway."""
+        try:
+            if not self.ib.isConnected():
+                return []
+            trades = self.ib.openTrades()
+            pending = []
+            for trade in trades:
+                order = trade.order
+                contract = trade.contract
+                status = trade.orderStatus.status if trade.orderStatus else 'Unknown'
+                if status in ('PreSubmitted', 'Submitted', 'PendingSubmit', 'PendingCancel'):
+                    pending.append({
+                        'order_id': str(order.orderId),
+                        'broker_order_id': str(order.orderId),
+                        'symbol': contract.symbol if contract else '',
+                        'quantity': int(order.totalQuantity) if hasattr(order, 'totalQuantity') else 0,
+                        'limit_price': float(order.lmtPrice) if hasattr(order, 'lmtPrice') and order.lmtPrice else None,
+                        'action': order.action if hasattr(order, 'action') else '',
+                        'order_type': order.orderType if hasattr(order, 'orderType') else '',
+                        'status': status,
+                        'asset_type': 'option' if contract and contract.secType == 'OPT' else 'stock'
+                    })
+            return pending
+        except Exception as e:
+            print(f"[{self.name}] Error getting pending orders: {e}")
+            return []
+
+    async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """Get the status of a specific order by order ID."""
+        try:
+            if not self.ib.isConnected():
+                return None
+            for trade in self.ib.openTrades():
+                if str(trade.order.orderId) == str(order_id):
+                    status = trade.orderStatus.status if trade.orderStatus else 'Unknown'
+                    filled_qty = int(trade.orderStatus.filled) if trade.orderStatus else 0
+                    remaining = int(trade.orderStatus.remaining) if trade.orderStatus else 0
+                    avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus and trade.orderStatus.avgFillPrice else 0
+                    ib_to_internal = {
+                        'Filled': 'FILLED', 'Cancelled': 'CANCELLED', 'Inactive': 'CANCELLED',
+                        'Submitted': 'WORKING', 'PreSubmitted': 'PENDING',
+                        'PendingSubmit': 'PENDING', 'PendingCancel': 'PENDING_CANCEL',
+                        'ApiCancelled': 'CANCELLED'
+                    }
+                    return {
+                        'order_id': str(order_id),
+                        'status': ib_to_internal.get(status, status),
+                        'filled_qty': filled_qty,
+                        'filled_quantity': filled_qty,
+                        'remaining_quantity': remaining,
+                        'avg_fill_price': avg_price,
+                        'raw_status': status
+                    }
+            for trade in self.ib.trades():
+                if str(trade.order.orderId) == str(order_id):
+                    status = trade.orderStatus.status if trade.orderStatus else 'Unknown'
+                    filled_qty = int(trade.orderStatus.filled) if trade.orderStatus else 0
+                    avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus and trade.orderStatus.avgFillPrice else 0
+                    ib_to_internal = {
+                        'Filled': 'FILLED', 'Cancelled': 'CANCELLED', 'Inactive': 'CANCELLED',
+                        'Submitted': 'WORKING', 'PreSubmitted': 'PENDING',
+                        'PendingSubmit': 'PENDING', 'PendingCancel': 'PENDING_CANCEL',
+                        'ApiCancelled': 'CANCELLED'
+                    }
+                    return {
+                        'order_id': str(order_id),
+                        'status': ib_to_internal.get(status, status),
+                        'filled_qty': filled_qty,
+                        'filled_quantity': filled_qty,
+                        'remaining_quantity': 0,
+                        'avg_fill_price': avg_price,
+                        'raw_status': status
+                    }
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting order status for {order_id}: {e}")
+            return None
+
+    async def get_positions_detailed(self) -> list:
+        """Get detailed positions for sync service compatibility."""
+        try:
+            if not self.ib.isConnected():
+                return []
+            raw_positions = self.ib.positions()
+            positions = []
+            for pos in raw_positions:
+                contract = pos.contract
+                quantity = abs(int(pos.position))
+                if quantity == 0:
+                    continue
+                avg_cost = float(pos.avgCost) if pos.avgCost else 0
+                entry = {
+                    'symbol': contract.symbol,
+                    'quantity': quantity,
+                    'position_id': str(contract.conId),
+                    'asset_type': 'option' if contract.secType == 'OPT' else 'stock'
+                }
+                if contract.secType == 'OPT':
+                    entry['avg_price'] = avg_cost / 100 if avg_cost > 0 else 0
+                    expiry_raw = contract.lastTradeDateOrContractMonth
+                    entry['expiry'] = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}" if len(expiry_raw) == 8 else expiry_raw
+                    entry['strike'] = contract.strike
+                    entry['call_put'] = contract.right
+                else:
+                    entry['avg_price'] = avg_cost
+                positions.append(entry)
+            return positions
+        except Exception as e:
+            print(f"[{self.name}] Error getting detailed positions: {e}")
+            return []
+
     async def place_stock_order(
         self,
         symbol: str,

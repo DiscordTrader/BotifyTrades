@@ -375,7 +375,7 @@ def check_alpaca_broker() -> CheckResult:
             category=DiagnosticCategory.BROKER_ALPACA,
             status=CheckStatus.PASS,
             message="Credentials configured",
-            details={'api_key_prefix': row['api_key'][:8] + '...'}
+            details={'api_key_prefix': creds['api_key'][:8] + '...'}
         )
     except Exception as e:
         return CheckResult(
