@@ -7952,11 +7952,31 @@ class SelfClient(discord.Client):
                     })
                     
                     ibkr_broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
-                    try:
-                        connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
-                    except asyncio.TimeoutError:
-                        _original_print("[IBKR] ⚠️ Connection timeout (15s) - TWS/Gateway may not be running", flush=True)
-                        connected = False
+                    connected = False
+                    max_retries = 3
+                    for attempt in range(1, max_retries + 1):
+                        try:
+                            _original_print(f"[IBKR] Connection attempt {attempt}/{max_retries}...", flush=True)
+                            connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
+                        except asyncio.TimeoutError:
+                            _original_print(f"[IBKR] ⚠️ Connection attempt {attempt} timeout (15s)", flush=True)
+                            connected = False
+                        if connected:
+                            break
+                        if attempt < max_retries:
+                            _original_print(f"[IBKR] Retrying in 5s (TWS may still be releasing previous session)...", flush=True)
+                            await asyncio.sleep(5)
+                            try:
+                                if self.ibkr_broker.ib.isConnected():
+                                    self.ibkr_broker.ib.disconnect()
+                            except Exception:
+                                pass
+                            self.ibkr_broker = IBKRBroker({
+                                'host': ibkr_host,
+                                'port': ibkr_port,
+                                'client_id': ibkr_client_id,
+                                'paper_trade': ibkr_paper_mode
+                            })
                     if connected:
                         mode = "PAPER" if ibkr_paper_mode else "LIVE"
                         _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)

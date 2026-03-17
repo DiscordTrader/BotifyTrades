@@ -14433,41 +14433,73 @@ def register_routes(app):
                     from ib_insync import IB
                     import asyncio
                     
-                    ib = IB()
-                    
-                    async def try_connect():
-                        try:
-                            await ib.connectAsync(host=host, port=port, clientId=client_id, timeout=10)
-                            if not ib.isConnected():
-                                return False, {}
-                            acct_info = {}
-                            try:
-                                accounts = ib.managedAccounts()
-                                if accounts:
-                                    acct_info['account_id'] = accounts[0]
-                                summary = ib.accountSummary()
-                                for item in summary:
-                                    if item.tag == 'BuyingPower':
-                                        acct_info['buying_power'] = float(item.value)
-                                    elif item.tag == 'NetLiquidation':
-                                        acct_info['portfolio_value'] = float(item.value)
-                                    elif item.tag == 'TotalCashValue':
-                                        acct_info['cash'] = float(item.value)
-                            except Exception as ae:
-                                print(f"[IBKR] Account info fetch warning: {ae}")
-                            return True, acct_info
-                        except Exception as e:
-                            print(f"[IBKR] Connection error: {e}")
+                    bot_reconnected = False
+                    if _bot_instance and hasattr(_bot_instance, 'ibkr_broker') and hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
+                        async def reconnect_bot_ibkr():
+                            from src.brokers.ibkr_broker import IBKRBroker
+                            if _bot_instance.ibkr_broker:
+                                try:
+                                    if _bot_instance.ibkr_broker.ib.isConnected():
+                                        _bot_instance.ibkr_broker.ib.disconnect()
+                                except Exception:
+                                    pass
+                            
+                            _bot_instance.ibkr_broker = IBKRBroker({
+                                'host': host,
+                                'port': port,
+                                'client_id': client_id,
+                                'paper_trade': is_paper
+                            })
+                            connected = await asyncio.wait_for(_bot_instance.ibkr_broker.connect(), timeout=15.0)
+                            if connected:
+                                acct_info = await _bot_instance.ibkr_broker.get_account_info()
+                                return True, acct_info
                             return False, {}
+                        
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(reconnect_bot_ibkr(), _bot_instance.loop)
+                            connected, acct_data = future.result(timeout=20)
+                            bot_reconnected = True
+                        except Exception as bot_err:
+                            print(f"[IBKR] Bot reconnect failed ({bot_err}), falling back to test connection")
+                            bot_reconnected = False
                     
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        connected, acct_data = loop.run_until_complete(try_connect())
-                    finally:
-                        if ib.isConnected():
-                            ib.disconnect()
-                        loop.close()
+                    if not bot_reconnected:
+                        ib = IB()
+                        
+                        async def try_connect():
+                            try:
+                                await ib.connectAsync(host=host, port=port, clientId=client_id, timeout=10)
+                                if not ib.isConnected():
+                                    return False, {}
+                                acct_info = {}
+                                try:
+                                    accounts = ib.managedAccounts()
+                                    if accounts:
+                                        acct_info['account_id'] = accounts[0]
+                                    summary = ib.accountSummary()
+                                    for item in summary:
+                                        if item.tag == 'BuyingPower':
+                                            acct_info['buying_power'] = float(item.value)
+                                        elif item.tag == 'NetLiquidation':
+                                            acct_info['portfolio_value'] = float(item.value)
+                                        elif item.tag == 'TotalCashValue':
+                                            acct_info['cash'] = float(item.value)
+                                except Exception as ae:
+                                    print(f"[IBKR] Account info fetch warning: {ae}")
+                                return True, acct_info
+                            except Exception as e:
+                                print(f"[IBKR] Connection error: {e}")
+                                return False, {}
+                        
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            connected, acct_data = loop.run_until_complete(try_connect())
+                        finally:
+                            if ib.isConnected():
+                                ib.disconnect()
+                            loop.close()
                     
                     if connected:
                         account_info = {
@@ -14490,9 +14522,10 @@ def register_routes(app):
                             details += f" | BP: ${bp:,.2f}"
                         if pv:
                             details += f" | Portfolio: ${pv:,.2f}"
+                        reconnect_note = " (bot broker reconnected)" if bot_reconnected else " (test only - restart bot to trade)"
                         return jsonify({
                             'success': True,
-                            'message': f'IBKR {mode} connected to TWS on {host}:{port}!{details}',
+                            'message': f'IBKR {mode} connected to TWS on {host}:{port}!{details}{reconnect_note}',
                             'status': 'connected',
                             'account': account_info
                         })
