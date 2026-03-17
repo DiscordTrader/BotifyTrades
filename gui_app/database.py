@@ -4607,8 +4607,9 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     
     try:
         cursor.execute('BEGIN IMMEDIATE')
-    except Exception:
-        pass
+    except Exception as tx_err:
+        if 'within a transaction' not in str(tx_err):
+            print(f"[LOT_MATCHER] ⚠️ BEGIN IMMEDIATE failed for lot #{lot_id}: {tx_err}")
     
     try:
         cursor.execute('SELECT * FROM signal_lots WHERE id = ?', (lot_id,))
