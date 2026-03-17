@@ -1260,6 +1260,17 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] ⚠️ Schwab hub subscription error: {e}")
 
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            ibkr_hub = get_ibkr_data_hub()
+            ibkr_hub.on('quote_updated', _on_quote_update)
+            _any_subscribed = True
+            print("[RISK] ✓ Subscribed to IBKR streaming prices (event-driven risk)")
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ IBKR hub subscription error: {e}")
+
         self._hub_subscribed = _any_subscribed
 
     def _update_monitored_symbols(self, positions):
@@ -1271,7 +1282,7 @@ class RiskManager:
             if hasattr(p, 'raw_symbol') and p.raw_symbol:
                 symbols.add(p.raw_symbol.upper())
             broker_upper = (p.broker or '').upper()
-            if 'WEBULL' not in broker_upper and broker_upper != 'SCHWAB':
+            if 'WEBULL' not in broker_upper and broker_upper != 'SCHWAB' and 'IBKR' not in broker_upper:
                 if p.asset != 'option':
                     non_streaming_symbols.add(sym)
         with self._monitored_symbols_lock:
@@ -2018,6 +2029,34 @@ class RiskManager:
             if not (self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False)):
                 return []
             try:
+                try:
+                    from src.services.ibkr_data_hub import get_ibkr_data_hub
+                    ibkr_hub = get_ibkr_data_hub()
+                    if ibkr_hub.is_streaming():
+                        hub_pos = ibkr_hub.get_positions(max_age_seconds=20)
+                        if hub_pos is not None and len(hub_pos) > 0:
+                            broker_label = 'IBKR_LIVE' if not getattr(self.ibkr_broker, 'paper_trade', True) else 'IBKR_PAPER'
+                            snapshots = []
+                            for p in hub_pos:
+                                snap = PositionSnapshot(
+                                    symbol=p.get('symbol', ''),
+                                    quantity=p.get('quantity', 0),
+                                    avg_cost=p.get('avg_cost', 0),
+                                    current_price=0,
+                                    asset=p.get('asset', 'stock'),
+                                    broker=broker_label,
+                                    strike=p.get('strike', 0),
+                                    expiry=p.get('expiry', ''),
+                                    direction=p.get('direction', ''),
+                                    raw_symbol=p.get('raw_symbol', p.get('symbol', ''))
+                                )
+                                snapshots.append(snap)
+                            self._last_ibkr_positions = snapshots
+                            self._ibkr_cache_ts = _time.time()
+                            return snapshots
+                except ImportError:
+                    pass
+
                 ibkr_cache_age = _time.time() - getattr(self, '_ibkr_cache_ts', 0)
                 if hasattr(self, '_last_ibkr_positions') and self._last_ibkr_positions is not None and ibkr_cache_age < _REST_CACHE_TTL:
                     return list(self._last_ibkr_positions)
@@ -2306,6 +2345,7 @@ class RiskManager:
                     else:
                         expiry = expiry_raw
                     
+                    raw_sym = f"{symbol}_{expiry_raw}_{contract.strike}_{contract.right}"
                     positions.append(PositionSnapshot(
                         symbol=symbol,
                         quantity=quantity,
@@ -2315,7 +2355,8 @@ class RiskManager:
                         broker=broker_label,
                         strike=contract.strike,
                         expiry=expiry,
-                        direction=contract.right
+                        direction=contract.right,
+                        raw_symbol=raw_sym
                     ))
                 else:
                     positions.append(PositionSnapshot(
@@ -2324,7 +2365,8 @@ class RiskManager:
                         avg_cost=avg_cost,
                         current_price=0,
                         asset='stock',
-                        broker=broker_label
+                        broker=broker_label,
+                        raw_symbol=symbol
                     ))
         except Exception as e:
             print(f"[RISK] Error fetching IBKR positions: {e}")
@@ -3863,8 +3905,39 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] ⚠️ Schwab hub price update error: {e}")
         
+        ibkr_updated = 0
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            ibkr_hub = get_ibkr_data_hub()
+            if ibkr_hub.is_streaming():
+                for pos in positions:
+                    if 'IBKR' not in pos.broker.upper():
+                        continue
+                    if pos.asset == 'option':
+                        lookup_sym = pos.raw_symbol if pos.raw_symbol else None
+                        if not lookup_sym:
+                            continue
+                        price = self._get_fresh_hub_price(ibkr_hub, lookup_sym)
+                        if not price:
+                            if ibkr_hub.get_quote_price(lookup_sym):
+                                stale_skipped += 1
+                            continue
+                    else:
+                        price = self._get_fresh_hub_price(ibkr_hub, pos.symbol)
+                        if not price:
+                            if ibkr_hub.get_quote_price(pos.symbol):
+                                stale_skipped += 1
+                            continue
+                    if price and price > 0:
+                        pos.current_price = price
+                        ibkr_updated += 1
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ IBKR hub price update error: {e}")
+        
         cross_updated = 0
-        _streaming_prefixes = ('WEBULL', 'SCHWAB')
+        _streaming_prefixes = ('WEBULL', 'SCHWAB', 'IBKR')
         for pos in positions:
             if pos.broker.upper().startswith(_streaming_prefixes):
                 continue
@@ -3897,13 +3970,15 @@ class RiskManager:
             if self._stale_skip_count <= 3 or self._stale_skip_count % 60 == 0:
                 print(f"[RISK] ⚠️ Skipped {stale_skipped} stale streaming quote(s) (>{self._HUB_PRICE_MAX_AGE}s old) — using REST price instead")
 
-        total = webull_updated + schwab_updated + cross_updated
+        total = webull_updated + schwab_updated + ibkr_updated + cross_updated
         if total > 0 and not hasattr(self, '_hub_update_logged'):
             parts = []
             if webull_updated > 0:
                 parts.append(f"Webull({webull_updated})")
             if schwab_updated > 0:
                 parts.append(f"Schwab({schwab_updated})")
+            if ibkr_updated > 0:
+                parts.append(f"IBKR({ibkr_updated})")
             if cross_updated > 0:
                 parts.append(f"CrossBroker({cross_updated})")
             print(f"[RISK] ✓ Streaming hub: updated {total} position prices [{', '.join(parts)}]")

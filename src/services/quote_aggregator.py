@@ -191,6 +191,15 @@ class QuoteAggregator:
                     return price
         except Exception:
             pass
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            hub = get_ibkr_data_hub()
+            if hub.is_streaming():
+                price = hub.get_quote_price(symbol)
+                if price and price > 0:
+                    return price
+        except Exception:
+            pass
         return None
 
     def _check_streaming_hubs_detailed(self, symbol: str) -> Optional[dict]:
@@ -206,6 +215,15 @@ class QuoteAggregator:
         try:
             from src.services.schwab_data_hub import get_schwab_data_hub
             hub = get_schwab_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(symbol)
+                if data and (data.get('last', 0) > 0 or data.get('bid', 0) > 0):
+                    return data
+        except Exception:
+            pass
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            hub = get_ibkr_data_hub()
             if hub.is_streaming():
                 data = hub.get_quote_detailed(symbol)
                 if data and (data.get('last', 0) > 0 or data.get('bid', 0) > 0):
@@ -294,6 +312,15 @@ class QuoteAggregator:
                     return float(quote['last_trade_price'])
         
         elif name == 'ibkr':
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                ibkr_hub = get_ibkr_data_hub()
+                if ibkr_hub.is_streaming():
+                    hub_price = ibkr_hub.get_quote_price(symbol)
+                    if hub_price and hub_price > 0:
+                        return float(hub_price)
+            except ImportError:
+                pass
             if hasattr(broker, 'ib') and broker.ib and broker.ib.isConnected():
                 from ib_insync import Stock
                 contract = Stock(symbol, 'SMART', 'USD')

@@ -1,0 +1,487 @@
+"""
+IBKR Data Hub
+=============
+Centralized cache and event bus for all IBKR data.
+All services read from this hub instead of polling TWS/Gateway.
+
+Architecture:
+- Single source of truth for IBKR positions, orders, quotes, account info
+- Event-driven: uses ib_insync native events (pendingTickersEvent, positionEvent, etc.)
+- Quote data populated by reqMktData streaming (continuous, not snapshot)
+- Position updates via positionEvent + periodic reconciliation
+- Mirrors WebullDataHub/SchwabDataHub architecture for consistency
+"""
+
+import time
+import asyncio
+import threading
+import logging
+from typing import Dict, Optional, List, Any, Callable, Set
+
+logger = logging.getLogger(__name__)
+
+
+class IBKRQuoteData:
+    __slots__ = ('symbol', 'contract_id', 'bid', 'ask', 'last', 'volume',
+                 'high', 'low', 'open_price', 'close_price', 'change',
+                 'change_pct', 'timestamp', 'source')
+
+    def __init__(self, symbol: str = '', contract_id: int = 0):
+        self.symbol = symbol
+        self.contract_id = contract_id
+        self.bid = 0.0
+        self.ask = 0.0
+        self.last = 0.0
+        self.volume = 0
+        self.high = 0.0
+        self.low = 0.0
+        self.open_price = 0.0
+        self.close_price = 0.0
+        self.change = 0.0
+        self.change_pct = 0.0
+        self.timestamp = 0.0
+        self.source = 'stream'
+
+
+class IBKRDataHub:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self._initialized = True
+
+        self._quotes: Dict[str, IBKRQuoteData] = {}
+        self._quotes_lock = threading.Lock()
+
+        self._conid_to_symbol: Dict[int, str] = {}
+        self._symbol_to_contract: Dict[str, Any] = {}
+        self._contract_lock = threading.Lock()
+
+        self._positions: List[Dict[str, Any]] = []
+        self._positions_lock = threading.Lock()
+        self._positions_time: float = 0
+
+        self._account_info: Dict[str, Any] = {}
+        self._account_lock = threading.Lock()
+        self._account_time: float = 0
+
+        self._event_handlers: Dict[str, List[Callable]] = {}
+        self._event_lock = threading.Lock()
+
+        self._streaming_active = False
+        self._subscribed_symbols: Set[str] = set()
+        self._subscribed_conids: Set[int] = set()
+        self._pending_subscriptions: Set[str] = set()
+
+        self._ib = None
+        self._broker = None
+        self._loop = None
+
+        self.POSITION_CACHE_TTL = 15
+        self.ACCOUNT_CACHE_TTL = 30
+        self.QUOTE_STALE_THRESHOLD = 120
+
+        self._risk_eval_requested = threading.Event()
+        self._reconcile_task = None
+
+        print("[IBKR_HUB] ✓ IBKRDataHub initialized (singleton)")
+
+    def on(self, event: str, handler: Callable):
+        with self._event_lock:
+            if event not in self._event_handlers:
+                self._event_handlers[event] = []
+            self._event_handlers[event].append(handler)
+
+    def off(self, event: str, handler: Callable):
+        with self._event_lock:
+            if event in self._event_handlers:
+                self._event_handlers[event] = [h for h in self._event_handlers[event] if h != handler]
+
+    def _emit(self, event: str, data: Any = None):
+        with self._event_lock:
+            handlers = list(self._event_handlers.get(event, []))
+        for handler in handlers:
+            try:
+                handler(data)
+            except Exception as e:
+                print(f"[IBKR_HUB] Event handler error ({event}): {e}")
+
+    def attach_broker(self, broker, loop=None):
+        self._broker = broker
+        self._ib = broker.ib
+        self._loop = loop
+        self._attach_events()
+        self._streaming_active = True
+        if self._reconcile_task is None or self._reconcile_task.done():
+            if self._loop and not self._loop.is_closed():
+                self._reconcile_task = self._loop.create_task(self.start_reconciliation_loop(interval=10.0))
+        print("[IBKR_HUB] ✓ Attached to IBKRBroker — streaming events active")
+
+    def detach_broker(self):
+        old_ib = self._ib
+        self._streaming_active = False
+        self._cancel_all_subscriptions()
+        if old_ib:
+            try:
+                old_ib.pendingTickersEvent -= self._on_pending_tickers
+                old_ib.positionEvent -= self._on_position_event
+                old_ib.orderStatusEvent -= self._on_order_status
+            except Exception:
+                pass
+        self._ib = None
+        self._broker = None
+        if self._reconcile_task and not self._reconcile_task.done():
+            self._reconcile_task.cancel()
+            self._reconcile_task = None
+        print("[IBKR_HUB] Detached from broker — streaming stopped")
+
+    def _attach_events(self):
+        if not self._ib:
+            return
+        self._ib.pendingTickersEvent += self._on_pending_tickers
+        self._ib.positionEvent += self._on_position_event
+        self._ib.orderStatusEvent += self._on_order_status
+        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders)")
+
+    def _on_pending_tickers(self, tickers):
+        now = time.time()
+        updated_symbols = []
+        with self._quotes_lock:
+            for ticker in tickers:
+                con_id = ticker.contract.conId if ticker.contract else 0
+                symbol = self._conid_to_symbol.get(con_id)
+                if not symbol:
+                    if ticker.contract:
+                        symbol = self._build_symbol_key(ticker.contract)
+                        if symbol:
+                            with self._contract_lock:
+                                self._conid_to_symbol[con_id] = symbol
+                if not symbol:
+                    continue
+
+                if symbol not in self._quotes:
+                    self._quotes[symbol] = IBKRQuoteData(symbol=symbol, contract_id=con_id)
+                q = self._quotes[symbol]
+                if ticker.bid is not None and ticker.bid > 0:
+                    q.bid = float(ticker.bid)
+                if ticker.ask is not None and ticker.ask > 0:
+                    q.ask = float(ticker.ask)
+                if ticker.last is not None and ticker.last > 0:
+                    q.last = float(ticker.last)
+                elif ticker.close is not None and ticker.close > 0:
+                    q.last = float(ticker.close)
+                if ticker.volume is not None:
+                    q.volume = int(ticker.volume)
+                if ticker.high is not None and ticker.high > 0:
+                    q.high = float(ticker.high)
+                if ticker.low is not None and ticker.low > 0:
+                    q.low = float(ticker.low)
+                q.timestamp = now
+                updated_symbols.append(symbol)
+
+        for sym in updated_symbols:
+            self._emit('quote_updated', {'symbol': sym, 'source': 'ibkr_stream'})
+
+    def _on_position_event(self, *args):
+        self._risk_eval_requested.set()
+        try:
+            if self._loop and not self._loop.is_closed():
+                self._loop.call_soon_threadsafe(
+                    lambda: self._loop.create_task(self._refresh_positions_from_ib())
+                )
+        except Exception as e:
+            print(f"[IBKR_HUB] Position event refresh error: {e}")
+
+    def _on_order_status(self, trade):
+        try:
+            status = trade.orderStatus.status if trade.orderStatus else ''
+            if status in ('Filled', 'Cancelled'):
+                self._risk_eval_requested.set()
+                if self._loop and not self._loop.is_closed():
+                    self._loop.call_soon_threadsafe(
+                        lambda: self._loop.create_task(self._refresh_positions_from_ib())
+                    )
+                self._emit('order_event', {
+                    'status': status,
+                    'order_id': trade.order.orderId if trade.order else None,
+                    'symbol': trade.contract.symbol if trade.contract else ''
+                })
+        except Exception as e:
+            print(f"[IBKR_HUB] Order status event error: {e}")
+
+    def _build_symbol_key(self, contract) -> str:
+        if not contract:
+            return ''
+        if contract.secType == 'OPT':
+            exp = contract.lastTradeDateOrContractMonth or ''
+            right = contract.right or ''
+            strike = contract.strike or 0
+            return f"{contract.symbol}_{exp}_{strike}_{right}"
+        return contract.symbol or ''
+
+    def update_quote(self, symbol: str, quote_data: Dict[str, Any], source: str = "stream"):
+        now = time.time()
+        with self._quotes_lock:
+            if symbol not in self._quotes:
+                self._quotes[symbol] = IBKRQuoteData(symbol=symbol)
+            q = self._quotes[symbol]
+            q.bid = float(quote_data.get('bid', q.bid) or q.bid)
+            q.ask = float(quote_data.get('ask', q.ask) or q.ask)
+            q.last = float(quote_data.get('last', q.last) or q.last)
+            q.volume = int(quote_data.get('volume', q.volume) or q.volume)
+            q.timestamp = now
+            q.source = source
+        self._emit('quote_updated', {'symbol': symbol, 'source': source})
+
+    def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[IBKRQuoteData]:
+        with self._quotes_lock:
+            q = self._quotes.get(symbol)
+            if not q:
+                return None
+            if max_age and (time.time() - q.timestamp) > max_age:
+                return None
+            return q
+
+    def get_quote_price(self, symbol: str) -> Optional[float]:
+        with self._quotes_lock:
+            q = self._quotes.get(symbol)
+            if not q:
+                return None
+            if q.last and q.last > 0:
+                return q.last
+            if q.bid > 0 and q.ask > 0:
+                return round((q.bid + q.ask) / 2, 4)
+            return q.bid or q.ask or None
+
+    def get_quote_detailed(self, symbol: str, max_age: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        with self._quotes_lock:
+            q = self._quotes.get(symbol)
+            if not q:
+                return None
+            if max_age and (time.time() - q.timestamp) > max_age:
+                return None
+            return {
+                'symbol': q.symbol,
+                'bid': q.bid,
+                'ask': q.ask,
+                'last': q.last,
+                'volume': q.volume,
+                'high': q.high,
+                'low': q.low,
+                'timestamp': q.timestamp,
+                'source': q.source
+            }
+
+    def get_positions(self, max_age_seconds: Optional[int] = None) -> Optional[List[Dict[str, Any]]]:
+        with self._positions_lock:
+            age = time.time() - self._positions_time
+            ttl = max_age_seconds if max_age_seconds is not None else self.POSITION_CACHE_TTL
+            if age > ttl:
+                return None
+            return list(self._positions)
+
+    def get_positions_age(self) -> float:
+        return time.time() - self._positions_time
+
+    def update_positions(self, positions: List[Dict[str, Any]]):
+        with self._positions_lock:
+            self._positions = positions
+            self._positions_time = time.time()
+        current_symbols = set()
+        for p in positions:
+            sym = p.get('symbol', '')
+            if sym:
+                current_symbols.add(sym)
+            raw = p.get('raw_symbol', '')
+            if raw:
+                current_symbols.add(raw)
+        self._sync_subscriptions(current_symbols)
+        self._emit('positions_updated', positions)
+
+    def get_account_info(self) -> Optional[Dict[str, Any]]:
+        with self._account_lock:
+            if not self._account_info:
+                return None
+            if (time.time() - self._account_time) > self.ACCOUNT_CACHE_TTL:
+                return None
+            return dict(self._account_info)
+
+    def update_account_info(self, info: Dict[str, Any]):
+        with self._account_lock:
+            self._account_info = info
+            self._account_time = time.time()
+
+    def is_streaming(self) -> bool:
+        return self._streaming_active and self._ib is not None
+
+    def request_risk_eval(self):
+        self._risk_eval_requested.set()
+
+    def check_risk_eval_requested(self) -> bool:
+        return self._risk_eval_requested.is_set()
+
+    def clear_risk_eval_request(self):
+        self._risk_eval_requested.clear()
+
+    def subscribe_symbol(self, symbol: str, contract=None):
+        if symbol in self._subscribed_symbols:
+            return
+        if not self._ib or not self._streaming_active:
+            self._pending_subscriptions.add(symbol)
+            return
+        if contract:
+            self._start_market_data(symbol, contract)
+        else:
+            self._pending_subscriptions.add(symbol)
+
+    def _start_market_data(self, symbol: str, contract):
+        if not self._ib:
+            return
+        try:
+            con_id = contract.conId if contract else 0
+            if con_id in self._subscribed_conids:
+                return
+            self._ib.reqMktData(contract, '', False, False)
+            self._subscribed_symbols.add(symbol)
+            self._subscribed_conids.add(con_id)
+            with self._contract_lock:
+                self._conid_to_symbol[con_id] = symbol
+                self._symbol_to_contract[symbol] = contract
+        except Exception as e:
+            print(f"[IBKR_HUB] Failed to subscribe {symbol}: {e}")
+
+    def unsubscribe_symbol(self, symbol: str):
+        with self._contract_lock:
+            contract = self._symbol_to_contract.pop(symbol, None)
+        if contract and self._ib:
+            try:
+                self._ib.cancelMktData(contract)
+                con_id = contract.conId if contract else 0
+                self._subscribed_conids.discard(con_id)
+                with self._contract_lock:
+                    self._conid_to_symbol.pop(con_id, None)
+            except Exception:
+                pass
+        self._subscribed_symbols.discard(symbol)
+
+    def _cancel_all_subscriptions(self):
+        with self._contract_lock:
+            contracts = list(self._symbol_to_contract.values())
+            self._symbol_to_contract.clear()
+            self._conid_to_symbol.clear()
+        for contract in contracts:
+            try:
+                if self._ib:
+                    self._ib.cancelMktData(contract)
+            except Exception:
+                pass
+        self._subscribed_symbols.clear()
+        self._subscribed_conids.clear()
+
+    def _sync_subscriptions(self, current_symbols: Set[str]):
+        if not self._ib or not self._streaming_active:
+            return
+        new_symbols = current_symbols - self._subscribed_symbols
+        stale_symbols = self._subscribed_symbols - current_symbols
+
+        for sym in stale_symbols:
+            self.unsubscribe_symbol(sym)
+
+        for sym in new_symbols:
+            with self._contract_lock:
+                contract = self._symbol_to_contract.get(sym)
+            if contract:
+                self._start_market_data(sym, contract)
+            else:
+                self._pending_subscriptions.add(sym)
+
+    async def _refresh_positions_from_ib(self):
+        if not self._ib or not self._ib.isConnected():
+            return
+        try:
+            raw_positions = await asyncio.to_thread(self._ib.positions)
+            parsed = []
+            for pos in raw_positions:
+                contract = pos.contract
+                symbol = contract.symbol
+                quantity = abs(int(pos.position))
+                if quantity == 0:
+                    continue
+                avg_cost = float(pos.avgCost) if pos.avgCost else 0
+                sym_key = self._build_symbol_key(contract)
+
+                with self._contract_lock:
+                    if contract.conId not in self._conid_to_symbol:
+                        self._conid_to_symbol[contract.conId] = sym_key
+                    if sym_key not in self._symbol_to_contract:
+                        self._symbol_to_contract[sym_key] = contract
+
+                entry = {
+                    'symbol': symbol,
+                    'quantity': quantity,
+                    'avg_cost': avg_cost / 100 if contract.secType == 'OPT' and avg_cost > 0 else avg_cost,
+                    'contract': contract,
+                    'con_id': contract.conId,
+                    'sec_type': contract.secType,
+                    'raw_symbol': sym_key,
+                }
+                if contract.secType == 'OPT':
+                    entry['strike'] = contract.strike
+                    entry['expiry'] = contract.lastTradeDateOrContractMonth
+                    entry['direction'] = contract.right
+                    entry['asset'] = 'option'
+                else:
+                    entry['asset'] = 'stock'
+                parsed.append(entry)
+
+            self.update_positions(parsed)
+
+            for p in parsed:
+                sym_key = p.get('raw_symbol', p['symbol'])
+                contract = p.get('contract')
+                if contract and sym_key not in self._subscribed_symbols:
+                    self._start_market_data(sym_key, contract)
+
+        except Exception as e:
+            print(f"[IBKR_HUB] Position refresh error: {e}")
+
+    async def start_reconciliation_loop(self, interval: float = 10.0):
+        print(f"[IBKR_HUB] ✓ Position reconciliation loop started ({interval}s)")
+        while True:
+            try:
+                await asyncio.sleep(interval)
+                if self._ib and self._ib.isConnected():
+                    await self._refresh_positions_from_ib()
+
+                    for sym in list(self._pending_subscriptions):
+                        with self._contract_lock:
+                            contract = self._symbol_to_contract.get(sym)
+                        if contract:
+                            self._start_market_data(sym, contract)
+                            self._pending_subscriptions.discard(sym)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[IBKR_HUB] Reconciliation error: {e}")
+                await asyncio.sleep(5)
+
+
+_ibkr_hub_instance: Optional[IBKRDataHub] = None
+_ibkr_hub_lock = threading.Lock()
+
+def get_ibkr_data_hub() -> IBKRDataHub:
+    global _ibkr_hub_instance
+    if _ibkr_hub_instance is None:
+        with _ibkr_hub_lock:
+            if _ibkr_hub_instance is None:
+                _ibkr_hub_instance = IBKRDataHub()
+    return _ibkr_hub_instance

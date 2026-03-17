@@ -7991,6 +7991,14 @@ class SelfClient(discord.Client):
                         except Exception as status_err:
                             _original_print(f"[IBKR] ⚠️ Failed to update broker status: {status_err}", flush=True)
                         try:
+                            from src.services.ibkr_data_hub import get_ibkr_data_hub
+                            _ibkr_hub = get_ibkr_data_hub()
+                            _ibkr_hub.attach_broker(self.ibkr_broker, loop=asyncio.get_event_loop())
+                            asyncio.create_task(_ibkr_hub._refresh_positions_from_ib())
+                            _original_print(f"[IBKR] ✓ IBKRDataHub streaming active — real-time prices for risk engine", flush=True)
+                        except Exception as hub_err:
+                            _original_print(f"[IBKR] ⚠️ IBKRDataHub init error (non-fatal): {hub_err}", flush=True)
+                        try:
                             from gui_app.discord_notifier import notify_broker_reconnected
                             notify_broker_reconnected(f'IBKR {mode}')
                         except Exception:

@@ -14474,6 +14474,15 @@ def register_routes(app):
                                     print("[IBKR] ✓ Conditional order router updated with new broker instance")
                                 except Exception:
                                     pass
+                                try:
+                                    from src.services.ibkr_data_hub import get_ibkr_data_hub
+                                    _ibkr_hub = get_ibkr_data_hub()
+                                    _ibkr_hub.detach_broker()
+                                    _ibkr_hub.attach_broker(_bot_instance.ibkr_broker, loop=asyncio.get_event_loop())
+                                    asyncio.create_task(_ibkr_hub._refresh_positions_from_ib())
+                                    print("[IBKR] ✓ IBKRDataHub re-attached to new broker instance")
+                                except Exception as hub_err:
+                                    print(f"[IBKR] ⚠️ IBKRDataHub re-attach error: {hub_err}")
                                 return True, acct_info
                             return False, {}
                         
