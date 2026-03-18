@@ -1165,7 +1165,7 @@ class RiskManager:
             print(f"[RISK] ✓ Webull broker reference acquired ({type(self._webull_broker).__name__})")
         
         self._stuck_price_tracker = {}
-        self._STUCK_PRICE_THRESHOLD = 5
+        self._STUCK_PRICE_THRESHOLD = 3
         
         self.cache = PositionCache()
         self._running = False
@@ -3978,50 +3978,32 @@ class RiskManager:
                 continue
             tracker['rest_refreshed'] = now
             try:
-                wb_broker = self._webull_broker
-                if not wb_broker:
-                    continue
                 if pos.asset == 'stock':
-                    quote_result = None
-                    if hasattr(wb_broker, 'get_quote'):
-                        quote_result = await asyncio.get_event_loop().run_in_executor(
-                            None, wb_broker.get_quote, pos.symbol)
-                    if quote_result and isinstance(quote_result, dict):
-                        close_price = float(quote_result.get('close', 0) or 0)
-                        bid = float(quote_result.get('bid', 0) or 0)
-                        ask = float(quote_result.get('ask', 0) or 0)
-                        last = float(quote_result.get('last', 0) or 0)
-                        if bid > 0 and ask > 0:
-                            fresh_price = (bid + ask) / 2
-                        elif close_price > 0:
-                            fresh_price = close_price
-                        elif last > 0:
-                            fresh_price = last
-                        else:
-                            fresh_price = 0
-                        if fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
-                            print(f"[RISK] 🔄 STUCK PRICE FIX: {pos.symbol} was ${pos.current_price:.4f} "
-                                  f"(frozen {stuck_seconds:.0f}s) → REST quote ${fresh_price:.4f}")
-                            pos.current_price = fresh_price
-                            tracker['last_price'] = fresh_price
-                            tracker['last_changed'] = now
-                        elif fresh_price > 0:
-                            tracker['last_changed'] = now
-                    elif not quote_result and stuck_seconds > 15:
-                        raw_client = self._get_raw_webull_client()
-                        if raw_client and hasattr(raw_client, 'get_quote'):
-                            try:
-                                raw_quote = await asyncio.get_event_loop().run_in_executor(
-                                    None, lambda: raw_client.get_quote(stock=pos.symbol))
-                                if raw_quote and isinstance(raw_quote, dict):
-                                    raw_last = float(raw_quote.get('last', 0) or raw_quote.get('close', 0) or 0)
-                                    if raw_last > 0 and abs(raw_last - pos.current_price) > 0.0001:
-                                        print(f"[RISK] 🔄 STUCK PRICE FIX (raw): {pos.symbol} ${pos.current_price:.4f} → ${raw_last:.4f}")
-                                        pos.current_price = raw_last
-                                        tracker['last_price'] = raw_last
-                                        tracker['last_changed'] = now
-                            except Exception:
-                                pass
+                    raw_client = self._get_raw_webull_client()
+                    if not raw_client or not hasattr(raw_client, 'get_quote'):
+                        continue
+                    sym = pos.symbol
+                    raw_quote = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: raw_client.get_quote(stock=sym))
+                    if not raw_quote or not isinstance(raw_quote, dict):
+                        continue
+                    ask = float(raw_quote.get('askPrice', 0) or 0)
+                    bid = float(raw_quote.get('bidPrice', 0) or 0)
+                    last = float(raw_quote.get('last', 0) or raw_quote.get('close', 0) or 0)
+                    if bid > 0 and ask > 0:
+                        fresh_price = (bid + ask) / 2
+                    elif last > 0:
+                        fresh_price = last
+                    else:
+                        fresh_price = 0
+                    if fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
+                        print(f"[RISK] 🔄 STUCK PRICE FIX: {pos.symbol} was ${pos.current_price:.4f} "
+                              f"(frozen {stuck_seconds:.0f}s) → REST quote ${fresh_price:.4f}")
+                        pos.current_price = fresh_price
+                        tracker['last_price'] = fresh_price
+                        tracker['last_changed'] = now
+                    elif fresh_price > 0:
+                        tracker['last_changed'] = now
             except Exception as e:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
