@@ -3847,7 +3847,7 @@ class RiskManager:
             print(f"[RISK] Error cleaning terminal order cache: {e}")
             return 0
     
-    _HUB_PRICE_MAX_AGE = 30
+    _HUB_PRICE_MAX_AGE = 120
 
     def _get_fresh_hub_price(self, hub, symbol, max_age=None):
         if max_age is None:
@@ -4023,8 +4023,8 @@ class RiskManager:
         _now = _pt.time()
         if not hasattr(self, '_price_change_tracker'):
             self._price_change_tracker = {}
-        _STUCK_THRESHOLD = 8
-        _STUCK_REFRESH_COOLDOWN = 15
+        _STUCK_THRESHOLD = 30
+        _STUCK_REFRESH_COOLDOWN = 30
         any_stuck = False
         _last_stuck_refresh = getattr(self, '_last_stuck_refresh_ts', 0)
         for pos in positions:
