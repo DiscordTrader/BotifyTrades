@@ -336,8 +336,8 @@ class SchwabStreamingClient:
 
                 async with websockets.connect(
                     socket_url,
-                    ping_interval=None,
-                    ping_timeout=None,
+                    ping_interval=20,
+                    ping_timeout=10,
                     close_timeout=5,
                     max_size=2**20
                 ) as ws:
