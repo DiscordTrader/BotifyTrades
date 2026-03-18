@@ -11092,8 +11092,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # !extractraw and !extracthistory work from any channel for admin use
         if self.user and message.author.id == self.user.id:
             content = message.content.strip().lower()
-            if content.startswith('!extractraw'):
-                args = message.content.strip()[11:].strip().split()
+            if content.startswith('!extractraw') or content.startswith('!extractedraw'):
+                cmd_text = message.content.strip()
+                if cmd_text.lower().startswith('!extractedraw'):
+                    args = cmd_text[13:].strip().split()
+                else:
+                    args = cmd_text[11:].strip().split()
                 if not args:
                     await message.channel.send("❌ Usage: `!extractraw [CHANNEL_ID] [LIMIT]`\nExample: `!extractraw 1234567890123456789 1000`")
                     return
@@ -12952,9 +12956,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             return
         
         # !extractraw [CHANNEL_ID] [LIMIT] - Extract ALL messages to JSON file (no filtering)
-        if message.content.strip().lower().startswith('!extractraw') and self.user and message.author.id == self.user.id:
+        if (message.content.strip().lower().startswith('!extractraw') or message.content.strip().lower().startswith('!extractedraw')) and self.user and message.author.id == self.user.id:
             content = message.content.strip()
-            args = content[11:].strip().split()
+            if content.lower().startswith('!extractedraw'):
+                args = content[13:].strip().split()
+            else:
+                args = content[11:].strip().split()
             if not args:
                 await message.channel.send("❌ Usage: `!extractraw [CHANNEL_ID] [LIMIT]`\nExample: `!extractraw 1234567890123456789 1000`")
                 return
