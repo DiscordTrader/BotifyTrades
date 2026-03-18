@@ -13862,7 +13862,10 @@ def cleanup_old_order_events(days: int = 30):
         return 0
 
 
-# Initialize tables
+# Initialize tables — init_db() MUST run first to create base tables (channels, trades, settings)
+# before any migrations that ALTER those tables
+init_db()
+
 init_channel_messages_table()
 init_signal_formats_table()
 init_conditional_orders_table()
@@ -13874,5 +13877,3 @@ init_upstox_settings()
 init_service_orchestrator_tables()
 init_order_chase_settings()
 init_order_events_table()
-
-init_db()

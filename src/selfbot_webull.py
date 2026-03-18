@@ -19446,6 +19446,26 @@ def run_bot_startup(progress_callback=None):
     _original_print("[STARTUP] ✓ Startup guard acquired (single instance)")
     logging.info("[STARTUP] ✓ Startup guard acquired (single instance)")
     
+    try:
+        return _run_bot_startup_inner(progress_callback)
+    except Exception as e:
+        _original_print(f"[STARTUP] ❌ FATAL ERROR during startup: {e}")
+        logging.error(f"[STARTUP] FATAL ERROR during startup: {e}", exc_info=True)
+        import traceback
+        traceback.print_exc()
+        default_port = int(os.environ.get('GUI_PORT', 5000))
+        return None, None, default_port
+    finally:
+        _startup_in_progress = False
+
+
+def _run_bot_startup_inner(progress_callback=None):
+    """Inner startup logic — called from run_bot_startup with try/finally guard."""
+    import time
+    global _discord_ready_event, _discord_shutdown_event, _discord_error_queue
+    global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
+    global _discord_thread_started
+
     startup_start = time.time()
     step_times = {}
     
@@ -19584,7 +19604,6 @@ def run_bot_startup(progress_callback=None):
         _original_print(f"[STARTUP]   TOTAL: {total_time:.1f}s")
         _original_print("[STARTUP] ================================\n")
     
-    _startup_in_progress = False
     return discord_thread, telegram_thread, gui_port
 
 
