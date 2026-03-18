@@ -19584,6 +19584,7 @@ def run_bot_startup(progress_callback=None):
         _original_print(f"[STARTUP]   TOTAL: {total_time:.1f}s")
         _original_print("[STARTUP] ================================\n")
     
+    _startup_in_progress = False
     return discord_thread, telegram_thread, gui_port
 
 
@@ -19908,10 +19909,14 @@ Environment Variables:
             def _startup_watchdog():
                 import time
                 time.sleep(60)
-                if not startup_state.get('license_ready') and startup_state.get('startup_thread') is None:
-                    _original_print("[STARTUP WATCHDOG] ⚠️ Bot startup was never triggered after 60s!")
-                    _original_print("[STARTUP WATCHDOG] Forcing startup (license signal may have been lost)...")
+                if startup_state.get('startup_thread') is not None:
+                    return
+                if not startup_state.get('license_ready'):
+                    _original_print("[STARTUP WATCHDOG] ⚠️ No license signal received after 60s and no startup thread exists")
+                    _original_print("[STARTUP WATCHDOG] Attempting startup (license signal may have been lost)...")
+                    logging.warning("[STARTUP WATCHDOG] No license signal after 60s - attempting startup")
                     startup_state['license_ready'] = True
+                    _start_network_monitor_safe()
                     t = threading.Thread(target=do_startup, daemon=True)
                     startup_state['startup_thread'] = t
                     t.start()
@@ -19930,15 +19935,30 @@ Environment Variables:
                 else:
                     splash.close()
                     if startup_state['error'] is None:
+                        d_thread = startup_state.get('discord_thread')
+                        discord_alive = d_thread is not None and d_thread.is_alive()
+                        
                         tray = setup_system_tray()
                         tray.web_panel_port = startup_state.get('gui_port') or 5000
-                        tray.set_status("running", "Bot is active and monitoring signals")
-                        tray.show_notification(
-                            "BotifyTrades",
-                            "Bot started successfully! Running in background.",
-                            QSystemTrayIcon.MessageIcon.Information,
-                            5000
-                        )
+                        
+                        if discord_alive:
+                            tray.set_status("running", "Bot is active and monitoring signals")
+                            tray.show_notification(
+                                "BotifyTrades",
+                                "Bot started successfully! Running in background.",
+                                QSystemTrayIcon.MessageIcon.Information,
+                                5000
+                            )
+                        else:
+                            _original_print("[GUI] ⚠️ Startup completed but Discord thread is not alive")
+                            logging.warning("[GUI] Startup completed but Discord thread is not alive")
+                            tray.set_status("error", "Discord not connected - check Settings")
+                            tray.show_notification(
+                                "BotifyTrades - Warning",
+                                "Bot started but Discord is not connected. Check Settings > Discord.",
+                                QSystemTrayIcon.MessageIcon.Warning,
+                                10000
+                            )
                         
                         import webbrowser
                         import subprocess
