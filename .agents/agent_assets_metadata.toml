@@ -6,3 +6,9 @@ id = "f6VfpjZ_AzQi2zqXCbemy"
 uri = "file://.local/docs/telegram_notification_architecture.md"
 type = "text"
 title = "Telegram Notification Architecture — Full Design Document"
+
+[[outputs]]
+id = "6VOZ0ud1LZWxIwBYnIvYI"
+uri = "file://.local/docs/ai_agent_order_monitoring_analysis.md"
+type = "text"
+title = "AI Agent Order Monitoring — Full Risk Analysis"
