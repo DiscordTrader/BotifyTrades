@@ -9237,13 +9237,15 @@ def register_routes(app):
             )
             
             if channel_id:
-                # Reload Telegram listener to pick up new channel
                 try:
-                    from src.selfbot_webull import get_telegram_listener
-                    listener = get_telegram_listener()
-                    if listener:
-                        listener.reload_channels_from_db()
-                        print(f"[API] Telegram listener reloaded after adding channel")
+                    import sys
+                    main_mod = sys.modules.get('__main__') or sys.modules.get('src.selfbot_webull')
+                    get_tg = getattr(main_mod, 'get_telegram_listener', None) if main_mod else None
+                    if get_tg:
+                        listener = get_tg()
+                        if listener:
+                            listener.reload_channels_from_db()
+                            print(f"[API] Telegram listener reloaded after adding channel")
                 except Exception as reload_err:
                     print(f"[API] Warning: Could not reload Telegram listener: {reload_err}")
                 
@@ -9276,11 +9278,14 @@ def register_routes(app):
             
             if success:
                 try:
-                    from src.selfbot_webull import get_telegram_listener
-                    listener = get_telegram_listener()
-                    if listener:
-                        listener.reload_channels_from_db()
-                        print(f"[API] Telegram listener reloaded channel configs")
+                    import sys
+                    main_mod = sys.modules.get('__main__') or sys.modules.get('src.selfbot_webull')
+                    get_tg = getattr(main_mod, 'get_telegram_listener', None) if main_mod else None
+                    if get_tg:
+                        listener = get_tg()
+                        if listener:
+                            listener.reload_channels_from_db()
+                            print(f"[API] Telegram listener reloaded channel configs")
                 except Exception as reload_err:
                     print(f"[API] Warning: Could not reload Telegram listener: {reload_err}")
                 return jsonify({'success': True, 'message': 'Telegram channel updated'})

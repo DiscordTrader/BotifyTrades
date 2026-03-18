@@ -19809,12 +19809,17 @@ Environment Variables:
                     def update_progress(step, message):
                         worker.progress_signal.emit(step, message)
                     
+                    _original_print("[STARTUP] do_startup() thread starting run_bot_startup()...")
                     d_thread, t_thread, port = run_bot_startup(update_progress)
                     startup_state['discord_thread'] = d_thread
                     startup_state['telegram_thread'] = t_thread
                     startup_state['gui_port'] = port
+                    _original_print("[STARTUP] do_startup() completed successfully")
                     worker.complete_signal.emit()
                 except Exception as e:
+                    import traceback
+                    _original_print(f"[STARTUP] ❌ do_startup() FAILED: {e}")
+                    _original_print(f"[STARTUP] ❌ Full traceback:\n{traceback.format_exc()}")
                     startup_state['error'] = str(e)
                     worker.error_signal.emit(str(e))
             
@@ -19861,6 +19866,21 @@ Environment Variables:
                 startup_thread = threading.Thread(target=do_startup, daemon=True)
                 startup_state['startup_thread'] = startup_thread
                 startup_thread.start()
+            
+            def _startup_watchdog():
+                import time
+                time.sleep(60)
+                if not startup_state.get('license_ready') and startup_state.get('startup_thread') is None:
+                    _original_print("[STARTUP WATCHDOG] ⚠️ Bot startup was never triggered after 60s!")
+                    _original_print("[STARTUP WATCHDOG] Forcing startup (license signal may have been lost)...")
+                    startup_state['license_ready'] = True
+                    t = threading.Thread(target=do_startup, daemon=True)
+                    startup_state['startup_thread'] = t
+                    t.start()
+
+            if not license_bypass:
+                watchdog = threading.Thread(target=_startup_watchdog, daemon=True, name="StartupWatchdog")
+                watchdog.start()
             
             def check_startup():
                 thread = startup_state.get('startup_thread')
