@@ -1857,13 +1857,19 @@ class RiskManager:
                             except:
                                 expiry = raw_exp
                         
+                        opt_raw_symbol = None
+                        if ticker_id:
+                            opt_raw_symbol = str(ticker_id)
+                        elif option_id:
+                            opt_raw_symbol = str(option_id)
                         snap_data = {
                             'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
                             'quantity': position_qty, 'avg_cost': float(pos.get('costPrice', 0)),
                             'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
                             'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
                             'option_id': option_id, 'strike': strike, 'expiry': expiry,
-                            'direction': direction, 'ticker_id': ticker_id
+                            'direction': direction, 'ticker_id': ticker_id,
+                            'raw_symbol': opt_raw_symbol
                         }
                         fetched.append(self._to_snapshot(snap_data))
                     else:
@@ -3450,12 +3456,18 @@ class RiskManager:
             from src.services.webull_data_hub import get_webull_data_hub
             hub = get_webull_data_hub()
             if hub.is_streaming():
-                lookup_key = None
-                if position.asset == 'option' and position.option_id:
-                    lookup_key = str(position.option_id)
-                elif position.asset != 'option':
-                    lookup_key = position.symbol
-                if lookup_key:
+                lookup_keys = []
+                if position.asset == 'option':
+                    if hasattr(position, 'raw_symbol') and position.raw_symbol:
+                        lookup_keys.append(position.raw_symbol)
+                    if position.symbol:
+                        lookup_keys.append(position.symbol)
+                    if position.option_id:
+                        lookup_keys.append(str(position.option_id))
+                else:
+                    if position.symbol:
+                        lookup_keys.append(position.symbol)
+                for lookup_key in lookup_keys:
                     q = _extract_quotes(hub.get_quote_detailed(lookup_key), 'webull_hub')
                     if q:
                         return q
@@ -3919,12 +3931,15 @@ class RiskManager:
                     if pos.broker != 'Webull':
                         continue
                     if pos.asset == 'option':
-                        lookup_sym = pos.raw_symbol if pos.raw_symbol else None
-                        if not lookup_sym:
-                            continue
-                        price = self._get_fresh_hub_price(hub, lookup_sym)
+                        price = None
+                        for lk in [pos.raw_symbol, pos.symbol]:
+                            if lk:
+                                price = self._get_fresh_hub_price(hub, lk)
+                                if price:
+                                    break
                         if not price:
-                            if hub.get_quote_price(lookup_sym):
+                            lk_check = pos.raw_symbol or pos.symbol
+                            if lk_check and hub.get_quote_price(lk_check):
                                 stale_skipped += 1
                             continue
                     else:

@@ -82,6 +82,7 @@ class SchwabDataHub:
         self._event_handlers: Dict[str, List[Callable]] = {}
 
         self._streaming_active = False
+        self._last_quote_ts: float = 0
         self._subscribed_symbols: Set[str] = set()
         self._pending_equity_subs: Set[str] = set()
         self._pending_subs_lock = threading.Lock()
@@ -154,6 +155,7 @@ class SchwabDataHub:
         existing.timestamp = time.time()
         existing.source = source
 
+        self._last_quote_ts = existing.timestamp
         self._emit('quote_updated', {'symbol': symbol, 'quote': existing})
 
     def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[QuoteData]:
@@ -260,7 +262,13 @@ class SchwabDataHub:
         self._emit('streaming_status', active)
 
     def is_streaming(self) -> bool:
-        return self._streaming_active
+        if not self._streaming_active:
+            return False
+        if self._last_quote_ts > 0:
+            import time as _t
+            if (_t.time() - self._last_quote_ts) > 300:
+                return False
+        return True
 
     def request_risk_eval(self):
         self._risk_eval_requested.set()

@@ -79,6 +79,7 @@ class WebullDataHub:
         self._event_lock = threading.Lock()
 
         self._streaming_active = False
+        self._last_quote_ts: float = 0
         self._subscribed_symbols: Set[str] = set()
         self._subscribed_ticker_ids: Set[str] = set()
 
@@ -167,6 +168,7 @@ class WebullDataHub:
             existing.timestamp = time.time()
             existing.source = source
 
+        self._last_quote_ts = time.time()
         self._emit('quote_updated', {'symbol': symbol.upper(), 'quote': existing})
 
     def get_quote(self, symbol: str) -> Optional[WebullQuoteData]:
@@ -174,6 +176,12 @@ class WebullDataHub:
             quote = self._quotes.get(symbol.upper())
             if quote and (time.time() - quote.timestamp) < self.QUOTE_STALE_THRESHOLD:
                 return quote
+        resolved = self.get_symbol_by_ticker_id(symbol)
+        if resolved:
+            with self._quotes_lock:
+                quote = self._quotes.get(resolved.upper())
+                if quote and (time.time() - quote.timestamp) < self.QUOTE_STALE_THRESHOLD:
+                    return quote
         return None
 
     def get_quote_price(self, symbol: str) -> Optional[float]:
@@ -214,8 +222,8 @@ class WebullDataHub:
             self._positions_time = time.time()
 
         for pos in positions:
-            ticker_id = pos.get('ticker', {}).get('tickerId')
-            symbol = pos.get('ticker', {}).get('symbol', '')
+            ticker_id = pos.get('ticker', {}).get('tickerId') or pos.get('tickerId')
+            symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
             if ticker_id and symbol:
                 self.register_ticker_id(symbol, ticker_id)
 
@@ -263,7 +271,13 @@ class WebullDataHub:
         self._emit('streaming_status', active)
 
     def is_streaming(self) -> bool:
-        return self._streaming_active
+        if not self._streaming_active:
+            return False
+        if self._last_quote_ts > 0:
+            import time as _t
+            if (_t.time() - self._last_quote_ts) > 300:
+                return False
+        return True
 
     def add_subscribed_symbols(self, symbols: Set[str]):
         self._subscribed_symbols.update(symbols)

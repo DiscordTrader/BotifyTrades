@@ -317,8 +317,15 @@ class WebullStreamingClient:
         for pos in positions:
             symbol = pos.get('symbol', '') or pos.get('ticker', {}).get('symbol', '')
             ticker_id = pos.get('ticker_id', 0) or pos.get('ticker', {}).get('tickerId', 0)
+            if not ticker_id:
+                ticker_id = pos.get('tickerId', 0)
+            is_option = ('optionId' in pos or 'option_id' in pos
+                         or 'strikePrice' in pos or 'strike' in pos
+                         or 'expireDate' in pos or 'expiry' in pos
+                         or pos.get('assetType', '').upper() in ('OPTION', 'OPT')
+                         or pos.get('asset', '').lower() == 'option')
             if symbol and ticker_id:
-                self.subscribe_symbol(symbol, str(ticker_id))
+                self.subscribe_symbol(symbol, str(ticker_id), is_option=is_option)
 
     def unsubscribe_symbol(self, symbol: str):
         with self._lock:

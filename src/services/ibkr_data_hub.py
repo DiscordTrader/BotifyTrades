@@ -78,6 +78,7 @@ class IBKRDataHub:
         self._event_lock = threading.Lock()
 
         self._streaming_active = False
+        self._last_quote_ts: float = 0
         self._subscribed_symbols: Set[str] = set()
         self._subscribed_conids: Set[int] = set()
         self._pending_subscriptions: Set[str] = set()
@@ -188,6 +189,8 @@ class IBKRDataHub:
                 q.timestamp = now
                 updated_symbols.append(symbol)
 
+        if updated_symbols:
+            self._last_quote_ts = now
         for sym in updated_symbols:
             self._emit('quote_updated', {'symbol': sym, 'source': 'ibkr_stream'})
 
@@ -240,6 +243,7 @@ class IBKRDataHub:
             q.volume = int(quote_data.get('volume', q.volume) or q.volume)
             q.timestamp = now
             q.source = source
+        self._last_quote_ts = now
         self._emit('quote_updated', {'symbol': symbol, 'source': source})
 
     def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[IBKRQuoteData]:
@@ -321,7 +325,18 @@ class IBKRDataHub:
             self._account_time = time.time()
 
     def is_streaming(self) -> bool:
-        return self._streaming_active and self._ib is not None
+        if not self._streaming_active or self._ib is None:
+            return False
+        try:
+            if hasattr(self._ib, 'isConnected') and not self._ib.isConnected():
+                return False
+        except Exception:
+            pass
+        if self._last_quote_ts > 0:
+            import time as _t
+            if (_t.time() - self._last_quote_ts) > 300:
+                return False
+        return True
 
     def request_risk_eval(self):
         self._risk_eval_requested.set()
