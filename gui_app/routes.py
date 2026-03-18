@@ -23,16 +23,47 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or db.get_setting('admin_passw
 # Environment variable takes priority over code-level BUILD_TYPE
 # This allows overriding USER builds to ADMIN via environment (e.g., Replit Secrets)
 _env_build_type = os.environ.get('BUILD_TYPE', '').upper()
+
+def _read_build_type_from_source() -> str:
+    """Read BUILD_TYPE from selfbot_webull.py source without importing/executing it.
+    
+    Importing selfbot_webull executes ~600 lines of top-level code (SSL patches,
+    license checks, broker imports, print statements). When Flask is started from
+    a PySide6 Qt timer callback (Windows EXE builds), this re-execution on the
+    Flask thread deadlocks the Qt event loop, hanging the entire startup before
+    Discord ever connects.
+    
+    This function safely reads the file and extracts the BUILD_TYPE constant
+    via regex — no code execution, no side effects.
+    """
+    import sys
+    candidates = []
+    repo_root = Path(__file__).resolve().parent.parent
+    candidates.extend([
+        repo_root / 'src' / 'selfbot_webull.py',
+        repo_root / 'selfbot_webull.py',
+    ])
+    meipass = getattr(sys, '_MEIPASS', None)
+    if meipass:
+        meipass_path = Path(meipass)
+        candidates.extend([
+            meipass_path / 'src' / 'selfbot_webull.py',
+            meipass_path / 'selfbot_webull.py',
+        ])
+    for path in candidates:
+        try:
+            text = path.read_text(encoding='utf-8', errors='ignore')
+        except Exception:
+            continue
+        m = re.search(r"^BUILD_TYPE\s*=\s*['\"](\w+)['\"]", text, re.MULTILINE)
+        if m and m.group(1).upper() in ('ADMIN', 'USER'):
+            return m.group(1).upper()
+    return 'USER'
+
 if _env_build_type in ('ADMIN', 'USER'):
     BUILD_TYPE = _env_build_type
 else:
-    try:
-        from src.selfbot_webull import BUILD_TYPE
-    except ImportError:
-        try:
-            from selfbot_webull import BUILD_TYPE
-        except ImportError:
-            BUILD_TYPE = 'ADMIN'
+    BUILD_TYPE = _read_build_type_from_source()
 
 def is_admin_build():
     """Check if this is an admin build with full features"""
@@ -13595,10 +13626,22 @@ def register_routes(app):
     def api_get_discord_credentials():
         """Get Discord credentials (token masked)"""
         try:
-            from .broker_credentials_service import get_discord_credentials, get_broker_status
+            from .broker_credentials_service import get_discord_credentials, set_broker_status
             
             creds = get_discord_credentials()
-            status = get_broker_status('discord')
+            
+            from .broker_credentials_service import get_broker_status as _get_broker_status
+            if _bot_instance and hasattr(_bot_instance, 'is_ready') and _bot_instance.is_ready():
+                user_info = str(_bot_instance.user) if getattr(_bot_instance, 'user', None) else None
+                status = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'user': user_info}}
+                set_broker_status('discord', True, 'connected', account_info={'user': user_info})
+            else:
+                prior = _get_broker_status('discord')
+                if prior and prior.get('error'):
+                    status = prior
+                else:
+                    status = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+            
             token = creds.get('token', '')
             
             return jsonify({
