@@ -958,45 +958,15 @@ class ConditionalOrderService:
                 'ACTIVE_MONITORING',
                 data_source_active=broker.lower()
             )
-        elif finnhub_available:
-            data_source = 'finnhub'
-            fallback_reason = 'broker_rate_limit' if (rate_limiter and rate_limiter.should_fallback(threshold)) else 'no_broker_instance'
-            sys.stderr.write(f"[CONDITIONAL] Using Finnhub for price monitoring of {symbol} (reason: {fallback_reason})\n")
-            sys.stderr.flush()
-            monitor = FinnhubPriceMonitor(
-                symbol,
-                price_callback,
-                self.finnhub_api_key
-            )
-            update_conditional_order_status(
-                order_id,
-                'FALLBACK_MONITORING',
-                data_source_active='finnhub',
-                fallback_reason=fallback_reason
-            )
-        elif YFINANCE_AVAILABLE:
-            data_source = 'yfinance'
-            sys.stderr.write(f"[CONDITIONAL] Using yfinance for price monitoring of {symbol} (delayed ~15min)\n")
-            sys.stderr.flush()
-            monitor = YFinancePriceMonitor(
-                symbol,
-                price_callback
-            )
-            update_conditional_order_status(
-                order_id,
-                'FALLBACK_MONITORING',
-                data_source_active='yfinance',
-                fallback_reason='no_api_key'
-            )
         else:
-            print(f"[CONDITIONAL] ERROR: No price source available for {symbol}")
-            print(f"[CONDITIONAL]   - Set FINNHUB_API_KEY for reliable price data")
-            print(f"[CONDITIONAL]   - Or install yfinance: pip install yfinance")
+            fallback_reason = 'broker_rate_limit' if (rate_limiter and rate_limiter.should_fallback(threshold)) else 'no_broker_instance'
+            print(f"[CONDITIONAL] ERROR: No broker price source available for {symbol} (reason: {fallback_reason})")
+            print(f"[CONDITIONAL]   Finnhub/yfinance fallbacks disabled (delayed data unsuitable for conditional orders)")
             update_conditional_order_status(
                 order_id,
                 'ERROR',
                 event='NO_PRICE_SOURCE',
-                error_message='No price source available. Set FINNHUB_API_KEY or install yfinance.'
+                error_message=f'No broker available for price monitoring (reason: {fallback_reason}). Finnhub/yfinance fallbacks disabled.'
             )
             return
         
