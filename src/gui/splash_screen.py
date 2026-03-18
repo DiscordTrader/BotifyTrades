@@ -649,6 +649,8 @@ class SplashScreen(QWidget):
             self.status_label.setText("Validating license...")
         elif state == LicenseState.ACTIVATED or state == LicenseState.OFFLINE_GRACE:
             self.status_label.setText("License valid - starting...")
+            self._show_progress_panel()
+            QTimer.singleShot(0, self.startup_ready.emit)
         elif state == LicenseState.REQUIRE_KEY:
             self._show_license_panel()
             self.license_input.setEnabled(True)
