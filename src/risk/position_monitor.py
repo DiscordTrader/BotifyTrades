@@ -3955,7 +3955,7 @@ class RiskManager:
         import time as _t
         now = _t.time()
         for pos in positions:
-            if pos.broker != 'Webull':
+            if pos.asset == 'option':
                 continue
             key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
             tracker = self._stuck_price_tracker.get(key)
@@ -3978,40 +3978,81 @@ class RiskManager:
                 continue
             tracker['rest_refreshed'] = now
             try:
-                if pos.asset == 'stock':
-                    raw_client = self._get_raw_webull_client()
-                    if not raw_client or not hasattr(raw_client, 'get_quote'):
-                        continue
-                    sym = pos.symbol
-                    raw_quote = await asyncio.get_event_loop().run_in_executor(
-                        None, lambda: raw_client.get_quote(stock=sym))
-                    if not raw_quote or not isinstance(raw_quote, dict):
-                        continue
-                    ask = float(raw_quote.get('askPrice', 0) or 0)
-                    bid = float(raw_quote.get('bidPrice', 0) or 0)
-                    last = float(raw_quote.get('last', 0) or raw_quote.get('close', 0) or 0)
-                    if bid > 0 and ask > 0:
-                        fresh_price = (bid + ask) / 2
-                    elif last > 0:
-                        fresh_price = last
-                    else:
-                        fresh_price = 0
-                    if fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
-                        print(f"[RISK] 🔄 STUCK PRICE FIX: {pos.symbol} was ${pos.current_price:.4f} "
-                              f"(frozen {stuck_seconds:.0f}s) → REST quote ${fresh_price:.4f}")
-                        pos.current_price = fresh_price
-                        tracker['last_price'] = fresh_price
-                        tracker['last_changed'] = now
-                    elif fresh_price > 0:
-                        tracker['last_changed'] = now
+                fresh_price = self._try_cross_hub_price(pos, now)
+                source = 'cross-hub'
+                if not fresh_price or abs(fresh_price - pos.current_price) < 0.0001:
+                    rest_price = await self._try_rest_quote(pos)
+                    if rest_price and rest_price > 0:
+                        fresh_price = rest_price
+                        source = 'REST'
+                if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
+                    print(f"[RISK] 🔄 STUCK PRICE FIX ({source}): {pos.broker} {pos.symbol} "
+                          f"was ${pos.current_price:.4f} (frozen {stuck_seconds:.0f}s) → ${fresh_price:.4f}")
+                    pos.current_price = fresh_price
+                    tracker['last_price'] = fresh_price
+                    tracker['last_changed'] = now
+                elif fresh_price and fresh_price > 0:
+                    tracker['last_changed'] = now
             except Exception as e:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
-                    print(f"[RISK] ⚠️ Stuck price REST fix error: {e}")
+                    print(f"[RISK] ⚠️ Stuck price fix error: {e}")
         stale_keys = [k for k in self._stuck_price_tracker
                       if k not in {f"{p.broker}_{p.symbol}_{p.asset}" for p in positions}]
         for k in stale_keys:
             del self._stuck_price_tracker[k]
+
+    def _try_cross_hub_price(self, pos, now):
+        broker_upper = (pos.broker or '').upper()
+        alt_hubs = []
+        if 'WEBULL' not in broker_upper:
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub
+                wb_hub = get_webull_data_hub()
+                if wb_hub.is_streaming():
+                    alt_hubs.append(('Webull', wb_hub))
+            except Exception:
+                pass
+        if 'SCHWAB' not in broker_upper:
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                sc_hub = get_schwab_data_hub()
+                if sc_hub.is_streaming():
+                    alt_hubs.append(('Schwab', sc_hub))
+            except Exception:
+                pass
+        if 'IBKR' not in broker_upper:
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                ib_hub = get_ibkr_data_hub()
+                if ib_hub.is_streaming():
+                    alt_hubs.append(('IBKR', ib_hub))
+            except Exception:
+                pass
+        for hub_name, hub in alt_hubs:
+            price = self._get_fresh_hub_price(hub, pos.symbol, max_age=5)
+            if price and price > 0:
+                return price
+        return None
+
+    async def _try_rest_quote(self, pos):
+        raw_client = self._get_raw_webull_client()
+        if raw_client and hasattr(raw_client, 'get_quote'):
+            try:
+                sym = pos.symbol
+                raw_quote = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: raw_client.get_quote(stock=sym))
+                if raw_quote and isinstance(raw_quote, dict):
+                    ask = float(raw_quote.get('askPrice', 0) or 0)
+                    bid = float(raw_quote.get('bidPrice', 0) or 0)
+                    last = float(raw_quote.get('last', 0) or raw_quote.get('close', 0) or 0)
+                    if bid > 0 and ask > 0:
+                        return (bid + ask) / 2
+                    elif last > 0:
+                        return last
+            except Exception:
+                pass
+        return None
 
     def _update_prices_from_hub(self, positions: list):
         """Update position prices from streaming hubs if available.
