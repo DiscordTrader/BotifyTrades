@@ -926,7 +926,7 @@ class SignalFormatRegistry:
             name="phoenix_adding",
             description="Phoenix adding to position",
             priority=67,
-            pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?(?:\$?((?!HERE\b|MORE\b|AT\b|SHARES\b)[A-Z]{2,5}))(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
+            pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?(?:\$?((?!HERE\b|MORE\b|AT\b|SHARES\b|SMALL\b|SOME\b|INTO\b|BACK\b|LONG\b|THIS\b|CALLS\b|PUTS\b|JUST\b|HEAVY\b|LIGHT\b|TINY\b|HUGE\b|LARGE\b|FEW\b)[A-Z]{2,5}))(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
             parser=self._parse_phoenix_adding_v2,
             examples=["adding here SMX at 11.50", "adding more PHOE shares", "buying more shares JBDI"],
             flags=re.IGNORECASE
