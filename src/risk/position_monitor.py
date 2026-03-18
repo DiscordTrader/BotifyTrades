@@ -1565,7 +1565,7 @@ class RiskManager:
         """
         return self.cache.invalidate_channel_settings(channel_id)
     
-    _PERIODIC_REST_FALLBACK_INTERVAL = 5
+    _PERIODIC_REST_FALLBACK_INTERVAL = 3
     _PERIODIC_REST_HEARTBEAT_INTERVAL = 60
 
     async def _monitoring_cycle(self) -> None:
@@ -1604,7 +1604,7 @@ class RiskManager:
                 self._force_webull_rest_refresh = True
                 self._last_periodic_webull_rest_ts = _now
                 if not getattr(self, '_rest_fallback_logged', False):
-                    print("[RISK] ⚠️ Streaming dead — REST fallback active (every 5s)")
+                    print("[RISK] ⚠️ Streaming dead — REST fallback active (every 3s)")
                     self._rest_fallback_logged = True
             self._heartbeat_logged = False
         if _streaming_live:
