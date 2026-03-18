@@ -104,6 +104,7 @@ class SignalFormatRegistry:
         text = re.sub(r'<@!?\d+>\s*', '', text)
         text = re.sub(r'<#\d+>\s*', '', text)
         text = re.sub(r'@(?:everyone|here)\s*', '', text)
+        text = re.sub(r'^@\w+\s+', '', text)
         return text.strip()
     
     def parse(self, text: str) -> Optional[Dict[str, Any]]:
@@ -472,25 +473,25 @@ class SignalFormatRegistry:
         # Priority 56-68 - after Bronze Swings, before learned patterns
         # =====================================================================
         
+        # Phoenix entry: SYMBOL over PRICE + SL X% (percentage stop loss) — MUST be checked before price SL
+        self.register(
+            name="phoenix_entry_over_pct_sl",
+            description="Phoenix entry with 'over' price trigger and percentage stop loss",
+            priority=55,
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
+            parser=self._parse_phoenix_entry_over_pct_sl,
+            examples=["PHEG over 7.50 SL 10%", "MOVE ober 30 SL 10%", "ARTV iver 4.60 SL 8%"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
         # Phoenix entry: SYMBOL over PRICE + SL PRICE (role ping stripped by parse())
         self.register(
             name="phoenix_entry_over",
             description="Phoenix entry with 'over' price trigger and stop loss",
             priority=56,
-            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)',
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)(?!\s*%)',
             parser=self._parse_phoenix_entry,
             examples=["PAVM over 21.50 SL 20", "AMZE ocer 0.67 SL 0.62"],
-            flags=re.IGNORECASE | re.DOTALL
-        )
-        
-        # Phoenix entry: SYMBOL over PRICE + SL X% (percentage stop loss)
-        self.register(
-            name="phoenix_entry_over_pct_sl",
-            description="Phoenix entry with 'over' price trigger and percentage stop loss",
-            priority=57,
-            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
-            parser=self._parse_phoenix_entry_over_pct_sl,
-            examples=["PHEG over 7.50 SL 10%", "MOVE ober 30 SL 10%", "ARTV iver 4.60 SL 8%"],
             flags=re.IGNORECASE | re.DOTALL
         )
         
@@ -789,9 +790,10 @@ class SignalFormatRegistry:
             name="phoenix_sl_move_price_to",
             description="Phoenix SL update - moving SL to specific price",
             priority=55,
-            pattern=r'mov(?:ing|e)\s+(?:my\s+)?SL\s+to\s+\$?([\d.]+)(?!%)\s*(?:for\s+\$?([A-Z]{2,5}))?',
+            pattern=r'mov(?:ing|e)\s+(?:my\s+)?SL\s+to\s+\$?([\d.]+)(?!\s*%)',
             parser=self._parse_phoenix_sl_move_price_to,
             examples=["moving SL to 0.41", "moving SL to 0.73", "moving SL to 4.98 for CATX",
+                       "moving my SL to 1.04 for now with LGVN",
                        "moving my SL to 1.88 just below VWAP"],
             flags=re.IGNORECASE
         )
@@ -1383,6 +1385,9 @@ class SignalFormatRegistry:
         symbol = groups[0].upper() if groups else None
         
         if not symbol:
+            return None
+
+        if symbol in self._COMMON_ENGLISH_WORDS:
             return None
         
         return {
@@ -2098,6 +2103,9 @@ class SignalFormatRegistry:
         
         if not symbol:
             return None
+
+        if symbol in self._COMMON_ENGLISH_WORDS:
+            return None
         
         return {
             "asset": "stock",
@@ -2119,6 +2127,9 @@ class SignalFormatRegistry:
         """Parse Phoenix SL update: moving SL to entry (breakeven)"""
         groups = match.groups()
         symbol = groups[0].upper() if groups and groups[0] else None
+
+        if symbol and symbol in self._COMMON_ENGLISH_WORDS:
+            symbol = None
 
         result = {
             "asset": "stock",
@@ -2162,13 +2173,25 @@ class SignalFormatRegistry:
         }
 
     def _parse_phoenix_sl_move_price_to(self, match: re.Match, text: str) -> Optional[Dict]:
-        """Parse Phoenix SL update: moving SL to PRICE (for SYMBOL)"""
+        """Parse Phoenix SL update: moving SL to PRICE (for/with SYMBOL)"""
         groups = match.groups()
         try:
             new_sl = float(groups[0]) if groups and groups[0] else None
         except (ValueError, TypeError):
             new_sl = None
-        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+
+        symbol = None
+        sym_patterns = [
+            re.compile(r'(?:for|with)\s+(?:the\s+)?(?:remaining\s+)?(?:shares?\s+)?\$?([A-Z]{2,5})(?![a-z])', re.IGNORECASE),
+        ]
+        for sp in sym_patterns:
+            for sym_match in sp.finditer(text):
+                candidate = sym_match.group(1).upper()
+                if candidate not in self._COMMON_ENGLISH_WORDS:
+                    symbol = candidate
+                    break
+            if symbol:
+                break
 
         if not new_sl:
             return None
