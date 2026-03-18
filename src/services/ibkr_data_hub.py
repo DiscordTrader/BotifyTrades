@@ -334,7 +334,7 @@ class IBKRDataHub:
             pass
         if self._last_quote_ts > 0:
             import time as _t
-            if (_t.time() - self._last_quote_ts) > 300:
+            if (_t.time() - self._last_quote_ts) > 60:
                 return False
         return True
 

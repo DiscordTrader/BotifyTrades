@@ -268,11 +268,11 @@ class WebullStreamingClient:
             if self._running:
                 self._reconnect_attempts += 1
                 if self._reconnect_attempts > self._max_reconnect_attempts:
-                    wait = 300
+                    wait = 60
                     print(f"[WEBULL_STREAM] Max reconnect attempts reached, waiting {wait}s...")
                     self._reconnect_attempts = 0
                 else:
-                    wait = min(5 * (2 ** min(self._reconnect_attempts, 6)), 120)
+                    wait = min(2 * (2 ** min(self._reconnect_attempts, 5)), 60)
                     print(f"[WEBULL_STREAM] Reconnecting in {wait}s (attempt {self._reconnect_attempts})...")
                 time.sleep(wait)
 

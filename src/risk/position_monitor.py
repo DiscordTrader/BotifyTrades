@@ -1565,7 +1565,7 @@ class RiskManager:
         """
         return self.cache.invalidate_channel_settings(channel_id)
     
-    _PERIODIC_WEBULL_REFRESH_INTERVAL = 15
+    _PERIODIC_WEBULL_REFRESH_INTERVAL = 5
 
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
@@ -3875,7 +3875,7 @@ class RiskManager:
             print(f"[RISK] Error cleaning terminal order cache: {e}")
             return 0
     
-    _HUB_PRICE_MAX_AGE = 120
+    _HUB_PRICE_MAX_AGE = 30
 
     def _get_raw_webull_client(self):
         wb_broker = self._webull_broker
@@ -4069,8 +4069,8 @@ class RiskManager:
         _now = _pt.time()
         if not hasattr(self, '_price_change_tracker'):
             self._price_change_tracker = {}
-        _STUCK_THRESHOLD = 30
-        _STUCK_REFRESH_COOLDOWN = 30
+        _STUCK_THRESHOLD = 8
+        _STUCK_REFRESH_COOLDOWN = 8
         any_stuck = False
         _last_stuck_refresh = getattr(self, '_last_stuck_refresh_ts', 0)
         for pos in positions:

@@ -322,7 +322,7 @@ class SchwabStreamingClient:
         while self._running:
             try:
                 if not await self._fetch_streamer_info():
-                    wait = min(30 * (2 ** self._reconnect_attempts), 300)
+                    wait = min(10 * (2 ** min(self._reconnect_attempts, 4)), 60)
                     print(f"[SCHWAB_STREAM] Retrying streamer info in {wait}s...")
                     await asyncio.sleep(wait)
                     self._reconnect_attempts += 1
@@ -433,11 +433,11 @@ class SchwabStreamingClient:
             if self._running:
                 self._reconnect_attempts += 1
                 if self._reconnect_attempts > self._max_reconnect_attempts:
-                    wait = 300
+                    wait = 60
                     print(f"[SCHWAB_STREAM] Max reconnect attempts reached, waiting {wait}s...")
                     self._reconnect_attempts = 0
                 else:
-                    wait = min(5 * (2 ** min(self._reconnect_attempts, 6)), 120)
+                    wait = min(2 * (2 ** min(self._reconnect_attempts, 5)), 60)
                     print(f"[SCHWAB_STREAM] Reconnecting in {wait}s (attempt {self._reconnect_attempts})...")
                 await asyncio.sleep(wait)
 
