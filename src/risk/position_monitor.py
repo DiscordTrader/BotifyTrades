@@ -1566,7 +1566,6 @@ class RiskManager:
         return self.cache.invalidate_channel_settings(channel_id)
     
     _PERIODIC_REST_FALLBACK_INTERVAL = 3
-    _PERIODIC_REST_HEARTBEAT_INTERVAL = 60
 
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
@@ -1593,12 +1592,10 @@ class RiskManager:
             pass
 
         if _streaming_live:
-            if (_now - _last_refresh) > self._PERIODIC_REST_HEARTBEAT_INTERVAL:
-                self._force_webull_rest_refresh = True
-                self._last_periodic_webull_rest_ts = _now
-                if not getattr(self, '_heartbeat_logged', False):
-                    print("[RISK] Streaming healthy — periodic REST heartbeat (every 60s)")
-                    self._heartbeat_logged = True
+            if not getattr(self, '_streaming_mode_logged', False):
+                print("[RISK] ✓ Streaming live — REST position polling STOPPED (zero API usage)")
+                self._streaming_mode_logged = True
+            self._rest_fallback_logged = False
         else:
             if (_now - _last_refresh) > self._PERIODIC_REST_FALLBACK_INTERVAL:
                 self._force_webull_rest_refresh = True
@@ -1606,9 +1603,7 @@ class RiskManager:
                 if not getattr(self, '_rest_fallback_logged', False):
                     print("[RISK] ⚠️ Streaming dead — REST fallback active (every 3s)")
                     self._rest_fallback_logged = True
-            self._heartbeat_logged = False
-        if _streaming_live:
-            self._rest_fallback_logged = False
+            self._streaming_mode_logged = False
         
         try:
             positions = await self._fetch_all_positions()
