@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "f6VfpjZ_AzQi2zqXCbemy"
+uri = "file://.local/docs/telegram_notification_architecture.md"
+type = "text"
+title = "Telegram Notification Architecture — Full Design Document"
