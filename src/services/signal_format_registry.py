@@ -921,12 +921,34 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
 
-        # Phoenix add to position: adding (here/more) SYMBOL (at PRICE)
+        # Phoenix add: "SYMBOL buying/adding ... shares" (ticker BEFORE verb)
+        self.register(
+            name="phoenix_adding_pre",
+            description="Phoenix add - ticker before verb: SYMBOL buying/adding shares",
+            priority=68,
+            pattern=r'\$?([A-Z]{2,5})\s+(?:buying|adding)\s+(?:small\s+|more\s+)?(?:shares?)?(?:\s+(?:at|here|avg)\s+\$?([\d.]+))?',
+            parser=self._parse_phoenix_adding_v2,
+            examples=["SWMR buying small shares", "PHOE adding more shares", "JBDI buying shares at 5.50"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix add: "adding more to SYMBOL position" (explicit 'to SYMBOL' form)
+        self.register(
+            name="phoenix_adding_to",
+            description="Phoenix add - adding more to SYMBOL position",
+            priority=68,
+            pattern=r'(?:adding|buying)\s+(?:more\s+)?(?:to\s+)(?:my\s+)?\$?([A-Z]{2,5})\s+(?:position|shares?)',
+            parser=self._parse_phoenix_adding_v2,
+            examples=["adding more to LGVN position", "adding to PHOE shares"],
+            flags=re.IGNORECASE
+        )
+
+        # Phoenix add: "adding (here/more) SYMBOL (at PRICE)" (ticker AFTER verb, no 'to')
         self.register(
             name="phoenix_adding",
             description="Phoenix adding to position",
             priority=67,
-            pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?(?:\$?((?!HERE\b|MORE\b|AT\b|SHARES\b|SMALL\b|SOME\b|INTO\b|BACK\b|LONG\b|THIS\b|CALLS\b|PUTS\b|JUST\b|HEAVY\b|LIGHT\b|TINY\b|HUGE\b|LARGE\b|FEW\b)[A-Z]{2,5}))(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
+            pattern=r'(?:adding|buying)\s+(?:here\s+)?(?:more\s+)?(?:shares?\s+)?\$?([A-Z]{2,5})(?:\s+shares?)?(?:\s+(?:at|here)\s+\$?([\d.]+))?',
             parser=self._parse_phoenix_adding_v2,
             examples=["adding here SMX at 11.50", "adding more PHOE shares", "buying more shares JBDI"],
             flags=re.IGNORECASE
@@ -2512,6 +2534,22 @@ class SignalFormatRegistry:
             "_phoenix_add_to_position": True,
         }
 
+    _COMMON_ENGLISH_WORDS = frozenset({
+        'HERE', 'MORE', 'AT', 'SHARES', 'SHARE', 'SMALL', 'SOME', 'INTO',
+        'BACK', 'LONG', 'THIS', 'CALLS', 'PUTS', 'JUST', 'HEAVY', 'LIGHT',
+        'TINY', 'HUGE', 'LARGE', 'FEW', 'THE', 'AND', 'BUT', 'FOR', 'WITH',
+        'FROM', 'THAT', 'WILL', 'BEEN', 'HAVE', 'HAD', 'HAS', 'WAS', 'ARE',
+        'NOT', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY', 'GET',
+        'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'WAY', 'WHO',
+        'DID', 'GOT', 'LET', 'SAY', 'SHE', 'TOO', 'USE', 'TO', 'MY', 'IN',
+        'UP', 'SO', 'IF', 'DO', 'NO', 'GO', 'ME', 'HE', 'WE', 'BE',
+        'STILL', 'ALSO', 'VERY', 'EVEN', 'MOST', 'MUCH', 'THEN', 'THEM',
+        'THAN', 'EACH', 'MAKE', 'LIKE', 'OVER', 'SUCH', 'TAKE', 'ONLY',
+        'COME', 'MADE', 'AFTER', 'YEAR', 'BEING', 'WHERE', 'ABOUT',
+        'ENTRY', 'BREAK', 'STOP', 'HOLD', 'SELL', 'SOLD', 'TRIM',
+        'SCALP', 'TRADE', 'WATCH', 'RISK', 'SLOW', 'FAST',
+    })
+
     def _parse_phoenix_adding_v2(self, match: re.Match, text: str) -> Optional[Dict]:
         groups = match.groups()
         symbol = groups[0].upper() if groups[0] else None
@@ -2522,6 +2560,9 @@ class SignalFormatRegistry:
             pass
 
         if not symbol:
+            return None
+
+        if symbol in self._COMMON_ENGLISH_WORDS:
             return None
 
         return {
