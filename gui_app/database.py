@@ -685,6 +685,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] Added sizing_mode column (live/pre_market/start_of_day) for per-channel position sizing base")
     
+    # Migrate: Add entry confirmation percentage column for per-channel entry confirmation threshold
+    try:
+        cursor.execute('SELECT entry_confirmation_pct FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN entry_confirmation_pct REAL DEFAULT 0.0')
+        conn.commit()
+        print("[DATABASE] ✓ Added entry_confirmation_pct column to channels")
+
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
