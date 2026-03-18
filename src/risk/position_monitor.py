@@ -554,8 +554,12 @@ class RiskDBAdapter:
                     if trade_pt_price and trade_entry_price and trade_entry_price > 0:
                         pt_pct_calc = ((trade_pt_price - trade_entry_price) / trade_entry_price) * 100
                         if pt_pct_calc > 0:
-                            pt1 = round(pt_pct_calc, 1)
-                            print(f"[RISK] Using trade-level PT: ${trade_pt_price:.2f} ({pt1}% from entry ${trade_entry_price:.2f})")
+                            pt_pct_rounded = round(pt_pct_calc, 1)
+                            if pt2 > 0 and pt_pct_rounded > pt2:
+                                print(f"[RISK] Signal PT ${trade_pt_price:.2f} ({pt_pct_rounded}%) would break tier ordering (T2={pt2}%) — keeping channel tiered targets")
+                            else:
+                                pt1 = pt_pct_rounded
+                                print(f"[RISK] Using trade-level PT: ${trade_pt_price:.2f} ({pt1}% from entry ${trade_entry_price:.2f})")
                 else:
                     if trade_sl_price or trade_pt_price:
                         print(f"[RISK] Exit mode is 'risk' - using channel settings (ignoring signal SL/PT override)")
