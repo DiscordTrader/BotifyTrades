@@ -1113,6 +1113,7 @@ class RiskManager:
         tastytrade_broker=None,
         robinhood_broker=None,
         trading212_broker=None,
+        webull_broker=None,
         monitoring_interval: int = DEFAULT_MONITORING_INTERVAL,
         trailing_activation_pct: float = DEFAULT_TRAILING_ACTIVATION,
         loop: Optional[asyncio.AbstractEventLoop] = None
@@ -1130,6 +1131,7 @@ class RiskManager:
             ibkr_broker: Optional IBKRBroker instance
             tastytrade_broker: Optional TastytradeBroker instance
             robinhood_broker: Optional RobinhoodBroker instance (WARNING: LIVE ONLY)
+            webull_broker: Optional WebullBroker instance for REST price refresh
             monitoring_interval: Seconds between position checks
             trailing_activation_pct: Default trailing stop activation threshold
             loop: Event loop (optional)
@@ -1148,14 +1150,22 @@ class RiskManager:
         self.trailing_activation_pct = trailing_activation_pct
         self.loop = loop or asyncio.get_event_loop()
 
-        self._webull_broker = None
-        try:
-            if hasattr(position_fetcher, '__self__'):
-                _pf_self = position_fetcher.__self__
-                if hasattr(_pf_self, 'wb') or hasattr(_pf_self, '_client'):
-                    self._webull_broker = _pf_self
-        except Exception:
-            pass
+        self._webull_broker = webull_broker
+        self.webull_broker = webull_broker
+        if not self._webull_broker:
+            try:
+                if hasattr(position_fetcher, '__self__'):
+                    _pf_self = position_fetcher.__self__
+                    if hasattr(_pf_self, 'wb') or hasattr(_pf_self, '_client'):
+                        self._webull_broker = _pf_self
+                        self.webull_broker = _pf_self
+            except Exception:
+                pass
+        if self._webull_broker:
+            print(f"[RISK] ✓ Webull broker reference acquired ({type(self._webull_broker).__name__})")
+        
+        self._stuck_price_tracker = {}
+        self._STUCK_PRICE_THRESHOLD = 8
         
         self.cache = PositionCache()
         self._running = False
@@ -1623,6 +1633,7 @@ class RiskManager:
         self._empty_pos_logged = False
         
         self._update_prices_from_hub(positions)
+        await self._detect_and_fix_stuck_prices(positions)
         self._last_positions_snapshot = positions
         self._update_monitored_symbols(positions)
         
@@ -1944,11 +1955,14 @@ class RiskManager:
                 if _raw_wb:
                     await _hub.refresh_positions_once(_raw_wb)
                 else:
-                    if not hasattr(self, '_wb_resolve_warn_count'):
-                        self._wb_resolve_warn_count = 0
-                    self._wb_resolve_warn_count += 1
-                    if self._wb_resolve_warn_count <= 3 or self._wb_resolve_warn_count % 300 == 0:
-                        print("[RISK] ⚠️ Could not resolve Webull broker for REST refresh — using cached data")
+                    if not hasattr(self, '_wb_resolve_warn_ts'):
+                        self._wb_resolve_warn_ts = 0
+                        self._wb_resolve_warn_total = 0
+                    self._wb_resolve_warn_total += 1
+                    import time as _wt
+                    if (_wt.time() - self._wb_resolve_warn_ts) > 60:
+                        self._wb_resolve_warn_ts = _wt.time()
+                        print(f"[RISK] ⚠️ Could not resolve Webull broker for REST refresh — using cached data (count={self._wb_resolve_warn_total})")
                 _refreshed = _hub.get_positions(max_age_seconds=30)
                 if _refreshed is not None and len(_refreshed) > 0:
                     fetched = []
@@ -3917,7 +3931,9 @@ class RiskManager:
             except Exception:
                 pass
         if wb_broker:
-            return getattr(wb_broker, 'wb', None) or getattr(wb_broker, '_client', None)
+            client = getattr(wb_broker, '_client', None) or getattr(wb_broker, 'wb', None)
+            if client:
+                return client
         return None
 
     def _get_fresh_hub_price(self, hub, symbol, max_age=None):
@@ -3934,6 +3950,86 @@ class RiskManager:
         if not price or price <= 0:
             return None
         return price
+
+    async def _detect_and_fix_stuck_prices(self, positions: list):
+        import time as _t
+        now = _t.time()
+        for pos in positions:
+            if pos.broker != 'Webull':
+                continue
+            key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
+            tracker = self._stuck_price_tracker.get(key)
+            if tracker is None:
+                self._stuck_price_tracker[key] = {
+                    'last_price': pos.current_price,
+                    'last_changed': now,
+                    'rest_refreshed': 0
+                }
+                continue
+            if abs(pos.current_price - tracker['last_price']) > 0.0001:
+                tracker['last_price'] = pos.current_price
+                tracker['last_changed'] = now
+                tracker['rest_refreshed'] = 0
+                continue
+            stuck_seconds = now - tracker['last_changed']
+            if stuck_seconds < self._STUCK_PRICE_THRESHOLD:
+                continue
+            if (now - tracker.get('rest_refreshed', 0)) < 3.0:
+                continue
+            tracker['rest_refreshed'] = now
+            try:
+                wb_broker = self._webull_broker
+                if not wb_broker:
+                    continue
+                if pos.asset == 'stock':
+                    quote_result = None
+                    if hasattr(wb_broker, 'get_quote'):
+                        quote_result = await asyncio.get_event_loop().run_in_executor(
+                            None, wb_broker.get_quote, pos.symbol)
+                    if quote_result and isinstance(quote_result, dict):
+                        close_price = float(quote_result.get('close', 0) or 0)
+                        bid = float(quote_result.get('bid', 0) or 0)
+                        ask = float(quote_result.get('ask', 0) or 0)
+                        last = float(quote_result.get('last', 0) or 0)
+                        if bid > 0 and ask > 0:
+                            fresh_price = (bid + ask) / 2
+                        elif close_price > 0:
+                            fresh_price = close_price
+                        elif last > 0:
+                            fresh_price = last
+                        else:
+                            fresh_price = 0
+                        if fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
+                            print(f"[RISK] 🔄 STUCK PRICE FIX: {pos.symbol} was ${pos.current_price:.4f} "
+                                  f"(frozen {stuck_seconds:.0f}s) → REST quote ${fresh_price:.4f}")
+                            pos.current_price = fresh_price
+                            tracker['last_price'] = fresh_price
+                            tracker['last_changed'] = now
+                        elif fresh_price > 0:
+                            tracker['last_changed'] = now
+                    elif not quote_result and stuck_seconds > 15:
+                        raw_client = self._get_raw_webull_client()
+                        if raw_client and hasattr(raw_client, 'get_quote'):
+                            try:
+                                raw_quote = await asyncio.get_event_loop().run_in_executor(
+                                    None, lambda: raw_client.get_quote(stock=pos.symbol))
+                                if raw_quote and isinstance(raw_quote, dict):
+                                    raw_last = float(raw_quote.get('last', 0) or raw_quote.get('close', 0) or 0)
+                                    if raw_last > 0 and abs(raw_last - pos.current_price) > 0.0001:
+                                        print(f"[RISK] 🔄 STUCK PRICE FIX (raw): {pos.symbol} ${pos.current_price:.4f} → ${raw_last:.4f}")
+                                        pos.current_price = raw_last
+                                        tracker['last_price'] = raw_last
+                                        tracker['last_changed'] = now
+                            except Exception:
+                                pass
+            except Exception as e:
+                if not hasattr(self, '_stuck_fix_err_logged'):
+                    self._stuck_fix_err_logged = True
+                    print(f"[RISK] ⚠️ Stuck price REST fix error: {e}")
+        stale_keys = [k for k in self._stuck_price_tracker
+                      if k not in {f"{p.broker}_{p.symbol}_{p.asset}" for p in positions}]
+        for k in stale_keys:
+            del self._stuck_price_tracker[k]
 
     def _update_prices_from_hub(self, positions: list):
         """Update position prices from streaming hubs if available.
