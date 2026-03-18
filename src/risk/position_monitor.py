@@ -1147,6 +1147,15 @@ class RiskManager:
         self.monitoring_interval = monitoring_interval
         self.trailing_activation_pct = trailing_activation_pct
         self.loop = loop or asyncio.get_event_loop()
+
+        self._webull_broker = None
+        try:
+            if hasattr(position_fetcher, '__self__'):
+                _pf_self = position_fetcher.__self__
+                if hasattr(_pf_self, 'wb') or hasattr(_pf_self, '_client'):
+                    self._webull_broker = _pf_self
+        except Exception:
+            pass
         
         self.cache = PositionCache()
         self._running = False
@@ -1749,6 +1758,16 @@ class RiskManager:
         _hub_max_age = 0 if (_force_webull or _force_global) else 20
         if _force_webull:
             self._force_webull_rest_refresh = False
+
+        if _force_webull or _force_global:
+            try:
+                from src.services.webull_data_hub import get_webull_data_hub as _gwdh
+                _fhub = _gwdh()
+                _raw_wb = self._get_raw_webull_client()
+                if _raw_wb:
+                    await _fhub.refresh_positions_once(_raw_wb)
+            except Exception:
+                pass
         
         try:
             from src.services.webull_data_hub import get_webull_data_hub
@@ -1897,22 +1916,15 @@ class RiskManager:
             try:
                 from src.services.webull_data_hub import get_webull_data_hub
                 _hub = get_webull_data_hub()
-                wb_broker = None
-                if hasattr(self.position_fetcher, '__self__'):
-                    wb_broker = self.position_fetcher.__self__
-                if not wb_broker or not (hasattr(wb_broker, 'wb') or hasattr(wb_broker, '_client')):
-                    wb_broker = getattr(self, '_webull_broker', None)
-                if not wb_broker or not (hasattr(wb_broker, 'wb') or hasattr(wb_broker, '_client')):
-                    _bot = getattr(self, 'bot', None)
-                    if _bot:
-                        wb_broker = getattr(_bot, 'broker', None)
-                _raw_wb = None
-                if wb_broker:
-                    _raw_wb = getattr(wb_broker, 'wb', None) or getattr(wb_broker, '_client', None)
+                _raw_wb = self._get_raw_webull_client()
                 if _raw_wb:
                     await _hub.refresh_positions_once(_raw_wb)
                 else:
-                    print("[RISK] ⚠️ Could not resolve Webull broker for REST refresh — using cached data")
+                    if not hasattr(self, '_wb_resolve_warn_count'):
+                        self._wb_resolve_warn_count = 0
+                    self._wb_resolve_warn_count += 1
+                    if self._wb_resolve_warn_count <= 3 or self._wb_resolve_warn_count % 300 == 0:
+                        print("[RISK] ⚠️ Could not resolve Webull broker for REST refresh — using cached data")
                 _refreshed = _hub.get_positions(max_age_seconds=30)
                 if _refreshed is not None and len(_refreshed) > 0:
                     fetched = []
@@ -3852,6 +3864,21 @@ class RiskManager:
             return 0
     
     _HUB_PRICE_MAX_AGE = 120
+
+    def _get_raw_webull_client(self):
+        wb_broker = self._webull_broker
+        if not wb_broker:
+            try:
+                if hasattr(self.position_fetcher, '__self__'):
+                    _pf_self = self.position_fetcher.__self__
+                    if hasattr(_pf_self, 'wb') or hasattr(_pf_self, '_client'):
+                        wb_broker = _pf_self
+                        self._webull_broker = wb_broker
+            except Exception:
+                pass
+        if wb_broker:
+            return getattr(wb_broker, 'wb', None) or getattr(wb_broker, '_client', None)
+        return None
 
     def _get_fresh_hub_price(self, hub, symbol, max_age=None):
         if max_age is None:

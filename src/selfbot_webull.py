@@ -12517,9 +12517,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         position = cache.get_position(symbol)
                                         
                                         if position and position.qty > 0:
-                                            exit_qty = int(position.qty * (exit_pct / 100.0))
+                                            exit_qty = max(1, int(position.qty * (exit_pct / 100.0)))
                                             if exit_qty > 0:
-                                                # Build STC signal preserving asset type from position
                                                 asset_type = getattr(position, 'asset_type', 'stock')
                                                 pos_broker = getattr(position, 'broker', '') or ''
                                                 stc_signal = {
@@ -12532,9 +12531,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     '_exit_percent': exit_pct,
                                                     '_exit_reason': action_type,
                                                     'broker': pos_broker,
+                                                    'channel_id': str(message.channel.id),
                                                 }
                                                 
-                                                # Add option details if this is an option position
                                                 if hasattr(position, 'strike') and position.strike:
                                                     stc_signal['strike'] = position.strike
                                                 if hasattr(position, 'opt_type') and position.opt_type:
@@ -12545,13 +12544,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 if not pos_broker:
                                                     print(f"[PARTIAL EXIT] ⚠️ No broker on position for {symbol} - STC may be rejected by routing")
                                                 
-                                                # Queue the partial exit
-                                                global _telegram_signal_queue
-                                                if _telegram_signal_queue is not None:
-                                                    _telegram_signal_queue.put_nowait(stc_signal)
+                                                try:
+                                                    await self.order_queue.put(stc_signal)
                                                     print(f"[PARTIAL EXIT] ✓ Queued STC for {exit_qty} {asset_type} of {symbol} ({exit_pct}%) [broker={pos_broker}]")
-                                                else:
-                                                    print(f"[PARTIAL EXIT] ❌ Signal queue not available")
+                                                except Exception as _qe:
+                                                    print(f"[PARTIAL EXIT] ❌ Failed to queue signal: {_qe}")
                                             else:
                                                 print(f"[PARTIAL EXIT] ⚠️ Calculated exit qty is 0 (position: {position.qty})")
                                         else:
@@ -15248,7 +15245,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 position = cache.get_position(symbol)
                                 
                                 if position and position.qty > 0:
-                                    exit_qty = int(position.qty * (exit_pct / 100.0))
+                                    exit_qty = max(1, int(position.qty * (exit_pct / 100.0)))
                                     if exit_qty > 0:
                                         asset_type = getattr(position, 'asset_type', 'stock')
                                         pos_broker = getattr(position, 'broker', '') or ''
@@ -15265,7 +15262,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'broker': pos_broker,
                                         }
                                         
-                                        # Add option details if this is an option position
                                         if hasattr(position, 'strike') and position.strike:
                                             stc_signal['strike'] = position.strike
                                         if hasattr(position, 'opt_type') and position.opt_type:
@@ -15276,9 +15272,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         if not pos_broker:
                                             print(f"[PARTIAL EXIT] ⚠️ No broker on position for {symbol} - STC may be rejected by routing")
                                         
-                                        # Queue the partial exit via order_queue
-                                        await self.order_queue.put(stc_signal)
-                                        print(f"[PARTIAL EXIT] ✓ Queued STC for {exit_qty} {asset_type} of {symbol} ({exit_pct}%) [broker={pos_broker}]")
+                                        try:
+                                            await self.order_queue.put(stc_signal)
+                                            print(f"[PARTIAL EXIT] ✓ Queued STC for {exit_qty} {asset_type} of {symbol} ({exit_pct}%) [broker={pos_broker}]")
+                                        except Exception as _qe:
+                                            print(f"[PARTIAL EXIT] ❌ Failed to queue signal: {_qe}")
                                     else:
                                         print(f"[PARTIAL EXIT] ⚠️ Calculated exit qty is 0 (position: {position.qty})")
                                 else:
