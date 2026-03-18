@@ -236,7 +236,7 @@ class BrokerPriceMonitor(PriceMonitor):
         super().__init__(symbol, callback)
         self.broker_name = broker_name
         self.broker_instance = broker_instance
-        self.poll_interval = 5  # seconds
+        self.poll_interval = 2  # seconds (streaming hub checks are zero-cost, REST is fallback only)
     
     async def start(self):
         """Start polling broker for price updates."""
@@ -262,8 +262,44 @@ class BrokerPriceMonitor(PriceMonitor):
             
             await asyncio.sleep(self.poll_interval)
     
+    def _try_streaming_hub_price(self) -> Optional[float]:
+        """Try to get price from streaming hubs (Webull MQTT, Schwab WebSocket, IBKR).
+        Zero API cost — checks all available hubs regardless of which broker owns the order."""
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            price = hub.get_quote_price(self.symbol)
+            if price and price > 0:
+                return price
+        except Exception:
+            pass
+        
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            price = hub.get_quote_price(self.symbol)
+            if price and price > 0:
+                return price
+        except Exception:
+            pass
+        
+        try:
+            from src.services.ibkr_data_hub import get_ibkr_data_hub
+            hub = get_ibkr_data_hub()
+            price = hub.get_quote_price(self.symbol)
+            if price and price > 0:
+                return price
+        except Exception:
+            pass
+        
+        return None
+
     async def _fetch_price(self) -> Optional[float]:
-        """Fetch current price from broker."""
+        """Fetch current price: streaming hub first, then broker REST fallback."""
+        hub_price = self._try_streaming_hub_price()
+        if hub_price:
+            return hub_price
+        
         if not self.broker_instance:
             return None
         
