@@ -476,9 +476,12 @@ class BrokerPriceMonitor(PriceMonitor):
         self.unchanged_count = 0
         self.using_finnhub_fallback = False
     
+    HUB_FAST_INTERVAL = 0.5
+
     async def start(self):
         self.is_running = True
-        sys.stderr.write(f"[{self.broker_name.upper()}] Starting price monitor for {self.symbol} (poll interval: {self.poll_interval}s)\n")
+        self._hub_available = False
+        sys.stderr.write(f"[{self.broker_name.upper()}] Starting price monitor for {self.symbol} (poll interval: {self.poll_interval}s, hub-accelerated: 0.5s)\n")
         sys.stderr.flush()
         
         poll_count = 0
@@ -487,10 +490,8 @@ class BrokerPriceMonitor(PriceMonitor):
                 price = await self._fetch_price()
                 poll_count += 1
                 
-                # Detect stale prices from broker
                 if price and price == self.last_price:
                     self.unchanged_count += 1
-                    # If price hasn't changed in many polls, try Finnhub
                     if self.unchanged_count >= self.STALE_THRESHOLD_POLLS and self.finnhub_api_key and not self.using_finnhub_fallback:
                         finnhub_price = await self._fetch_finnhub_price()
                         if finnhub_price and abs(finnhub_price - price) > 0.05:
@@ -503,29 +504,28 @@ class BrokerPriceMonitor(PriceMonitor):
                 else:
                     self.unchanged_count = 0
                 
-                # If using Finnhub fallback, fetch from Finnhub instead
                 if self.using_finnhub_fallback and self.finnhub_api_key:
                     price = await self._fetch_finnhub_price() or price
                 
                 if poll_count <= 3 or poll_count % 10 == 0:
                     source = "FINNHUB" if self.using_finnhub_fallback else self.broker_name.upper()
-                    sys.stderr.write(f"[{source}] Poll #{poll_count} for {self.symbol}: price={price}\n")
+                    hub_tag = " (via hub)" if self._hub_available else ""
+                    sys.stderr.write(f"[{source}] Poll #{poll_count} for {self.symbol}: price={price}{hub_tag}\n")
                     sys.stderr.flush()
                 
-                # Call callback on price change OR every 10 polls as heartbeat
                 if price:
-                    self._update_price_timestamp()  # Track staleness
+                    self._update_price_timestamp()
                     if price != self.last_price:
                         self.last_price = price
                         await self.callback(self.symbol, price)
                     elif poll_count % 10 == 0:
-                        # Heartbeat update - same price but refreshes timestamp
                         await self.callback(self.symbol, price)
             except Exception as e:
                 sys.stderr.write(f"[{self.broker_name.upper()}] Error for {self.symbol}: {e}\n")
                 sys.stderr.flush()
             
-            await asyncio.sleep(self.poll_interval)
+            interval = self.HUB_FAST_INTERVAL if self._hub_available else self.poll_interval
+            await asyncio.sleep(interval)
     
     async def _fetch_finnhub_price(self) -> Optional[float]:
         """Fetch price from Finnhub as fallback for stale broker data."""
@@ -544,7 +544,32 @@ class BrokerPriceMonitor(PriceMonitor):
             sys.stderr.flush()
         return None
     
+    def _try_any_streaming_hub(self) -> Optional[float]:
+        """Check all available streaming hubs for price data (zero API cost).
+        Useful for brokers without their own hub (Alpaca, Robinhood, Tastytrade, etc.)."""
+        for hub_getter, hub_name in [
+            ('src.services.webull_data_hub', 'get_webull_data_hub'),
+            ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
+            ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+        ]:
+            try:
+                import importlib
+                mod = importlib.import_module(hub_getter)
+                hub = getattr(mod, hub_name)()
+                price = hub.get_quote_price(self.symbol)
+                if price and price > 0:
+                    return float(price)
+            except Exception:
+                pass
+        return None
+
     async def _fetch_price(self) -> Optional[float]:
+        hub_price = self._try_any_streaming_hub()
+        if hub_price:
+            self._hub_available = True
+            return hub_price
+        self._hub_available = False
+
         if not self.broker_instance:
             return None
         
