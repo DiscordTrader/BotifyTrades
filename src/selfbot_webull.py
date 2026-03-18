@@ -19281,8 +19281,11 @@ def run_discord_bot_thread():
             _discord_error_queue.put(e)
             raise
     
+    loop = None
     try:
-        asyncio.run(discord_main())
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(discord_main())
     except KeyboardInterrupt:
         _original_print("\n[Discord Thread] Bot stopped by user (Ctrl+C)")
     except Exception as e:
@@ -19291,12 +19294,18 @@ def run_discord_bot_thread():
             _original_print("[Discord Thread] Discord not configured - set your token in Settings to enable")
             logging.warning("[Discord Thread] Discord not configured - set your token in Settings")
         else:
-            _original_print(f"[Discord Thread] Exception escaped asyncio.run(): {e}")
-            logging.error(f"[Discord Thread] Exception escaped asyncio.run(): {e}")
+            _original_print(f"[Discord Thread] Exception escaped event loop: {e}")
+            logging.error(f"[Discord Thread] Exception escaped event loop: {e}")
         _discord_error_queue.put(e)
     finally:
         _original_print("[Discord Thread] Shutting down...")
         logging.info("[Discord Thread] Shutting down...")
+        if loop and not loop.is_closed():
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
+            loop.close()
         _reset_discord_thread_guard()
         _discord_shutdown_event.set()
 
@@ -19397,14 +19406,23 @@ def run_telegram_bot_thread():
             traceback.print_exc()
             _telegram_ready_event.set()
     
+    tg_loop = None
     try:
-        asyncio.run(telegram_main())
+        tg_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(tg_loop)
+        tg_loop.run_until_complete(telegram_main())
     except KeyboardInterrupt:
         _original_print("\n[Telegram Thread] Stopped by user (Ctrl+C)")
     except Exception as e:
-        _original_print(f"[Telegram Thread] Exception escaped asyncio.run(): {e}")
+        _original_print(f"[Telegram Thread] Exception escaped event loop: {e}")
     finally:
         _original_print("[Telegram Thread] Shutting down...")
+        if tg_loop and not tg_loop.is_closed():
+            try:
+                tg_loop.run_until_complete(tg_loop.shutdown_asyncgens())
+            except Exception:
+                pass
+            tg_loop.close()
         _telegram_shutdown_event.set()
 
 
