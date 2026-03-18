@@ -7,6 +7,7 @@
 
 import sys
 import os
+import logging
 
 # BUILD VERSION MARKER - This MUST print if the code is current
 import builtins
@@ -19255,12 +19256,12 @@ def run_discord_bot_thread():
         """Async entrypoint for Discord bot with proper lifecycle"""
         try:
             _original_print("[Discord Thread] Starting Discord bot...")
+            logging.info("[Discord Thread] Starting Discord bot...")
             
-            # Create Discord client instance (on_ready will handle GUI registration)
             client = SelfClient()
             
-            # Start Discord connection (non-blocking async)
             _original_print("[Discord Thread] Connecting to Discord...")
+            logging.info("[Discord Thread] Connecting to Discord...")
             await client.start(USER_TOKEN)
             
         except Exception as e:
@@ -19268,17 +19269,19 @@ def run_discord_bot_thread():
             if 'expected token to be a str' in error_msg or 'NoneType' in error_msg:
                 _original_print("[Discord Thread] Discord token not configured - this is expected if you haven't set it up yet")
                 _original_print("[Discord Thread] Configure your Discord token in Settings > Discord to enable signal reading")
+                logging.warning("[Discord Thread] Discord token not configured")
             else:
                 _original_print(f"[Discord Thread ERROR] Bot crashed: {e}")
+                logging.error(f"[Discord Thread] Bot crashed: {e}")
                 log_error_to_db('discord_connection', f"Discord bot crashed: {str(e)}", 
                                'DiscordClient', 'critical', 'Check Discord token and network connection')
                 import traceback
                 traceback.print_exc()
+                logging.error(f"[Discord Thread] Traceback:\n{traceback.format_exc()}")
             _discord_error_queue.put(e)
             raise
     
     try:
-        # Run Discord bot with dedicated event loop via asyncio.run()
         asyncio.run(discord_main())
     except KeyboardInterrupt:
         _original_print("\n[Discord Thread] Bot stopped by user (Ctrl+C)")
@@ -19286,12 +19289,15 @@ def run_discord_bot_thread():
         error_msg = str(e)
         if 'expected token to be a str' in error_msg or 'NoneType' in error_msg:
             _original_print("[Discord Thread] Discord not configured - set your token in Settings to enable")
+            logging.warning("[Discord Thread] Discord not configured - set your token in Settings")
         else:
             _original_print(f"[Discord Thread] Exception escaped asyncio.run(): {e}")
+            logging.error(f"[Discord Thread] Exception escaped asyncio.run(): {e}")
         _discord_error_queue.put(e)
     finally:
         _original_print("[Discord Thread] Shutting down...")
-        _reset_discord_thread_guard()  # Reset guard for restart capability
+        logging.info("[Discord Thread] Shutting down...")
+        _reset_discord_thread_guard()
         _discord_shutdown_event.set()
 
 def _reset_discord_thread_guard():
@@ -19415,10 +19421,12 @@ def run_bot_startup(progress_callback=None):
     # Guard: Prevent duplicate startup calls (critical for PyInstaller builds with lifecycle watchdog)
     if _startup_in_progress:
         _original_print("[STARTUP] ⚠️ DUPLICATE STARTUP BLOCKED - startup already in progress")
+        logging.warning("[STARTUP] DUPLICATE STARTUP BLOCKED - startup already in progress")
         default_port = int(os.environ.get('GUI_PORT', 5000))
         return None, None, default_port
     _startup_in_progress = True
     _original_print("[STARTUP] ✓ Startup guard acquired (single instance)")
+    logging.info("[STARTUP] ✓ Startup guard acquired (single instance)")
     
     startup_start = time.time()
     step_times = {}
@@ -19485,11 +19493,13 @@ def run_bot_startup(progress_callback=None):
         _original_print(f"[STARTUP] Warning: Could not run diagnostics: {e}")
     
     report_progress(4, "Connecting to Discord...")
+    logging.info("[STARTUP] Step 4: Connecting to Discord...")
     
     # Start Discord bot in dedicated thread
     discord_thread = threading.Thread(target=run_discord_bot_thread, name="DiscordBot", daemon=False)
     discord_thread.start()
     _original_print("[MAIN] ✓ Discord bot started in dedicated thread")
+    logging.info("[MAIN] ✓ Discord bot started in dedicated thread")
     
     report_progress(5, "Starting Telegram listener...")
     
@@ -19808,23 +19818,24 @@ Environment Variables:
                         worker.progress_signal.emit(step, message)
                     
                     _original_print("[STARTUP] do_startup() thread starting run_bot_startup()...")
+                    logging.info("[STARTUP] do_startup() thread starting run_bot_startup()...")
                     d_thread, t_thread, port = run_bot_startup(update_progress)
                     startup_state['discord_thread'] = d_thread
                     startup_state['telegram_thread'] = t_thread
                     startup_state['gui_port'] = port
                     _original_print("[STARTUP] do_startup() completed successfully")
+                    logging.info(f"[STARTUP] do_startup() completed: discord_thread={'alive' if d_thread and d_thread.is_alive() else 'None'}, gui_port={port}")
                     worker.complete_signal.emit()
                 except Exception as e:
                     import traceback
+                    tb = traceback.format_exc()
                     _original_print(f"[STARTUP] ❌ do_startup() FAILED: {e}")
-                    _original_print(f"[STARTUP] ❌ Full traceback:\n{traceback.format_exc()}")
+                    _original_print(f"[STARTUP] ❌ Full traceback:\n{tb}")
+                    logging.error(f"[STARTUP] do_startup() FAILED: {e}\n{tb}")
                     startup_state['error'] = str(e)
                     worker.error_signal.emit(str(e))
             
-            def on_license_ready():
-                startup_state['license_ready'] = True
-                _original_print("[LICENSE] License validated, starting bot...")
-                
+            def _start_network_monitor_safe():
                 try:
                     from src.license import start_network_monitor, show_license_expired_popup
                     license_key = None
@@ -19853,6 +19864,16 @@ Environment Variables:
                         _original_print("[LICENSE] Warning: No license key found for network monitor")
                 except Exception as nm_err:
                     _original_print(f"[LICENSE] Network monitor init error: {nm_err}")
+
+            def on_license_ready():
+                if startup_state.get('startup_thread') is not None:
+                    _original_print("[LICENSE] License validated (startup already in progress, skipping duplicate)")
+                    logging.info("[LICENSE] Duplicate on_license_ready() blocked - startup already running")
+                    return
+                startup_state['license_ready'] = True
+                _original_print("[LICENSE] License validated, starting bot...")
+                
+                _start_network_monitor_safe()
                 
                 startup_thread = threading.Thread(target=do_startup, daemon=True)
                 startup_state['startup_thread'] = startup_thread
@@ -19861,6 +19882,7 @@ Environment Variables:
             splash.startup_ready.connect(on_license_ready)
             
             if license_bypass:
+                _start_network_monitor_safe()
                 startup_thread = threading.Thread(target=do_startup, daemon=True)
                 startup_state['startup_thread'] = startup_thread
                 startup_thread.start()
@@ -19918,10 +19940,33 @@ Environment Variables:
                             _original_print(f"[GUI] subprocess open failed ({browser_err}), trying webbrowser fallback")
                             webbrowser.open(url)
                         
+                        def _gui_discord_error_monitor():
+                            try:
+                                while not _discord_error_queue.empty():
+                                    err = _discord_error_queue.get_nowait()
+                                    err_msg = str(err)
+                                    _original_print(f"[GUI ERROR MONITOR] Discord error detected: {err_msg}")
+                                    logging.error(f"[GUI ERROR MONITOR] Discord error: {err_msg}")
+                                    if tray:
+                                        tray.set_status("error", f"Discord error: {err_msg[:100]}")
+                                        tray.show_notification(
+                                            "BotifyTrades - Discord Error",
+                                            f"Discord connection issue: {err_msg[:200]}",
+                                            QSystemTrayIcon.MessageIcon.Warning,
+                                            10000
+                                        )
+                            except Exception:
+                                pass
+                        
+                        _discord_monitor_timer = QTimer()
+                        _discord_monitor_timer.timeout.connect(_gui_discord_error_monitor)
+                        _discord_monitor_timer.start(5000)
+                        
                         def shutdown_handler():
                             _original_print("[MAIN] Shutdown requested from tray")
                             _discord_shutdown_event.set()
                             _telegram_shutdown_event.set()
+                            _discord_monitor_timer.stop()
                             app.quit()
                         
                         tray.shutdown_requested.connect(shutdown_handler)
