@@ -12,3 +12,9 @@ id = "6VOZ0ud1LZWxIwBYnIvYI"
 uri = "file://.local/docs/ai_agent_order_monitoring_analysis.md"
 type = "text"
 title = "AI Agent Order Monitoring — Full Risk Analysis"
+
+[[outputs]]
+id = "7RktyUHaCUfRtXKMC6yCd"
+uri = "file://.local/docs/discord_startup_bug_analysis.md"
+type = "text"
+title = "Discord Startup Bug — Root Cause Analysis"
