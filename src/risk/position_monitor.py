@@ -1165,7 +1165,7 @@ class RiskManager:
             print(f"[RISK] ✓ Webull broker reference acquired ({type(self._webull_broker).__name__})")
         
         self._stuck_price_tracker = {}
-        self._STUCK_PRICE_THRESHOLD = 8
+        self._STUCK_PRICE_THRESHOLD = 5
         
         self.cache = PositionCache()
         self._running = False
