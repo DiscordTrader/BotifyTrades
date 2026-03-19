@@ -767,7 +767,11 @@ class WebullBroker(BrokerInterface):
             import traceback
             traceback.print_exc()
             return []
-    
+
+    async def subscribe_position_symbols(self, positions: list):
+        if self._streaming_client and positions:
+            self._streaming_client.subscribe_positions(positions)
+
     async def get_pending_orders(self) -> list:
         """Get all pending/open orders from Webull. Uses hub cache when fresh."""
         try:
