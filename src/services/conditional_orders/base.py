@@ -407,21 +407,29 @@ class StreamingPriceMonitor(PriceMonitor):
                             return float(val)
             except Exception:
                 pass
-        
-        if self.finnhub_api_key:
+
+        cross_price = self._try_cross_broker_hubs()
+        if cross_price:
+            return cross_price
+
+        return None
+
+    def _try_cross_broker_hubs(self) -> Optional[float]:
+        for hub_getter, hub_name in [
+            ('src.services.webull_data_hub', 'get_webull_data_hub'),
+            ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
+            ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+            ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+        ]:
             try:
-                if not self._rest_session or self._rest_session.closed:
-                    self._rest_session = aiohttp.ClientSession()
-                url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
-                async with self._rest_session.get(url, timeout=aiohttp.ClientTimeout(total=3)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        price = data.get('c')
-                        if price and float(price) > 0:
-                            return float(price)
+                import importlib
+                mod = importlib.import_module(hub_getter)
+                hub = getattr(mod, hub_name)()
+                price = hub.get_quote_price(self.symbol)
+                if price and price > 0:
+                    return float(price)
             except Exception:
                 pass
-        
         return None
     
     def _try_unsubscribe_streaming(self):
@@ -492,23 +500,25 @@ class BrokerPriceMonitor(PriceMonitor):
                 
                 if price and price == self.last_price:
                     self.unchanged_count += 1
-                    if self.unchanged_count >= self.STALE_THRESHOLD_POLLS and self.finnhub_api_key and not self.using_finnhub_fallback:
-                        finnhub_price = await self._fetch_finnhub_price()
-                        if finnhub_price and abs(finnhub_price - price) > 0.05:
-                            sys.stderr.write(f"[{self.broker_name.upper()}] STALE DATA DETECTED for {self.symbol}: broker=${price:.2f}, Finnhub=${finnhub_price:.2f}\n")
-                            sys.stderr.write(f"[{self.broker_name.upper()}] Switching to Finnhub for {self.symbol}\n")
+                    if self.unchanged_count >= self.STALE_THRESHOLD_POLLS and not self.using_finnhub_fallback:
+                        cross_price = self._try_any_streaming_hub()
+                        if cross_price and abs(cross_price - price) > 0.05:
+                            sys.stderr.write(f"[{self.broker_name.upper()}] STALE DATA DETECTED for {self.symbol}: broker=${price:.2f}, cross-hub=${cross_price:.2f}\n")
+                            sys.stderr.write(f"[{self.broker_name.upper()}] Switching to cross-broker hub for {self.symbol}\n")
                             sys.stderr.flush()
                             self.using_finnhub_fallback = True
-                            price = finnhub_price
+                            price = cross_price
                             self.unchanged_count = 0
                 else:
                     self.unchanged_count = 0
-                
-                if self.using_finnhub_fallback and self.finnhub_api_key:
-                    price = await self._fetch_finnhub_price() or price
-                
+
+                if self.using_finnhub_fallback:
+                    cross_price = self._try_any_streaming_hub()
+                    if cross_price and cross_price > 0:
+                        price = cross_price
+
                 if poll_count <= 3 or poll_count % 10 == 0:
-                    source = "FINNHUB" if self.using_finnhub_fallback else self.broker_name.upper()
+                    source = "CROSS-HUB" if self.using_finnhub_fallback else self.broker_name.upper()
                     hub_tag = " (via hub)" if self._hub_available else ""
                     sys.stderr.write(f"[{source}] Poll #{poll_count} for {self.symbol}: price={price}{hub_tag}\n")
                     sys.stderr.flush()
@@ -665,9 +675,6 @@ class BrokerPriceMonitor(PriceMonitor):
                     result = await self.broker_instance.get_quote(self.symbol)
                     if isinstance(result, (int, float)) and result > 0:
                         return float(result)
-                finnhub_price = await self._fetch_finnhub_price()
-                if finnhub_price and finnhub_price > 0:
-                    return float(finnhub_price)
 
         except Exception as e:
             sys.stderr.write(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}\n")
@@ -815,7 +822,7 @@ class BaseConditionalOrderService(ABC):
         
         Returns the hub even when not actively streaming, so that
         StreamingPriceMonitor can attempt to subscribe and use its
-        internal REST fallback chain (broker REST → Finnhub).
+        internal REST fallback chain (broker REST → cross-broker hub).
         """
         broker_lower = broker_name.lower().replace('_paper', '').replace('_live', '')
         hub = self.data_hubs.get(broker_lower)
@@ -908,57 +915,67 @@ class BaseConditionalOrderService(ABC):
             self._log(f"Broker {broker_name} not supported for {self.MARKET} market")
     
     async def _upgrade_fallback_monitors(self, broker_name: str, broker_instance: Any):
-        """Upgrade monitors using fallback data sources to use the newly registered broker."""
+        """Upgrade or create monitors when a broker registers.
+        
+        Handles two cases:
+        1. Orders with no monitor (failed to create during restore because broker wasn't ready)
+        2. Orders with fallback monitors that should use the newly registered broker
+        """
         broker_lower = broker_name.lower()
+        broker_key = broker_lower.replace('_paper', '').replace('_live', '')
         upgraded_count = 0
-        
-        fallback_monitors = [oid for oid, mon in self.monitors.items() 
-                              if isinstance(mon, (FinnhubPriceMonitor, YFinancePriceMonitor))]
-        if not fallback_monitors:
-            return
-        
-        self._log(f"Checking {len(fallback_monitors)} fallback monitor(s) for upgrade to {broker_name}")
-        
-        for order_id, monitor in list(self.monitors.items()):
-            # Check if this monitor is using a fallback (Finnhub/yfinance) and should use this broker
-            if isinstance(monitor, (FinnhubPriceMonitor, YFinancePriceMonitor)):
-                # Check if this order is configured for this broker
-                order = self.pending_orders.get(order_id)
-                if not order:
-                    continue
-                
+
+        monitorless_orders = []
+        for order_id, order in self.pending_orders.items():
+            if order_id not in self.monitors:
                 order_broker = order.get('broker_primary', '').lower()
                 order_broker_key = order_broker.replace('_paper', '').replace('_live', '')
-                broker_key = broker_lower.replace('_paper', '').replace('_live', '')
-                
                 if order_broker_key == broker_key or order_broker == broker_lower:
-                    current = self.monitors.get(order_id)
-                    if current is not monitor or isinstance(current, StreamingPriceMonitor):
-                        continue
-                    
-                    self._log(f"Upgrading #{order_id} {monitor.symbol} from fallback to {broker_name}")
-                    
-                    await monitor.stop()
-                    if order_id in self.monitor_tasks:
-                        self.monitor_tasks[order_id].cancel()
-                        try:
-                            await self.monitor_tasks[order_id]
-                        except asyncio.CancelledError:
-                            pass
-                    
-                    if isinstance(self.monitors.get(order_id), StreamingPriceMonitor):
-                        self._log(f"#{order_id} already upgraded to streaming, skipping")
-                        continue
-                    
-                    new_monitor = await self.build_price_monitor(order, broker_instance, broker_name)
-                    if new_monitor:
-                        self.monitors[order_id] = new_monitor
-                        task = asyncio.create_task(new_monitor.start())
-                        self.monitor_tasks[order_id] = task
-                        upgraded_count += 1
-        
+                    monitorless_orders.append(order_id)
+
+        for order_id in monitorless_orders:
+            order = self.pending_orders.get(order_id)
+            if not order:
+                continue
+            symbol = order.get('symbol', '?')
+            self._log(f"Retrying monitor for #{order_id} {symbol} — broker {broker_name} now available")
+            new_monitor = await self.build_price_monitor(order, broker_instance, broker_name)
+            if new_monitor:
+                self.monitors[order_id] = new_monitor
+                task = asyncio.create_task(new_monitor.start())
+                self.monitor_tasks[order_id] = task
+                upgraded_count += 1
+                from gui_app.database import update_conditional_order_status
+                update_conditional_order_status(order_id, 'ACTIVE_MONITORING', data_source_active=broker_lower)
+                self._log(f"✓ #{order_id} {symbol} monitor created via {broker_name}")
+
+        fallback_monitors = [(oid, mon) for oid, mon in self.monitors.items()
+                              if isinstance(mon, (FinnhubPriceMonitor, YFinancePriceMonitor))]
+
+        for order_id, monitor in fallback_monitors:
+            order = self.pending_orders.get(order_id)
+            if not order:
+                continue
+            order_broker = order.get('broker_primary', '').lower()
+            order_broker_key = order_broker.replace('_paper', '').replace('_live', '')
+            if order_broker_key == broker_key or order_broker == broker_lower:
+                self._log(f"Upgrading #{order_id} {monitor.symbol} from fallback to {broker_name}")
+                await monitor.stop()
+                if order_id in self.monitor_tasks:
+                    self.monitor_tasks[order_id].cancel()
+                    try:
+                        await self.monitor_tasks[order_id]
+                    except asyncio.CancelledError:
+                        pass
+                new_monitor = await self.build_price_monitor(order, broker_instance, broker_name)
+                if new_monitor:
+                    self.monitors[order_id] = new_monitor
+                    task = asyncio.create_task(new_monitor.start())
+                    self.monitor_tasks[order_id] = task
+                    upgraded_count += 1
+
         if upgraded_count > 0:
-            self._log(f"Upgraded {upgraded_count} monitor(s) to {broker_name}")
+            self._log(f"Upgraded/created {upgraded_count} monitor(s) via {broker_name}")
     
     def set_execution_callback(self, callback: Callable, main_loop: Optional[asyncio.AbstractEventLoop] = None):
         self.execution_callback = callback
@@ -1399,23 +1416,13 @@ class BaseConditionalOrderService(ABC):
         monitor = await self.build_price_monitor(order, broker_instance, broker or '')
         
         if not monitor:
-            self._log(f"No price monitor available for #{order_id}")
+            self._log(f"No price monitor available for #{order_id} — will retry when broker registers")
             update_conditional_order_status(
                 order_id,
-                'ERROR',
-                event='NO_PRICE_SOURCE',
-                error_message='No price source available for this market'
+                'ACTIVE_MONITORING',
+                event='WAITING_FOR_BROKER',
+                error_message=f'Waiting for {broker or "broker"} to connect'
             )
-            try:
-                notify_conditional_failed(
-                    symbol=symbol,
-                    broker=broker or '',
-                    order_id=order_id,
-                    error="No price source available",
-                    stage="monitoring"
-                )
-            except Exception as e:
-                self._log(f"Notification error (no price source): {e}")
             return
         
         self.monitors[order_id] = monitor

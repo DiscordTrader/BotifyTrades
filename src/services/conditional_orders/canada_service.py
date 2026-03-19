@@ -2,7 +2,7 @@
 Canada Market Conditional Order Service
 
 Handles conditional orders for Canadian markets (TSX, CSE, NEO)
-Price monitoring fallback chain: Questrade → Finnhub → yfinance
+Price monitoring fallback chain: Questrade → Cross-Broker Hub → Broker REST API
 """
 
 import sys
@@ -24,7 +24,7 @@ class CanadaConditionalOrderService(BaseConditionalOrderService):
     Conditional order service for Canadian markets.
     
     Supports brokers: Questrade
-    Fallback chain: Questrade → Finnhub → yfinance
+    Fallback chain: Questrade → Cross-Broker Hub → Broker REST API
     """
     
     MARKET = 'CANADA'
@@ -63,25 +63,29 @@ class CanadaConditionalOrderService(BaseConditionalOrderService):
         
         if broker_instance and broker_rate_ok:
             data_source = broker_name.lower()
-            self._log(f"Using {broker_name} for {symbol} (real-time, Finnhub fallback available)")
-            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance, finnhub_api_key=self.finnhub_api_key)
-        
-        elif self.finnhub_api_key:
-            tsym = f"{symbol}.TO" if not symbol.endswith('.TO') else symbol
-            data_source = 'finnhub'
-            fallback_reason = 'broker_rate_limit' if (rate_limiter and rate_limiter.should_fallback(settings_threshold)) else 'no_broker_instance'
-            self._log(f"Using Finnhub for {tsym} (reason: {fallback_reason})")
-            monitor = FinnhubPriceMonitor(tsym, price_callback, self.finnhub_api_key)
-        
-        elif YFINANCE_AVAILABLE:
-            yf_symbol = f"{symbol}.TO" if not symbol.endswith('.TO') else symbol
-            data_source = 'yfinance'
-            self._log(f"Using yfinance for {yf_symbol} (delayed)")
-            monitor = YFinancePriceMonitor(yf_symbol, price_callback)
-        
+            self._log(f"Using {broker_name} for {symbol} (real-time REST, cross-broker hub fallback)")
+            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)
+
+        elif broker_instance:
+            data_source = broker_name.lower()
+            self._log(f"Using {broker_name} for {symbol} (broker REST with cross-hub fallback)")
+            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)
+
         else:
-            self._log(f"ERROR: No price source for {symbol}")
-            return None
+            any_broker_name = None
+            any_broker_inst = None
+            for bname, binst in self.broker_instances.items():
+                if binst and hasattr(binst, 'get_quote'):
+                    any_broker_name = bname
+                    any_broker_inst = binst
+                    break
+            if any_broker_inst:
+                data_source = any_broker_name.lower()
+                self._log(f"Using {any_broker_name} for {symbol} (fallback broker REST)")
+                monitor = BrokerPriceMonitor(symbol, price_callback, any_broker_name, any_broker_inst)
+            else:
+                self._log(f"ERROR: No price source for {symbol} — no brokers connected")
+                return None
         
         from gui_app.database import update_conditional_order_status
         status = 'ACTIVE_MONITORING' if data_source in self.get_supported_brokers() else 'FALLBACK_MONITORING'

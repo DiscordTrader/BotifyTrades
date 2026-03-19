@@ -2,7 +2,7 @@
 US Market Conditional Order Service
 
 Handles conditional orders for US markets (NYSE, NASDAQ, etc.)
-Price monitoring fallback chain: Webull/Alpaca → Finnhub → yfinance
+Price monitoring fallback chain: Streaming Hub → Cross-Broker Hub → Broker REST API
 """
 
 import sys
@@ -25,7 +25,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
     Conditional order service for US markets.
     
     Supports brokers: Webull, Alpaca, Tastytrade, IBKR, Robinhood, Schwab
-    Fallback chain: Channel Broker → Finnhub → yfinance
+    Fallback chain: Channel Broker → Cross-Broker Hub → Any Connected Broker REST
     """
     
     MARKET = 'US'
@@ -57,8 +57,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
         3. Alt streaming hub (Schwab/Webull cross-broker WebSocket) - for brokers without own hub
         4. Alt hub without streaming (cross-broker cache)
         5. Broker REST API direct (incl. T212 portfolio quotes) - real-time polling
-        6. Finnhub API - real-time
-        7. yfinance - delayed (~15 min)
+        6. Any connected broker REST API
+        7. Cross-broker hub fallback (via BrokerPriceMonitor._try_any_streaming_hub)
         """
         symbol = order['symbol']
         settings_threshold = 0.8
@@ -99,8 +99,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"Using STREAMING hub for {symbol} via {broker_name} (sub-100ms, zero API calls)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
-                broker_instance=broker_instance,
-                finnhub_api_key=self.finnhub_api_key
+                broker_instance=broker_instance
             )
         
         elif hub:
@@ -108,8 +107,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"Using data hub for {symbol} via {broker_name} (hub cache + broker REST fallback, will auto-upgrade when streaming connects)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
-                broker_instance=broker_instance,
-                finnhub_api_key=self.finnhub_api_key
+                broker_instance=broker_instance
             )
         
         elif alt_hub and alt_hub_streaming:
@@ -117,8 +115,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"Using STREAMING hub for {symbol} via {alt_hub_name} (cross-broker WebSocket for {broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
-                broker_instance=alt_hub_broker,
-                finnhub_api_key=self.finnhub_api_key
+                broker_instance=alt_hub_broker
             )
         
         elif alt_hub:
@@ -126,31 +123,34 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"Using data hub for {symbol} via {alt_hub_name} (cross-broker cache for {broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
-                broker_instance=alt_hub_broker,
-                finnhub_api_key=self.finnhub_api_key
+                broker_instance=alt_hub_broker
             )
         
         elif broker_instance and broker_rate_ok:
             data_source = broker_name.lower()
-            self._log(f"Using {broker_name} for {symbol} (real-time REST, Finnhub fallback available)")
-            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance, finnhub_api_key=self.finnhub_api_key)
-        
-        elif self.finnhub_api_key:
-            data_source = 'finnhub'
-            fallback_reason = 'broker_rate_limit' if (rate_limiter and rate_limiter.should_fallback(settings_threshold)) else 'no_broker_instance'
-            self._log(f"Using Finnhub for {symbol} (reason: {fallback_reason})")
-            monitor = FinnhubPriceMonitor(symbol, price_callback, self.finnhub_api_key)
-        
-        elif YFINANCE_AVAILABLE:
-            data_source = 'yfinance'
-            self._log(f"Using yfinance for {symbol} (delayed ~15min)")
-            monitor = YFinancePriceMonitor(symbol, price_callback)
-        
+            self._log(f"Using {broker_name} for {symbol} (real-time REST, cross-broker hub fallback)")
+            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)
+
+        elif broker_instance:
+            data_source = broker_name.lower()
+            self._log(f"Using {broker_name} for {symbol} (broker REST with cross-hub fallback)")
+            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)
+
         else:
-            self._log(f"ERROR: No price source for {symbol}")
-            self._log(f"  - Set FINNHUB_API_KEY for real-time data")
-            self._log(f"  - Or install yfinance: pip install yfinance")
-            return None
+            any_broker_name = None
+            any_broker_inst = None
+            for bname, binst in self.broker_instances.items():
+                if binst and hasattr(binst, 'get_quote'):
+                    any_broker_name = bname
+                    any_broker_inst = binst
+                    break
+            if any_broker_inst:
+                data_source = any_broker_name.lower()
+                self._log(f"Using {any_broker_name} for {symbol} (fallback broker REST, no primary broker)")
+                monitor = BrokerPriceMonitor(symbol, price_callback, any_broker_name, any_broker_inst)
+            else:
+                self._log(f"ERROR: No price source for {symbol} — no brokers connected and no streaming hubs available")
+                return None
         
         from gui_app.database import update_conditional_order_status
         is_streaming = data_source and data_source.endswith('_stream')
