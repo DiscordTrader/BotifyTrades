@@ -1126,8 +1126,10 @@ class SchwabBroker(BrokerInterface):
             
             order_type = "LIMIT" if price else "MARKET"
             
-            if is_exit:
-                if session == "SEAMLESS" and order_type == "LIMIT":
+            if order_type == "MARKET":
+                duration = "DAY"
+            elif is_exit:
+                if session == "SEAMLESS":
                     duration = "DAY"
                 else:
                     duration = "GOOD_TILL_CANCEL"
@@ -1135,6 +1137,8 @@ class SchwabBroker(BrokerInterface):
                 duration = "GOOD_TILL_CANCEL"
             else:
                 duration = "DAY"
+            
+            print(f"[{self.name}] 📋 Stock order: {instruction} {quantity} {symbol} | type={order_type} | session={session} | duration={duration}" + (f" | price=${price:.4f}" if price else ""))
             
             order_payload = {
                 "orderStrategyType": "SINGLE",
@@ -1361,7 +1365,7 @@ class SchwabBroker(BrokerInterface):
             except Exception:
                 pass
             
-            if is_near_expiry:
+            if order_type == "MARKET" or is_near_expiry:
                 duration = "DAY"
             elif is_exit:
                 duration = "GOOD_TILL_CANCEL"
