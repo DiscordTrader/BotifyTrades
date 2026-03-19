@@ -2704,12 +2704,18 @@ class RiskManager:
         
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
-            return decision
+            if getattr(position, '_rest_repair_cycle', False):
+                pass
+            else:
+                return decision
         
         if channel_settings:
             decision = evaluate_channel_stop_loss(position, cache, channel_settings)
             if decision.should_exit:
-                return decision
+                if getattr(position, '_rest_repair_cycle', False):
+                    pass
+                else:
+                    return decision
         
         if channel_settings and channel_settings.has_tiered_targets:
             if channel_settings.escalation_only_mode:
@@ -3952,6 +3958,13 @@ class RiskManager:
             return None
         return price
 
+    def _get_hub_quote_age(self, hub, symbol):
+        import time as _t
+        quote = hub.get_quote(symbol)
+        if not quote:
+            return None
+        return _t.time() - quote.timestamp
+
     def _get_market_session(self):
         from datetime import datetime
         try:
@@ -3959,8 +3972,9 @@ class RiskManager:
             et = pytz.timezone('US/Eastern')
             now_et = datetime.now(et)
         except Exception:
-            import os
+            import os, time as _tz_time
             os.environ.setdefault('TZ', 'America/New_York')
+            _tz_time.tzset()
             now_et = datetime.now()
         wd = now_et.weekday()
         if wd >= 5:
@@ -4024,6 +4038,7 @@ class RiskManager:
                     self._rest_repaired_prices[key] = {
                         'price': fresh_price, 'until': now + self._HUB_PRICE_MAX_AGE
                     }
+                    pos._rest_repair_cycle = True
                 elif fresh_price and fresh_price > 0:
                     tracker['last_changed'] = now
             except Exception as e:
@@ -4066,7 +4081,7 @@ class RiskManager:
             except Exception:
                 pass
         for hub_name, hub in alt_hubs:
-            price = self._get_fresh_hub_price(hub, pos.symbol, max_age=5)
+            price = self._get_fresh_hub_price(hub, pos.symbol, max_age=2)
             if price and price > 0:
                 return price
         return None
@@ -4168,14 +4183,21 @@ class RiskManager:
             pass
         return None
 
-    def _is_rest_repair_active(self, pos):
-        """Check if a REST-repaired price is protecting this position from hub overwrite."""
+    def _is_rest_repair_active(self, pos, hub_quote_age=None):
+        """Check if a REST-repaired price is protecting this position from hub overwrite.
+        
+        If hub_quote_age is provided and is < 3s, the stream has genuinely recovered
+        and the repair guard is released early regardless of TTL.
+        """
         import time as _rt
         key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
         repair = self._rest_repaired_prices.get(key)
         if not repair:
             return False
         if _rt.time() > repair['until']:
+            del self._rest_repaired_prices[key]
+            return False
+        if hub_quote_age is not None and hub_quote_age < 3.0:
             del self._rest_repaired_prices[key]
             return False
         return True
@@ -4227,7 +4249,8 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        if self._is_rest_repair_active(pos):
+                        _qa = self._get_hub_quote_age(hub, pos.symbol)
+                        if self._is_rest_repair_active(pos, hub_quote_age=_qa):
                             repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                             if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                                 pos.current_price = price
@@ -4264,7 +4287,9 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        if self._is_rest_repair_active(pos):
+                        _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
+                        _qa = self._get_hub_quote_age(schwab_hub, _lookup)
+                        if self._is_rest_repair_active(pos, hub_quote_age=_qa):
                             repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                             if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                                 pos.current_price = price
@@ -4302,7 +4327,9 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        if self._is_rest_repair_active(pos):
+                        _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
+                        _qa = self._get_hub_quote_age(ibkr_hub, _lookup)
+                        if self._is_rest_repair_active(pos, hub_quote_age=_qa):
                             repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                             if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                                 pos.current_price = price
@@ -4324,11 +4351,14 @@ class RiskManager:
             if pos.asset == 'option':
                 continue
             price = None
+            _cross_qa = None
             try:
                 from src.services.webull_data_hub import get_webull_data_hub
                 wb_hub = get_webull_data_hub()
                 if wb_hub.is_streaming():
                     price = self._get_fresh_hub_price(wb_hub, pos.symbol)
+                    if price:
+                        _cross_qa = self._get_hub_quote_age(wb_hub, pos.symbol)
             except Exception:
                 pass
             if not price:
@@ -4337,10 +4367,12 @@ class RiskManager:
                     sc_hub = get_schwab_data_hub()
                     if sc_hub.is_streaming():
                         price = self._get_fresh_hub_price(sc_hub, pos.symbol)
+                        if price:
+                            _cross_qa = self._get_hub_quote_age(sc_hub, pos.symbol)
                 except Exception:
                     pass
             if price and price > 0:
-                if self._is_rest_repair_active(pos):
+                if self._is_rest_repair_active(pos, hub_quote_age=_cross_qa):
                     repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                     if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                         pos.current_price = price
