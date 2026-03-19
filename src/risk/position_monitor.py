@@ -3952,7 +3952,7 @@ class RiskManager:
             return None
         return price
 
-    def _is_market_hours(self):
+    def _get_market_session(self):
         from datetime import datetime
         try:
             import pytz
@@ -3964,15 +3964,24 @@ class RiskManager:
             now_et = datetime.now()
         wd = now_et.weekday()
         if wd >= 5:
-            return False
-        h, m = now_et.hour, now_et.minute
-        t = h * 60 + m
-        return 390 <= t <= 1020
+            return 'closed'
+        t = now_et.hour * 60 + now_et.minute
+        if 570 <= t < 960:
+            return 'regular'
+        if 240 <= t < 570 or 960 <= t < 1200:
+            return 'extended'
+        return 'closed'
+
+    def _is_market_hours(self):
+        return self._get_market_session() != 'closed'
 
     async def _detect_and_fix_stuck_prices(self, positions: list):
         import time as _t
         now = _t.time()
-        rest_cooldown = 3.0 if self._is_market_hours() else 30.0
+        session = self._get_market_session()
+        rest_cooldown = 3.0 if session == 'regular' else (10.0 if session == 'extended' else 30.0)
+        _MAX_REST_REPAIRS_PER_CYCLE = 3
+        rest_repairs_this_cycle = 0
         for pos in positions:
             if pos.asset == 'option':
                 continue
@@ -4000,10 +4009,12 @@ class RiskManager:
                 fresh_price = self._try_cross_hub_price(pos, now)
                 source = 'cross-hub'
                 if not fresh_price or abs(fresh_price - pos.current_price) < 0.0001:
-                    rest_price = await self._try_rest_quote(pos)
-                    if rest_price and rest_price > 0:
-                        fresh_price = rest_price
-                        source = 'REST'
+                    if rest_repairs_this_cycle < _MAX_REST_REPAIRS_PER_CYCLE:
+                        rest_price = await self._try_rest_quote(pos)
+                        if rest_price and rest_price > 0:
+                            fresh_price = rest_price
+                            source = 'REST'
+                            rest_repairs_this_cycle += 1
                 if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
                     print(f"[RISK] 🔄 STUCK PRICE FIX ({source}): {pos.broker} {pos.symbol} "
                           f"was ${pos.current_price:.4f} (frozen {stuck_seconds:.0f}s) → ${fresh_price:.4f}")
@@ -4011,7 +4022,7 @@ class RiskManager:
                     tracker['last_price'] = fresh_price
                     tracker['last_changed'] = now
                     self._rest_repaired_prices[key] = {
-                        'price': fresh_price, 'until': now + 10
+                        'price': fresh_price, 'until': now + self._HUB_PRICE_MAX_AGE
                     }
                 elif fresh_price and fresh_price > 0:
                     tracker['last_changed'] = now
@@ -4019,10 +4030,13 @@ class RiskManager:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
                     print(f"[RISK] ⚠️ Stuck price fix error: {e}")
-        stale_keys = [k for k in self._stuck_price_tracker
-                      if k not in {f"{p.broker}_{p.symbol}_{p.asset}" for p in positions}]
+        active_keys = {f"{p.broker}_{p.symbol}_{p.asset}" for p in positions}
+        stale_keys = [k for k in self._stuck_price_tracker if k not in active_keys]
         for k in stale_keys:
             del self._stuck_price_tracker[k]
+        stale_repair = [k for k in self._rest_repaired_prices if k not in active_keys]
+        for k in stale_repair:
+            del self._rest_repaired_prices[k]
 
     def _try_cross_hub_price(self, pos, now):
         broker_upper = (pos.broker or '').upper()
@@ -4058,14 +4072,15 @@ class RiskManager:
         return None
 
     async def _try_rest_quote(self, pos):
+        current = pos.current_price
         price = await self._try_webull_rest_quote(pos.symbol)
-        if price and price > 0:
+        if price and price > 0 and abs(price - current) > 0.0001:
             return price
         price = await self._try_schwab_rest_quote(pos.symbol)
-        if price and price > 0:
+        if price and price > 0 and abs(price - current) > 0.0001:
             return price
         price = await self._try_broker_get_quote(pos)
-        if price and price > 0:
+        if price and price > 0 and abs(price - current) > 0.0001:
             return price
         return None
 
@@ -4075,8 +4090,10 @@ class RiskManager:
             return None
         try:
             sym = symbol
-            raw_quote = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: raw_client.get_quote(stock=sym))
+            raw_quote = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: raw_client.get_quote(stock=sym)),
+                timeout=5.0)
             if raw_quote and isinstance(raw_quote, dict):
                 ask = float(raw_quote.get('askPrice', 0) or 0)
                 bid = float(raw_quote.get('bidPrice', 0) or 0)
@@ -4085,6 +4102,8 @@ class RiskManager:
                     return (bid + ask) / 2
                 elif last > 0:
                     return last
+        except asyncio.TimeoutError:
+            return None
         except Exception:
             pass
         return None
@@ -4152,7 +4171,7 @@ class RiskManager:
     def _is_rest_repair_active(self, pos):
         """Check if a REST-repaired price is protecting this position from hub overwrite."""
         import time as _rt
-        key = pos.position_key
+        key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
         repair = self._rest_repaired_prices.get(key)
         if not repair:
             return False
@@ -4209,10 +4228,10 @@ class RiskManager:
                             continue
                     if price and price > 0:
                         if self._is_rest_repair_active(pos):
-                            repair = self._rest_repaired_prices[pos.position_key]
-                            if abs(price - repair['price']) / repair['price'] > 0.005:
+                            repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                                 pos.current_price = price
-                                del self._rest_repaired_prices[pos.position_key]
+                                del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 webull_updated += 1
                         else:
                             pos.current_price = price
@@ -4246,10 +4265,10 @@ class RiskManager:
                             continue
                     if price and price > 0:
                         if self._is_rest_repair_active(pos):
-                            repair = self._rest_repaired_prices[pos.position_key]
-                            if abs(price - repair['price']) / repair['price'] > 0.005:
+                            repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                                 pos.current_price = price
-                                del self._rest_repaired_prices[pos.position_key]
+                                del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 schwab_updated += 1
                         else:
                             pos.current_price = price
@@ -4284,10 +4303,10 @@ class RiskManager:
                             continue
                     if price and price > 0:
                         if self._is_rest_repair_active(pos):
-                            repair = self._rest_repaired_prices[pos.position_key]
-                            if abs(price - repair['price']) / repair['price'] > 0.005:
+                            repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                                 pos.current_price = price
-                                del self._rest_repaired_prices[pos.position_key]
+                                del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 ibkr_updated += 1
                         else:
                             pos.current_price = price
@@ -4322,10 +4341,10 @@ class RiskManager:
                     pass
             if price and price > 0:
                 if self._is_rest_repair_active(pos):
-                    repair = self._rest_repaired_prices[pos.position_key]
-                    if abs(price - repair['price']) / repair['price'] > 0.005:
+                    repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                    if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
                         pos.current_price = price
-                        del self._rest_repaired_prices[pos.position_key]
+                        del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                         cross_updated += 1
                 else:
                     pos.current_price = price
