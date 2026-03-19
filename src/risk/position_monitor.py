@@ -3427,7 +3427,7 @@ class RiskManager:
                         print(f"[RISK] 📊 Trim Limit Order: market ${original_price:.2f} → limit ${trim_price:.2f} ({offset_display} offset)")
             
             if not use_market and 'TRADING212' in position.broker.upper():
-                if is_sl_type_exit:
+                if is_sl_type_exit or decision.risk_trigger in ('ema_exit', 'ema_no_trend', 'profit_target'):
                     use_market = True
                     print(f"[RISK] 📊 Trading212 has no bid/ask streaming — using market order for {decision.risk_trigger}")
 
