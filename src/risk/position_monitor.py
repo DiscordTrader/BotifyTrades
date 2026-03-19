@@ -1166,6 +1166,7 @@ class RiskManager:
         
         self._stuck_price_tracker = {}
         self._STUCK_PRICE_THRESHOLD = 3
+        self._rest_repaired_prices = {}
         
         self.cache = PositionCache()
         self._running = False
@@ -3951,9 +3952,27 @@ class RiskManager:
             return None
         return price
 
+    def _is_market_hours(self):
+        from datetime import datetime
+        try:
+            import pytz
+            et = pytz.timezone('US/Eastern')
+            now_et = datetime.now(et)
+        except Exception:
+            import os
+            os.environ.setdefault('TZ', 'America/New_York')
+            now_et = datetime.now()
+        wd = now_et.weekday()
+        if wd >= 5:
+            return False
+        h, m = now_et.hour, now_et.minute
+        t = h * 60 + m
+        return 390 <= t <= 1020
+
     async def _detect_and_fix_stuck_prices(self, positions: list):
         import time as _t
         now = _t.time()
+        rest_cooldown = 3.0 if self._is_market_hours() else 30.0
         for pos in positions:
             if pos.asset == 'option':
                 continue
@@ -3974,7 +3993,7 @@ class RiskManager:
             stuck_seconds = now - tracker['last_changed']
             if stuck_seconds < self._STUCK_PRICE_THRESHOLD:
                 continue
-            if (now - tracker.get('rest_refreshed', 0)) < 3.0:
+            if (now - tracker.get('rest_refreshed', 0)) < rest_cooldown:
                 continue
             tracker['rest_refreshed'] = now
             try:
@@ -3991,6 +4010,9 @@ class RiskManager:
                     pos.current_price = fresh_price
                     tracker['last_price'] = fresh_price
                     tracker['last_changed'] = now
+                    self._rest_repaired_prices[key] = {
+                        'price': fresh_price, 'until': now + 10
+                    }
                 elif fresh_price and fresh_price > 0:
                     tracker['last_changed'] = now
             except Exception as e:
@@ -4072,26 +4094,33 @@ class RiskManager:
             return None
         try:
             sb = self.schwab_broker
-            if not await sb._ensure_valid_token():
-                return None
-            response = await sb._make_request(
-                'GET',
-                'https://api.schwabapi.com/marketdata/v1/quotes',
-                params={'symbols': symbol}
-            )
-            if response and response.status_code == 200:
-                data = response.json()
-                if symbol in data:
-                    quote = data[symbol].get('quote', {})
-                    bid = float(quote.get('bidPrice', 0) or 0)
-                    ask = float(quote.get('askPrice', 0) or 0)
-                    last = float(quote.get('lastPrice', 0) or 0)
-                    if bid > 0 and ask > 0:
-                        return (bid + ask) / 2
-                    elif last > 0:
-                        return last
+            result = await asyncio.wait_for(self._schwab_rest_inner(sb, symbol), timeout=5.0)
+            return result
+        except asyncio.TimeoutError:
+            return None
         except Exception:
             pass
+        return None
+
+    async def _schwab_rest_inner(self, sb, symbol):
+        if not await sb._ensure_valid_token():
+            return None
+        response = await sb._make_request(
+            'GET',
+            'https://api.schwabapi.com/marketdata/v1/quotes',
+            params={'symbols': symbol}
+        )
+        if response and response.status_code == 200:
+            data = response.json()
+            if symbol in data:
+                quote = data[symbol].get('quote', {})
+                bid = float(quote.get('bidPrice', 0) or 0)
+                ask = float(quote.get('askPrice', 0) or 0)
+                last = float(quote.get('lastPrice', 0) or 0)
+                if bid > 0 and ask > 0:
+                    return (bid + ask) / 2
+                elif last > 0:
+                    return last
         return None
 
     async def _try_broker_get_quote(self, pos):
@@ -4110,12 +4139,27 @@ class RiskManager:
         if not broker_instance or not hasattr(broker_instance, 'get_quote'):
             return None
         try:
-            result = await broker_instance.get_quote(pos.symbol)
+            result = await asyncio.wait_for(
+                broker_instance.get_quote(pos.symbol), timeout=5.0)
             if isinstance(result, (int, float)) and result > 0:
                 return float(result)
+        except asyncio.TimeoutError:
+            return None
         except Exception:
             pass
         return None
+
+    def _is_rest_repair_active(self, pos):
+        """Check if a REST-repaired price is protecting this position from hub overwrite."""
+        import time as _rt
+        key = pos.position_key
+        repair = self._rest_repaired_prices.get(key)
+        if not repair:
+            return False
+        if _rt.time() > repair['until']:
+            del self._rest_repaired_prices[key]
+            return False
+        return True
 
     def _update_prices_from_hub(self, positions: list):
         """Update position prices from streaming hubs if available.
@@ -4128,6 +4172,11 @@ class RiskManager:
         fresher than _HUB_PRICE_MAX_AGE seconds (default 30s). For low-volume
         symbols where MQTT updates are infrequent, the REST position price
         (refreshed every 10s) is kept instead of a stale streaming quote.
+        
+        REST REPAIR GUARD: If _detect_and_fix_stuck_prices recently wrote a
+        fresh REST price, hub overlay will NOT overwrite it for 10 seconds —
+        unless the hub price materially differs (>0.5% from repaired price),
+        indicating the stream has genuinely recovered.
         """
         webull_updated = 0
         schwab_updated = 0
@@ -4159,8 +4208,15 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        pos.current_price = price
-                        webull_updated += 1
+                        if self._is_rest_repair_active(pos):
+                            repair = self._rest_repaired_prices[pos.position_key]
+                            if abs(price - repair['price']) / repair['price'] > 0.005:
+                                pos.current_price = price
+                                del self._rest_repaired_prices[pos.position_key]
+                                webull_updated += 1
+                        else:
+                            pos.current_price = price
+                            webull_updated += 1
         except ImportError:
             pass
         except Exception as e:
@@ -4189,8 +4245,15 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        pos.current_price = price
-                        schwab_updated += 1
+                        if self._is_rest_repair_active(pos):
+                            repair = self._rest_repaired_prices[pos.position_key]
+                            if abs(price - repair['price']) / repair['price'] > 0.005:
+                                pos.current_price = price
+                                del self._rest_repaired_prices[pos.position_key]
+                                schwab_updated += 1
+                        else:
+                            pos.current_price = price
+                            schwab_updated += 1
         except ImportError:
             pass
         except Exception as e:
@@ -4220,8 +4283,15 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        pos.current_price = price
-                        ibkr_updated += 1
+                        if self._is_rest_repair_active(pos):
+                            repair = self._rest_repaired_prices[pos.position_key]
+                            if abs(price - repair['price']) / repair['price'] > 0.005:
+                                pos.current_price = price
+                                del self._rest_repaired_prices[pos.position_key]
+                                ibkr_updated += 1
+                        else:
+                            pos.current_price = price
+                            ibkr_updated += 1
         except ImportError:
             pass
         except Exception as e:
@@ -4251,8 +4321,15 @@ class RiskManager:
                 except Exception:
                     pass
             if price and price > 0:
-                pos.current_price = price
-                cross_updated += 1
+                if self._is_rest_repair_active(pos):
+                    repair = self._rest_repaired_prices[pos.position_key]
+                    if abs(price - repair['price']) / repair['price'] > 0.005:
+                        pos.current_price = price
+                        del self._rest_repaired_prices[pos.position_key]
+                        cross_updated += 1
+                else:
+                    pos.current_price = price
+                    cross_updated += 1
 
         if stale_skipped > 0:
             if not hasattr(self, '_stale_skip_count'):
@@ -4275,36 +4352,6 @@ class RiskManager:
             print(f"[RISK] ✓ Streaming hub: updated {total} position prices [{', '.join(parts)}]")
             self._hub_update_logged = True
 
-        import time as _pt
-        _now = _pt.time()
-        if not hasattr(self, '_price_change_tracker'):
-            self._price_change_tracker = {}
-        _STUCK_THRESHOLD = 8
-        _STUCK_REFRESH_COOLDOWN = 8
-        any_stuck = False
-        _last_stuck_refresh = getattr(self, '_last_stuck_refresh_ts', 0)
-        for pos in positions:
-            key = pos.position_key
-            tracked = self._price_change_tracker.get(key)
-            if tracked is None:
-                self._price_change_tracker[key] = {'price': pos.current_price, 'last_change': _now}
-                continue
-            if abs(pos.current_price - tracked['price']) > 0.0001:
-                tracked['price'] = pos.current_price
-                tracked['last_change'] = _now
-            elif (_now - tracked['last_change']) > _STUCK_THRESHOLD:
-                any_stuck = True
-        active_keys = {p.position_key for p in positions}
-        for key in list(self._price_change_tracker.keys()):
-            if key not in active_keys:
-                del self._price_change_tracker[key]
-        if any_stuck and (_now - _last_stuck_refresh) > _STUCK_REFRESH_COOLDOWN:
-            if not getattr(self, '_force_webull_rest_refresh', False):
-                self._force_webull_rest_refresh = True
-                self._last_stuck_refresh_ts = _now
-                stuck_keys = [k for k, v in self._price_change_tracker.items() if (_now - v['last_change']) > _STUCK_THRESHOLD]
-                if stuck_keys:
-                    print(f"[RISK] ⚠️ Price stuck for {len(stuck_keys)} position(s) — forcing Webull REST refresh")
 
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:
         """Convert raw position dict to PositionSnapshot."""
