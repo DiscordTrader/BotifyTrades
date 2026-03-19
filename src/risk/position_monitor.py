@@ -4036,22 +4036,85 @@ class RiskManager:
         return None
 
     async def _try_rest_quote(self, pos):
+        price = await self._try_webull_rest_quote(pos.symbol)
+        if price and price > 0:
+            return price
+        price = await self._try_schwab_rest_quote(pos.symbol)
+        if price and price > 0:
+            return price
+        price = await self._try_broker_get_quote(pos)
+        if price and price > 0:
+            return price
+        return None
+
+    async def _try_webull_rest_quote(self, symbol):
         raw_client = self._get_raw_webull_client()
-        if raw_client and hasattr(raw_client, 'get_quote'):
-            try:
-                sym = pos.symbol
-                raw_quote = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: raw_client.get_quote(stock=sym))
-                if raw_quote and isinstance(raw_quote, dict):
-                    ask = float(raw_quote.get('askPrice', 0) or 0)
-                    bid = float(raw_quote.get('bidPrice', 0) or 0)
-                    last = float(raw_quote.get('last', 0) or raw_quote.get('close', 0) or 0)
+        if not raw_client or not hasattr(raw_client, 'get_quote'):
+            return None
+        try:
+            sym = symbol
+            raw_quote = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: raw_client.get_quote(stock=sym))
+            if raw_quote and isinstance(raw_quote, dict):
+                ask = float(raw_quote.get('askPrice', 0) or 0)
+                bid = float(raw_quote.get('bidPrice', 0) or 0)
+                last = float(raw_quote.get('last', 0) or raw_quote.get('close', 0) or 0)
+                if bid > 0 and ask > 0:
+                    return (bid + ask) / 2
+                elif last > 0:
+                    return last
+        except Exception:
+            pass
+        return None
+
+    async def _try_schwab_rest_quote(self, symbol):
+        if not self.schwab_broker:
+            return None
+        try:
+            sb = self.schwab_broker
+            if not await sb._ensure_valid_token():
+                return None
+            response = await sb._make_request(
+                'GET',
+                'https://api.schwabapi.com/marketdata/v1/quotes',
+                params={'symbols': symbol}
+            )
+            if response and response.status_code == 200:
+                data = response.json()
+                if symbol in data:
+                    quote = data[symbol].get('quote', {})
+                    bid = float(quote.get('bidPrice', 0) or 0)
+                    ask = float(quote.get('askPrice', 0) or 0)
+                    last = float(quote.get('lastPrice', 0) or 0)
                     if bid > 0 and ask > 0:
                         return (bid + ask) / 2
                     elif last > 0:
                         return last
-            except Exception:
-                pass
+        except Exception:
+            pass
+        return None
+
+    async def _try_broker_get_quote(self, pos):
+        broker_upper = (pos.broker or '').upper()
+        broker_instance = None
+        if 'ALPACA' in broker_upper:
+            broker_instance = self.alpaca_broker
+        elif 'TASTYTRADE' in broker_upper:
+            broker_instance = self.tastytrade_broker
+        elif 'ROBINHOOD' in broker_upper:
+            broker_instance = self.robinhood_broker
+        elif 'IBKR' in broker_upper:
+            broker_instance = self.ibkr_broker
+        elif 'TRADING212' in broker_upper or 'T212' in broker_upper:
+            broker_instance = self.trading212_broker
+        if not broker_instance or not hasattr(broker_instance, 'get_quote'):
+            return None
+        try:
+            result = await broker_instance.get_quote(pos.symbol)
+            if isinstance(result, (int, float)) and result > 0:
+                return float(result)
+        except Exception:
+            pass
         return None
 
     def _update_prices_from_hub(self, positions: list):
