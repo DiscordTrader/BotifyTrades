@@ -4351,7 +4351,31 @@ class RiskManager:
             pass
         except Exception as e:
             print(f"[RISK] ⚠️ IBKR hub price update error: {e}")
-        
+
+        t212_updated = 0
+        try:
+            import time as _t212_time
+            from src.services.trading212_data_hub import get_trading212_data_hub
+            t212_hub = get_trading212_data_hub()
+            if t212_hub and not t212_hub.is_stale:
+                _now = _t212_time.time()
+                for pos in positions:
+                    if 'TRADING212' not in pos.broker.upper():
+                        continue
+                    if pos.asset == 'option':
+                        continue
+                    price = t212_hub.get_quote_price(pos.symbol)
+                    if price and price > 0:
+                        ts = t212_hub.get_quote_timestamp(pos.symbol)
+                        if ts and (_now - ts) > self._HUB_PRICE_MAX_AGE:
+                            continue
+                        pos.current_price = price
+                        t212_updated += 1
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ Trading212 hub price update error: {e}")
+
         cross_updated = 0
         _streaming_prefixes = ('WEBULL', 'SCHWAB', 'IBKR')
         for pos in positions:
@@ -4398,7 +4422,7 @@ class RiskManager:
             if self._stale_skip_count <= 3 or self._stale_skip_count % 60 == 0:
                 print(f"[RISK] ⚠️ Skipped {stale_skipped} stale streaming quote(s) (>{self._HUB_PRICE_MAX_AGE}s old) — using REST price instead")
 
-        total = webull_updated + schwab_updated + ibkr_updated + cross_updated
+        total = webull_updated + schwab_updated + ibkr_updated + t212_updated + cross_updated
         if total > 0 and not hasattr(self, '_hub_update_logged'):
             parts = []
             if webull_updated > 0:
@@ -4407,6 +4431,8 @@ class RiskManager:
                 parts.append(f"Schwab({schwab_updated})")
             if ibkr_updated > 0:
                 parts.append(f"IBKR({ibkr_updated})")
+            if t212_updated > 0:
+                parts.append(f"T212({t212_updated})")
             if cross_updated > 0:
                 parts.append(f"CrossBroker({cross_updated})")
             print(f"[RISK] ✓ Streaming hub: updated {total} position prices [{', '.join(parts)}]")

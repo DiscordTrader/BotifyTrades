@@ -8614,6 +8614,14 @@ class SelfClient(discord.Client):
                     _original_print(f"[CONDITIONAL] ✓ Schwab data hub {streaming_status}", flush=True)
             except Exception:
                 pass
+            try:
+                from src.services.trading212_data_hub import get_trading212_data_hub
+                t212_hub = get_trading212_data_hub()
+                if t212_hub:
+                    conditional_order_router.set_data_hub('trading212', t212_hub)
+                    _original_print(f"[CONDITIONAL] ✓ Trading212 data hub registered (REST polling)", flush=True)
+            except Exception:
+                pass
         except Exception as e:
             _original_print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
         

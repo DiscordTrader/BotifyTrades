@@ -10,6 +10,7 @@ class PollState(Enum):
     WATCHING = 'watching'
     ACTIVE = 'active'
     PENDING = 'pending'
+    CONDITIONAL = 'conditional'
 
 
 POLL_INTERVALS = {
@@ -17,7 +18,10 @@ POLL_INTERVALS = {
     PollState.WATCHING: 15,
     PollState.ACTIVE: 6,
     PollState.PENDING: 5,
+    PollState.CONDITIONAL: 4,
 }
+
+QUOTE_STALE_THRESHOLD = 60
 
 
 class Trading212DataHub:
@@ -29,11 +33,15 @@ class Trading212DataHub:
         self._orders_ts = 0
         self._account = {}
         self._account_ts = 0
+        self._quotes: Dict[str, Dict[str, Any]] = {}
+        self._quotes_lock = threading.Lock()
         self._poll_state = PollState.IDLE
         self._running = False
         self._task = None
         self._lock = threading.Lock()
         self._is_stale = False
+        self._conditional_symbols: set = set()
+        self._conditional_lock = threading.Lock()
 
     def set_broker(self, broker):
         self._broker = broker
@@ -46,9 +54,29 @@ class Trading212DataHub:
     def is_stale(self) -> bool:
         return self._is_stale
 
+    def add_conditional_symbol(self, symbol: str):
+        with self._conditional_lock:
+            self._conditional_symbols.add(symbol.upper())
+        self._update_state_for_conditionals()
+
+    def remove_conditional_symbol(self, symbol: str):
+        with self._conditional_lock:
+            self._conditional_symbols.discard(symbol.upper())
+        self._update_state_for_conditionals()
+
+    def _update_state_for_conditionals(self):
+        with self._conditional_lock:
+            has_conditionals = len(self._conditional_symbols) > 0
+        if has_conditionals and self._poll_state in (PollState.IDLE, PollState.WATCHING):
+            self._poll_state = PollState.CONDITIONAL
+
     def update_poll_state(self, has_open_positions: bool, has_pending_orders: bool):
+        with self._conditional_lock:
+            has_conditionals = len(self._conditional_symbols) > 0
         if has_pending_orders:
             self._poll_state = PollState.PENDING
+        elif has_conditionals:
+            self._poll_state = PollState.CONDITIONAL
         elif has_open_positions:
             self._poll_state = PollState.ACTIVE
         else:
@@ -72,6 +100,29 @@ class Trading212DataHub:
         with self._lock:
             return dict(self._account) if self._account else {}
 
+    def get_quote_price(self, symbol: str) -> Optional[float]:
+        with self._quotes_lock:
+            entry = self._quotes.get(symbol.upper())
+            if entry and (time.time() - entry['ts']) < QUOTE_STALE_THRESHOLD:
+                return entry['price']
+        return None
+
+    def get_quote_timestamp(self, symbol: str) -> Optional[float]:
+        with self._quotes_lock:
+            entry = self._quotes.get(symbol.upper())
+            if entry:
+                return entry['ts']
+        return None
+
+    def _update_quotes_from_positions(self, positions: List[Dict[str, Any]]):
+        now = time.time()
+        with self._quotes_lock:
+            for pos in positions:
+                sym = (pos.get('symbol') or '').upper()
+                price = pos.get('current_price')
+                if sym and price and float(price) > 0:
+                    self._quotes[sym] = {'price': float(price), 'ts': now}
+
     async def poll_once(self):
         if not self._broker or not self._broker.connected:
             return
@@ -82,6 +133,8 @@ class Trading212DataHub:
                 self._positions = positions if isinstance(positions, list) else []
                 self._positions_ts = time.time()
                 self._is_stale = False
+            if self._positions:
+                self._update_quotes_from_positions(self._positions)
         except Exception as e:
             print(f"[T212-HUB] Position poll error: {e}")
 

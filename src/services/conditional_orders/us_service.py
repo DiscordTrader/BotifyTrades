@@ -160,5 +160,14 @@ class USConditionalOrderService(BaseConditionalOrderService):
             status,
             data_source_active=data_source
         )
-        
+
+        if broker_key == 'trading212' and monitor:
+            try:
+                from src.services.trading212_data_hub import get_trading212_data_hub
+                t212_hub = get_trading212_data_hub()
+                if t212_hub:
+                    t212_hub.add_conditional_symbol(symbol)
+            except Exception:
+                pass
+
         return monitor

@@ -545,12 +545,13 @@ class BrokerPriceMonitor(PriceMonitor):
         return None
     
     def _try_any_streaming_hub(self) -> Optional[float]:
-        """Check all available streaming hubs for price data (zero API cost).
+        """Check all available streaming/polling hubs for price data (zero extra API cost).
         Useful for brokers without their own hub (Alpaca, Robinhood, Tastytrade, etc.)."""
         for hub_getter, hub_name in [
             ('src.services.webull_data_hub', 'get_webull_data_hub'),
             ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
             ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+            ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
         ]:
             try:
                 import importlib
@@ -650,7 +651,24 @@ class BrokerPriceMonitor(PriceMonitor):
                         price = result.get('last', 0) or result.get('price', 0) or result.get('close', 0)
                         if price and float(price) > 0:
                             return float(price)
-            
+
+            elif broker_normalized == 'trading212':
+                try:
+                    from src.services.trading212_data_hub import get_trading212_data_hub
+                    hub = get_trading212_data_hub()
+                    hub_price = hub.get_quote_price(self.symbol)
+                    if hub_price and hub_price > 0:
+                        return float(hub_price)
+                except Exception:
+                    pass
+                if hasattr(self.broker_instance, 'get_quote'):
+                    result = await self.broker_instance.get_quote(self.symbol)
+                    if isinstance(result, (int, float)) and result > 0:
+                        return float(result)
+                finnhub_price = await self._fetch_finnhub_price()
+                if finnhub_price and finnhub_price > 0:
+                    return float(finnhub_price)
+
         except Exception as e:
             sys.stderr.write(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}\n")
             sys.stderr.flush()
@@ -1432,12 +1450,21 @@ class BaseConditionalOrderService(ABC):
     
     async def _cleanup_order(self, order_id: int):
         """Remove an order from all in-memory tracking structures."""
+        order = self.pending_orders.get(order_id)
         if order_id in self.monitors:
             await self.monitors[order_id].stop()
             del self.monitors[order_id]
         if order_id in self.monitor_tasks:
             self.monitor_tasks[order_id].cancel()
             del self.monitor_tasks[order_id]
+        if order and order.get('broker', '').lower().replace('_paper', '').replace('_live', '') == 'trading212':
+            try:
+                from src.services.trading212_data_hub import get_trading212_data_hub
+                t212_hub = get_trading212_data_hub()
+                if t212_hub:
+                    t212_hub.remove_conditional_symbol(order.get('symbol', ''))
+            except Exception:
+                pass
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
         self._price_reset_needed.pop(order_id, None)
