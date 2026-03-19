@@ -303,6 +303,13 @@ def _fetch_webull(bot) -> List[Dict]:
 
             avg_cost = float(pos.get('costPrice', 0))
             cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
+            if is_option and cur_price > 0 and avg_cost > 0 and cur_price / avg_cost > 50:
+                market_value = float(pos.get('marketValue', 0))
+                mv_price = market_value / (position_qty * 100) if position_qty > 0 else 0
+                if mv_price > 0 and (mv_price / avg_cost if avg_cost > 0 else 0) < 50:
+                    cur_price = mv_price
+                else:
+                    cur_price = avg_cost
             unrealized = (cur_price - avg_cost) * position_qty
             if is_option:
                 unrealized *= 100
@@ -383,6 +390,13 @@ def _fetch_webull_paper(bot) -> List[Dict]:
 
             avg_cost = float(pos.get('costPrice', 0))
             cur_price = float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0))
+            if is_option and cur_price > 0 and avg_cost > 0 and cur_price / avg_cost > 50:
+                market_value = float(pos.get('marketValue', 0))
+                mv_price = market_value / (position_qty * 100) if position_qty > 0 else 0
+                if mv_price > 0 and (mv_price / avg_cost if avg_cost > 0 else 0) < 50:
+                    cur_price = mv_price
+                else:
+                    cur_price = avg_cost
             unrealized = (cur_price - avg_cost) * position_qty
             if is_option:
                 unrealized *= 100

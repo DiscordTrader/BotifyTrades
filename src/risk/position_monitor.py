@@ -1894,10 +1894,11 @@ class RiskManager:
                             opt_raw_symbol = str(ticker_id)
                         elif option_id:
                             opt_raw_symbol = str(option_id)
+                        opt_current_price = self._resolve_webull_option_price(pos, position_qty, symbol)
                         snap_data = {
                             'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
                             'quantity': position_qty, 'avg_cost': float(pos.get('costPrice', 0)),
-                            'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
+                            'current_price': opt_current_price,
                             'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
                             'option_id': option_id, 'strike': strike, 'expiry': expiry,
                             'direction': direction, 'ticker_id': ticker_id,
@@ -1986,10 +1987,11 @@ class RiskManager:
                             }
                             fetched.append(self._to_snapshot(snap_data))
                         else:
+                            opt_current_price = self._resolve_webull_option_price(pos, position_qty, symbol)
                             snap_data = {
                                 'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
                                 'quantity': position_qty, 'avg_cost': float(pos.get('costPrice', 0)),
-                                'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
+                                'current_price': opt_current_price,
                                 'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
                                 'option_id': pos.get('optionId', 0),
                                 'strike': float(pos.get('strikePrice', 0)),
@@ -4034,6 +4036,43 @@ class RiskManager:
 
         self._price_confirmed_fresh[pos_key] = _ft.time()
         return None
+
+    def _resolve_webull_option_price(self, pos: dict, quantity: float, symbol: str = '') -> float:
+        latest = float(pos.get('latestPrice', 0) or 0)
+        last = float(pos.get('lastPrice', 0) or 0)
+        cost_price = float(pos.get('costPrice', 0) or 0)
+        market_value = float(pos.get('marketValue', 0))
+        mv_price = market_value / (quantity * 100) if quantity > 0 else 0
+
+        direct_price = latest if latest > 0 else last
+
+        if direct_price > 0 and cost_price > 0:
+            ratio = direct_price / cost_price if cost_price > 0 else 0
+            if ratio > 50:
+                if not hasattr(self, '_wb_opt_price_warn_ts'):
+                    self._wb_opt_price_warn_ts = {}
+                import time as _owt
+                _now = _owt.time()
+                _sym = symbol or pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+                if _sym not in self._wb_opt_price_warn_ts or (_now - self._wb_opt_price_warn_ts.get(_sym, 0)) > 30:
+                    self._wb_opt_price_warn_ts[_sym] = _now
+                    print(f"[RISK] ⚠️ OPTION PRICE GUARD: {_sym} latestPrice=${direct_price:.2f} is {ratio:.0f}x entry ${cost_price:.2f} "
+                          f"— likely underlying index price, not option premium. Using marketValue-derived price ${mv_price:.4f}" if mv_price > 0
+                          else f"[RISK] ⚠️ OPTION PRICE GUARD: {_sym} latestPrice=${direct_price:.2f} is {ratio:.0f}x entry ${cost_price:.2f} "
+                               f"— likely underlying index price, not option premium. Falling back to entry price")
+                if mv_price > 0:
+                    mv_ratio = mv_price / cost_price if cost_price > 0 else 0
+                    if mv_ratio < 50:
+                        return mv_price
+                return cost_price
+
+        if direct_price > 0:
+            return direct_price
+
+        if mv_price > 0:
+            return mv_price
+
+        return cost_price
 
     def _resolve_webull_stock_price(self, pos: dict, quantity: float) -> float:
         latest = float(pos.get('latestPrice', 0) or 0)
