@@ -1368,7 +1368,20 @@ class RiskManager:
                     pos_key = position.position_key
                     pos_key_upper = pos_key.upper()
                     if pos_key in self._permanent_failure_keys or pos_key_upper in {k.upper() for k in self._permanent_failure_keys}:
-                        continue
+                        call_put = self._normalize_call_put(position.direction) if position.asset == 'option' else None
+                        reopened_trade_id = self.db_adapter.get_open_trade_id_for_position(
+                            symbol=position.symbol, asset_type=position.asset, broker=position.broker,
+                            strike=position.strike, expiry=position.expiry, call_put=call_put
+                        )
+                        if reopened_trade_id:
+                            self._permanent_failure_keys.discard(pos_key)
+                            for k in list(self._permanent_failure_keys):
+                                if k.upper() == pos_key_upper:
+                                    self._permanent_failure_keys.discard(k)
+                            self._save_permanent_failures()
+                            print(f"[RISK] ✓ Cleared permanent failure for {pos_key} — new trade #{reopened_trade_id} found")
+                        else:
+                            continue
                     await self._evaluate_position(position, risk_settings, broker_position_keys)
                     evaluated += 1
                 except Exception as e:
@@ -1736,7 +1749,21 @@ class RiskManager:
             try:
                 pos_key = position.position_key
                 if pos_key in self._permanent_failure_keys or pos_key.upper() in _pf_upper:
-                    continue
+                    call_put = self._normalize_call_put(position.direction) if position.asset == 'option' else None
+                    reopened_trade_id = self.db_adapter.get_open_trade_id_for_position(
+                        symbol=position.symbol, asset_type=position.asset, broker=position.broker,
+                        strike=position.strike, expiry=position.expiry, call_put=call_put
+                    )
+                    if reopened_trade_id:
+                        self._permanent_failure_keys.discard(pos_key)
+                        for k in list(self._permanent_failure_keys):
+                            if k.upper() == pos_key.upper():
+                                self._permanent_failure_keys.discard(k)
+                        _pf_upper = {k.upper() for k in self._permanent_failure_keys}
+                        self._save_permanent_failures()
+                        print(f"[RISK] ✓ Cleared permanent failure for {pos_key} — new trade #{reopened_trade_id} found")
+                    else:
+                        continue
                 await self._evaluate_position(position, risk_settings, broker_position_keys)
             except Exception as e:
                 print(f"[RISK] ⚠️ Error processing position {position.symbol}: {e}")
