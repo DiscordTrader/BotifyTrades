@@ -1156,6 +1156,15 @@ class WebullBroker(BrokerInterface):
                 if self._data_hub:
                     self._data_hub.invalidate_all()
                 self._order_history_cache = None
+                if action == "BTO" and self._streaming_client:
+                    try:
+                        tid = (self._streaming_client._symbol_to_ticker_id.get(symbol.upper())
+                               or (self._data_hub and self._data_hub.get_ticker_id(symbol)))
+                        if tid:
+                            self._streaming_client.subscribe_symbol(symbol, str(tid), is_option=False)
+                            print(f"[{self.name}] ✓ Immediate stream subscribe: {symbol}")
+                    except Exception:
+                        pass
                 return OrderResult(
                     success=True,
                     order_id=str(response.get('orderId', '')),
@@ -1601,6 +1610,14 @@ class WebullBroker(BrokerInterface):
                 if self._data_hub:
                     self._data_hub.invalidate_all()
                 self._order_history_cache = None
+                if action == "BTO" and self._streaming_client:
+                    try:
+                        oid = str(option_id) if option_id else None
+                        if oid:
+                            self._streaming_client.subscribe_symbol(symbol, oid, is_option=True)
+                            print(f"[{self.name}] ✓ Immediate stream subscribe: {symbol} (option)")
+                    except Exception:
+                        pass
                 return OrderResult(
                     success=True,
                     order_id=str(response.get('orderId', '')),

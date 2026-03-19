@@ -1246,6 +1246,12 @@ class SchwabBroker(BrokerInterface):
                     except Exception as verify_err:
                         print(f"[{self.name}] ⚠️ Post-order verify failed (non-critical): {verify_err}")
                 
+                if action.upper() == "BTO" and self._streaming_client:
+                    try:
+                        await self._streaming_client.subscribe_equities([symbol])
+                        print(f"[{self.name}] ✓ Immediate stream subscribe: {symbol}")
+                    except Exception:
+                        pass
                 return OrderResult(
                     success=True,
                     order_id=order_id,
@@ -1496,6 +1502,12 @@ class SchwabBroker(BrokerInterface):
                 except Exception:
                     pass
 
+                if action.upper() == "BTO" and self._streaming_client:
+                    try:
+                        await self._streaming_client.subscribe_options([option_symbol])
+                        print(f"[{self.name}] ✓ Immediate stream subscribe: {option_symbol} (option)")
+                    except Exception:
+                        pass
                 return OrderResult(
                     success=True,
                     order_id=order_id,
@@ -1555,6 +1567,12 @@ class SchwabBroker(BrokerInterface):
                                 )
                             except Exception:
                                 pass
+                            if action.upper() == "BTO" and self._streaming_client:
+                                try:
+                                    await self._streaming_client.subscribe_options([alt_symbol])
+                                    print(f"[{self.name}] ✓ Immediate stream subscribe: {alt_symbol} (option, alt strike)")
+                                except Exception:
+                                    pass
                             return OrderResult(
                                 success=True,
                                 order_id=order_id,
