@@ -436,6 +436,157 @@
 }
 .back-to-top.visible { opacity: 1; }
 
+/* ── Entry Settings Guide Section ────────────────────── */
+.es-pipeline {
+    display: flex; align-items: stretch; gap: 0; margin: 20px 0; flex-wrap: wrap;
+}
+.es-pipeline-stage {
+    flex: 1; min-width: 140px; padding: 16px 12px; text-align: center;
+    border: 1px solid var(--help-card-border); position: relative;
+    background: rgba(30, 41, 59, 0.5);
+}
+.es-pipeline-stage:first-child { border-radius: 12px 0 0 12px; }
+.es-pipeline-stage:last-child { border-radius: 0 12px 12px 0; }
+.es-pipeline-stage.es-active { background: var(--help-accent-dim); border-color: var(--help-accent); }
+.es-pipeline-stage.es-skip { opacity: 0.35; }
+.es-stage-icon { font-size: 1.5rem; margin-bottom: 6px; }
+.es-stage-label { font-weight: 700; font-size: 0.78rem; color: var(--help-text); margin-bottom: 4px; }
+.es-stage-val { font-size: 0.72rem; color: var(--help-accent); font-weight: 600; }
+.es-stage-sub { font-size: 0.68rem; color: var(--help-muted); margin-top: 2px; }
+.es-pipe-arrow { display: flex; align-items: center; color: var(--help-accent); font-size: 1.2rem; padding: 0 2px; flex-shrink: 0; }
+
+.es-timeline {
+    position: relative; padding: 0 0 0 36px; margin: 24px 0;
+}
+.es-timeline::before {
+    content: ''; position: absolute; left: 15px; top: 0; bottom: 0;
+    width: 2px; background: linear-gradient(180deg, var(--help-accent) 0%, rgba(99,102,241,0.3) 100%);
+}
+.es-tl-item {
+    position: relative; padding: 12px 0 20px; display: flex; align-items: flex-start; gap: 14px;
+}
+.es-tl-dot {
+    position: absolute; left: -29px; top: 14px; width: 14px; height: 14px;
+    border-radius: 50%; border: 2px solid var(--help-accent); background: var(--help-bg);
+    z-index: 1;
+}
+.es-tl-dot.es-filled { background: var(--help-accent); }
+.es-tl-content {
+    background: rgba(30, 41, 59, 0.5); border: 1px solid var(--help-card-border);
+    border-radius: 10px; padding: 14px 16px; flex: 1;
+}
+.es-tl-content.es-highlight { border-color: var(--help-accent); background: var(--help-accent-dim); }
+.es-tl-content.es-danger { border-color: var(--help-danger); background: rgba(239,68,68,0.06); }
+.es-tl-time { font-size: 0.72rem; color: var(--help-muted); font-weight: 600; min-width: 50px; padding-top: 2px; }
+.es-tl-title { font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px; }
+.es-tl-desc { font-size: 0.78rem; color: var(--help-muted); line-height: 1.5; }
+
+.es-price-bar {
+    position: relative; height: 56px; background: rgba(30, 41, 59, 0.8);
+    border-radius: 10px; overflow: hidden; margin: 14px 0 6px;
+}
+.es-price-seg {
+    position: absolute; top: 0; height: 100%; display: flex;
+    align-items: center; justify-content: center; font-weight: 700;
+    font-size: 0.72rem; color: white; transition: all 0.3s;
+}
+.es-price-labels {
+    display: flex; justify-content: space-between; font-size: 0.72rem;
+    color: var(--help-muted); margin-top: 4px; padding: 0 2px;
+}
+.es-price-marker {
+    position: absolute; top: -6px; bottom: -6px; width: 2px; z-index: 2;
+}
+.es-price-marker-label {
+    position: absolute; top: -22px; font-size: 0.65rem; font-weight: 700;
+    white-space: nowrap; transform: translateX(-50%);
+}
+
+.es-combo-card {
+    background: rgba(15, 23, 42, 0.6); border: 1px solid var(--help-card-border);
+    border-radius: 12px; padding: 20px; margin: 12px 0;
+    transition: border-color 0.2s;
+}
+.es-combo-card:hover { border-color: var(--help-accent); }
+.es-combo-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+    padding-bottom: 12px; border-bottom: 1px solid rgba(71,85,105,0.2);
+}
+.es-combo-badge {
+    width: 40px; height: 40px; border-radius: 10px; display: flex;
+    align-items: center; justify-content: center; font-size: 1.2rem;
+    flex-shrink: 0;
+}
+.es-combo-title { font-weight: 700; font-size: 1rem; color: var(--help-text); }
+.es-combo-subtitle { font-size: 0.78rem; color: var(--help-muted); margin-top: 2px; }
+.es-combo-settings {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.es-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+    border-radius: 6px; font-size: 0.72rem; font-weight: 700;
+    border: 1px solid rgba(71,85,105,0.2);
+}
+.es-chip-on { background: rgba(16,185,129,0.12); color: #6ee7b7; border-color: rgba(16,185,129,0.25); }
+.es-chip-off { background: rgba(71,85,105,0.1); color: #64748b; }
+.es-chip-val { background: rgba(99,102,241,0.12); color: #a5b4fc; border-color: rgba(99,102,241,0.25); }
+
+.es-calc-box {
+    background: rgba(15, 240, 179, 0.04); border: 1px solid rgba(15,240,179,0.15);
+    border-radius: 8px; padding: 12px 16px; margin: 10px 0;
+    font-family: 'Space Grotesk', monospace; font-size: 0.82rem; color: var(--help-text);
+    line-height: 1.8;
+}
+.es-calc-highlight { color: var(--help-accent); font-weight: 700; }
+.es-calc-dim { color: var(--help-muted); }
+.es-calc-result { color: #f59e0b; font-weight: 800; }
+.es-calc-arrow { color: var(--help-accent); }
+
+.es-outcome-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0;
+}
+.es-outcome {
+    padding: 14px 16px; border-radius: 10px; border: 1px solid;
+}
+.es-outcome-fill { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.25); }
+.es-outcome-block { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.2); }
+.es-outcome-icon { font-size: 1.3rem; margin-bottom: 6px; }
+.es-outcome-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 4px; }
+.es-outcome-fill .es-outcome-title { color: var(--help-success); }
+.es-outcome-block .es-outcome-title { color: var(--help-danger); }
+.es-outcome-desc { font-size: 0.78rem; color: var(--help-muted); line-height: 1.5; }
+
+.es-setting-deep {
+    display: grid; grid-template-columns: 48px 1fr; gap: 14px;
+    padding: 16px; background: rgba(30, 41, 59, 0.3); border-radius: 10px;
+    border: 1px solid rgba(71,85,105,0.15); margin-bottom: 10px;
+    align-items: start;
+}
+.es-setting-icon {
+    width: 48px; height: 48px; border-radius: 12px; display: flex;
+    align-items: center; justify-content: center; font-size: 1.3rem;
+}
+.es-setting-title { font-weight: 700; font-size: 0.95rem; color: var(--help-text); margin-bottom: 4px; }
+.es-setting-where { font-size: 0.72rem; color: var(--help-info); font-weight: 600; margin-bottom: 6px; }
+.es-setting-body { font-size: 0.82rem; color: var(--help-muted); line-height: 1.6; }
+
+.es-versus-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    font-size: 0.82rem; margin: 14px 0; border-radius: 10px;
+    overflow: hidden; border: 1px solid var(--help-card-border);
+}
+.es-versus-table th {
+    padding: 10px 14px; text-align: left; background: rgba(99,102,241,0.12);
+    color: var(--help-accent); font-weight: 700; font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.es-versus-table td {
+    padding: 10px 14px; border-bottom: 1px solid rgba(71,85,105,0.12);
+    color: var(--help-muted); vertical-align: top;
+}
+.es-versus-table tr:last-child td { border-bottom: none; }
+.es-versus-table td:first-child { color: var(--help-text); font-weight: 600; }
+
 @media (max-width: 768px) {
     .help-hero h1 { font-size: 1.6rem; }
     .help-toc { grid-template-columns: 1fr; }
@@ -444,6 +595,11 @@
     .step-item { border-radius: 10px !important; }
     .step-arrow { transform: rotate(90deg); justify-content: center; }
     .setting-row { grid-template-columns: 1fr; }
+    .es-pipeline { flex-direction: column; }
+    .es-pipeline-stage { border-radius: 10px !important; }
+    .es-pipe-arrow { transform: rotate(90deg); justify-content: center; }
+    .es-outcome-grid { grid-template-columns: 1fr; }
+    .es-setting-deep { grid-template-columns: 1fr; }
 }
 </style>
 {% endblock %}
@@ -461,6 +617,7 @@
     <a href="#discord" class="toc-item"><span class="toc-icon">💬</span> Discord Connection</a>
     <a href="#brokers" class="toc-item"><span class="toc-icon">🏦</span> Broker Setup</a>
     <a href="#channels" class="toc-item"><span class="toc-icon">📡</span> Channel Configuration</a>
+    <a href="#entry-settings" class="toc-item"><span class="toc-icon">🎯</span> Entry Settings Guide</a>
     <a href="#execution" class="toc-item"><span class="toc-icon">⚡</span> Execution Page</a>
     <a href="#risk" class="toc-item"><span class="toc-icon">🛡️</span> Risk Management</a>
     <a href="#notifications" class="toc-item"><span class="toc-icon">🔔</span> Notifications</a>
@@ -1392,6 +1549,701 @@
                 <div class="setting-explain">Re-launches the guided configuration wizard. Useful for initial setup or when adding a new broker. Available at Settings &rarr; Setup Wizard.</div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- ========== SECTION: ENTRY SETTINGS GUIDE ========== -->
+<div class="help-section" id="entry-settings">
+    <div class="help-section-header">
+        <span class="section-badge">🎯</span>
+        <h2>Entry Settings &mdash; Complete Guide with Examples</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>How Entry Protection Works</h3>
+        <p>When a buy signal arrives, the bot can process it through a series of protective settings before placing an order. Each setting controls a different aspect of <strong>when</strong> and <strong>at what price</strong> you enter a trade.</p>
+
+        <div class="es-pipeline">
+            <div class="es-pipeline-stage es-active">
+                <div class="es-stage-icon">📨</div>
+                <div class="es-stage-label">Signal Arrives</div>
+                <div class="es-stage-val">BTO GXAI $2.60</div>
+                <div class="es-stage-sub">Discord / Telegram</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage es-active">
+                <div class="es-stage-icon">📈</div>
+                <div class="es-stage-label">Entry Confirmation</div>
+                <div class="es-stage-val">+2% buffer</div>
+                <div class="es-stage-sub">Must prove breakout</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage es-active">
+                <div class="es-stage-icon">🎯</div>
+                <div class="es-stage-label">Trigger Offset</div>
+                <div class="es-stage-val">Fine-tune trigger</div>
+                <div class="es-stage-sub">Adjust &plusmn;%/$</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage es-active">
+                <div class="es-stage-icon">🛡️</div>
+                <div class="es-stage-label">Limit Cap</div>
+                <div class="es-stage-val">Max buy price</div>
+                <div class="es-stage-sub">Hard price ceiling</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage es-active">
+                <div class="es-stage-icon">✅</div>
+                <div class="es-stage-label">Order Placed</div>
+                <div class="es-stage-val">Limit @ $2.73</div>
+                <div class="es-stage-sub">Sent to broker</div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">Where to find these settings</div>
+            <p>All entry settings are configured per channel: <strong>Admin &rarr; Channels &rarr; click a channel &rarr; Conditional tab</strong> (Entry Confirmation, Trigger Offset, Breakout Reset) and <strong>Execution tab</strong> (Limit Cap, Order Type).</p>
+        </div>
+    </div>
+
+    <!-- ── Individual Setting Explanations ── -->
+    <div class="help-card">
+        <h3>Each Setting Explained</h3>
+
+        <div class="es-setting-deep">
+            <div class="es-setting-icon" style="background: rgba(16,185,129,0.15);">📈</div>
+            <div>
+                <div class="es-setting-title">Entry Confirmation (%)</div>
+                <div class="es-setting-where">Channels &rarr; Conditional Tab &rarr; Entry Confirmation</div>
+                <div class="es-setting-body">
+                    <strong>What it does:</strong> Converts a normal buy signal into a conditional (watched) order. The bot will NOT buy immediately &mdash; it monitors the price and only buys when the stock moves up by this percentage above the signal price.
+                    <br><br>
+                    <strong>Why use it:</strong> Filters out fake breakouts. If a signal says &ldquo;GXAI over $2.60&rdquo; but the price never reaches $2.60, no money is spent.
+                </div>
+                <div class="es-calc-box" style="margin-top: 10px;">
+                    <span class="es-calc-dim">Signal price:</span> <span class="es-calc-highlight">$2.60</span><br>
+                    <span class="es-calc-dim">Confirmation:</span> <span class="es-calc-highlight">2%</span><br>
+                    <span class="es-calc-dim">Formula:</span> $2.60 &times; (1 + 2/100) <span class="es-calc-arrow">=</span> <span class="es-calc-result">Trigger @ $2.652</span><br>
+                    <span class="es-calc-dim">Bot waits until price &ge; $2.652 before buying</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="es-setting-deep">
+            <div class="es-setting-icon" style="background: rgba(99,102,241,0.15);">🎯</div>
+            <div>
+                <div class="es-setting-title">Trigger Offset (% or $)</div>
+                <div class="es-setting-where">Channels &rarr; Conditional Tab &rarr; Trigger Offset</div>
+                <div class="es-setting-body">
+                    <strong>What it does:</strong> Fine-tunes the trigger price with an additional adjustment. Positive values push the trigger further away (more conservative). Negative values bring it closer (enters sooner).
+                    <br><br>
+                    <strong>When it applies:</strong> Applied <em>after</em> Entry Confirmation at conditional order creation.
+                </div>
+                <div class="es-calc-box" style="margin-top: 10px;">
+                    <span class="es-calc-dim">Trigger (after confirmation):</span> <span class="es-calc-highlight">$2.652</span><br>
+                    <span class="es-calc-dim">Offset:</span> <span class="es-calc-highlight">-1%</span> <span class="es-calc-dim">(enter sooner)</span><br>
+                    <span class="es-calc-dim">Formula:</span> $2.652 &times; (1 - 1/100) <span class="es-calc-arrow">=</span> <span class="es-calc-result">Adjusted trigger @ $2.625</span>
+                </div>
+                <div class="es-calc-box">
+                    <span class="es-calc-dim">Dollar mode example:</span><br>
+                    <span class="es-calc-dim">Trigger:</span> <span class="es-calc-highlight">$2.60</span> &nbsp;&nbsp;
+                    <span class="es-calc-dim">Offset:</span> <span class="es-calc-highlight">+$0.10</span><br>
+                    <span class="es-calc-dim">Formula:</span> $2.60 + $0.10 <span class="es-calc-arrow">=</span> <span class="es-calc-result">Adjusted trigger @ $2.70</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="es-setting-deep">
+            <div class="es-setting-icon" style="background: rgba(245,158,11,0.15);">🔄</div>
+            <div>
+                <div class="es-setting-title">Breakout Reset Guard</div>
+                <div class="es-setting-where">Channels &rarr; Conditional Tab &rarr; Breakout Reset</div>
+                <div class="es-setting-body">
+                    <strong>What it does:</strong> If the price is already past the trigger when the conditional order is created, this guard waits for the price to pull back below the trigger first, then watches for the real breakout. Prevents immediate execution on stale signals.
+                    <br><br>
+                    <strong>Default:</strong> ON. Disable if you want immediate trigger on already-passed prices.
+                </div>
+                <div class="es-calc-box" style="margin-top: 10px;">
+                    <span class="es-calc-dim">Trigger:</span> <span class="es-calc-highlight">$2.60</span> &nbsp;&nbsp;
+                    <span class="es-calc-dim">Current price:</span> <span class="es-calc-highlight">$2.75</span> <span class="es-calc-dim">(already past!)</span><br>
+                    <span class="es-calc-dim">Guard ON:</span> <span class="es-calc-result">Wait for pullback below $2.60, then trigger on next cross above</span><br>
+                    <span class="es-calc-dim">Guard OFF:</span> <span class="es-calc-result">Trigger immediately since $2.75 &ge; $2.60</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="es-setting-deep">
+            <div class="es-setting-icon" style="background: rgba(239,68,68,0.15);">🛡️</div>
+            <div>
+                <div class="es-setting-title">Limit Cap (% above trigger)</div>
+                <div class="es-setting-where">Channels &rarr; Execution Tab &rarr; Price Controls &rarr; Limit Cap</div>
+                <div class="es-setting-body">
+                    <strong>What it does:</strong> Sets a maximum price you&rsquo;re willing to pay. When the conditional order triggers, instead of chasing the stock at any price, the bot places a <strong>limit order</strong> capped at trigger + this percentage. If the stock has already run past your cap, the order simply won&rsquo;t fill &mdash; protecting you from overpaying.
+                    <br><br>
+                    <strong>Important:</strong> Limit Cap acts as a hard ceiling even if the channel is set to &ldquo;Market&rdquo; order mode. It always overrides market mode when enabled.
+                </div>
+                <div class="es-calc-box" style="margin-top: 10px;">
+                    <span class="es-calc-dim">Trigger price:</span> <span class="es-calc-highlight">$2.60</span><br>
+                    <span class="es-calc-dim">Limit Cap:</span> <span class="es-calc-highlight">5%</span><br>
+                    <span class="es-calc-dim">Formula:</span> $2.60 &times; (1 + 5/100) <span class="es-calc-arrow">=</span> <span class="es-calc-result">Max buy price: $2.73</span><br>
+                    <span class="es-calc-dim">Order won&rsquo;t fill above $2.73 regardless of market price</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="es-setting-deep">
+            <div class="es-setting-icon" style="background: rgba(59,130,246,0.15);">📥</div>
+            <div>
+                <div class="es-setting-title">Entry Order Mode (Limit / Market)</div>
+                <div class="es-setting-where">Channels &rarr; Order Types Tab &rarr; Entry Order</div>
+                <div class="es-setting-body">
+                    <strong>What it does:</strong> Controls whether the bot places limit orders (at a specific price) or market orders (at whatever the current price is) when entering a trade.
+                </div>
+                <table class="es-versus-table" style="margin-top: 10px;">
+                    <thead>
+                        <tr><th>Mode</th><th>Limit Cap OFF</th><th>Limit Cap ON</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Limit</td>
+                            <td>Limit order at signal price</td>
+                            <td>Limit order at cap price (ceiling)</td>
+                        </tr>
+                        <tr>
+                            <td>Market</td>
+                            <td>Market order (no price limit)</td>
+                            <td><strong style="color: var(--help-accent);">Limit order at cap price</strong> &mdash; cap overrides market mode</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="es-setting-deep">
+            <div class="es-setting-icon" style="background: rgba(168,85,247,0.15);">⏱</div>
+            <div>
+                <div class="es-setting-title">Conditional / Order Timeout</div>
+                <div class="es-setting-where">Channels &rarr; Conditional Tab &rarr; Timeouts</div>
+                <div class="es-setting-body">
+                    <strong>What it does:</strong> Auto-cancels the conditional order if the trigger is never reached within the timeout period. &ldquo;Order Timeout&rdquo; applies to all orders. &ldquo;Conditional Timeout&rdquo; applies only to conditional orders (overrides the general one if set).
+                </div>
+                <div class="es-calc-box" style="margin-top: 10px;">
+                    <span class="es-calc-dim">Example:</span> Conditional timeout = <span class="es-calc-highlight">60 minutes</span><br>
+                    <span class="es-calc-dim">Signal at 10:00 AM &rarr; Order auto-cancels at 11:00 AM if trigger not reached</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="es-setting-deep">
+            <div class="es-setting-icon" style="background: rgba(236,72,153,0.15);">🏃</div>
+            <div>
+                <div class="es-setting-title">Slippage Protection</div>
+                <div class="es-setting-where">Channels &rarr; Execution Tab &rarr; Slippage Protection</div>
+                <div class="es-setting-body">
+                    <strong>What it does:</strong> After a conditional order triggers, checks the current market price against the trigger price. If the stock has moved more than your max slippage %, the bot waits (up to the configured minutes) for the price to come back before placing the order.
+                </div>
+                <div class="es-calc-box" style="margin-top: 10px;">
+                    <span class="es-calc-dim">Trigger:</span> <span class="es-calc-highlight">$2.60</span> &nbsp;&nbsp;
+                    <span class="es-calc-dim">Max slippage:</span> <span class="es-calc-highlight">50%</span> &nbsp;&nbsp;
+                    <span class="es-calc-dim">Wait:</span> <span class="es-calc-highlight">5 min</span><br>
+                    <span class="es-calc-dim">Price at trigger: $3.50 (+34.6%)</span> <span class="es-calc-arrow">&rarr;</span> <span class="es-calc-result">Within 50%, proceeds with order</span><br>
+                    <span class="es-calc-dim">Price at trigger: $4.20 (+61.5%)</span> <span class="es-calc-arrow">&rarr;</span> <span class="es-calc-result">Waits up to 5 min for pullback</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Setting Combinations with Live Examples ── -->
+    <div class="help-card">
+        <h3>Setting Combinations &mdash; Real Examples</h3>
+        <p>These examples show how different setting combinations work together in real trading scenarios. Each one walks through the exact calculations the bot performs.</p>
+
+        <!-- ── COMBO 1: Basic Breakout ── -->
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(16,185,129,0.15);">1</div>
+                <div>
+                    <div class="es-combo-title">Buy the Breakout, Don&rsquo;t Chase</div>
+                    <div class="es-combo-subtitle">Most common setup &mdash; simple trigger with price protection</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-off">Entry Confirmation: OFF</span>
+                <span class="es-chip es-chip-off">Trigger Offset: 0</span>
+                <span class="es-chip es-chip-on">Limit Cap: ON, 5%</span>
+                <span class="es-chip es-chip-val">Entry Mode: Limit</span>
+            </div>
+            <div class="es-calc-box">
+                <span class="es-calc-dim">Signal arrives:</span> <span class="es-calc-highlight">BTO GXAI over $2.60</span><br>
+                <span class="es-calc-dim">Trigger price:</span> <span class="es-calc-highlight">$2.60</span> <span class="es-calc-dim">(straight from signal, no confirmation)</span><br>
+                <span class="es-calc-dim">Limit Cap:</span> $2.60 &times; 1.05 <span class="es-calc-arrow">=</span> <span class="es-calc-result">$2.73 max buy price</span>
+            </div>
+
+            <div class="es-pipeline" style="margin: 16px 0;">
+                <div class="es-pipeline-stage es-active">
+                    <div class="es-stage-icon">📨</div>
+                    <div class="es-stage-label">Signal</div>
+                    <div class="es-stage-val">GXAI $2.60</div>
+                </div>
+                <span class="es-pipe-arrow">&#8594;</span>
+                <div class="es-pipeline-stage es-skip">
+                    <div class="es-stage-icon">📈</div>
+                    <div class="es-stage-label">Confirmation</div>
+                    <div class="es-stage-val">OFF</div>
+                </div>
+                <span class="es-pipe-arrow">&#8594;</span>
+                <div class="es-pipeline-stage es-skip">
+                    <div class="es-stage-icon">🎯</div>
+                    <div class="es-stage-label">Offset</div>
+                    <div class="es-stage-val">0</div>
+                </div>
+                <span class="es-pipe-arrow">&#8594;</span>
+                <div class="es-pipeline-stage es-active">
+                    <div class="es-stage-icon">👁️</div>
+                    <div class="es-stage-label">Monitoring</div>
+                    <div class="es-stage-val">Trigger &ge; $2.60</div>
+                </div>
+                <span class="es-pipe-arrow">&#8594;</span>
+                <div class="es-pipeline-stage es-active">
+                    <div class="es-stage-icon">🛡️</div>
+                    <div class="es-stage-label">Limit Cap</div>
+                    <div class="es-stage-val">Max $2.73</div>
+                </div>
+            </div>
+
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--help-text); margin: 14px 0 8px;">Price bar &mdash; where your order will fill:</div>
+            <div class="es-price-bar">
+                <div class="es-price-seg" style="left: 0; width: 60%; background: rgba(239,68,68,0.3);">
+                    Below trigger &mdash; waiting
+                </div>
+                <div class="es-price-seg" style="left: 60%; width: 15%; background: rgba(16,185,129,0.5);">
+                    FILLS HERE
+                </div>
+                <div class="es-price-seg" style="left: 75%; width: 25%; background: rgba(239,68,68,0.2);">
+                    Above cap &mdash; protected
+                </div>
+                <div class="es-price-marker" style="left: 60%; background: var(--help-accent);">
+                    <div class="es-price-marker-label" style="color: var(--help-accent);">$2.60 trigger</div>
+                </div>
+                <div class="es-price-marker" style="left: 75%; background: var(--help-warn);">
+                    <div class="es-price-marker-label" style="color: var(--help-warn);">$2.73 cap</div>
+                </div>
+            </div>
+            <div class="es-price-labels">
+                <span>$2.40</span><span>$2.50</span><span>$2.60</span><span>$2.73</span><span>$2.90</span><span>$3.00</span>
+            </div>
+
+            <div class="es-outcome-grid">
+                <div class="es-outcome es-outcome-fill">
+                    <div class="es-outcome-icon">✅</div>
+                    <div class="es-outcome-title">Order Fills</div>
+                    <div class="es-outcome-desc">Price hits $2.65 &mdash; within cap window ($2.60&ndash;$2.73). Limit order fills at $2.65.</div>
+                </div>
+                <div class="es-outcome es-outcome-block">
+                    <div class="es-outcome-icon">🛡️</div>
+                    <div class="es-outcome-title">Protected &mdash; No Fill</div>
+                    <div class="es-outcome-desc">Price spikes to $2.90 &mdash; above $2.73 cap. Limit order sits unfilled. You don&rsquo;t overpay.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── COMBO 2: Full Protection ── -->
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(99,102,241,0.15);">2</div>
+                <div>
+                    <div class="es-combo-title">Confirm the Move, Then Buy Safely</div>
+                    <div class="es-combo-subtitle">Full protection &mdash; confirms breakout + price ceiling</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-on">Entry Confirmation: 2%</span>
+                <span class="es-chip es-chip-off">Trigger Offset: 0</span>
+                <span class="es-chip es-chip-on">Limit Cap: ON, 5%</span>
+                <span class="es-chip es-chip-val">Entry Mode: Limit</span>
+            </div>
+            <div class="es-calc-box">
+                <span class="es-calc-dim">Signal arrives:</span> <span class="es-calc-highlight">BTO PAVM at $10.00</span><br>
+                <span class="es-calc-dim">Entry Confirmation (2%):</span> $10.00 &times; 1.02 <span class="es-calc-arrow">=</span> <span class="es-calc-highlight">Trigger @ $10.20</span><br>
+                <span class="es-calc-dim">Limit Cap (5% of trigger):</span> $10.20 &times; 1.05 <span class="es-calc-arrow">=</span> <span class="es-calc-result">Max buy: $10.71</span>
+            </div>
+
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--help-text); margin: 18px 0 10px;">Timeline &mdash; what happens step by step:</div>
+            <div class="es-timeline">
+                <div class="es-tl-item">
+                    <div class="es-tl-dot"></div>
+                    <div class="es-tl-time">10:01</div>
+                    <div class="es-tl-content">
+                        <div class="es-tl-title">Signal Received</div>
+                        <div class="es-tl-desc">&ldquo;BTO PAVM at $10.00&rdquo; &mdash; Entry Confirmation creates conditional order. Trigger set to $10.20 (+2%).</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot"></div>
+                    <div class="es-tl-time">10:05</div>
+                    <div class="es-tl-content">
+                        <div class="es-tl-title">Price @ $10.10 &mdash; Watching</div>
+                        <div class="es-tl-desc">Below $10.20 trigger. Bot continues monitoring. No action taken.</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot"></div>
+                    <div class="es-tl-time">10:12</div>
+                    <div class="es-tl-content">
+                        <div class="es-tl-title">Price @ $10.15 &mdash; Still Watching</div>
+                        <div class="es-tl-desc">Getting close but still below $10.20. Breakout not confirmed yet.</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot es-filled"></div>
+                    <div class="es-tl-time">10:18</div>
+                    <div class="es-tl-content es-highlight">
+                        <div class="es-tl-title">Price @ $10.22 &mdash; TRIGGERED!</div>
+                        <div class="es-tl-desc">Price crossed $10.20. Breakout confirmed. Bot places limit order at $10.71 (cap price). Since market is $10.22, order fills immediately at $10.22.</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot es-filled"></div>
+                    <div class="es-tl-time">10:18</div>
+                    <div class="es-tl-content" style="border-color: var(--help-success);">
+                        <div class="es-tl-title" style="color: var(--help-success);">Order Filled @ $10.22</div>
+                        <div class="es-tl-desc">Bought PAVM at $10.22. The $10.71 cap was the safety net &mdash; it wasn&rsquo;t needed since the market price was well below it.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── COMBO 3: Tight Window ── -->
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(245,158,11,0.15);">3</div>
+                <div>
+                    <div class="es-combo-title">Conservative &mdash; Tight Entry Window</div>
+                    <div class="es-combo-subtitle">Entry Confirmation + Negative Offset + Tight Limit Cap</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-on">Entry Confirmation: 1%</span>
+                <span class="es-chip es-chip-on">Trigger Offset: -0.5%</span>
+                <span class="es-chip es-chip-on">Limit Cap: ON, 2%</span>
+                <span class="es-chip es-chip-val">Breakout Reset: ON</span>
+            </div>
+            <div class="es-calc-box">
+                <span class="es-calc-dim">Signal:</span> <span class="es-calc-highlight">BTO ACXP at $5.00</span><br><br>
+                <span class="es-calc-dim">Step 1 &mdash; Entry Confirmation (1%):</span><br>
+                &nbsp;&nbsp;$5.00 &times; 1.01 <span class="es-calc-arrow">=</span> <span class="es-calc-highlight">$5.05</span><br><br>
+                <span class="es-calc-dim">Step 2 &mdash; Trigger Offset (-0.5%):</span><br>
+                &nbsp;&nbsp;$5.05 &times; 0.995 <span class="es-calc-arrow">=</span> <span class="es-calc-highlight">Adjusted trigger: $5.025</span><br><br>
+                <span class="es-calc-dim">Step 3 &mdash; Limit Cap (2% of adjusted trigger):</span><br>
+                &nbsp;&nbsp;$5.025 &times; 1.02 <span class="es-calc-arrow">=</span> <span class="es-calc-result">Max buy: $5.1255</span><br><br>
+                <span class="es-calc-dim">Entry window: $5.025 to $5.1255 (just $0.10 wide)</span>
+            </div>
+
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--help-text); margin: 14px 0 8px;">Price bar &mdash; very tight entry window:</div>
+            <div class="es-price-bar">
+                <div class="es-price-seg" style="left: 0; width: 50%; background: rgba(239,68,68,0.25);">
+                    Below trigger &mdash; waiting
+                </div>
+                <div class="es-price-seg" style="left: 50%; width: 6%; background: rgba(16,185,129,0.6);">
+                    &check;
+                </div>
+                <div class="es-price-seg" style="left: 56%; width: 44%; background: rgba(239,68,68,0.15);">
+                    Above cap &mdash; protected
+                </div>
+                <div class="es-price-marker" style="left: 50%; background: var(--help-accent);">
+                    <div class="es-price-marker-label" style="color: var(--help-accent);">$5.025</div>
+                </div>
+                <div class="es-price-marker" style="left: 56%; background: var(--help-warn);">
+                    <div class="es-price-marker-label" style="color: var(--help-warn);">$5.126</div>
+                </div>
+            </div>
+            <div class="es-price-labels">
+                <span>$4.80</span><span>$4.90</span><span>$5.00</span><span>$5.025</span><span>$5.126</span><span>$5.30</span>
+            </div>
+
+            <div class="warn-box" style="margin-top: 14px;">
+                <div class="warn-title">Tight window = more missed trades</div>
+                <p>With only a $0.10 entry window, fast-moving stocks may blow past the cap before the order fills. This is by design &mdash; you only enter when the price is right, or not at all.</p>
+            </div>
+        </div>
+
+        <!-- ── COMBO 4: Market Mode + Cap Protection ── -->
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(239,68,68,0.15);">4</div>
+                <div>
+                    <div class="es-combo-title">Market Mode with Safety Net</div>
+                    <div class="es-combo-subtitle">Fast execution, but Limit Cap prevents extreme overpay</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-off">Entry Confirmation: OFF</span>
+                <span class="es-chip es-chip-off">Trigger Offset: 0</span>
+                <span class="es-chip es-chip-on">Limit Cap: ON, 10%</span>
+                <span class="es-chip es-chip-val">Entry Mode: Market</span>
+            </div>
+            <div class="es-calc-box">
+                <span class="es-calc-dim">Signal:</span> <span class="es-calc-highlight">BTO MARA over $15.00</span><br>
+                <span class="es-calc-dim">Entry Mode:</span> <span class="es-calc-highlight">Market</span> <span class="es-calc-dim">(normally = buy at any price)</span><br>
+                <span class="es-calc-dim">Limit Cap (10%):</span> $15.00 &times; 1.10 <span class="es-calc-arrow">=</span> <span class="es-calc-result">Max buy: $16.50</span><br><br>
+                <span class="es-calc-dim" style="color: var(--help-accent); font-weight: 700;">Limit Cap overrides Market mode &mdash; order becomes a limit order at $16.50</span>
+            </div>
+
+            <div class="es-outcome-grid">
+                <div class="es-outcome es-outcome-fill">
+                    <div class="es-outcome-icon">✅</div>
+                    <div class="es-outcome-title">Normal Fill</div>
+                    <div class="es-outcome-desc">Price @ $15.30 when triggered &mdash; fills at $15.30 (well under $16.50 cap). Fast execution like market mode, but with protection.</div>
+                </div>
+                <div class="es-outcome es-outcome-block">
+                    <div class="es-outcome-icon">🛡️</div>
+                    <div class="es-outcome-title">Spike Protection</div>
+                    <div class="es-outcome-desc">Price spikes to $18.00 &mdash; limit order at $16.50 won&rsquo;t fill. Without Limit Cap, a pure market order would have bought at $18.00.</div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <div class="info-title">Why does Limit Cap override Market mode?</div>
+                <p>The purpose of Limit Cap is to prevent overpaying. If you enable it, it acts as a <strong>hard ceiling</strong> regardless of your order mode. The bot converts the market order into a limit order at the cap price.</p>
+            </div>
+        </div>
+
+        <!-- ── COMBO 5: Maximum Protection ── -->
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(168,85,247,0.15);">5</div>
+                <div>
+                    <div class="es-combo-title">Maximum Protection &mdash; All Settings Active</div>
+                    <div class="es-combo-subtitle">Every safeguard enabled &mdash; confirmation + offset + cap + slippage + timeout</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-on">Entry Confirmation: 2%</span>
+                <span class="es-chip es-chip-on">Trigger Offset: -1%</span>
+                <span class="es-chip es-chip-on">Limit Cap: ON, 5%</span>
+                <span class="es-chip es-chip-on">Breakout Reset: ON</span>
+                <span class="es-chip es-chip-on">Slippage: 50%, 5 min</span>
+                <span class="es-chip es-chip-on">Timeout: 60 min</span>
+            </div>
+            <div class="es-calc-box">
+                <span class="es-calc-dim">Signal:</span> <span class="es-calc-highlight">BTO RIVN at $20.00</span><br><br>
+                <span class="es-calc-dim">Step 1 &mdash; Entry Confirmation (2%):</span><br>
+                &nbsp;&nbsp;$20.00 &times; 1.02 <span class="es-calc-arrow">=</span> <span class="es-calc-highlight">$20.40</span><br><br>
+                <span class="es-calc-dim">Step 2 &mdash; Trigger Offset (-1%):</span><br>
+                &nbsp;&nbsp;$20.40 &times; 0.99 <span class="es-calc-arrow">=</span> <span class="es-calc-highlight">Adjusted trigger: $20.196</span><br><br>
+                <span class="es-calc-dim">Step 3 &mdash; Limit Cap (5%):</span><br>
+                &nbsp;&nbsp;$20.196 &times; 1.05 <span class="es-calc-arrow">=</span> <span class="es-calc-result">Max buy: $21.206</span><br><br>
+                <span class="es-calc-dim">Step 4 &mdash; Breakout Reset: If price already &gt; $20.196, wait for pullback first</span><br>
+                <span class="es-calc-dim">Step 5 &mdash; Slippage: If price jumps &gt; 50% above trigger at execution, wait up to 5 min</span><br>
+                <span class="es-calc-dim">Step 6 &mdash; Timeout: Entire order auto-cancels after 60 min if trigger never reached</span>
+            </div>
+
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--help-text); margin: 18px 0 10px;">Full timeline &mdash; all protections in action:</div>
+            <div class="es-timeline">
+                <div class="es-tl-item">
+                    <div class="es-tl-dot"></div>
+                    <div class="es-tl-time">10:00</div>
+                    <div class="es-tl-content">
+                        <div class="es-tl-title">Signal: BTO RIVN $20.00</div>
+                        <div class="es-tl-desc">Conditional order created. Trigger: $20.196. Cap: $21.206. Expires: 11:00 AM.</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot"></div>
+                    <div class="es-tl-time">10:00</div>
+                    <div class="es-tl-content">
+                        <div class="es-tl-title">Breakout Reset Check</div>
+                        <div class="es-tl-desc">Current price $20.50 &mdash; already past $20.196. Guard enabled &mdash; bot waits for pullback below trigger before allowing trigger.</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot"></div>
+                    <div class="es-tl-time">10:15</div>
+                    <div class="es-tl-content">
+                        <div class="es-tl-title">Price pulls back to $20.00</div>
+                        <div class="es-tl-desc">Below $20.196. Breakout reset complete &mdash; now watching for real breakout.</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot es-filled"></div>
+                    <div class="es-tl-time">10:32</div>
+                    <div class="es-tl-content es-highlight">
+                        <div class="es-tl-title">Price @ $20.25 &mdash; TRIGGERED!</div>
+                        <div class="es-tl-desc">Price crossed $20.196 cleanly. Slippage check: $20.25 is only 0.3% above trigger (well under 50% limit). Proceeds immediately.</div>
+                    </div>
+                </div>
+                <div class="es-tl-item">
+                    <div class="es-tl-dot es-filled"></div>
+                    <div class="es-tl-time">10:32</div>
+                    <div class="es-tl-content" style="border-color: var(--help-success);">
+                        <div class="es-tl-title" style="color: var(--help-success);">Limit Order Placed @ $21.206 &mdash; Fills at $20.25</div>
+                        <div class="es-tl-desc">Limit order at cap price. Market is $20.25, so fills immediately at market. Cap of $21.206 was the safety net.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── COMBO 6: No Protection (Speed) ── -->
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(71,85,105,0.2);">6</div>
+                <div>
+                    <div class="es-combo-title">Speed Mode &mdash; No Protection</div>
+                    <div class="es-combo-subtitle">Fastest possible entry &mdash; market order fires immediately</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-off">Entry Confirmation: OFF</span>
+                <span class="es-chip es-chip-off">Trigger Offset: 0</span>
+                <span class="es-chip es-chip-off">Limit Cap: OFF</span>
+                <span class="es-chip es-chip-val">Entry Mode: Market</span>
+            </div>
+
+            <div class="es-pipeline" style="margin: 16px 0;">
+                <div class="es-pipeline-stage es-active">
+                    <div class="es-stage-icon">📨</div>
+                    <div class="es-stage-label">Signal</div>
+                    <div class="es-stage-val">BTO TSLA $180</div>
+                </div>
+                <span class="es-pipe-arrow">&#8594;</span>
+                <div class="es-pipeline-stage es-skip">
+                    <div class="es-stage-icon">📈</div>
+                    <div class="es-stage-label">Confirmation</div>
+                    <div class="es-stage-val">SKIPPED</div>
+                </div>
+                <span class="es-pipe-arrow">&#8594;</span>
+                <div class="es-pipeline-stage es-skip">
+                    <div class="es-stage-icon">🛡️</div>
+                    <div class="es-stage-label">Limit Cap</div>
+                    <div class="es-stage-val">SKIPPED</div>
+                </div>
+                <span class="es-pipe-arrow">&#8594;</span>
+                <div class="es-pipeline-stage es-active" style="background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4);">
+                    <div class="es-stage-icon">⚡</div>
+                    <div class="es-stage-label">Market Order</div>
+                    <div class="es-stage-val">Any price</div>
+                </div>
+            </div>
+
+            <div class="warn-box">
+                <div class="warn-title">No price protection</div>
+                <p>With everything disabled, the bot buys at whatever the current market price is. Fastest entry, but no safeguards against spikes or fake breakouts. Only recommended for highly liquid stocks with tight spreads.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Quick Reference Table ── -->
+    <div class="help-card">
+        <h3>Quick Reference &mdash; All Settings at a Glance</h3>
+        <table class="es-versus-table">
+            <thead>
+                <tr>
+                    <th>Setting</th>
+                    <th>Location</th>
+                    <th>Default</th>
+                    <th>What It Controls</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Entry Confirmation %</td>
+                    <td>Conditional Tab</td>
+                    <td>0 (off)</td>
+                    <td>How far above signal price the stock must go before buying</td>
+                </tr>
+                <tr>
+                    <td>Trigger Offset</td>
+                    <td>Conditional Tab</td>
+                    <td>0</td>
+                    <td>Additional trigger price adjustment (&plusmn;% or &plusmn;$)</td>
+                </tr>
+                <tr>
+                    <td>Breakout Reset</td>
+                    <td>Conditional Tab</td>
+                    <td>ON</td>
+                    <td>Require pullback if price already past trigger</td>
+                </tr>
+                <tr>
+                    <td>Limit Cap</td>
+                    <td>Execution Tab</td>
+                    <td>OFF, 5%</td>
+                    <td>Maximum buy price = trigger + cap %</td>
+                </tr>
+                <tr>
+                    <td>Entry Order Mode</td>
+                    <td>Order Types Tab</td>
+                    <td>Limit</td>
+                    <td>Limit or Market (Limit Cap overrides when on)</td>
+                </tr>
+                <tr>
+                    <td>Slippage Protection</td>
+                    <td>Execution Tab</td>
+                    <td>OFF</td>
+                    <td>Wait for price recovery if slippage exceeds threshold</td>
+                </tr>
+                <tr>
+                    <td>Order Timeout</td>
+                    <td>Conditional Tab</td>
+                    <td>No limit</td>
+                    <td>Auto-cancel all unfilled orders after X minutes</td>
+                </tr>
+                <tr>
+                    <td>Conditional Timeout</td>
+                    <td>Conditional Tab</td>
+                    <td>No limit</td>
+                    <td>Auto-cancel conditional orders after X minutes</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Processing Order ── -->
+    <div class="help-card">
+        <h3>Processing Order &mdash; Which Settings Apply When</h3>
+        <p>Settings are applied in a specific sequence. Understanding this order helps you predict exactly what the bot will do.</p>
+
+        <table class="es-versus-table">
+            <thead>
+                <tr><th>Phase</th><th>Setting</th><th>When It Runs</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="color: var(--help-accent);">1. Signal Arrival</td>
+                    <td>Entry Confirmation</td>
+                    <td>Immediately when signal is received. Adjusts trigger price and converts BTO to conditional order.</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--help-accent);">2. Order Creation</td>
+                    <td>Trigger Offset</td>
+                    <td>When the conditional order is created. Applied on top of the confirmation-adjusted trigger.</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--help-accent);">2. Order Creation</td>
+                    <td>Limit Cap</td>
+                    <td>Computed at order creation from the final adjusted trigger. Stored with the order.</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--help-accent);">3. Monitoring</td>
+                    <td>Breakout Reset</td>
+                    <td>Active during price monitoring. Checks if price was already past trigger and requires pullback.</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--help-accent);">3. Monitoring</td>
+                    <td>Timeout</td>
+                    <td>Checked on every price update. Cancels order when time is up.</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--help-accent);">4. Trigger Fires</td>
+                    <td>Slippage Protection</td>
+                    <td>After trigger condition is met. Checks if current price is too far from trigger.</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--help-accent);">5. Order Placement</td>
+                    <td>Entry Order Mode + Limit Cap</td>
+                    <td>Final order sent to broker. Limit Cap overrides Market mode when enabled.</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 </div>
 
