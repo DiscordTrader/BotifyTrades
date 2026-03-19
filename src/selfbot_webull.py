@@ -10251,14 +10251,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 use_limit_order = False
                                 sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ Limit Cap enabled but no percentage - using market order\n")
                                 sys.stderr.flush()
+                        has_effective_cap = effective_limit_price is not None
                         signal = {
                             'asset': order.get('asset_type', 'stock'),
                             'asset_type': order.get('asset_type', 'stock'),
                             'action': 'BTO',
                             'symbol': symbol,
                             'price': execution_price,
-                            'is_market_order': not use_limit_order,
-                            '_use_market_order': is_channel_market_mode and not use_limit_order,
+                            'is_market_order': not use_limit_order and not has_effective_cap,
+                            '_use_market_order': is_channel_market_mode and not has_effective_cap,
                             '_conditional_order_id': order['id'],
                             'channel_id': order.get('channel_id'),
                             '_trigger_price': triggered_price,
@@ -16193,8 +16194,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
                 use_market_order = signal.get('_use_market_order', False)
                 if use_market_order:
-                    stock_order_price = None
-                    _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')})", flush=True)
+                    if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
+                        stock_order_price = signal['_limit_price']
+                        _original_print(f"[{broker_name}] 🛡️ Market mode + LIMIT CAP: using limit order @ ${stock_order_price:.4f} (hard ceiling overrides market)", flush=True)
+                    else:
+                        stock_order_price = None
+                        _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')})", flush=True)
                 else:
                     # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
                     stock_order_price = signal.get('price')
