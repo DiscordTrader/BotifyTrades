@@ -1167,6 +1167,7 @@ class RiskManager:
         self._stuck_price_tracker = {}
         self._STUCK_PRICE_THRESHOLD = 3
         self._rest_repaired_prices = {}
+        self._rest_repair_cycle_keys = {}
         
         self.cache = PositionCache()
         self._running = False
@@ -1633,6 +1634,7 @@ class RiskManager:
             return
         self._empty_pos_logged = False
         
+        self._rest_repair_cycle_keys.clear()
         self._update_prices_from_hub(positions)
         await self._detect_and_fix_stuck_prices(positions)
         self._last_positions_snapshot = positions
@@ -2702,19 +2704,18 @@ class RiskManager:
     ) -> ExitDecision:
         """Evaluate all exit conditions in priority order including Enhanced Risk v2.0."""
         
+        _repair_key = f"{position.broker}_{position.symbol}_{position.asset}"
+        _is_repair_cycle = _repair_key in self._rest_repair_cycle_keys
+
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
-            if getattr(position, '_rest_repair_cycle', False):
-                pass
-            else:
+            if not _is_repair_cycle:
                 return decision
         
         if channel_settings:
             decision = evaluate_channel_stop_loss(position, cache, channel_settings)
             if decision.should_exit:
-                if getattr(position, '_rest_repair_cycle', False):
-                    pass
-                else:
+                if not _is_repair_cycle:
                     return decision
         
         if channel_settings and channel_settings.has_tiered_targets:
@@ -2742,13 +2743,15 @@ class RiskManager:
             else:
                 decision = evaluate_tiered_targets(position, cache, channel_settings)
                 if decision.should_exit:
-                    decision.reason = format_tier_reason(decision, channel_settings.channel_name)
-                    return decision
+                    if not _is_repair_cycle:
+                        decision.reason = format_tier_reason(decision, channel_settings.channel_name)
+                        return decision
         
         if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled):
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
             if engine_decision and engine_decision.should_exit:
-                return engine_decision
+                if not _is_repair_cycle:
+                    return engine_decision
         
         if channel_settings and channel_settings.enable_early_trailing:
             early_result, updated_cache = evaluate_early_trailing(
@@ -2757,14 +2760,15 @@ class RiskManager:
             if early_result.should_update_stop:
                 self.cache.persist_early_trailing_state(position.position_key)
             if early_result.should_exit:
-                channel_name = channel_settings.channel_name
-                return ExitDecision(
-                    should_exit=True,
-                    reason=f"EARLY TRAIL [{channel_name}] {early_result.reason}",
-                    exit_qty=int(position.quantity),
-                    is_partial=False,
-                    risk_trigger='early_trailing'
-                )
+                if not _is_repair_cycle:
+                    channel_name = channel_settings.channel_name
+                    return ExitDecision(
+                        should_exit=True,
+                        reason=f"EARLY TRAIL [{channel_name}] {early_result.reason}",
+                        exit_qty=int(position.quantity),
+                        is_partial=False,
+                        risk_trigger='early_trailing'
+                    )
         
         trailing_pct, activation_pct, stop_pct = get_effective_trailing_settings(
             channel_settings, risk_settings, self.trailing_activation_pct
@@ -2783,12 +2787,14 @@ class RiskManager:
         if should_activate:
             self.cache.activate_trailing_stop(position.position_key)
         if decision.should_exit:
-            return decision
+            if not _is_repair_cycle:
+                return decision
         
         if not channel_settings:
             decision = evaluate_global_risk(position, cache, risk_settings)
             if decision.should_exit:
-                return decision
+                if not _is_repair_cycle:
+                    return decision
         
         return ExitDecision.no_exit()
     
@@ -4018,12 +4024,12 @@ class RiskManager:
                 continue
             if (now - tracker.get('rest_refreshed', 0)) < rest_cooldown:
                 continue
-            tracker['rest_refreshed'] = now
             try:
                 fresh_price = self._try_cross_hub_price(pos, now)
                 source = 'cross-hub'
                 if not fresh_price or abs(fresh_price - pos.current_price) < 0.0001:
                     if rest_repairs_this_cycle < _MAX_REST_REPAIRS_PER_CYCLE:
+                        tracker['rest_refreshed'] = now
                         rest_price = await self._try_rest_quote(pos)
                         if rest_price and rest_price > 0:
                             fresh_price = rest_price
@@ -4038,9 +4044,7 @@ class RiskManager:
                     self._rest_repaired_prices[key] = {
                         'price': fresh_price, 'until': now + self._HUB_PRICE_MAX_AGE
                     }
-                    pos._rest_repair_cycle = True
-                elif fresh_price and fresh_price > 0:
-                    tracker['last_changed'] = now
+                    self._rest_repair_cycle_keys[key] = now
             except Exception as e:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
