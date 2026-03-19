@@ -558,12 +558,19 @@ class CandlePreWarmService:
     def is_global_enabled(self) -> bool:
         return self._global_enabled
 
-    def subscribe_symbol(self, symbol: str, timeframe: int = 5, period: int = 5, yfinance_only: bool = False) -> bool:
+    def subscribe_symbol(self, symbol: str, timeframe: int = 5, period: int = 5, yfinance_only: bool = False, extended_hours: bool = False) -> bool:
         symbol = symbol.upper()
         ema_key = f"{symbol}_{timeframe}m_{period}"
         if symbol in self._tracked_symbols:
             existing = self._tracked_symbols[symbol]
             if existing['ema_key'] == ema_key:
+                if extended_hours and not existing.get('extended_hours', False):
+                    existing['extended_hours'] = True
+                    agg_key = f"{symbol}_{timeframe}m"
+                    agg = self._aggregators.get(agg_key)
+                    if agg and not agg._extended_hours:
+                        agg._extended_hours = True
+                        print(f"[EMA] Upgraded {symbol} aggregator to extended_hours=True")
                 if yfinance_only:
                     self._yfinance_only_symbols.add(symbol)
                 return True
@@ -575,13 +582,14 @@ class CandlePreWarmService:
             print(f"[EMA] Cannot subscribe {symbol}: max {MAX_TRACKED_SYMBOLS} symbols reached")
             return False
 
-        self._ensure_tracking_multi(symbol, is_prewarm=False, timeframe=timeframe, period=period)
+        self._ensure_tracking_multi(symbol, is_prewarm=False, timeframe=timeframe, period=period, extended_hours=extended_hours)
         self._dynamic_symbols.add(symbol)
         if yfinance_only:
             self._yfinance_only_symbols.add(symbol)
-        self._fetch_historical_candles_multi(symbol, timeframe, period)
+        self._fetch_historical_candles_multi(symbol, timeframe, period, extended_hours=extended_hours)
         yf_tag = " [yfinance-only]" if yfinance_only else ""
-        print(f"[EMA] Dynamically subscribed {symbol} (timeframe={timeframe}m, period={period}){yf_tag}")
+        ext_tag = " [extended-hours]" if extended_hours else ""
+        print(f"[EMA] Dynamically subscribed {symbol} (timeframe={timeframe}m, period={period}){yf_tag}{ext_tag}")
         return True
 
     def unsubscribe_symbol(self, symbol: str):
@@ -659,7 +667,7 @@ class CandlePreWarmService:
         return status
 
     def _ensure_tracking(self, symbol: str, is_prewarm: bool = False,
-                         timeframe: int = 5, period: int = 5):
+                         timeframe: int = 5, period: int = 5, extended_hours: bool = False):
         symbol = symbol.upper()
         agg_key = f"{symbol}_{timeframe}m"
         ema_key = f"{symbol}_{timeframe}m_{period}"
@@ -669,6 +677,11 @@ class CandlePreWarmService:
             if agg_key not in existing.get('agg_keys', [existing.get('agg_key', '')]):
                 pass
             else:
+                if extended_hours and not existing.get('extended_hours', False):
+                    existing['extended_hours'] = True
+                    agg = self._aggregators.get(agg_key)
+                    if agg and not agg._extended_hours:
+                        agg._extended_hours = True
                 return
 
         if symbol not in self._tracked_symbols:
@@ -678,7 +691,8 @@ class CandlePreWarmService:
                 'is_prewarm': is_prewarm,
                 'agg_key': agg_key,
                 'ema_key': ema_key,
-                'agg_keys': [agg_key]
+                'agg_keys': [agg_key],
+                'extended_hours': extended_hours
             }
         else:
             existing = self._tracked_symbols[symbol]
@@ -686,9 +700,11 @@ class CandlePreWarmService:
                 existing['agg_keys'] = [existing.get('agg_key', '')]
             if agg_key not in existing['agg_keys']:
                 existing['agg_keys'].append(agg_key)
+            if extended_hours:
+                existing['extended_hours'] = True
 
         if agg_key not in self._aggregators:
-            agg = CandleAggregator(timeframe_minutes=timeframe)
+            agg = CandleAggregator(timeframe_minutes=timeframe, extended_hours=extended_hours)
             self._aggregators[agg_key] = agg
 
         if ema_key not in self._ema_engines:
@@ -700,8 +716,8 @@ class CandlePreWarmService:
         agg.on_candle_complete(lambda sym, candles, e=engine: e.process_candles(sym, candles))
 
     def _ensure_tracking_multi(self, symbol: str, is_prewarm: bool = False,
-                               timeframe: int = 5, period: int = 5):
-        self._ensure_tracking(symbol, is_prewarm=is_prewarm, timeframe=timeframe, period=period)
+                               timeframe: int = 5, period: int = 5, extended_hours: bool = False):
+        self._ensure_tracking(symbol, is_prewarm=is_prewarm, timeframe=timeframe, period=period, extended_hours=extended_hours)
 
     def _on_quote_updated(self, event_data: Dict[str, Any]):
         if not self._running or not self._global_enabled:
@@ -738,7 +754,7 @@ class CandlePreWarmService:
                 if agg:
                     agg.process_tick(symbol, price)
 
-    def _fetch_historical_candles_multi(self, symbol: str, timeframe: int, period: int):
+    def _fetch_historical_candles_multi(self, symbol: str, timeframe: int, period: int, extended_hours: bool = False):
         symbol = symbol.upper()
         ema_key = f"{symbol}_{timeframe}m_{period}"
         engine = self._ema_engines.get(ema_key)
@@ -746,7 +762,7 @@ class CandlePreWarmService:
             return
 
         def _do_fetch():
-            candles = self._try_broker_candles(symbol, timeframe)
+            candles = self._try_broker_candles(symbol, timeframe, extended_hours=extended_hours)
             if candles and len(candles) >= period:
                 candle_objects = []
                 for c in candles:
@@ -814,13 +830,17 @@ class CandlePreWarmService:
         except Exception as e:
             print(f"[EMA] Failed to start pre-seed thread for {symbol}: {e}")
 
-    def _try_broker_candles(self, symbol: str, timeframe: int) -> Optional[List[Dict[str, Any]]]:
+    def _try_broker_candles(self, symbol: str, timeframe: int, extended_hours: bool = False) -> Optional[List[Dict[str, Any]]]:
+        extend_trading_flag = 1 if extended_hours else 0
         for hub in self._hubs:
             try:
                 if hasattr(hub, 'get_bars') or hasattr(hub, 'get_candles'):
                     method = getattr(hub, 'get_bars', None) or getattr(hub, 'get_candles', None)
                     if method:
-                        result = method(symbol, interval=f"m{timeframe}", count=100)
+                        try:
+                            result = method(symbol, interval=f"m{timeframe}", count=100, extendTrading=extend_trading_flag)
+                        except TypeError:
+                            result = method(symbol, interval=f"m{timeframe}", count=100)
                         if result:
                             return result
             except Exception:
@@ -831,8 +851,28 @@ class CandlePreWarmService:
             webull_hub = get_webull_data_hub()
             if webull_hub and hasattr(webull_hub, '_broker') and webull_hub._broker:
                 broker = webull_hub._broker
-                if hasattr(broker, 'get_bars'):
-                    bars = broker.get_bars(symbol, interval=f"m{timeframe}", count=100)
+                if hasattr(broker, '_wb') and hasattr(broker._wb, 'get_bars'):
+                    bars = broker._wb.get_bars(stock=symbol, interval=f"m{timeframe}", count=100, extendTrading=extend_trading_flag)
+                    if bars:
+                        candles = []
+                        if hasattr(bars, 'iterrows'):
+                            for idx, row in bars.iterrows():
+                                candles.append({
+                                    'open': float(row.get('open', row.get('Open', 0))),
+                                    'high': float(row.get('high', row.get('High', 0))),
+                                    'low': float(row.get('low', row.get('Low', 0))),
+                                    'close': float(row.get('close', row.get('Close', 0))),
+                                    'timestamp': float(idx.timestamp()) if hasattr(idx, 'timestamp') else 0
+                                })
+                            if candles:
+                                return candles
+                        elif isinstance(bars, list):
+                            return bars
+                elif hasattr(broker, 'get_bars'):
+                    try:
+                        bars = broker.get_bars(symbol, interval=f"m{timeframe}", count=100, extendTrading=extend_trading_flag)
+                    except TypeError:
+                        bars = broker.get_bars(symbol, interval=f"m{timeframe}", count=100)
                     if bars:
                         return bars
         except Exception:

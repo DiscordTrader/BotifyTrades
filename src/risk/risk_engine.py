@@ -106,6 +106,8 @@ class TradeState:
     ema_candles_count: int = 0
     ema_no_trend_count: int = 0
     ema_last_candle: Optional[Dict] = None
+    ema_last_eval_candle_ts: Optional[float] = None
+    ema_post_entry_candles: int = 0
     position_direction: str = 'stock'
     
     @property
@@ -137,6 +139,8 @@ class TradeState:
         self.early_stop_price = cache.early_stop_price
         self.early_steps_locked = cache.early_steps_locked
         self.ema_no_trend_count = cache.ema_no_trend_count
+        self.ema_last_eval_candle_ts = cache.ema_last_eval_candle_ts
+        self.ema_post_entry_candles = cache.ema_post_entry_candles
         return self
 
 
@@ -241,7 +245,9 @@ def evaluate_exit_actions(
     if state.remaining_qty <= 0:
         return actions, state
     
-    if state.last_evaluated_price == state.current_price:
+    ema_candle_ts = state.ema_last_candle.get('timestamp', 0) if state.ema_last_candle else 0
+    has_new_ema_candle = (ema_candle_ts > 0 and ema_candle_ts != state.ema_last_eval_candle_ts)
+    if state.last_evaluated_price == state.current_price and not has_new_ema_candle:
         return actions, state
     
     state.last_evaluated_price = state.current_price
@@ -314,6 +320,16 @@ def evaluate_exit_actions(
                 finalized=True
             )
 
+        current_candle_ts = state.ema_last_candle.get('timestamp', 0) if state.ema_last_candle else 0
+        is_new_candle = (current_candle_ts > 0 and 
+                         current_candle_ts != state.ema_last_eval_candle_ts)
+
+        if is_new_candle:
+            state.ema_post_entry_candles += 1
+            state.ema_last_eval_candle_ts = current_candle_ts
+
+        EMA_WARMUP_CANDLES = 2
+
         ema_config = {
             'ema_buffer_pct': config.ema_buffer_pct,
             'ema_exit_enabled': config.ema_exit_enabled,
@@ -325,7 +341,9 @@ def evaluate_exit_actions(
         ema_result = EMAExitEvaluator.evaluate(state.position_direction, ema_st, ema_config)
 
         if ema_result.decision == EMADecision.EXIT:
-            if config.leave_runner_enabled and state.remaining_qty > 1:
+            if state.ema_post_entry_candles < EMA_WARMUP_CANDLES:
+                pass
+            elif config.leave_runner_enabled and state.remaining_qty > 1:
                 runner_qty = max(1, int(state.remaining_qty * config.leave_runner_pct / 100))
                 sell_qty = state.remaining_qty - runner_qty
                 if sell_qty > 0:
@@ -358,18 +376,20 @@ def evaluate_exit_actions(
                     ))
             state.ema_no_trend_count = 0
 
-        elif ema_result.decision == EMADecision.NO_TREND_EXIT:
-            state.ema_no_trend_count += 1
-            actions.append(RiskAction(
-                action_type=ActionType.EMA_NO_TREND_EXIT,
-                reason=ema_result.reason,
-                qty=state.remaining_qty,
-                priority=2
-            ))
-            return actions, state
+        elif ema_result.decision in (EMADecision.NO_TREND_EXIT, EMADecision.NO_TREND_TICK):
+            if is_new_candle:
+                state.ema_no_trend_count += 1
 
-        elif ema_result.decision == EMADecision.NO_TREND_TICK:
-            state.ema_no_trend_count += 1
+            if (ema_result.decision == EMADecision.NO_TREND_EXIT and 
+                    is_new_candle and
+                    state.ema_post_entry_candles >= EMA_WARMUP_CANDLES):
+                actions.append(RiskAction(
+                    action_type=ActionType.EMA_NO_TREND_EXIT,
+                    reason=f"{ema_result.reason} (after {state.ema_post_entry_candles} post-entry candles)",
+                    qty=state.remaining_qty,
+                    priority=2
+                ))
+                return actions, state
 
         elif ema_result.decision == EMADecision.HOLD:
             pass

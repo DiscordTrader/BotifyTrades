@@ -2827,7 +2827,8 @@ class RiskManager:
 
                     is_option = position_snapshot.direction in ('C', 'Call', 'call', 'P', 'Put', 'put')
                     yf_only = is_option and channel_settings.ema_use_underlying
-                    candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd, yfinance_only=yf_only)
+                    ext_hours = getattr(channel_settings, 'ema_extended_hours', False)
+                    candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd, yfinance_only=yf_only, extended_hours=ext_hours)
 
                     ema_state = candle_svc.get_ema_state(ema_symbol, timeframe=tf, period=pd)
                     state.ema_value = ema_state.value
@@ -2949,6 +2950,8 @@ class RiskManager:
                     print(f"[RISK] 📊 EMA Stop escalated to ${action.new_stop_price:.2f} ({action.reason})")
 
         cache.ema_no_trend_count = updated_state.ema_no_trend_count
+        cache.ema_last_eval_candle_ts = updated_state.ema_last_eval_candle_ts
+        cache.ema_post_entry_candles = updated_state.ema_post_entry_candles
         if updated_state.ema_cross_state and updated_state.ema_cross_state not in ('seeding', 'frozen', ''):
             cache.ema_last_cross_state = updated_state.ema_cross_state
 
