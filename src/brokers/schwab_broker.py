@@ -987,8 +987,8 @@ class SchwabBroker(BrokerInterface):
         """Cancel any pending sell orders for a symbol before placing a new STC.
         
         When bracket orders (BUY + OCO SL/PT) are active, Schwab will reject
-        a new sell order for the same position. This method cancels those
-        bracket child legs first so the risk engine STC can go through.
+        a new sell order for the same position. This method walks into nested
+        childOrderStrategies to find hidden OCO/TRIGGER children and cancels them.
         """
         try:
             if self.dry_run:
@@ -1011,7 +1011,6 @@ class SchwabBroker(BrokerInterface):
                 params={
                     'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
                     'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                    'status': 'WORKING'
                 }
             )
             
@@ -1020,63 +1019,57 @@ class SchwabBroker(BrokerInterface):
             
             orders = response.json()
             cancelled_count = 0
+            cancelled_ids = set()
             
             if asset_type == 'EQUITY':
                 sell_instructions = {'SELL', 'SELL_SHORT'}
             else:
                 sell_instructions = {'SELL_TO_CLOSE'}
             
+            cancellable_statuses = {'WORKING', 'ACCEPTED', 'QUEUED', 'PENDING_ACTIVATION', 'AWAITING_PARENT_ORDER', 'AWAITING_CONDITION', 'AWAITING_STOP_CONDITION', 'PENDING_ACKNOWLEDGEMENT'}
+            
+            lookup_symbol = symbol.upper()
+            if asset_type != 'EQUITY' and option_symbol:
+                lookup_symbol = option_symbol.upper()
+            
             for order in orders:
-                order_legs = order.get('orderLegCollection', [])
-                if not order_legs:
-                    continue
-                
-                leg = order_legs[0]
-                instrument = leg.get('instrument', {})
-                order_symbol = instrument.get('symbol', '')
-                instruction = leg.get('instruction', '')
-                order_asset = instrument.get('assetType', 'EQUITY')
-                
-                if order_asset == 'EQUITY' and asset_type != 'EQUITY':
-                    continue
-                if order_asset == 'OPTION' and asset_type != 'OPTION':
-                    continue
-                
-                if asset_type == 'EQUITY':
-                    sym_match = order_symbol.upper() == symbol.upper()
-                elif option_symbol:
-                    sym_match = order_symbol.upper() == option_symbol.upper()
-                else:
-                    sym_match = order_symbol.upper().startswith(symbol.upper())
-                
-                if sym_match and instruction in sell_instructions:
-                    oid = str(order.get('orderId', ''))
-                    order_type = order.get('orderType', '')
-                    stop_price = order.get('stopPrice', '')
-                    limit_price = order.get('price', '')
-                    price_info = f"stop=${stop_price}" if stop_price else f"limit=${limit_price}" if limit_price else "MARKET"
-                    print(f"[{self.name}] 🔄 Cancelling conflicting {instruction} order {oid} for {order_symbol} ({order_type} {price_info}) — clearing for new STC")
+                all_matches = self._extract_orders_recursive(order, lookup_symbol if asset_type == 'EQUITY' else symbol)
+                for match in all_matches:
+                    match_status = match.get('status', '')
+                    match_id = str(match.get('id', ''))
+                    instruction = match.get('instruction', '')
                     
-                    cancel_resp = await self._make_request(
-                        'DELETE',
-                        f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{oid}",
-                        is_exit_order=True
-                    )
-                    
-                    if cancel_resp.status_code in [200, 201, 202, 204]:
-                        cancelled_count += 1
-                        print(f"[{self.name}] ✓ Cancelled bracket leg {oid}")
-                    else:
-                        print(f"[{self.name}] ⚠️ Cancel failed for {oid}: {cancel_resp.status_code}")
+                    if match_status in cancellable_statuses and instruction in sell_instructions and match_id not in cancelled_ids:
+                        qty = match.get('qty', 0)
+                        strategy = match.get('strategy', 'SINGLE')
+                        stop_price = match.get('stop_price', '')
+                        limit_price = match.get('limit_price', '')
+                        price_info = f"stop=${stop_price}" if stop_price else f"limit=${limit_price}" if limit_price else "MARKET"
+                        print(f"[{self.name}] 🔄 Cancelling conflicting {strategy} {instruction} order {match_id} for {symbol} ({price_info}) — clearing for new STC")
+                        
+                        cancel_resp = await self._make_request(
+                            'DELETE',
+                            f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{match_id}",
+                            is_exit_order=True
+                        )
+                        
+                        if cancel_resp.status_code in [200, 201, 202, 204]:
+                            cancelled_ids.add(match_id)
+                            cancelled_count += 1
+                            print(f"[{self.name}] ✓ Cancelled bracket/OCO leg {match_id}")
+                        else:
+                            print(f"[{self.name}] ⚠️ Cancel failed for {match_id}: {cancel_resp.status_code} - {cancel_resp.text[:200]}")
             
             if cancelled_count > 0:
                 if self._data_hub:
                     self._data_hub.invalidate_all()
                 print(f"[{self.name}] ✓ Cleared {cancelled_count} conflicting sell order(s) for {symbol}")
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.5)
                 
+        except asyncio.TimeoutError:
+            print(f"[{self.name}] ⚠️ Timeout cancelling conflicting orders for {symbol} — will retry in pre-exit block")
         except Exception as e:
-            print(f"[{self.name}] ⚠️ Error cancelling conflicting orders for {symbol}: {e}")
+            print(f"[{self.name}] ⚠️ Error cancelling conflicting orders for {symbol}: {type(e).__name__}: {e}")
 
     async def place_stock_order(
         self,
@@ -1114,13 +1107,13 @@ class SchwabBroker(BrokerInterface):
             is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
             
             if not price and is_exit:
-                if session == "NORMAL":
-                    print(f"[{self.name}] 🎯 STC using true MARKET order (session=NORMAL)")
+                aggressive_price = await self._get_aggressive_exit_price(symbol, 'stock')
+                if aggressive_price and aggressive_price > 0:
+                    price = aggressive_price
+                    print(f"[{self.name}] 🎯 STC MARKET→aggressive LIMIT ${price:.4f} (session={session}, fills instantly at bid)")
                 else:
-                    aggressive_price = await self._get_aggressive_exit_price(symbol, 'stock')
-                    if aggressive_price and aggressive_price > 0:
-                        price = aggressive_price
-                        print(f"[{self.name}] 🎯 STC MARKET→aggressive LIMIT ${price:.4f} (session={session}, fills instantly at bid)")
+                    if session == "NORMAL":
+                        print(f"[{self.name}] 🎯 STC using true MARKET order (session=NORMAL, no quote available)")
                     else:
                         print(f"[{self.name}] ⚠️ STC MARKET in {session} session with no quote — may pend as PENDING_ACTIVATION")
             
@@ -1139,6 +1132,33 @@ class SchwabBroker(BrokerInterface):
                 duration = "DAY"
             
             print(f"[{self.name}] 📋 Stock order: {instruction} {quantity} {symbol} | type={order_type} | session={session} | duration={duration}" + (f" | price=${price:.4f}" if price else ""))
+            
+            if is_exit:
+                max_cancel_attempts = 2
+                for cancel_attempt in range(max_cancel_attempts):
+                    try:
+                        if cancel_attempt > 0:
+                            print(f"[{self.name}] 🔄 Retry cancel attempt {cancel_attempt + 1}/{max_cancel_attempts} for {symbol} (waiting 3s)...")
+                            await asyncio.sleep(3.0)
+                        all_sym_orders = await self._dump_all_orders_for_symbol(symbol)
+                        if all_sym_orders:
+                            active_statuses = {'WORKING', 'ACCEPTED', 'QUEUED', 'PENDING_ACTIVATION', 'AWAITING_PARENT_ORDER', 'AWAITING_CONDITION', 'AWAITING_STOP_CONDITION'}
+                            working_orders = [o for o in all_sym_orders if o.get('status') in active_statuses]
+                            if working_orders:
+                                print(f"[{self.name}] ⚠️ Found {len(working_orders)} ACTIVE order(s) for {symbol} (including OCO/bracket children): {working_orders}")
+                            print(f"[{self.name}] 📊 All {symbol} orders (last 24h, {len(all_sym_orders)} total, {len(working_orders)} active)")
+                        cancelled = await self._cancel_all_open_orders_for_symbol(symbol)
+                        if cancelled > 0:
+                            print(f"[{self.name}] 🧹 Cancelled {cancelled} conflicting order(s) for {symbol} before exit — waiting 2s")
+                            await asyncio.sleep(2.0)
+                        break
+                    except asyncio.TimeoutError:
+                        print(f"[{self.name}] ⚠️ Pre-exit cancel timed out for {symbol} (attempt {cancel_attempt + 1}/{max_cancel_attempts})")
+                        if cancel_attempt < max_cancel_attempts - 1:
+                            continue
+                    except Exception as cancel_err:
+                        print(f"[{self.name}] ⚠️ Pre-exit check failed: {type(cancel_err).__name__}: {cancel_err}")
+                        break
             
             order_payload = {
                 "orderStrategyType": "SINGLE",
@@ -1192,6 +1212,40 @@ class SchwabBroker(BrokerInterface):
                 if is_exit:
                     self._position_cache_invalidated = True
                     self._consecutive_zero_positions = 0
+                
+                if is_exit and order_id:
+                    try:
+                        await asyncio.sleep(1.5)
+                        status_result = await self.get_order_status(order_id)
+                        if status_result and isinstance(status_result, dict):
+                            schwab_status = str(status_result.get('status', '')).upper()
+                            if schwab_status == 'REJECTED':
+                                reject_reason = status_result.get('status_description', '') or status_result.get('statusDescription', 'unknown')
+                                close_time = status_result.get('close_time', '') or status_result.get('closeTime', '')
+                                print(f"[{self.name}] ❌ EXCHANGE REJECTED order {order_id}: {reject_reason} | closeTime={close_time}")
+                                import json as _json
+                                safe_keys = {k: v for k, v in status_result.items() if k not in ('orderLegCollection',)}
+                                print(f"[{self.name}] 🔍 RAW ORDER RESPONSE: {_json.dumps(safe_keys, default=str)}")
+                                for key in ('cancelledReason', 'statusDescription', 'tag', 'releaseTime'):
+                                    val = status_result.get(key)
+                                    if val:
+                                        print(f"[{self.name}]   {key}: {val}")
+                                legs = status_result.get('orderLegCollection', [])
+                                for leg in legs:
+                                    print(f"[{self.name}]   leg: {leg.get('instruction')} {leg.get('quantity')} {leg.get('instrument', {}).get('symbol')} assetType={leg.get('instrument', {}).get('assetType')}")
+                                return OrderResult(
+                                    success=False,
+                                    order_id=order_id,
+                                    message=f"Exchange rejected: {reject_reason}",
+                                    symbol=symbol,
+                                    action=action
+                                )
+                            elif schwab_status == 'FILLED':
+                                fill_price = status_result.get('price', price)
+                                print(f"[{self.name}] ✅ Order {order_id} FILLED immediately @ ${fill_price}")
+                    except Exception as verify_err:
+                        print(f"[{self.name}] ⚠️ Post-order verify failed (non-critical): {verify_err}")
+                
                 return OrderResult(
                     success=True,
                     order_id=order_id,
@@ -2896,6 +2950,162 @@ class SchwabBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error getting transactions: {e}")
             return []
+
+    async def _verify_position_for_sell(self, symbol: str, qty: int) -> dict:
+        """Verify position exists on Schwab before selling - returns position details."""
+        try:
+            if not await self._ensure_valid_token():
+                return {}
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}",
+                params={'fields': 'positions'}
+            )
+            if response.status_code != 200:
+                return {'error': f'HTTP {response.status_code}'}
+            data = response.json()
+            positions = data.get('securitiesAccount', {}).get('positions', [])
+            acct_type = data.get('securitiesAccount', {}).get('type', 'unknown')
+            acct_num = data.get('securitiesAccount', {}).get('accountNumber', 'unknown')
+            for pos in positions:
+                inst = pos.get('instrument', {})
+                if inst.get('symbol', '').upper() == symbol.upper():
+                    return {
+                        'symbol': symbol,
+                        'long_qty': pos.get('longQuantity', 0),
+                        'short_qty': pos.get('shortQuantity', 0),
+                        'settled_long': pos.get('settledLongQuantity', 0),
+                        'settled_short': pos.get('settledShortQuantity', 0),
+                        'avg_price': pos.get('averagePrice', 0),
+                        'acct_type': acct_type,
+                        'acct_num': acct_num[-4:] if len(str(acct_num)) > 4 else acct_num,
+                        'sell_qty': qty,
+                    }
+            return {'error': f'{symbol} not found in {len(positions)} positions', 'acct_type': acct_type}
+        except Exception as e:
+            return {'error': str(e)}
+
+    def _extract_orders_recursive(self, order, symbol: str, include_children: bool = True) -> list:
+        """Extract all order entries for a symbol, walking into nested childOrderStrategies.
+        Returns list of dicts with order info including nested OCO/TRIGGER children."""
+        results = []
+        sym_upper = symbol.upper()
+        
+        legs = order.get('orderLegCollection', [])
+        for leg in legs:
+            inst = leg.get('instrument', {})
+            if inst.get('symbol', '').upper() == sym_upper:
+                results.append({
+                    'id': order.get('orderId'),
+                    'status': order.get('status'),
+                    'instruction': leg.get('instruction'),
+                    'qty': leg.get('quantity'),
+                    'type': order.get('orderType'),
+                    'strategy': order.get('orderStrategyType', 'SINGLE'),
+                    'entered': order.get('enteredTime', '')[-12:],
+                    'closed': order.get('closeTime', '')[-12:],
+                    'stop_price': order.get('stopPrice', ''),
+                    'limit_price': order.get('price', ''),
+                })
+                break
+        
+        if include_children:
+            for child in order.get('childOrderStrategies', []):
+                child_results = self._extract_orders_recursive(child, symbol, include_children=True)
+                results.extend(child_results)
+        
+        return results
+
+    async def _dump_all_orders_for_symbol(self, symbol: str) -> list:
+        """Dump all orders for a symbol from last 24h for debugging, including nested OCO/bracket children."""
+        try:
+            if not await self._ensure_valid_token():
+                return []
+            from datetime import datetime, timedelta
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=1)
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                params={
+                    'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                }
+            )
+            if response.status_code != 200:
+                return []
+            orders = response.json()
+            results = []
+            for order in orders:
+                results.extend(self._extract_orders_recursive(order, symbol))
+            return results
+        except Exception:
+            return []
+
+    async def _cancel_all_open_orders_for_symbol(self, symbol: str) -> int:
+        """Cancel ALL non-terminal orders for a symbol, including nested OCO/bracket children.
+        Walks into childOrderStrategies to find hidden WORKING OCO legs.
+        Returns the number of orders cancelled."""
+        try:
+            if not await self._ensure_valid_token():
+                return 0
+            
+            import time as _time
+            if hasattr(self, '_global_429_until') and _time.time() < self._global_429_until:
+                wait_remaining = self._global_429_until - _time.time()
+                if wait_remaining > 10:
+                    print(f"[{self.name}] ⚠️ Skipping cancel check — 429 backoff ({wait_remaining:.0f}s remaining)")
+                    return 0
+                else:
+                    await asyncio.sleep(min(wait_remaining, 5))
+            
+            from datetime import datetime, timedelta
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=7)
+            
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                params={
+                    'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                    'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                }
+            )
+            
+            if response.status_code != 200:
+                print(f"[{self.name}] ⚠️ Failed to fetch orders for cancel check: {response.status_code}")
+                return 0
+            
+            orders = response.json()
+            cancellable_statuses = {'WORKING', 'ACCEPTED', 'QUEUED', 'PENDING_ACTIVATION', 'AWAITING_PARENT_ORDER', 'AWAITING_CONDITION', 'AWAITING_STOP_CONDITION', 'PENDING_ACKNOWLEDGEMENT'}
+            cancelled_count = 0
+            cancelled_ids = set()
+            
+            for order in orders:
+                all_matches = self._extract_orders_recursive(order, symbol)
+                for match in all_matches:
+                    match_status = match.get('status', '')
+                    match_id = str(match.get('id', ''))
+                    if match_status in cancellable_statuses and match_id not in cancelled_ids:
+                        instruction = match.get('instruction', '')
+                        qty = match.get('qty', 0)
+                        strategy = match.get('strategy', 'SINGLE')
+                        stop_price = match.get('stop_price', '')
+                        limit_price = match.get('limit_price', '')
+                        price_info = f"stop=${stop_price}" if stop_price else f"limit=${limit_price}" if limit_price else "MARKET"
+                        print(f"[{self.name}] 🧹 Cancelling {match_status} {strategy} order {match_id}: {instruction} {qty} {symbol} ({price_info})")
+                        cancel_result = await self.cancel_order(match_id)
+                        print(f"[{self.name}]   Result: {cancel_result.get('message', '')}")
+                        cancelled_ids.add(match_id)
+                        cancelled_count += 1
+            
+            return cancelled_count
+        except asyncio.TimeoutError:
+            print(f"[{self.name}] ⚠️ _cancel_all_open_orders_for_symbol({symbol}) timed out — API overloaded")
+            return 0
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ _cancel_all_open_orders_for_symbol({symbol}) failed: {type(e).__name__}: {e}")
+            return 0
 
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """Cancel an existing order"""
