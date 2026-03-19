@@ -19,7 +19,7 @@
     "max_pnl_seen": 0.4183663261970393,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 594.9,
+    "last_evaluated_price": 589.75,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
@@ -30,7 +30,9 @@
     "source_trade_id": null,
     "seed_time": null,
     "ema_no_trend_count": 0,
-    "ema_last_cross_state": "unknown"
+    "ema_last_cross_state": "unknown",
+    "ema_last_eval_candle_ts": null,
+    "ema_post_entry_candles": 0
   },
   "ALPACA_PAPER_CVNA_stock": {
     "entry_price": 313.88,
@@ -52,7 +54,7 @@
     "max_pnl_seen": 1.8191665604689624,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 291.17,
+    "last_evaluated_price": 285.3557,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
@@ -63,7 +65,9 @@
     "source_trade_id": null,
     "seed_time": null,
     "ema_no_trend_count": 0,
-    "ema_last_cross_state": "unknown"
+    "ema_last_cross_state": "unknown",
+    "ema_last_eval_candle_ts": null,
+    "ema_post_entry_candles": 0
   },
   "ALPACA_PAPER_SWMR_stock": {
     "entry_price": 49.4,
@@ -85,7 +89,7 @@
     "max_pnl_seen": 16.396761133603242,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 55.0,
+    "last_evaluated_price": 47.64,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
@@ -96,6 +100,8 @@
     "source_trade_id": null,
     "seed_time": null,
     "ema_no_trend_count": 0,
-    "ema_last_cross_state": "above"
+    "ema_last_cross_state": "above",
+    "ema_last_eval_candle_ts": null,
+    "ema_post_entry_candles": 0
   }
 }
