@@ -17785,6 +17785,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     paper_config = signal.get('_channel_paper_config', {})
                     _original_print(f"[DEBUG] Paper trade mode: {is_paper_trade}, Signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
                     
+                    # ── Daily P&L / trade-limit pre-check for legacy single-broker path ──
+                    if signal.get('action', '').upper() == 'BTO':
+                        try:
+                            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                            _legacy_pnl_svc = get_daily_pnl_service()
+                            _legacy_broker_name = signal.get('_broker_override', '') or signal.get('broker', '') or 'Unknown'
+                            _legacy_pnl_check = _legacy_pnl_svc.check_broker_locked(_legacy_broker_name)
+                            if _legacy_pnl_check.get('locked'):
+                                _lt = _legacy_pnl_check.get('lock_type', 'unknown')
+                                _pnl = _legacy_pnl_check.get('daily_pnl', 0)
+                                _ppct = _legacy_pnl_check.get('daily_pnl_pct', 0)
+                                if _lt == 'trades':
+                                    _tc = _legacy_pnl_check.get('daily_trade_count', 0)
+                                    _tl = _legacy_pnl_check.get('daily_trade_limit', 0)
+                                    _original_print(f"[DAILY P&L] ⛔ {_legacy_broker_name} LOCKED (trades) — BTO blocked | {_tc}/{_tl} trades today | P&L: ${_pnl:+,.2f} ({_ppct:+.1f}%)")
+                                else:
+                                    _original_print(f"[DAILY P&L] ⛔ {_legacy_broker_name} LOCKED ({_lt}) — BTO blocked | Daily P&L: ${_pnl:+,.2f} ({_ppct:+.1f}%)")
+                                resp = {'success': False, 'message': f'Daily P&L limit — BTO blocked ({_lt})', '_daily_pnl_blocked': True}
+                                order_success = False
+                                self.order_queue.task_done()
+                                continue
+                        except ImportError:
+                            pass
+                        except Exception as _legacy_pnl_err:
+                            _original_print(f"[DAILY P&L] Pre-check error (continuing): {_legacy_pnl_err}")
+
                     # Get the appropriate broker (paper or live)
                     if is_paper_trade:
                         # PAPER TRADING - Route to paper trading account
@@ -17997,6 +18023,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     if result.success:
                                         _original_print(f"[PAPER TRADE] ✅ Order executed in {paper_broker_label} account")
                                         _original_print(f"[PAPER TRADE] Order ID: {result.order_id}")
+                                        if signal.get('action', '').upper() == 'BTO':
+                                            try:
+                                                from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                                                get_daily_pnl_service().record_bto_trade(paper_broker_label)
+                                            except Exception:
+                                                pass
                                         try:
                                             from gui_app.discord_notifier import notify_order_placed
                                             notify_order_placed(
@@ -18344,6 +18376,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             order_success = False
                         _original_print(f"[DEBUG] After broker call, order_success: {order_success}, resp type: {type(resp).__name__}", flush=True)
+
+                        if order_success and signal.get('action', '').upper() == 'BTO':
+                            try:
+                                from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                                get_daily_pnl_service().record_bto_trade(broker_name_used or 'Unknown')
+                            except Exception:
+                                pass
                 
                 # Handle failed orders
                 if not order_success:

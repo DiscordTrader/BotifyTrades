@@ -216,8 +216,7 @@ class DailyPnLLimitService:
             }
             self._states[normalized] = state
             state_copy = dict(state)
-
-        self._persist_state(normalized, state_copy)
+            self._persist_state(normalized, state_copy)
 
         if new_lock != 'none':
             print(f"[DAILY P&L] ⛔ {normalized} LOCKED ({new_lock}) — {lock_reason} | P&L: ${daily_pnl:+,.2f} ({daily_pnl_pct:+.1f}%)")
@@ -325,8 +324,8 @@ class DailyPnLLimitService:
 
             self._states[normalized] = state
             state_copy = dict(state)
+            self._persist_state(normalized, state_copy)
 
-        self._persist_state(normalized, state_copy)
         if should_lock:
             print(f"[DAILY P&L] ⛔ {normalized} LOCKED (trades) — {new_count}/{trade_limit} trades reached")
             self._log_lock_event(normalized, 'trades', f'{new_count}/{trade_limit} daily trades reached', state_copy)
@@ -359,9 +358,9 @@ class DailyPnLLimitService:
                 state['locked_at'] = self._now_iso()
                 self._states[normalized] = state
                 state_copy = dict(state)
+                self._persist_state(normalized, state_copy)
 
         if state_copy:
-            self._persist_state(normalized, state_copy)
             print(f"[DAILY P&L] ⛔ {normalized} LOCKED (trades) — {trade_count}/{trade_limit} trades (caught in check)")
             self._log_lock_event(normalized, 'trades', f'{trade_count}/{trade_limit} daily trades reached (catch-up)', state_copy)
 
