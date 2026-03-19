@@ -899,14 +899,35 @@ class SchwabBroker(BrokerInterface):
             return dict(self._last_positions_simple)
         return {}
     
+    def _stock_tick_below(self, price: float) -> float:
+        import math
+        if price >= 1.0:
+            return math.floor((price - 0.01) * 100) / 100
+        else:
+            return math.floor((price - 0.0001) * 10000) / 10000
+
+    def _clamp_to_last_band(self, aggressive: float, last: float, price_for_log: float) -> float:
+        if last <= 0:
+            return aggressive
+        if last < 1.0:
+            floor = round(last * 0.98, 4)
+        elif last < 5.0:
+            floor = round(last * 0.97, 4)
+        else:
+            floor = round(last * 0.95, 2)
+        if aggressive < floor:
+            print(f"[{self.name}] 🛡️ Exit price ${aggressive:.4f} clamped up to ${floor:.4f} (last-trade band, last=${last:.4f})")
+            return floor
+        return aggressive
+
     async def _get_aggressive_exit_price(self, symbol: str, asset_type: str = 'stock', 
                                          strike: float = None, expiry: str = None, 
                                          call_put: str = None) -> Optional[float]:
-        """Get aggressive exit price for STC orders — bid * 0.95 for instant fill.
+        """Get aggressive exit price for STC orders — near-touch limit for instant fill.
         
         Schwab rejects MARKET orders in SEAMLESS session and for OTC stocks.
-        Using an aggressive LIMIT at/below bid fills instantly like a market order
-        but works in all session types and for all stock classes.
+        Uses bid (or 1 tick below bid) as limit, clamped to a last-trade band
+        to avoid Schwab price-band rejections on low-priced stocks.
         """
         import math
         try:
@@ -914,12 +935,12 @@ class SchwabBroker(BrokerInterface):
                 quote = await self.get_option_quote(symbol, strike, expiry, call_put, max_age=10)
                 if quote:
                     bid = float(quote.get('bid', 0) or 0)
+                    last = float(quote.get('last', 0) or 0)
                     if bid > 0:
                         aggressive = max(0.01, round(bid * 0.95, 2))
                         aggressive = self._round_to_cboe_increment(aggressive, is_sell=True)
                         print(f"[{self.name}] 💰 Option exit: bid=${bid:.2f} → aggressive LIMIT ${aggressive:.2f}")
                         return aggressive
-                    last = float(quote.get('last', 0) or 0)
                     if last > 0:
                         aggressive = max(0.01, round(last * 0.90, 2))
                         aggressive = self._round_to_cboe_increment(aggressive, is_sell=True)
@@ -927,36 +948,35 @@ class SchwabBroker(BrokerInterface):
                         return aggressive
             else:
                 hub_price = self.get_hub_quote(symbol)
+                last_price = 0.0
+                bid_price = 0.0
                 if hub_price and hub_price > 0:
                     hub_detailed = self.get_hub_quote_detailed(symbol, max_age=10)
                     if hub_detailed:
-                        bid = float(hub_detailed.get('bid', 0) or 0)
-                        if bid > 0:
-                            aggressive = round(bid * 0.95, 4)
-                            if aggressive < 1.0:
-                                aggressive = math.floor(aggressive * 10000) / 10000
-                            else:
-                                aggressive = math.floor(aggressive * 100) / 100
-                            print(f"[{self.name}] 💰 Stock exit: bid=${bid:.4f} → aggressive LIMIT ${aggressive:.4f} (hub)")
-                            return max(0.0001, aggressive)
-                    aggressive = round(hub_price * 0.95, 4)
-                    if aggressive < 1.0:
-                        aggressive = math.floor(aggressive * 10000) / 10000
-                    else:
-                        aggressive = math.floor(aggressive * 100) / 100
-                    print(f"[{self.name}] 💰 Stock exit: hub=${hub_price:.4f} → aggressive LIMIT ${aggressive:.4f}")
-                    return max(0.0001, aggressive)
+                        bid_price = float(hub_detailed.get('bid', 0) or 0)
+                        last_price = float(hub_detailed.get('last', 0) or hub_detailed.get('price', 0) or 0)
+
+                    if bid_price > 0:
+                        aggressive = self._stock_tick_below(bid_price)
+                        aggressive = self._clamp_to_last_band(aggressive, last_price or hub_price, bid_price)
+                        aggressive = max(0.0001, aggressive)
+                        print(f"[{self.name}] 💰 Stock exit: bid=${bid_price:.4f} → near-touch LIMIT ${aggressive:.4f} (hub)")
+                        return aggressive
+
+                    aggressive = self._stock_tick_below(hub_price)
+                    aggressive = self._clamp_to_last_band(aggressive, last_price or hub_price, hub_price)
+                    aggressive = max(0.0001, aggressive)
+                    print(f"[{self.name}] 💰 Stock exit: hub=${hub_price:.4f} → near-touch LIMIT ${aggressive:.4f}")
+                    return aggressive
                 
                 try:
                     rest_price = await self.get_quote(symbol)
                     if rest_price and rest_price > 0:
-                        aggressive = round(rest_price * 0.95, 4)
-                        if aggressive < 1.0:
-                            aggressive = math.floor(aggressive * 10000) / 10000
-                        else:
-                            aggressive = math.floor(aggressive * 100) / 100
-                        print(f"[{self.name}] 💰 Stock exit: REST=${rest_price:.4f} → aggressive LIMIT ${aggressive:.4f}")
-                        return max(0.0001, aggressive)
+                        aggressive = self._stock_tick_below(rest_price)
+                        aggressive = self._clamp_to_last_band(aggressive, rest_price, rest_price)
+                        aggressive = max(0.0001, aggressive)
+                        print(f"[{self.name}] 💰 Stock exit: REST=${rest_price:.4f} → near-touch LIMIT ${aggressive:.4f}")
+                        return aggressive
                 except Exception as rest_err:
                     print(f"[{self.name}] ⚠️ REST quote for exit price failed: {rest_err}")
         except Exception as e:
