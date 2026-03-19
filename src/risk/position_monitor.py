@@ -2718,6 +2718,9 @@ class RiskManager:
                 if not _is_repair_cycle:
                     return decision
         
+        if _is_repair_cycle:
+            return ExitDecision.no_exit()
+        
         if channel_settings and channel_settings.has_tiered_targets:
             if channel_settings.escalation_only_mode:
                 tier_thresholds = {
@@ -2743,15 +2746,13 @@ class RiskManager:
             else:
                 decision = evaluate_tiered_targets(position, cache, channel_settings)
                 if decision.should_exit:
-                    if not _is_repair_cycle:
-                        decision.reason = format_tier_reason(decision, channel_settings.channel_name)
-                        return decision
+                    decision.reason = format_tier_reason(decision, channel_settings.channel_name)
+                    return decision
         
         if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled):
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
             if engine_decision and engine_decision.should_exit:
-                if not _is_repair_cycle:
-                    return engine_decision
+                return engine_decision
         
         if channel_settings and channel_settings.enable_early_trailing:
             early_result, updated_cache = evaluate_early_trailing(
@@ -2760,15 +2761,14 @@ class RiskManager:
             if early_result.should_update_stop:
                 self.cache.persist_early_trailing_state(position.position_key)
             if early_result.should_exit:
-                if not _is_repair_cycle:
-                    channel_name = channel_settings.channel_name
-                    return ExitDecision(
-                        should_exit=True,
-                        reason=f"EARLY TRAIL [{channel_name}] {early_result.reason}",
-                        exit_qty=int(position.quantity),
-                        is_partial=False,
-                        risk_trigger='early_trailing'
-                    )
+                channel_name = channel_settings.channel_name
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"EARLY TRAIL [{channel_name}] {early_result.reason}",
+                    exit_qty=int(position.quantity),
+                    is_partial=False,
+                    risk_trigger='early_trailing'
+                )
         
         trailing_pct, activation_pct, stop_pct = get_effective_trailing_settings(
             channel_settings, risk_settings, self.trailing_activation_pct
@@ -2787,14 +2787,12 @@ class RiskManager:
         if should_activate:
             self.cache.activate_trailing_stop(position.position_key)
         if decision.should_exit:
-            if not _is_repair_cycle:
-                return decision
+            return decision
         
         if not channel_settings:
             decision = evaluate_global_risk(position, cache, risk_settings)
             if decision.should_exit:
-                if not _is_repair_cycle:
-                    return decision
+                return decision
         
         return ExitDecision.no_exit()
     
@@ -4002,6 +4000,8 @@ class RiskManager:
         rest_cooldown = 3.0 if session == 'regular' else (10.0 if session == 'extended' else 30.0)
         _MAX_REST_REPAIRS_PER_CYCLE = 3
         rest_repairs_this_cycle = 0
+
+        stuck_candidates = []
         for pos in positions:
             if pos.asset == 'option':
                 continue
@@ -4024,6 +4024,11 @@ class RiskManager:
                 continue
             if (now - tracker.get('rest_refreshed', 0)) < rest_cooldown:
                 continue
+            stuck_candidates.append((stuck_seconds, pos, key, tracker))
+
+        stuck_candidates.sort(key=lambda x: -x[0])
+
+        for stuck_seconds, pos, key, tracker in stuck_candidates:
             try:
                 fresh_price = self._try_cross_hub_price(pos, now)
                 source = 'cross-hub'
