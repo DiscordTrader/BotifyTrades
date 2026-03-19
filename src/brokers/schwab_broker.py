@@ -1114,12 +1114,15 @@ class SchwabBroker(BrokerInterface):
             is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
             
             if not price and is_exit:
-                aggressive_price = await self._get_aggressive_exit_price(symbol, 'stock')
-                if aggressive_price and aggressive_price > 0:
-                    price = aggressive_price
-                    print(f"[{self.name}] 🎯 STC MARKET→aggressive LIMIT ${price:.4f} (session={session}, fills instantly at bid)")
-                elif session == "SEAMLESS":
-                    print(f"[{self.name}] ⚠️ STC MARKET in SEAMLESS session with no quote — may pend as PENDING_ACTIVATION")
+                if session == "NORMAL":
+                    print(f"[{self.name}] 🎯 STC using true MARKET order (session=NORMAL)")
+                else:
+                    aggressive_price = await self._get_aggressive_exit_price(symbol, 'stock')
+                    if aggressive_price and aggressive_price > 0:
+                        price = aggressive_price
+                        print(f"[{self.name}] 🎯 STC MARKET→aggressive LIMIT ${price:.4f} (session={session}, fills instantly at bid)")
+                    else:
+                        print(f"[{self.name}] ⚠️ STC MARKET in {session} session with no quote — may pend as PENDING_ACTIVATION")
             
             order_type = "LIMIT" if price else "MARKET"
             
