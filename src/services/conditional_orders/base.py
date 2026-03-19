@@ -412,6 +412,34 @@ class StreamingPriceMonitor(PriceMonitor):
         if cross_price:
             return cross_price
 
+        if self.finnhub_api_key:
+            try:
+                finnhub_price = await self._fetch_finnhub_price()
+                if finnhub_price and finnhub_price > 0:
+                    if not getattr(self, '_finnhub_fallback_logged', False):
+                        sys.stderr.write(f"[STREAM_MON] {self.symbol}: Using Finnhub fallback (no hub/broker price available)\n")
+                        sys.stderr.flush()
+                        self._finnhub_fallback_logged = True
+                    return finnhub_price
+            except Exception:
+                pass
+
+        if YFINANCE_AVAILABLE:
+            try:
+                import yfinance as yf
+                loop = asyncio.get_event_loop()
+                ticker = await loop.run_in_executor(None, lambda: yf.Ticker(self.symbol))
+                info = await loop.run_in_executor(None, lambda: ticker.fast_info)
+                price = getattr(info, 'last_price', None) or getattr(info, 'previous_close', None)
+                if price and float(price) > 0:
+                    if not getattr(self, '_yfinance_fallback_logged', False):
+                        sys.stderr.write(f"[STREAM_MON] {self.symbol}: Using YFinance fallback (no hub/broker/Finnhub price available)\n")
+                        sys.stderr.flush()
+                        self._yfinance_fallback_logged = True
+                    return float(price)
+            except Exception:
+                pass
+
         return None
 
     def _try_cross_broker_hubs(self) -> Optional[float]:
@@ -432,6 +460,22 @@ class StreamingPriceMonitor(PriceMonitor):
                 pass
         return None
     
+    async def _fetch_finnhub_price(self) -> Optional[float]:
+        if not self.finnhub_api_key:
+            return None
+        try:
+            url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        price = data.get('c')
+                        return float(price) if price else None
+        except Exception as e:
+            sys.stderr.write(f"[STREAM_MON] Finnhub fallback error for {self.symbol}: {e}\n")
+            sys.stderr.flush()
+        return None
+
     def _try_unsubscribe_streaming(self):
         try:
             if self.broker_instance and hasattr(self.broker_instance, '_streaming_client'):
