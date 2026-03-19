@@ -297,7 +297,6 @@ def evaluate_exit_actions(
 
     # 2.5. EMA Exit/Escalation (candlestick-based trend monitoring)
     if (config.ema_risk_enabled and 
-        config.exit_strategy_mode != 'signal' and
         state.ema_cross_state not in ('seeding', 'frozen', '') and
         state.ema_candles_count >= config.ema_period and
         state.ema_value is not None):

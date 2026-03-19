@@ -2650,7 +2650,7 @@ class RiskManager:
         if channel_settings and channel_settings.exit_strategy_mode == 'signal':
             if channel_settings.ema_risk_enabled:
                 self._log_position_status(position, cache, channel_settings, pct_change)
-                ema_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
+                ema_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position, ema_only=True)
                 if ema_decision and ema_decision.should_exit:
                     from src.services.market_hours import is_regular_market_hours, is_extended_hours
                     if position.asset == 'option':
@@ -2805,12 +2805,30 @@ class RiskManager:
         position: PositionSnapshot,
         cache: PositionCacheEntry,
         channel_settings: ChannelRiskSettings,
-        position_snapshot: PositionSnapshot = None
+        position_snapshot: PositionSnapshot = None,
+        ema_only: bool = False
     ) -> Optional[ExitDecision]:
         """
         Evaluate Enhanced Risk v2.0 features: Dynamic SL, Giveback Guard, and EMA Risk.
         Updates cache state and returns exit decision if triggered.
+        When ema_only=True (signal mode), non-EMA risk features are disabled so only
+        EMA exits can fire.
         """
+        if ema_only:
+            from dataclasses import replace
+            channel_settings = replace(
+                channel_settings,
+                stop_loss_pct=0.0,
+                enable_dynamic_sl=False,
+                enable_giveback_guard=False,
+                enable_early_trailing=False,
+                trailing_stop_pct=0.0,
+                profit_target_1_pct=0.0,
+                profit_target_2_pct=0.0,
+                profit_target_3_pct=0.0,
+                profit_target_4_pct=0.0,
+            )
+
         original_qty = cache.original_qty if cache.original_qty else int(position.quantity)
         state = TradeState(
             entry_price=cache.entry_price,
