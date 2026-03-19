@@ -7011,6 +7011,92 @@ def register_routes(app):
             print(f"[API] Error fetching risk status: {e}")
             return jsonify({'success': False, 'risk_states': {}, 'error': str(e)})
 
+    @app.route('/api/unprotected-trades', methods=['GET'])
+    @login_required
+    def api_unprotected_trades():
+        """Check for open/pending trades executing without SL or PT risk settings."""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT t.id, t.symbol, t.broker, t.status, t.asset_type, t.strike,
+                       t.expiry, t.call_put, t.quantity, t.executed_price, t.channel_id,
+                       c.name as channel_name, c.risk_management_enabled,
+                       c.stop_loss_pct, c.profit_target_1_pct, c.exit_strategy_mode
+                FROM trades t
+                LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+                WHERE t.status IN ('OPEN', 'PENDING')
+                  AND t.direction = 'BTO'
+                  AND (t.hide_in_ui IS NULL OR t.hide_in_ui = 0)
+                ORDER BY t.executed_at DESC
+                LIMIT 1000
+            ''')
+            rows = [dict(r) for r in cursor.fetchall()]
+
+            if not rows:
+                return jsonify({'success': True, 'unprotected': [], 'count': 0})
+
+            def _safe_float(val):
+                try:
+                    return float(val) if val is not None else 0.0
+                except (ValueError, TypeError):
+                    return 0.0
+
+            unprotected = []
+            for row in rows:
+                exit_mode = row.get('exit_strategy_mode') or 'hybrid'
+                if exit_mode == 'signal':
+                    continue
+
+                channel_name = row.get('channel_name')
+                risk_enabled = bool(row.get('risk_management_enabled', 0))
+                has_sl = _safe_float(row.get('stop_loss_pct')) > 0
+                has_pt = _safe_float(row.get('profit_target_1_pct')) > 0
+
+                missing = []
+                if not channel_name:
+                    missing = ['stop_loss', 'profit_target']
+                    risk_enabled = False
+                    channel_name = 'No Channel'
+                else:
+                    if not risk_enabled:
+                        missing.append('risk_disabled')
+                    if not has_sl:
+                        missing.append('stop_loss')
+                    if not has_pt:
+                        missing.append('profit_target')
+
+                if missing:
+                    unprotected.append({
+                        'trade_id': row.get('id'),
+                        'symbol': row.get('symbol', ''),
+                        'broker': row.get('broker', ''),
+                        'status': row.get('status', ''),
+                        'asset_type': row.get('asset_type', 'stock'),
+                        'strike': row.get('strike'),
+                        'expiry': row.get('expiry'),
+                        'call_put': row.get('call_put'),
+                        'quantity': row.get('quantity', 0),
+                        'executed_price': row.get('executed_price', 0),
+                        'channel_name': channel_name,
+                        'missing': missing,
+                        'risk_enabled': risk_enabled,
+                        'exit_strategy': exit_mode,
+                        'stop_loss_pct': _safe_float(row.get('stop_loss_pct')) or None,
+                        'profit_target_1_pct': _safe_float(row.get('profit_target_1_pct')) or None,
+                    })
+
+            return jsonify({
+                'success': True,
+                'unprotected': unprotected,
+                'count': len(unprotected),
+            })
+        except Exception as e:
+            print(f"[API] Unprotected trades check error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'unprotected': [], 'count': 0, 'error': str(e)})
+
     @app.route('/api/trades/live-snapshot', methods=['GET'])
     @login_required
     def api_live_snapshot():

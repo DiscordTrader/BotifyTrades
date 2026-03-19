@@ -26,6 +26,61 @@
 <!-- Daily P&L Limit Banners -->
 <div id="daily-pnl-banners" style="display: none; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;"></div>
 
+<!-- Unprotected Trades Critical Banner -->
+<div id="unprotected-trades-banner" style="display: none;">
+    <div style="margin-bottom: 16px; padding: 0; border-radius: 12px; overflow: hidden;
+        border: 1px solid rgba(239, 68, 68, 0.5); 
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.35) 0%, rgba(153, 27, 27, 0.2) 50%, rgba(127, 29, 29, 0.1) 100%);
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.15), inset 0 1px 0 rgba(255,255,255,0.03);">
+
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px;
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.18) 0%, rgba(239, 68, 68, 0.06) 100%);
+            border-bottom: 1px solid rgba(239, 68, 68, 0.2);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+                    background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.35);">
+                    <span style="font-size: 1.15rem;">🛡️</span>
+                </div>
+                <div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: #fca5a5; letter-spacing: 0.3px;">
+                        RISK PROTECTION ALERT
+                    </div>
+                    <div id="unprotected-subtitle" style="font-size: 0.78rem; color: #f87171; margin-top: 2px; font-weight: 500;">
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div id="unprotected-count-badge" style="background: rgba(239, 68, 68, 0.3); border: 1px solid rgba(239, 68, 68, 0.5);
+                    border-radius: 8px; padding: 4px 12px; font-weight: 800; font-size: 1.1rem; color: #fca5a5;
+                    min-width: 36px; text-align: center; font-variant-numeric: tabular-nums;">
+                    0
+                </div>
+                <button onclick="toggleUnprotectedDetails()" id="unprotected-expand-btn"
+                    style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);
+                    border-radius: 8px; color: #fca5a5; cursor: pointer; padding: 6px 10px; font-size: 0.85rem;
+                    transition: all 0.2s; display: flex; align-items: center; gap: 4px;">
+                    <span id="unprotected-expand-icon" style="transition: transform 0.2s;">&#9660;</span> Details
+                </button>
+                <button onclick="dismissUnprotectedBanner()" title="Dismiss for this session"
+                    style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 1.15rem; padding: 4px 6px;
+                    opacity: 0.6; transition: opacity 0.2s;"
+                    onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.6'">&#10005;</button>
+            </div>
+        </div>
+
+        <div id="unprotected-details" style="display: none; padding: 0;">
+            <div id="unprotected-trades-list" style="max-height: 320px; overflow-y: auto;"></div>
+            <div style="padding: 10px 20px; border-top: 1px solid rgba(239, 68, 68, 0.12);
+                background: rgba(239, 68, 68, 0.04);">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: rgba(252, 165, 165, 0.7);">
+                    <span>&#9432;</span>
+                    <span>Configure risk settings in <strong>Admin &rarr; Channels &rarr; Risk Controls</strong> tab. Enable risk management and set Stop Loss / Profit Targets per channel.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Stats Grid -->
 <div class="stats-grid">
     <div class="stat-card">
@@ -3652,5 +3707,130 @@ if (!document.getElementById('pnl-banner-keyframes')) {
 
 pollDailyPnlStatus();
 setInterval(pollDailyPnlStatus, 15000);
+
+let _unprotectedDismissed = false;
+let _unprotectedExpanded = false;
+
+function dismissUnprotectedBanner() {
+    _unprotectedDismissed = true;
+    const banner = document.getElementById('unprotected-trades-banner');
+    if (banner) {
+        banner.style.transition = 'opacity 0.3s, transform 0.3s';
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(-8px)';
+        setTimeout(() => { banner.style.display = 'none'; }, 300);
+    }
+}
+
+function toggleUnprotectedDetails() {
+    _unprotectedExpanded = !_unprotectedExpanded;
+    const details = document.getElementById('unprotected-details');
+    const icon = document.getElementById('unprotected-expand-icon');
+    if (details) {
+        details.style.display = _unprotectedExpanded ? 'block' : 'none';
+    }
+    if (icon) {
+        icon.style.transform = _unprotectedExpanded ? 'rotate(180deg)' : 'rotate(0)';
+    }
+}
+
+function _escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function renderUnprotectedTradeRow(t) {
+    const missingTags = t.missing.map(m => {
+        if (m === 'risk_disabled') return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;font-size:0.7rem;font-weight:700;background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);">RISK OFF</span>';
+        if (m === 'stop_loss') return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;font-size:0.7rem;font-weight:700;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.25);">NO STOP LOSS</span>';
+        if (m === 'profit_target') return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;font-size:0.7rem;font-weight:700;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.25);">NO PROFIT TARGET</span>';
+        return '';
+    }).join(' ');
+
+    const isOption = t.asset_type === 'option';
+    let symbolDisplay = _escHtml(String(t.symbol || ''));
+    if (isOption && t.strike) {
+        symbolDisplay += ` $${_escHtml(String(t.strike))} ${_escHtml((t.call_put || '').toUpperCase())}`;
+        if (t.expiry) symbolDisplay += ` ${_escHtml(String(t.expiry))}`;
+    }
+
+    const safeBroker = _escHtml(String(t.broker || ''));
+    const safeChannel = _escHtml(String(t.channel_name || ''));
+    const statusColor = t.status === 'OPEN' ? '#f87171' : '#fbbf24';
+    const statusLabel = t.status === 'OPEN' ? 'LIVE' : 'PENDING';
+
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;
+        border-bottom:1px solid rgba(239,68,68,0.08);transition:background 0.15s;"
+        onmouseenter="this.style.background='rgba(239,68,68,0.06)'" onmouseleave="this.style.background='transparent'">
+        <div style="display:flex;align-items:center;gap:14px;flex:1;min-width:0;">
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-weight:700;font-size:0.88rem;color:#e2e8f0;letter-spacing:0.3px;">${symbolDisplay}</span>
+                    <span style="font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:4px;
+                        background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;">${statusLabel}</span>
+                </div>
+                <div style="font-size:0.72rem;color:#94a3b8;">
+                    ${safeBroker} &middot; ${safeChannel} &middot; ${t.quantity} ${isOption ? 'contracts' : 'shares'} @ $${(t.executed_price || 0).toFixed(2)}
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            ${missingTags}
+        </div>
+    </div>`;
+}
+
+async function checkUnprotectedTrades() {
+    if (_unprotectedDismissed) return;
+    try {
+        const resp = await fetch('/api/unprotected-trades');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const banner = document.getElementById('unprotected-trades-banner');
+        const countBadge = document.getElementById('unprotected-count-badge');
+        const subtitle = document.getElementById('unprotected-subtitle');
+        const listContainer = document.getElementById('unprotected-trades-list');
+        if (!banner) return;
+
+        if (data.count === 0) {
+            banner.style.display = 'none';
+            return;
+        }
+
+        const trades = data.unprotected;
+        const riskOffCount = trades.filter(t => t.missing.includes('risk_disabled')).length;
+        const noSlCount = trades.filter(t => t.missing.includes('stop_loss')).length;
+        const noPtCount = trades.filter(t => t.missing.includes('profit_target')).length;
+        const openCount = trades.filter(t => t.status === 'OPEN').length;
+        const pendingCount = trades.filter(t => t.status === 'PENDING').length;
+
+        countBadge.textContent = data.count;
+
+        const parts = [];
+        if (openCount) parts.push(`${openCount} live`);
+        if (pendingCount) parts.push(`${pendingCount} pending`);
+        let subtitleText = parts.join(', ') + ` position${data.count > 1 ? 's' : ''} without full risk protection`;
+        const details = [];
+        if (riskOffCount) details.push(`${riskOffCount} risk disabled`);
+        if (noSlCount) details.push(`${noSlCount} missing SL`);
+        if (noPtCount) details.push(`${noPtCount} missing PT`);
+        if (details.length) subtitleText += ' \u2014 ' + details.join(', ');
+        subtitle.textContent = subtitleText;
+
+        listContainer.innerHTML = trades.map(renderUnprotectedTradeRow).join('');
+
+        banner.style.display = 'block';
+        banner.style.opacity = '1';
+        banner.style.transform = 'translateY(0)';
+
+    } catch (err) {
+        console.error('[Unprotected] Check failed:', err);
+    }
+}
+
+checkUnprotectedTrades();
+setInterval(checkUnprotectedTrades, 30000);
 </script>
 {% endblock %}
