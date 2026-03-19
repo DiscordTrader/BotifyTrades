@@ -1668,6 +1668,12 @@ input:checked + .slider:before {
                 <p class="help-text" style="margin-top: 2px;">Dollar and percentage limits work together — whichever is hit first triggers the lock. Set to 0 to disable that limit type.</p>
                 
                 <div class="form-group" style="margin-top: 10px;">
+                    <label>Max Daily Trades (Per Broker)</label>
+                    <input type="number" id="max-daily-trades-default" value="0" min="0" step="1" placeholder="0 = Unlimited">
+                    <p class="help-text">Block new BTO entries after this many trades per broker per day. 0 = unlimited. Resets at the same daily reset time above.</p>
+                </div>
+                
+                <div class="form-group" style="margin-top: 10px;">
                     <label>Warning Threshold (%)</label>
                     <input type="number" id="daily-pnl-warning-pct" value="80" min="0" max="100" step="5" placeholder="80">
                     <p class="help-text">Show a warning banner when P&L reaches this percentage of the limit (0 = no warning)</p>
@@ -3437,6 +3443,7 @@ async function loadConditionalOrdersSettings() {
             document.getElementById('daily-profit-limit-dollar').value = riskSettings.daily_profit_limit || 0;
             document.getElementById('daily-profit-limit-pct').value = riskSettings.daily_profit_limit_pct || 0;
             document.getElementById('daily-pnl-warning-pct').value = riskSettings.daily_pnl_warning_pct || 80;
+            document.getElementById('max-daily-trades-default').value = riskSettings.max_daily_trades_default || 0;
             document.getElementById('daily-pnl-reset-time').value = riskSettings.daily_pnl_reset_time || '09:30';
             console.log('[Global Risk] UI updated');
         }
@@ -3471,6 +3478,7 @@ document.getElementById('save-conditional-orders').addEventListener('click', asy
         daily_profit_limit: parseFloat(document.getElementById('daily-profit-limit-dollar').value) || 0,
         daily_profit_limit_pct: parseFloat(document.getElementById('daily-profit-limit-pct').value) || 0,
         daily_pnl_warning_pct: parseFloat(document.getElementById('daily-pnl-warning-pct').value) || 80,
+        max_daily_trades_default: parseInt(document.getElementById('max-daily-trades-default').value) || 0,
         daily_pnl_reset_time: document.getElementById('daily-pnl-reset-time').value || '09:30'
     };
     

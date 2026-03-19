@@ -3533,23 +3533,41 @@ async function pollDailyPnlStatus() {
             
             if (b.locked) {
                 const isProfit = b.lock_type === 'profit';
-                const gradient = isProfit 
-                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.06))'
-                    : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.06))';
-                const border = isProfit ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
-                const shadow = isProfit ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
-                const titleColor = isProfit ? '#10b981' : '#ef4444';
-                const msgColor = isProfit ? '#6ee7b7' : '#fca5a5';
-                const icon = isProfit ? '✅' : '⛔';
-                const title = isProfit 
-                    ? key + ' — Daily Profit Target Reached'
-                    : key + ' — Daily Loss Limit Reached';
-                const msg = isProfit
-                    ? 'Trading paused — gains locked in (' + pnlStr + ' / ' + pctStr + ')'
-                    : 'Trading paused until next session (' + pnlStr + ' / ' + pctStr + ')';
-                const limitInfo = isProfit
-                    ? (limits.profit_dollar > 0 ? ' | Target: $' + limits.profit_dollar.toFixed(0) : '') + (limits.profit_pct > 0 ? ' / ' + limits.profit_pct.toFixed(1) + '%' : '')
-                    : (limits.loss_dollar > 0 ? ' | Limit: $' + limits.loss_dollar.toFixed(0) : '') + (limits.loss_pct > 0 ? ' / ' + limits.loss_pct.toFixed(1) + '%' : '');
+                const isTrades = b.lock_type === 'trades';
+                let gradient, border, shadow, titleColor, msgColor, icon, title, msg, limitInfo;
+                if (isTrades) {
+                    gradient = 'linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.06))';
+                    border = 'rgba(249, 115, 22, 0.4)';
+                    shadow = 'rgba(249, 115, 22, 0.15)';
+                    titleColor = '#f97316';
+                    msgColor = '#fdba74';
+                    icon = '🔢';
+                    title = key + ' — Daily Trade Limit Reached';
+                    const tradeCount = b.daily_trade_count || 0;
+                    const tradeLimit = b.daily_trade_limit || 0;
+                    msg = 'Trading paused — ' + tradeCount + '/' + tradeLimit + ' trades used today (' + pnlStr + ' / ' + pctStr + ')';
+                    limitInfo = ' | Limit: ' + tradeLimit + ' trades/day';
+                } else if (isProfit) {
+                    gradient = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.06))';
+                    border = 'rgba(16, 185, 129, 0.4)';
+                    shadow = 'rgba(16, 185, 129, 0.15)';
+                    titleColor = '#10b981';
+                    msgColor = '#6ee7b7';
+                    icon = '✅';
+                    title = key + ' — Daily Profit Target Reached';
+                    msg = 'Trading paused — gains locked in (' + pnlStr + ' / ' + pctStr + ')';
+                    limitInfo = (limits.profit_dollar > 0 ? ' | Target: $' + limits.profit_dollar.toFixed(0) : '') + (limits.profit_pct > 0 ? ' / ' + limits.profit_pct.toFixed(1) + '%' : '');
+                } else {
+                    gradient = 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.06))';
+                    border = 'rgba(239, 68, 68, 0.4)';
+                    shadow = 'rgba(239, 68, 68, 0.15)';
+                    titleColor = '#ef4444';
+                    msgColor = '#fca5a5';
+                    icon = '⛔';
+                    title = key + ' — Daily Loss Limit Reached';
+                    msg = 'Trading paused until next session (' + pnlStr + ' / ' + pctStr + ')';
+                    limitInfo = (limits.loss_dollar > 0 ? ' | Limit: $' + limits.loss_dollar.toFixed(0) : '') + (limits.loss_pct > 0 ? ' / ' + limits.loss_pct.toFixed(1) + '%' : '');
+                }
                 
                 banners.push(`
                     <div style="padding: 14px 18px; background: ${gradient}; border: 1px solid ${border}; 

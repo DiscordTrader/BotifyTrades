@@ -1,3 +1,4 @@
+import json
 import threading
 from datetime import datetime
 
@@ -55,6 +56,7 @@ class DailyPnLLimitService:
                         'daily_pnl': float(r.get('daily_pnl', 0)),
                         'daily_pnl_pct': float(r.get('daily_pnl_pct', 0)),
                         'trading_date': r.get('trading_date'),
+                        'daily_trade_count': int(r.get('daily_trade_count', 0) or 0),
                     }
         except Exception as e:
             print(f"[DAILY P&L] Error loading from DB: {e}")
@@ -93,6 +95,31 @@ class DailyPnLLimitService:
         if reset_hour < 9 or (reset_hour == 9 and reset_minute < 30):
             return 'pre_market'
         return 'start_of_day'
+
+    def _get_trade_limit_for_broker(self, settings, broker_name):
+        default_limit = int(settings.get('max_daily_trades_default', 0) or 0)
+        overrides_raw = settings.get('max_daily_trades_overrides', '{}')
+        if isinstance(overrides_raw, str):
+            try:
+                overrides = json.loads(overrides_raw)
+            except (json.JSONDecodeError, TypeError):
+                overrides = {}
+        elif isinstance(overrides_raw, dict):
+            overrides = overrides_raw
+        else:
+            overrides = {}
+        normalized = _normalize(broker_name) if broker_name else broker_name
+        if normalized in overrides:
+            try:
+                return int(overrides[normalized])
+            except (ValueError, TypeError):
+                pass
+        if broker_name in overrides:
+            try:
+                return int(overrides[broker_name])
+            except (ValueError, TypeError):
+                pass
+        return default_limit
 
     def update_broker_pnl(self, broker_name, current_portfolio_value):
         normalized = _normalize(broker_name)
@@ -142,6 +169,7 @@ class DailyPnLLimitService:
         with self._lock:
             state = self._states.get(normalized, {})
             existing_lock = state.get('lock_type', 'none')
+            preserved_trade_count = state.get('daily_trade_count', 0)
 
             if existing_lock != 'none' and state.get('trading_date') == today:
                 state['current_equity'] = current_val
@@ -184,6 +212,7 @@ class DailyPnLLimitService:
                 'daily_pnl': daily_pnl,
                 'daily_pnl_pct': daily_pnl_pct,
                 'trading_date': today,
+                'daily_trade_count': preserved_trade_count if state.get('trading_date') == today else 0,
             }
             self._states[normalized] = state
             state_copy = dict(state)
@@ -239,6 +268,7 @@ class DailyPnLLimitService:
                 daily_pnl_pct=state.get('daily_pnl_pct', 0),
                 trading_date=state.get('trading_date'),
                 locked_at=state.get('locked_at'),
+                daily_trade_count=state.get('daily_trade_count'),
             )
         except Exception as e:
             print(f"[DAILY P&L] Error persisting state for {broker_name}: {e}")
@@ -257,25 +287,84 @@ class DailyPnLLimitService:
                     'daily_pnl_pct': state.get('daily_pnl_pct', 0),
                     'sod_equity': state.get('sod_equity', 0),
                     'current_equity': state.get('current_equity', 0),
+                    'daily_trade_count': state.get('daily_trade_count', 0),
                 }
             )
         except Exception as e:
             print(f"[DAILY P&L] Error logging lock event: {e}")
 
+    def record_bto_trade(self, broker_name):
+        normalized = _normalize(broker_name)
+        settings = self._get_settings()
+        if not settings.get('daily_pnl_limit_enabled'):
+            return
+        today = self._today_str()
+        trade_limit = self._get_trade_limit_for_broker(settings, normalized)
+
+        should_lock = False
+        with self._lock:
+            state = self._states.get(normalized)
+            if not state or state.get('trading_date') != today:
+                state = {
+                    'lock_type': 'none',
+                    'locked_at': None,
+                    'sod_equity': 0,
+                    'current_equity': 0,
+                    'daily_pnl': 0,
+                    'daily_pnl_pct': 0,
+                    'trading_date': today,
+                    'daily_trade_count': 0,
+                }
+            new_count = state.get('daily_trade_count', 0) + 1
+            state['daily_trade_count'] = new_count
+
+            if trade_limit > 0 and new_count >= trade_limit and state.get('lock_type', 'none') == 'none':
+                state['lock_type'] = 'trades'
+                state['locked_at'] = self._now_iso()
+                should_lock = True
+
+            self._states[normalized] = state
+            state_copy = dict(state)
+
+        self._persist_state(normalized, state_copy)
+        if should_lock:
+            print(f"[DAILY P&L] ⛔ {normalized} LOCKED (trades) — {new_count}/{trade_limit} trades reached")
+            self._log_lock_event(normalized, 'trades', f'{new_count}/{trade_limit} daily trades reached', state_copy)
+        elif trade_limit > 0:
+            print(f"[DAILY P&L] {normalized}: Trade {new_count}/{trade_limit} recorded")
+        else:
+            print(f"[DAILY P&L] {normalized}: Trade {new_count} recorded (no limit set)")
+
     def check_broker_locked(self, broker_name) -> dict:
         normalized = _normalize(broker_name)
         settings = self._get_settings()
         if not settings.get('daily_pnl_limit_enabled'):
-            return {'locked': False, 'lock_type': None, 'daily_pnl': 0, 'daily_pnl_pct': 0, 'sod_equity': 0, 'current_equity': 0}
+            return {'locked': False, 'lock_type': None, 'daily_pnl': 0, 'daily_pnl_pct': 0, 'sod_equity': 0, 'current_equity': 0, 'daily_trade_count': 0}
 
         today = self._today_str()
+        trade_limit = self._get_trade_limit_for_broker(settings, normalized)
+        state_copy = None
+
         with self._lock:
             state = self._states.get(normalized, {})
+            if state.get('trading_date') != today:
+                return {'locked': False, 'lock_type': None, 'daily_pnl': 0, 'daily_pnl_pct': 0, 'sod_equity': 0, 'current_equity': 0, 'daily_trade_count': 0}
 
-        if state.get('trading_date') != today:
-            return {'locked': False, 'lock_type': None, 'daily_pnl': 0, 'daily_pnl_pct': 0, 'sod_equity': 0, 'current_equity': 0}
+            lock_type = state.get('lock_type', 'none')
+            trade_count = state.get('daily_trade_count', 0)
 
-        lock_type = state.get('lock_type', 'none')
+            if lock_type == 'none' and trade_limit > 0 and trade_count >= trade_limit:
+                lock_type = 'trades'
+                state['lock_type'] = 'trades'
+                state['locked_at'] = self._now_iso()
+                self._states[normalized] = state
+                state_copy = dict(state)
+
+        if state_copy:
+            self._persist_state(normalized, state_copy)
+            print(f"[DAILY P&L] ⛔ {normalized} LOCKED (trades) — {trade_count}/{trade_limit} trades (caught in check)")
+            self._log_lock_event(normalized, 'trades', f'{trade_count}/{trade_limit} daily trades reached (catch-up)', state_copy)
+
         return {
             'locked': lock_type != 'none',
             'lock_type': lock_type if lock_type != 'none' else None,
@@ -283,6 +372,8 @@ class DailyPnLLimitService:
             'daily_pnl_pct': state.get('daily_pnl_pct', 0),
             'sod_equity': state.get('sod_equity', 0),
             'current_equity': state.get('current_equity', 0),
+            'daily_trade_count': trade_count,
+            'daily_trade_limit': trade_limit,
         }
 
     def get_all_states(self) -> list:
@@ -294,6 +385,8 @@ class DailyPnLLimitService:
             for broker_name, state in self._states.items():
                 if state.get('trading_date') == today:
                     lock_type = state.get('lock_type', 'none')
+                    trade_count = state.get('daily_trade_count', 0)
+                    trade_limit = self._get_trade_limit_for_broker(settings, broker_name)
                     result.append({
                         'broker_name': broker_name,
                         'locked': lock_type != 'none',
@@ -303,6 +396,8 @@ class DailyPnLLimitService:
                         'daily_pnl_pct': state.get('daily_pnl_pct', 0),
                         'sod_equity': state.get('sod_equity', 0),
                         'current_equity': state.get('current_equity', 0),
+                        'daily_trade_count': trade_count,
+                        'daily_trade_limit': trade_limit,
                     })
 
         loss_limit = float(settings.get('daily_loss_limit_dollar', 0) or settings.get('global_daily_loss_limit', 0))
@@ -310,6 +405,7 @@ class DailyPnLLimitService:
         profit_limit = float(settings.get('daily_profit_limit', 0))
         profit_limit_pct = float(settings.get('daily_profit_limit_pct', 0))
         warning_pct = float(settings.get('daily_pnl_warning_pct', 80))
+        max_trades_default = int(settings.get('max_daily_trades_default', 0) or 0)
 
         for item in result:
             pnl = item['daily_pnl']
@@ -337,6 +433,7 @@ class DailyPnLLimitService:
                 'profit_dollar': profit_limit,
                 'profit_pct': profit_limit_pct,
                 'warning_pct': warning_pct,
+                'max_trades_default': max_trades_default,
             },
             'brokers': result,
         }
@@ -350,7 +447,7 @@ class DailyPnLLimitService:
             reset_daily_pnl_states()
         except Exception as e:
             print(f"[DAILY P&L] Error resetting DB states: {e}")
-        print("[DAILY P&L] All locks cleared — new trading day")
+        print("[DAILY P&L] All locks and trade counts cleared — new trading day")
 
     def check_and_reset_if_new_day(self):
         try:

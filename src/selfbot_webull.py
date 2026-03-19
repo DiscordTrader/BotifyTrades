@@ -15313,10 +15313,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         lock_type = pnl_check.get('lock_type', 'unknown')
                         pnl = pnl_check.get('daily_pnl', 0)
                         pnl_pct = pnl_check.get('daily_pnl_pct', 0)
-                        _original_print(f"[DAILY P&L] ⛔ {broker_name} LOCKED ({lock_type}) — BTO blocked | Daily P&L: ${pnl:+,.2f} ({pnl_pct:+.1f}%)")
+                        if lock_type == 'trades':
+                            tc = pnl_check.get('daily_trade_count', 0)
+                            tl = pnl_check.get('daily_trade_limit', 0)
+                            _original_print(f"[DAILY P&L] ⛔ {broker_name} LOCKED (trades) — BTO blocked | {tc}/{tl} trades today | P&L: ${pnl:+,.2f} ({pnl_pct:+.1f}%)")
+                            block_msg = f'Daily trade limit reached ({tc}/{tl}) — BTO blocked'
+                        else:
+                            _original_print(f"[DAILY P&L] ⛔ {broker_name} LOCKED ({lock_type}) — BTO blocked | Daily P&L: ${pnl:+,.2f} ({pnl_pct:+.1f}%)")
+                            block_msg = f'Daily P&L {lock_type} limit reached — BTO blocked'
                         return {
                             'success': False,
-                            'message': f'Daily P&L {lock_type} limit reached — BTO blocked',
+                            'message': block_msg,
                             'broker': broker_name,
                             '_daily_pnl_blocked': True
                         }
@@ -16102,13 +16109,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if action == 'BTO':
                         try:
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                            pnl_svc = get_daily_pnl_service()
+                            pnl_svc.record_bto_trade(broker_name)
                             async def _post_bto_pnl_async(bn=broker_name, bi=broker_instance):
                                 try:
                                     await asyncio.sleep(8)
                                     if hasattr(bi, '_is_in_429_backoff') and bi._is_in_429_backoff() > 0:
                                         _original_print(f"[DAILY_PNL] Post-BTO refresh skipped for {bn} — in 429 backoff")
                                         return
-                                    pnl_svc = get_daily_pnl_service()
+                                    pnl_svc_inner = get_daily_pnl_service()
                                     ai = None
                                     if hasattr(bi, 'get_account_info'):
                                         ai = await asyncio.wait_for(bi.get_account_info(), timeout=10)
@@ -16116,7 +16125,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
                                         if pv > 0:
                                             _original_print(f"[DAILY_PNL] Post-BTO refresh for {bn} (equity=${pv:,.2f})")
-                                            pnl_svc.update_broker_pnl(bn, pv)
+                                            pnl_svc_inner.update_broker_pnl(bn, pv)
                                 except Exception as ex:
                                     _original_print(f"[DAILY_PNL] Post-BTO refresh error: {ex}")
                             try:
@@ -16338,13 +16347,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if action == 'BTO':
                         try:
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                            pnl_svc = get_daily_pnl_service()
+                            pnl_svc.record_bto_trade(broker_name)
                             async def _post_stock_bto_pnl_async(bn=broker_name, bi=broker_instance):
                                 try:
                                     await asyncio.sleep(8)
                                     if hasattr(bi, '_is_in_429_backoff') and bi._is_in_429_backoff() > 0:
                                         _original_print(f"[DAILY_PNL] Post-BTO refresh skipped for {bn} — in 429 backoff")
                                         return
-                                    pnl_svc = get_daily_pnl_service()
+                                    pnl_svc_inner = get_daily_pnl_service()
                                     ai = None
                                     if hasattr(bi, 'get_account_info'):
                                         ai = await asyncio.wait_for(bi.get_account_info(), timeout=10)
@@ -16352,7 +16363,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
                                         if pv > 0:
                                             _original_print(f"[DAILY_PNL] Post-BTO refresh for {bn} (equity=${pv:,.2f})")
-                                            pnl_svc.update_broker_pnl(bn, pv)
+                                            pnl_svc_inner.update_broker_pnl(bn, pv)
                                 except Exception as ex:
                                     _original_print(f"[DAILY_PNL] Post-BTO refresh error: {ex}")
                             try:

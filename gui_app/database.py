@@ -1384,6 +1384,8 @@ def init_db():
         'daily_loss_limit_pct': 'REAL DEFAULT 0',
         'daily_pnl_warning_pct': 'REAL DEFAULT 80',
         'daily_pnl_reset_time': "TEXT DEFAULT '09:30'",
+        'max_daily_trades_default': 'INTEGER DEFAULT 0',
+        'max_daily_trades_overrides': "TEXT DEFAULT '{}'",
     }
     for col_name, col_type in _daily_pnl_columns.items():
         try:
@@ -1402,9 +1404,16 @@ def init_db():
             daily_pnl REAL DEFAULT 0,
             daily_pnl_pct REAL DEFAULT 0,
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trading_date TEXT
+            trading_date TEXT,
+            daily_trade_count INTEGER DEFAULT 0
         )
     ''')
+
+    try:
+        cursor.execute('SELECT daily_trade_count FROM daily_pnl_state LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE daily_pnl_state ADD COLUMN daily_trade_count INTEGER DEFAULT 0')
+        conn.commit()
     
     # Risk events audit log - Immutable record of all risk decisions
     cursor.execute('''
@@ -10928,6 +10937,8 @@ def get_global_risk_settings() -> Dict:
             'daily_loss_limit_pct': 0,
             'daily_pnl_warning_pct': 80,
             'daily_pnl_reset_time': '09:30',
+            'max_daily_trades_default': 0,
+            'max_daily_trades_overrides': '{}',
         }
     except Exception as e:
         print(f"[OMS] Error getting global risk settings: {e}")
@@ -10949,6 +10960,7 @@ def update_global_risk_settings(updates: Dict) -> bool:
         'daily_profit_limit_pct', 'daily_loss_limit_dollar',
         'daily_loss_limit_pct', 'daily_pnl_warning_pct',
         'daily_pnl_reset_time',
+        'max_daily_trades_default', 'max_daily_trades_overrides',
     ]
     
     try:
@@ -11013,14 +11025,15 @@ def get_all_daily_pnl_states() -> list:
 def update_daily_pnl_state(broker_name: str, lock_type: str = 'none',
                            sod_equity: float = 0, current_equity: float = 0,
                            daily_pnl: float = 0, daily_pnl_pct: float = 0,
-                           trading_date: str = None, locked_at: str = None) -> bool:
+                           trading_date: str = None, locked_at: str = None,
+                           daily_trade_count: int = None) -> bool:
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute('''
             INSERT INTO daily_pnl_state (broker_name, lock_type, locked_at, sod_equity,
-                current_equity, daily_pnl, daily_pnl_pct, last_updated, trading_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                current_equity, daily_pnl, daily_pnl_pct, last_updated, trading_date, daily_trade_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
             ON CONFLICT(broker_name) DO UPDATE SET
                 lock_type = excluded.lock_type,
                 locked_at = CASE WHEN excluded.lock_type != 'none' AND daily_pnl_state.lock_type = 'none'
@@ -11030,9 +11043,11 @@ def update_daily_pnl_state(broker_name: str, lock_type: str = 'none',
                 daily_pnl = excluded.daily_pnl,
                 daily_pnl_pct = excluded.daily_pnl_pct,
                 last_updated = CURRENT_TIMESTAMP,
-                trading_date = excluded.trading_date
+                trading_date = excluded.trading_date,
+                daily_trade_count = CASE WHEN excluded.daily_trade_count IS NOT NULL
+                    THEN excluded.daily_trade_count ELSE daily_pnl_state.daily_trade_count END
         ''', (broker_name.upper(), lock_type, locked_at, sod_equity,
-              current_equity, daily_pnl, daily_pnl_pct, trading_date))
+              current_equity, daily_pnl, daily_pnl_pct, trading_date, daily_trade_count))
         conn.commit()
         return True
     except Exception as e:

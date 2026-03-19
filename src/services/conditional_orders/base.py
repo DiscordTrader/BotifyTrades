@@ -1668,12 +1668,18 @@ class BaseConditionalOrderService(ABC):
                     lock_type = pnl_check.get('lock_type', 'unknown')
                     pnl = pnl_check.get('daily_pnl', 0)
                     pnl_pct = pnl_check.get('daily_pnl_pct', 0)
-                    self._log(f"⛔ BLOCKED #{order_id} {symbol}: Daily P&L {lock_type} limit reached — P&L: ${pnl:+,.2f} ({pnl_pct:+.1f}%)")
+                    if lock_type == 'trades':
+                        tc = pnl_check.get('daily_trade_count', 0)
+                        tl = pnl_check.get('daily_trade_limit', 0)
+                        block_detail = f"Daily trade limit reached ({tc}/{tl})"
+                    else:
+                        block_detail = f"Daily P&L {lock_type} limit reached: ${pnl:+,.2f} ({pnl_pct:+.1f}%)"
+                    self._log(f"⛔ BLOCKED #{order_id} {symbol}: {block_detail}")
                     update_conditional_order_status(
                         order_id,
                         'PENDING_MONITOR',
                         event='DAILY_PNL_BLOCK',
-                        details=f"Daily P&L {lock_type} limit reached: ${pnl:+,.2f} ({pnl_pct:+.1f}%)"
+                        details=block_detail
                     )
                     return
         except ImportError:
