@@ -18,3 +18,9 @@ id = "7RktyUHaCUfRtXKMC6yCd"
 uri = "file://.local/docs/discord_startup_bug_analysis.md"
 type = "text"
 title = "Discord Startup Bug — Root Cause Analysis"
+
+[[outputs]]
+id = "Z7URhXM7gqhcGACSS6FcX"
+uri = "file://attached_assets/Per_Channel_Settings_Explained.md"
+type = "text"
+title = "Per-Channel Settings Explained: Entry Confirmation vs Trigger Offset vs Limit Cap"
