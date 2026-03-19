@@ -465,6 +465,34 @@ class RiskDBAdapter:
                         ORDER BY t.id DESC LIMIT 1
                     ''', (*symbols_to_check,))
                 row = cursor.fetchone()
+                
+                if not row and trade_id:
+                    cursor.execute(f'''
+                        SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
+                               c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                               c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
+                               c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
+                               c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
+                               c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
+                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
+                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
+                               t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset,
+                               c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
+                               c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
+                               c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                        FROM trades t
+                        LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
+                            OR t.channel_id = CAST(c.id AS TEXT)
+                            OR t.channel_id = c.telegram_chat_id)
+                        WHERE t.id = ?
+                        AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                        ORDER BY t.id DESC LIMIT 1
+                    ''', (trade_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        print(f"[RISK] ✓ Channel settings resolved via trade_id #{trade_id} (stock direct lookup fallback)")
+                
                 if not row:
                     return None
             
@@ -484,7 +512,7 @@ class RiskDBAdapter:
                 # If risk management is explicitly enabled at channel level, use channel settings
                 # This takes priority over use_global_risk_settings flag
                 risk_enabled = row[8] if len(row) > 8 else 0
-                use_global = row[34] if len(row) > 34 else 1  # Default: use global (backwards compat)
+                use_global = row[34] if (len(row) > 34 and row[34] is not None) else 1  # Default: use global (backwards compat, handles NULL from LEFT JOIN)
                 
                 if risk_enabled:
                     pass
@@ -492,6 +520,20 @@ class RiskDBAdapter:
                     trade_sl_price = row[27] if len(row) > 27 and row[27] else None
                     trade_pt_price = row[28] if len(row) > 28 and row[28] else None
                     trade_entry_price = row[29] if len(row) > 29 and row[29] else None
+                    if not trade_entry_price or trade_entry_price <= 0:
+                        try:
+                            if trade_id:
+                                cursor.execute('SELECT intended_price FROM trades WHERE id = ?', (trade_id,))
+                            else:
+                                cursor.execute('SELECT intended_price FROM trades WHERE id = (SELECT MAX(id) FROM trades WHERE symbol IN ({}) AND asset_type = ? AND status IN (?, ?, ?) AND direction = ?{})'.format(
+                                    ','.join(['?' for _ in symbols_to_check]),
+                                    ' AND LOWER(broker) = LOWER(?)' if broker_name else ''),
+                                    (*symbols_to_check, asset_type, 'OPEN', 'PENDING', 'PARTIAL', 'BTO', *([broker_name] if broker_name else [])))
+                            ip_row = cursor.fetchone()
+                            if ip_row and ip_row[0] and ip_row[0] > 0:
+                                trade_entry_price = ip_row[0]
+                        except Exception:
+                            pass
                     if trade_sl_price or trade_pt_price:
                         sl_override = 0
                         pt_override = 0
