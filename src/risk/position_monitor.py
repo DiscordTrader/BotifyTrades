@@ -1906,8 +1906,7 @@ class RiskManager:
                         fetched.append(self._to_snapshot(snap_data))
                     else:
                         quantity = position_qty
-                        market_value = float(pos.get('marketValue', 0))
-                        current_price = market_value / quantity if quantity > 0 else 0
+                        current_price = self._resolve_webull_stock_price(pos, quantity)
                         snap_data = {
                             'broker': 'Webull', 'asset': 'stock', 'symbol': symbol,
                             'quantity': quantity, 'avg_cost': float(pos.get('costPrice', 0)),
@@ -1977,8 +1976,7 @@ class RiskManager:
                         is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos)
                         if not is_option:
                             quantity = position_qty
-                            market_value = float(pos.get('marketValue', 0))
-                            current_price = market_value / quantity if quantity > 0 else 0
+                            current_price = self._resolve_webull_stock_price(pos, quantity)
                             snap_data = {
                                 'broker': 'Webull', 'asset': 'stock', 'symbol': symbol,
                                 'quantity': quantity, 'avg_cost': float(pos.get('costPrice', 0)),
@@ -2706,6 +2704,10 @@ class RiskManager:
         
         _repair_key = f"{position.broker}_{position.symbol}_{position.asset}"
         _is_repair_cycle = _repair_key in self._rest_repair_cycle_keys
+
+        freshness_result = self._check_price_freshness(position, cache, channel_settings)
+        if freshness_result is not None:
+            return freshness_result
 
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
@@ -3950,6 +3952,129 @@ class RiskManager:
                 return client
         return None
 
+    def _check_price_freshness(self, position, cache, channel_settings) -> Optional['ExitDecision']:
+        import time as _ft
+        pos_key = f"{position.broker}_{position.symbol}_{position.asset}"
+
+        if not hasattr(self, '_price_confirmed_fresh'):
+            self._price_confirmed_fresh = {}
+
+        if pos_key in self._price_confirmed_fresh:
+            return None
+
+        entry_price = cache.entry_price
+        current_price = position.current_price
+
+        if entry_price <= 0 or current_price <= 0:
+            self._price_confirmed_fresh[pos_key] = _ft.time()
+            return None
+
+        deviation_pct = abs(current_price - entry_price) / entry_price * 100
+
+        sl_pct = 0
+        if channel_settings and channel_settings.stop_loss_pct > 0:
+            sl_pct = channel_settings.stop_loss_pct
+        elif cache.stop_loss_price and entry_price > 0:
+            sl_pct = abs(entry_price - cache.stop_loss_price) / entry_price * 100
+
+        if sl_pct <= 0:
+            self._price_confirmed_fresh[pos_key] = _ft.time()
+            return None
+
+        is_loss = current_price < entry_price
+        if is_loss and deviation_pct > sl_pct * 1.5:
+            session = self._get_market_session()
+            if session == 'extended':
+                fresh_price = None
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    hub = get_webull_data_hub()
+                    if hub:
+                        fresh_price = self._get_fresh_hub_price(hub, position.symbol, max_age=60)
+                except Exception:
+                    pass
+                if not fresh_price:
+                    try:
+                        from src.services.schwab_data_hub import get_schwab_data_hub
+                        s_hub = get_schwab_data_hub()
+                        if s_hub:
+                            fresh_price = self._get_fresh_hub_price(s_hub, position.symbol, max_age=60)
+                    except Exception:
+                        pass
+
+                if fresh_price and fresh_price > 0:
+                    fresh_dev = abs(fresh_price - entry_price) / entry_price * 100
+                    if fresh_dev < sl_pct:
+                        print(f"[RISK] 🛡️ FRESHNESS GUARD: {position.symbol} position price ${current_price:.2f} "
+                              f"looks stale (prev close?) — streaming says ${fresh_price:.2f} "
+                              f"({fresh_dev:.1f}% vs entry ${entry_price:.2f}) — BLOCKING false SL exit")
+                        position.current_price = fresh_price
+                        self._price_confirmed_fresh[pos_key] = _ft.time()
+                        return ExitDecision.no_exit()
+                    else:
+                        print(f"[RISK] ⚠️ FRESHNESS: {position.symbol} streaming confirms loss "
+                              f"${fresh_price:.2f} ({fresh_dev:.1f}% from entry ${entry_price:.2f}) "
+                              f"— allowing SL evaluation")
+                        self._price_confirmed_fresh[pos_key] = _ft.time()
+                        return None
+
+                if not hasattr(self, '_price_deferred_once'):
+                    self._price_deferred_once = {}
+                if pos_key not in self._price_deferred_once:
+                    self._price_deferred_once[pos_key] = _ft.time()
+                    print(f"[RISK] 🛡️ FRESHNESS GUARD: {position.symbol} first-cycle price ${current_price:.2f} "
+                          f"deviates {deviation_pct:.1f}% from entry ${entry_price:.2f} during extended hours — "
+                          f"deferring SL for 1 cycle to verify")
+                    return ExitDecision.no_exit()
+                else:
+                    print(f"[RISK] ⚠️ FRESHNESS: {position.symbol} already deferred once — "
+                          f"allowing SL evaluation (price ${current_price:.2f}, no stream confirmation)")
+                    self._price_confirmed_fresh[pos_key] = _ft.time()
+                    return None
+
+        self._price_confirmed_fresh[pos_key] = _ft.time()
+        return None
+
+    def _resolve_webull_stock_price(self, pos: dict, quantity: float) -> float:
+        latest = float(pos.get('latestPrice', 0) or 0)
+        last = float(pos.get('lastPrice', 0) or 0)
+        market_value = float(pos.get('marketValue', 0))
+        mv_price = market_value / quantity if quantity > 0 else 0
+        cost_price = float(pos.get('costPrice', 0) or 0)
+
+        direct_price = latest if latest > 0 else last
+        if direct_price > 0:
+            return direct_price
+
+        symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            if hub:
+                hub_price = self._get_fresh_hub_price(hub, symbol, max_age=60)
+                if hub_price and hub_price > 0:
+                    return hub_price
+        except Exception:
+            pass
+
+        if mv_price > 0 and cost_price > 0:
+            deviation = abs(mv_price - cost_price) / cost_price if cost_price > 0 else 0
+            if deviation > 0.25:
+                session = self._get_market_session()
+                if session == 'extended':
+                    if not hasattr(self, '_wb_mv_warn_ts'):
+                        self._wb_mv_warn_ts = {}
+                    import time as _wt
+                    _now = _wt.time()
+                    if symbol not in self._wb_mv_warn_ts or (_now - self._wb_mv_warn_ts[symbol]) > 60:
+                        self._wb_mv_warn_ts[symbol] = _now
+                        print(f"[RISK] ⚠️ Webull {symbol}: marketValue price ${mv_price:.2f} deviates "
+                              f"{deviation*100:.0f}% from entry ${cost_price:.2f} during extended hours — "
+                              f"possible stale previous-close, using entry as safe fallback")
+                    return cost_price
+
+        return mv_price if mv_price > 0 else cost_price
+
     def _get_fresh_hub_price(self, hub, symbol, max_age=None):
         if max_age is None:
             max_age = self._HUB_PRICE_MAX_AGE
@@ -4023,6 +4148,19 @@ class RiskManager:
                 tracker['rest_refreshed'] = 0
                 continue
             stuck_seconds = now - tracker['last_changed']
+
+            if session == 'extended' and stuck_seconds >= 2:
+                cache_entry = self.cache.get(key) or self.cache.get(f"{pos.broker}_{pos.symbol}")
+                if cache_entry and cache_entry.entry_price > 0:
+                    entry = cache_entry.entry_price
+                    dev = abs(pos.current_price - entry) / entry
+                    if dev > 0.15 and pos.current_price < entry:
+                        if (now - tracker.get('rest_refreshed', 0)) >= rest_cooldown:
+                            print(f"[RISK] 🔍 PREV-CLOSE DETECT: {pos.symbol} price ${pos.current_price:.2f} "
+                                  f"is {dev*100:.0f}% below entry ${entry:.2f} during extended hours — forcing refresh")
+                            stuck_candidates.append((stuck_seconds, pos, key, tracker))
+                            continue
+
             if stuck_seconds < self._STUCK_PRICE_THRESHOLD:
                 continue
             if (now - tracker.get('rest_refreshed', 0)) < rest_cooldown:
@@ -4064,6 +4202,14 @@ class RiskManager:
         stale_repair = [k for k in self._rest_repaired_prices if k not in active_keys]
         for k in stale_repair:
             del self._rest_repaired_prices[k]
+        if hasattr(self, '_price_confirmed_fresh'):
+            stale_fresh = [k for k in self._price_confirmed_fresh if k not in active_keys]
+            for k in stale_fresh:
+                del self._price_confirmed_fresh[k]
+        if hasattr(self, '_price_deferred_once'):
+            stale_defer = [k for k in self._price_deferred_once if k not in active_keys]
+            for k in stale_defer:
+                del self._price_deferred_once[k]
 
     def _try_cross_hub_price(self, pos, now):
         broker_upper = (pos.broker or '').upper()
