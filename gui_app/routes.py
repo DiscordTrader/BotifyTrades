@@ -17616,6 +17616,20 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/system/backfill-fill-prices', methods=['POST'])
+    @login_required
+    @admin_required
+    def api_backfill_fill_prices():
+        """Backfill historical trade fill prices from execution_closures and filled_orders."""
+        try:
+            from .database import backfill_trade_fill_prices
+            results = backfill_trade_fill_prices()
+            return jsonify({'success': True, **results})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)})
+
     @app.route('/api/system/consistency-check', methods=['GET'])
     @login_required
     def api_system_consistency_check():

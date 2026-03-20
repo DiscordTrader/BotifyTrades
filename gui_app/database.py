@@ -4996,6 +4996,179 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
         return False
 
 
+def backfill_trade_fill_prices():
+    """One-time backfill: reconcile historical STC trades with actual broker fill prices
+    from execution_closures and filled_orders tables.
+    
+    Returns dict with counts of updated trades and lot_closures.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    results = {'stc_updated': 0, 'bto_pnl_updated': 0, 'lot_closures_updated': 0, 'errors': []}
+    
+    try:
+        cursor.execute('''
+            SELECT t.id, t.symbol, t.broker, t.executed_price, t.quantity, t.asset_type,
+                   t.strike, t.expiry, t.call_put, t.origin_trade_id, t.order_id,
+                   t.executed_at
+            FROM trades t
+            WHERE t.direction = 'STC' AND t.status IN ('CLOSED', 'FILLED')
+              AND t.executed_price IS NOT NULL
+        ''')
+        stc_trades = [dict(r) for r in cursor.fetchall()]
+        
+        print(f"[BACKFILL] Scanning {len(stc_trades)} historical STC trades for fill price corrections...")
+        
+        for stc in stc_trades:
+            try:
+                fill_price = None
+                
+                if stc['order_id']:
+                    cursor.execute('''
+                        SELECT filled_price FROM filled_orders
+                        WHERE broker_order_id = ? AND UPPER(broker) = UPPER(?)
+                          AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
+                        LIMIT 1
+                    ''', (stc['order_id'], stc['broker']))
+                    row = cursor.fetchone()
+                    if row and row['filled_price']:
+                        fill_price = float(row['filled_price'])
+                
+                if not fill_price:
+                    ec_query = '''
+                        SELECT ec.fill_price FROM execution_closures ec
+                        JOIN execution_lots el ON ec.execution_lot_id = el.id
+                        WHERE UPPER(el.symbol) = UPPER(?) AND UPPER(el.broker) = UPPER(?)
+                    '''
+                    ec_params = [stc['symbol'], stc['broker']]
+                    if stc['asset_type'] == 'option' and stc.get('strike'):
+                        ec_query += ' AND el.strike = ?'
+                        ec_params.append(stc['strike'])
+                    if stc.get('expiry'):
+                        ec_query += ' AND el.expiry = ?'
+                        ec_params.append(stc['expiry'])
+                    ec_query += ' ORDER BY ABS(ec.closed_qty - ?) ASC, ec.filled_at DESC LIMIT 1'
+                    ec_params.append(stc['quantity'])
+                    cursor.execute(ec_query, ec_params)
+                    row = cursor.fetchone()
+                    if row and row['fill_price']:
+                        fill_price = float(row['fill_price'])
+                
+                if not fill_price:
+                    continue
+                
+                old_price = float(stc['executed_price'] or 0)
+                if abs(old_price - fill_price) < 0.0001:
+                    continue
+                
+                cursor.execute('UPDATE trades SET executed_price = ? WHERE id = ?', (fill_price, stc['id']))
+                results['stc_updated'] += 1
+                
+                origin_id = stc.get('origin_trade_id')
+                if origin_id:
+                    cursor.execute('''
+                        SELECT id, executed_price, quantity, asset_type FROM trades
+                        WHERE id = ? AND direction = 'BTO'
+                    ''', (origin_id,))
+                    bto = cursor.fetchone()
+                    if bto:
+                        ep = float(bto['executed_price'] or 0)
+                        if ep > 0:
+                            cursor.execute('''
+                                SELECT quantity, executed_price FROM trades
+                                WHERE origin_trade_id = ? AND direction = 'STC'
+                                  AND status IN ('CLOSED', 'OPEN', 'FILLED')
+                            ''', (origin_id,))
+                            all_stcs = cursor.fetchall()
+                            mult = 100 if (bto['asset_type'] or '').lower() == 'option' else 1
+                            total_pnl = sum((float(s['executed_price'] or 0) - ep) * int(s['quantity'] or 0) * mult for s in all_stcs)
+                            total_qty = sum(int(s['quantity'] or 0) for s in all_stcs)
+                            if total_qty > 0:
+                                wavg = sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in all_stcs) / total_qty
+                                pnl_pct = ((wavg - ep) / ep * 100) if ep > 0 else 0
+                            else:
+                                pnl_pct = 0
+                            cursor.execute('UPDATE trades SET pnl = ?, pnl_percent = ? WHERE id = ?',
+                                         (round(total_pnl, 2), round(pnl_pct, 4), origin_id))
+                            results['bto_pnl_updated'] += 1
+                
+            except Exception as e:
+                results['errors'].append(f"Trade #{stc['id']}: {e}")
+        
+        cursor.execute('''
+            SELECT lc.id, lc.lot_id, lc.closed_qty, lc.close_price, lc.exit_fill_price,
+                   sl.symbol, sl.asset_type, sl.strike, sl.expiry, sl.open_price,
+                   sl.entry_fill_price, sl.entry_fill_broker
+            FROM lot_closures lc
+            JOIN signal_lots sl ON lc.lot_id = sl.id
+            WHERE lc.exit_fill_price IS NULL AND lc.close_price IS NOT NULL
+        ''')
+        unfilled_closures = [dict(r) for r in cursor.fetchall()]
+        
+        print(f"[BACKFILL] Scanning {len(unfilled_closures)} lot_closures missing exit_fill_price...")
+        
+        for lc in unfilled_closures:
+            try:
+                ec_query = '''
+                    SELECT ec.fill_price, ec.broker, ec.broker_order_id, ec.filled_at, ec.exit_source
+                    FROM execution_closures ec
+                    JOIN execution_lots el ON ec.execution_lot_id = el.id
+                    WHERE UPPER(el.symbol) = UPPER(?)
+                '''
+                ec_params = [lc['symbol']]
+                broker_val = lc.get('entry_fill_broker')
+                if broker_val:
+                    ec_query += ' AND UPPER(el.broker) = UPPER(?)'
+                    ec_params.append(broker_val)
+                if lc['asset_type'] == 'option' and lc.get('strike'):
+                    ec_query += ' AND el.strike = ?'
+                    ec_params.append(lc['strike'])
+                if lc.get('expiry'):
+                    ec_query += ' AND el.expiry = ?'
+                    ec_params.append(lc['expiry'])
+                ec_query += ' ORDER BY ABS(ec.closed_qty - ?) ASC, ec.filled_at DESC LIMIT 1'
+                ec_params.append(lc['closed_qty'])
+                cursor.execute(ec_query, ec_params)
+                row = cursor.fetchone()
+                
+                if row and row['fill_price'] and float(row['fill_price']) > 0:
+                    fp = float(row['fill_price'])
+                    entry_p = float(lc['entry_fill_price'] or lc['open_price'] or 0)
+                    mult = 100 if lc['asset_type'] == 'option' else 1
+                    if entry_p > 0:
+                        cost = entry_p * lc['closed_qty'] * mult
+                        proceeds = fp * lc['closed_qty'] * mult
+                        pnl = round(proceeds - cost, 2)
+                        pnl_pct = round((pnl / cost * 100), 4) if cost > 0 else 0
+                    else:
+                        pnl = 0
+                        pnl_pct = 0
+                    
+                    cursor.execute('''
+                        UPDATE lot_closures SET exit_fill_price = ?, exit_fill_broker = ?,
+                               exit_fill_order_id = ?, exit_filled_at = ?, pnl = ?, pnl_percent = ?
+                        WHERE id = ? AND exit_fill_price IS NULL
+                    ''', (fp, row['broker'], row['broker_order_id'], row['filled_at'], pnl, pnl_pct, lc['id']))
+                    if cursor.rowcount > 0:
+                        results['lot_closures_updated'] += 1
+            except Exception as e:
+                results['errors'].append(f"Closure #{lc['id']}: {e}")
+        
+        conn.commit()
+        print(f"[BACKFILL] ✓ Complete: {results['stc_updated']} STC prices updated, {results['bto_pnl_updated']} BTO PNL recalculated, {results['lot_closures_updated']} lot_closures filled")
+        if results['errors']:
+            print(f"[BACKFILL] ⚠️ {len(results['errors'])} errors (non-fatal)")
+        return results
+        
+    except Exception as e:
+        print(f"[BACKFILL] ❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        conn.rollback()
+        results['errors'].append(str(e))
+        return results
+
+
 def find_lot_by_trade_id(trade_id: int):
     """Find a signal lot by its linked trade_id."""
     conn = get_connection()

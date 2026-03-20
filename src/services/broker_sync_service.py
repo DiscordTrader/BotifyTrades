@@ -1612,23 +1612,68 @@ class BrokerSyncService:
                     # Open position no longer exists = broker closed it (manual close, stop/target hit, or liquidation)
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in positions: OPEN → CLOSED (broker closed)")
                     
-                    # Use existing PNL data from last sync update (already calculated with live prices)
-                    # This is more reliable than recalculating since position is now gone
-                    exit_price = float(trade.get('current_price') or 0)
                     entry_price = float(trade.get('executed_price') or 0)
                     quantity = float(trade.get('quantity') or 0)
                     asset_type = trade.get('asset_type', 'option')
                     discord_channel_id = trade.get('channel_id')
                     
-                    # Use existing PNL from last sync update (calculated while position was still open)
+                    exit_price = float(trade.get('current_price') or 0)
+                    exit_price_source = 'last_sync'
+                    
+                    try:
+                        from gui_app.database import get_connection as _get_conn
+                        _conn = _get_conn()
+                        _cur = _conn.cursor()
+                        _fill_query = '''
+                            SELECT ec.fill_price, ec.filled_at FROM execution_closures ec
+                            JOIN execution_lots el ON ec.execution_lot_id = el.id
+                            WHERE UPPER(el.symbol) = UPPER(?) AND UPPER(el.broker) = UPPER(?)
+                        '''
+                        _fill_params = [symbol, broker_name]
+                        if asset_type == 'option' and trade.get('strike'):
+                            _fill_query += ' AND el.strike = ?'
+                            _fill_params.append(trade['strike'])
+                        if trade.get('expiry'):
+                            _fill_query += ' AND el.expiry = ?'
+                            _fill_params.append(trade['expiry'])
+                        _fill_query += ' ORDER BY ec.filled_at DESC LIMIT 1'
+                        _cur.execute(_fill_query, _fill_params)
+                        _fill_row = _cur.fetchone()
+                        if _fill_row and _fill_row['fill_price'] and float(_fill_row['fill_price']) > 0:
+                            exit_price = float(_fill_row['fill_price'])
+                            exit_price_source = 'execution_closure'
+                            print(f"[SYNC] ✓ Trade #{trade_id} exit price from execution_closures: ${exit_price:.4f} (vs last_sync ${float(trade.get('current_price') or 0):.4f})")
+                    except Exception as fill_lookup_err:
+                        print(f"[SYNC] ⚠️ Execution closure lookup: {fill_lookup_err}")
+                    
+                    if exit_price_source == 'last_sync':
+                        try:
+                            _fo_query = '''
+                                SELECT filled_price, filled_at FROM filled_orders
+                                WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                                  AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
+                            '''
+                            _fo_params = [symbol, broker_name]
+                            if asset_type == 'option' and trade.get('strike'):
+                                _fo_query += ' AND strike = ?'
+                                _fo_params.append(trade['strike'])
+                            _fo_query += ' ORDER BY filled_at DESC LIMIT 1'
+                            _cur.execute(_fo_query, _fo_params)
+                            _fo_row = _cur.fetchone()
+                            if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
+                                exit_price = float(_fo_row['filled_price'])
+                                exit_price_source = 'filled_orders'
+                                print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders: ${exit_price:.4f}")
+                        except Exception as fo_err:
+                            print(f"[SYNC] ⚠️ Filled orders lookup: {fo_err}")
+                    
                     pnl = float(trade.get('pnl') or 0)
                     pnl_percent = float(trade.get('pnl_percent') or 0)
                     
-                    # Only recalculate if we have valid prices and no existing PNL
-                    if pnl == 0 and entry_price > 0 and exit_price > 0:
+                    if exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
                         multiplier = 100 if asset_type == 'option' else 1
                         pnl = (exit_price - entry_price) * quantity * multiplier
-                        pnl_percent = ((exit_price - entry_price) / entry_price) * 100
+                        pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
                     
                     # Update trade with final status and close_reason
                     self.db.update_trade(
