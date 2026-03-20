@@ -478,9 +478,9 @@ class SignalFormatRegistry:
             name="phoenix_entry_over_pct_sl",
             description="Phoenix entry with 'over' price trigger and percentage stop loss",
             priority=55,
-            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ocver|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
             parser=self._parse_phoenix_entry_over_pct_sl,
-            examples=["PHEG over 7.50 SL 10%", "MOVE ober 30 SL 10%", "ARTV iver 4.60 SL 8%"],
+            examples=["PHEG over 7.50 SL 10%", "MOVE ober 30 SL 10%", "ARTV iver 4.60 SL 8%", "CURV ocver 1.80 SL 10%"],
             flags=re.IGNORECASE | re.DOTALL
         )
         
@@ -489,7 +489,7 @@ class SignalFormatRegistry:
             name="phoenix_entry_over",
             description="Phoenix entry with 'over' price trigger and stop loss",
             priority=56,
-            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)(?!\s*%)',
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ocver|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)(?!\s*%)',
             parser=self._parse_phoenix_entry,
             examples=["PAVM over 21.50 SL 20", "AMZE ocer 0.67 SL 0.62"],
             flags=re.IGNORECASE | re.DOTALL
@@ -500,7 +500,7 @@ class SignalFormatRegistry:
             name="phoenix_entry_over_no_sl",
             description="Phoenix entry with 'over' price trigger, no stop loss",
             priority=58,
-            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)',
+            pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ocver|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)',
             parser=self._parse_phoenix_entry_no_sl,
             examples=["ENVB over 12.80", "ENVB over 13"],
             flags=re.IGNORECASE | re.DOTALL
