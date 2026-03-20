@@ -1344,20 +1344,18 @@ class RiskManager:
 
     def _update_monitored_symbols(self, positions):
         symbols = set()
-        non_streaming_symbols = set()
+        cross_sub_symbols = set()
         for p in positions:
             sym = p.symbol.upper()
             symbols.add(sym)
             if hasattr(p, 'raw_symbol') and p.raw_symbol:
                 symbols.add(p.raw_symbol.upper())
-            broker_upper = (p.broker or '').upper()
-            if 'WEBULL' not in broker_upper and broker_upper != 'SCHWAB' and 'IBKR' not in broker_upper:
-                if p.asset != 'option':
-                    non_streaming_symbols.add(sym)
+            if p.asset != 'option':
+                cross_sub_symbols.add(sym)
         with self._monitored_symbols_lock:
             self._monitored_symbols = symbols
-        if non_streaming_symbols:
-            self._request_cross_broker_subscriptions(non_streaming_symbols)
+        if cross_sub_symbols:
+            self._request_cross_broker_subscriptions(cross_sub_symbols)
 
     def _request_cross_broker_subscriptions(self, symbols):
         try:
@@ -1708,10 +1706,10 @@ class RiskManager:
         self._empty_pos_logged = False
         
         self._rest_repair_cycle_keys.clear()
+        self._update_monitored_symbols(positions)
         self._update_prices_from_hub(positions)
         await self._detect_and_fix_stuck_prices(positions)
         self._last_positions_snapshot = positions
-        self._update_monitored_symbols(positions)
         
         if positions:
             current_keys = {p.position_key for p in positions}
@@ -4383,8 +4381,11 @@ class RiskManager:
                     alt_hubs.append(('IBKR', ib_hub))
             except Exception:
                 pass
+        session = self._get_market_session()
+        cross_max_age = 5 if session == 'regular' else 15
+
         for hub_name, hub in alt_hubs:
-            price = self._get_fresh_hub_price(hub, pos.symbol, max_age=2)
+            price = self._get_fresh_hub_price(hub, pos.symbol, max_age=cross_max_age)
             if price and price > 0:
                 return price
         return None
@@ -4698,24 +4699,23 @@ class RiskManager:
             print(f"[RISK] ⚠️ Trading212 hub price update error: {e}")
 
         cross_updated = 0
-        _streaming_prefixes = ('WEBULL', 'SCHWAB', 'IBKR')
         for pos in positions:
-            if pos.broker.upper().startswith(_streaming_prefixes):
-                continue
             if pos.asset == 'option':
                 continue
+            broker_upper = pos.broker.upper()
             price = None
             _cross_qa = None
-            try:
-                from src.services.webull_data_hub import get_webull_data_hub
-                wb_hub = get_webull_data_hub()
-                if wb_hub.is_streaming():
-                    price = self._get_fresh_hub_price(wb_hub, pos.symbol)
-                    if price:
-                        _cross_qa = self._get_hub_quote_age(wb_hub, pos.symbol)
-            except Exception:
-                pass
-            if not price:
+            if 'WEBULL' not in broker_upper:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    wb_hub = get_webull_data_hub()
+                    if wb_hub.is_streaming():
+                        price = self._get_fresh_hub_price(wb_hub, pos.symbol)
+                        if price:
+                            _cross_qa = self._get_hub_quote_age(wb_hub, pos.symbol)
+                except Exception:
+                    pass
+            if not price and 'SCHWAB' not in broker_upper:
                 try:
                     from src.services.schwab_data_hub import get_schwab_data_hub
                     sc_hub = get_schwab_data_hub()
