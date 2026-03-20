@@ -563,7 +563,7 @@ class CandlePreWarmService:
         ema_key = f"{symbol}_{timeframe}m_{period}"
         if symbol in self._tracked_symbols:
             existing = self._tracked_symbols[symbol]
-            if existing['ema_key'] == ema_key:
+            if existing['ema_key'] == ema_key and ema_key in self._ema_engines:
                 if extended_hours and not existing.get('extended_hours', False):
                     existing['extended_hours'] = True
                     agg_key = f"{symbol}_{timeframe}m"
@@ -575,6 +575,8 @@ class CandlePreWarmService:
                     self._yfinance_only_symbols.add(symbol)
                 return True
             if ema_key in self._ema_engines:
+                existing['ema_key'] = ema_key
+                existing['period'] = period
                 if yfinance_only:
                     self._yfinance_only_symbols.add(symbol)
                 return True
@@ -597,9 +599,20 @@ class CandlePreWarmService:
         if symbol in PRE_WARM_SYMBOLS:
             return
 
-        self._tracked_symbols.pop(symbol, None)
-        self._aggregators.pop(symbol, None)
-        self._ema_engines.pop(symbol, None)
+        info = self._tracked_symbols.pop(symbol, None)
+        if info:
+            for agg_key in info.get('agg_keys', [info.get('agg_key', '')]):
+                if agg_key:
+                    self._aggregators.pop(agg_key, None)
+            ema_key = info.get('ema_key', '')
+            if ema_key:
+                self._ema_engines.pop(ema_key, None)
+        stale_ema_keys = [k for k in self._ema_engines if k.startswith(f"{symbol}_")]
+        for k in stale_ema_keys:
+            self._ema_engines.pop(k, None)
+        stale_agg_keys = [k for k in self._aggregators if k.startswith(f"{symbol}_")]
+        for k in stale_agg_keys:
+            self._aggregators.pop(k, None)
         self._dynamic_symbols.discard(symbol)
         self._yfinance_only_symbols.discard(symbol)
         print(f"[EMA] Unsubscribed dynamic symbol {symbol}")
@@ -672,6 +685,8 @@ class CandlePreWarmService:
         agg_key = f"{symbol}_{timeframe}m"
         ema_key = f"{symbol}_{timeframe}m_{period}"
 
+        need_new_ema = ema_key not in self._ema_engines
+
         if symbol in self._tracked_symbols:
             existing = self._tracked_symbols[symbol]
             if agg_key not in existing.get('agg_keys', [existing.get('agg_key', '')]):
@@ -682,7 +697,14 @@ class CandlePreWarmService:
                     agg = self._aggregators.get(agg_key)
                     if agg and not agg._extended_hours:
                         agg._extended_hours = True
-                return
+                if not need_new_ema:
+                    return
+
+            existing_ema_key = existing.get('ema_key', '')
+            if existing_ema_key != ema_key:
+                existing['period'] = period
+                existing['ema_key'] = ema_key
+                print(f"[EMA] {symbol}: Period changed ({existing_ema_key} → {ema_key})")
 
         if symbol not in self._tracked_symbols:
             self._tracked_symbols[symbol] = {
@@ -707,9 +729,10 @@ class CandlePreWarmService:
             agg = CandleAggregator(timeframe_minutes=timeframe, extended_hours=extended_hours)
             self._aggregators[agg_key] = agg
 
-        if ema_key not in self._ema_engines:
+        if need_new_ema:
             engine = EMAEngine(period=period)
             self._ema_engines[ema_key] = engine
+            print(f"[EMA] {symbol}: Created new EMA engine (period={period}, key={ema_key})")
 
         agg = self._aggregators[agg_key]
         engine = self._ema_engines[ema_key]
