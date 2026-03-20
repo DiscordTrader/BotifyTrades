@@ -4861,27 +4861,55 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
     
     Idempotent: skips if executed_price already matches fill_price.
     Atomic: uses BEGIN IMMEDIATE to prevent concurrent wrong-row updates.
-    Deterministic: requires broker_order_id for matching. Skips with warning if absent.
+    Match priority: (1) broker_order_id exact match, (2) time-window fallback
+    (±120s of fill time + symbol/broker/strike/expiry/qty match).
     """
-    if not broker_order_id:
-        print(f"[FILL-RECONCILE] ⚠️ No broker_order_id for {symbol} — skipping heuristic match (safety)")
-        return False
-    
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
         cursor.execute('BEGIN IMMEDIATE')
         
-        stc_query = '''
-            SELECT id, origin_trade_id, executed_price, quantity, asset_type, broker
-            FROM trades
-            WHERE direction = 'STC' AND broker = ? AND UPPER(symbol) = UPPER(?)
-              AND order_id = ?
-            LIMIT 1
-        '''
-        cursor.execute(stc_query, [broker, symbol, broker_order_id])
-        stc_trade = cursor.fetchone()
+        stc_trade = None
+        
+        if broker_order_id:
+            stc_query = '''
+                SELECT id, origin_trade_id, executed_price, quantity, asset_type, broker
+                FROM trades
+                WHERE direction = 'STC' AND UPPER(broker) = UPPER(?) AND UPPER(symbol) = UPPER(?)
+                  AND order_id = ?
+                LIMIT 1
+            '''
+            cursor.execute(stc_query, [broker, symbol, broker_order_id])
+            stc_trade = cursor.fetchone()
+        
+        if not stc_trade and filled_at:
+            fallback_query = '''
+                SELECT id, origin_trade_id, executed_price, quantity, asset_type, broker
+                FROM trades
+                WHERE direction = 'STC' AND UPPER(broker) = UPPER(?) AND UPPER(symbol) = UPPER(?)
+                  AND status IN ('CLOSED', 'FILLED')
+                  AND executed_at >= datetime(?, '-120 seconds')
+                  AND executed_at <= datetime(?, '+120 seconds')
+            '''
+            fallback_params = [broker, symbol, filled_at, filled_at]
+            
+            if asset_type == 'option' and strike is not None:
+                fallback_query += ' AND strike = ?'
+                fallback_params.append(strike)
+            if expiry:
+                fallback_query += ' AND expiry = ?'
+                fallback_params.append(expiry)
+            if call_put:
+                fallback_query += ' AND call_put = ?'
+                fallback_params.append(call_put)
+            
+            fallback_query += ' ORDER BY ABS(quantity - ?) ASC LIMIT 1'
+            fallback_params.append(quantity)
+            cursor.execute(fallback_query, fallback_params)
+            stc_trade = cursor.fetchone()
+            if stc_trade:
+                print(f"[FILL-RECONCILE] ✓ Matched STC trade #{stc_trade['id']} via time-window fallback (±120s of fill)")
         
         if not stc_trade:
             conn.rollback()

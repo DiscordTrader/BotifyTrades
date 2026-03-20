@@ -10447,7 +10447,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # CRITICAL: Add channel_record_id for trade database saving
                             if channel_settings and channel_settings.get('id'):
                                 signal['channel_record_id'] = channel_settings['id']
-                                print(f"[CONDITIONAL] ✓ Linked to channel #{channel_settings['id']} for trade tracking", flush=True)
+                                signal['_channel_name'] = channel_settings.get('name', '')
+                                print(f"[CONDITIONAL] ✓ Linked to channel #{channel_settings['id']} ({signal['_channel_name']}) for trade tracking", flush=True)
                         
                         # Stop Loss: Signal value first, then channel settings
                         # Hybrid SL: Both fixed price AND percentage (whichever triggers first)
