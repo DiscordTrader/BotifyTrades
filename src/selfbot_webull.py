@@ -8479,7 +8479,8 @@ class SelfClient(discord.Client):
                     ibkr_broker=getattr(self, 'ibkr_broker', None),
                     tastytrade_broker=getattr(self, 'tastytrade_broker', None),
                     webull_broker=self.broker,
-                    loop=self.loop
+                    loop=self.loop,
+                    sync_ready_event=self.sync_ready
                 )
                 
                 # Start monitoring as async task

@@ -1158,7 +1158,8 @@ class RiskManager:
         webull_broker=None,
         monitoring_interval: int = DEFAULT_MONITORING_INTERVAL,
         trailing_activation_pct: float = DEFAULT_TRAILING_ACTIVATION,
-        loop: Optional[asyncio.AbstractEventLoop] = None
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        sync_ready_event: Optional[asyncio.Event] = None
     ):
         """
         Initialize RiskManager.
@@ -1211,6 +1212,7 @@ class RiskManager:
         self._rest_repaired_prices = {}
         self._rest_repair_cycle_keys = {}
         
+        self._sync_ready_event = sync_ready_event
         self.cache = PositionCache()
         self._running = False
         self._permanent_failure_keys = self._load_permanent_failures()
@@ -1370,6 +1372,8 @@ class RiskManager:
             pass
 
     async def _run_incremental_eval(self):
+        if not getattr(self, '_first_sync_completed', False):
+            return
         if self._incremental_cycle_lock.locked():
             return
         async with self._incremental_cycle_lock:
@@ -1460,6 +1464,7 @@ class RiskManager:
         self._running = True
         self._standby_mode = False
         self._last_status_log = 0
+        self._first_sync_completed = False
         
         if not hasattr(self, '_heartbeat_counter'):
             self._heartbeat_counter = 0
@@ -1636,6 +1641,19 @@ class RiskManager:
 
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
+        if not self._first_sync_completed:
+            _sync_event = self._sync_ready_event
+            
+            if _sync_event and not _sync_event.is_set():
+                print("[RISK] ⏳ Waiting for first broker sync before evaluating positions...")
+                try:
+                    await asyncio.wait_for(_sync_event.wait(), timeout=30.0)
+                    print("[RISK] ✓ First broker sync completed — risk evaluation starting")
+                except asyncio.TimeoutError:
+                    print("[RISK] ⚠️ First sync timed out after 30s — proceeding with caution")
+            self._first_sync_completed = True
+            self._permanent_failure_keys = self._load_permanent_failures()
+        
         check_and_process_invalidation_request()
         
         risk_settings = self._get_risk_settings()
