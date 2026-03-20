@@ -8378,7 +8378,7 @@ class SelfClient(discord.Client):
                 broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker, trading212_broker=self.trading212_broker)
                 self._broker_manager = broker_manager
                 
-                self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
+                self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=15)
                 self._sync_service = self.sync_service
                 
                 # Wire callback to set sync_ready after first sync (prevents conditional order race condition)
