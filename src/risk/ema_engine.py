@@ -916,7 +916,9 @@ class CandlePreWarmService:
                         symbol, periodType='day', period=2,
                         frequencyType='minute', frequency=int(freq),
                         startDate=int(start.timestamp() * 1000),
-                        endDate=int(end.timestamp() * 1000)
+                        endDate=int(end.timestamp() * 1000),
+                        needExtendedHoursData=extended_hours,
+                        needPreviousClose=True
                     )
                     if result and hasattr(result, 'json'):
                         data = result.json()

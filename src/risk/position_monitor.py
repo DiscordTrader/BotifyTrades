@@ -4426,7 +4426,8 @@ class RiskManager:
         response = await sb._make_request(
             'GET',
             'https://api.schwabapi.com/marketdata/v1/quotes',
-            params={'symbols': symbol}
+            params={'symbols': symbol, 'indicative': 'false',
+                    'needExtendedHoursData': 'true', 'needPreviousClose': 'true'}
         )
         if response and response.status_code == 200:
             data = response.json()

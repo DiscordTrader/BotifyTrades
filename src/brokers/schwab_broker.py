@@ -1348,7 +1348,8 @@ class SchwabBroker(BrokerInterface):
                                     resp = await self._make_request(
                                         'GET',
                                         f"https://api.schwabapi.com/marketdata/v1/quotes",
-                                        params={'symbols': option_sym_fresh}
+                                        params={'symbols': option_sym_fresh, 'indicative': 'false',
+                                                'needExtendedHoursData': 'true', 'needPreviousClose': 'true'}
                                     )
                                     if resp.status_code == 200:
                                         data = resp.json()
@@ -1790,7 +1791,8 @@ class SchwabBroker(BrokerInterface):
             response = await self._make_request(
                 'GET',
                 f"https://api.schwabapi.com/marketdata/v1/quotes",
-                params={'symbols': symbol}
+                params={'symbols': symbol, 'indicative': 'false',
+                        'needExtendedHoursData': 'true', 'needPreviousClose': 'true'}
             )
             
             if response.status_code == 200:
@@ -1828,7 +1830,8 @@ class SchwabBroker(BrokerInterface):
             response = await self._make_request(
                 'GET',
                 f"https://api.schwabapi.com/marketdata/v1/quotes",
-                params={'symbols': symbol}
+                params={'symbols': symbol, 'indicative': 'false',
+                        'needExtendedHoursData': 'true', 'needPreviousClose': 'true'}
             )
             
             if response.status_code == 200:
@@ -1866,7 +1869,8 @@ class SchwabBroker(BrokerInterface):
             response = await self._make_request(
                 'GET',
                 f"https://api.schwabapi.com/marketdata/v1/quotes",
-                params={'symbols': option_symbol}
+                params={'symbols': option_symbol, 'indicative': 'false',
+                        'needExtendedHoursData': 'true', 'needPreviousClose': 'true'}
             )
             
             if response.status_code == 200:
@@ -1931,7 +1935,9 @@ class SchwabBroker(BrokerInterface):
             
             async def _async_quote_and_chain(h, sym, exp):
                 async with httpx.AsyncClient(timeout=15.0) as c:
-                    qr = await c.get("https://api.schwabapi.com/marketdata/v1/quotes", headers=h, params={'symbols': sym})
+                    qr = await c.get("https://api.schwabapi.com/marketdata/v1/quotes", headers=h, params={
+                        'symbols': sym, 'indicative': 'false',
+                        'needExtendedHoursData': 'true', 'needPreviousClose': 'true'})
                     cr = await c.get("https://api.schwabapi.com/marketdata/v1/chains", headers=h, params={
                         'symbol': sym, 'contractType': 'ALL', 'fromDate': exp, 'toDate': exp, 'includeUnderlyingQuote': 'true'
                     })
