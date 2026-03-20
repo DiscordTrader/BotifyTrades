@@ -13559,7 +13559,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         india_stock_signal['trim_percentage'] = trim_pct
                     if is_full_exit:
                         india_stock_signal['_phoenix_exit'] = True
-                    print(f"[{fmt_name}] ✓ Registry stock STC: {reg_symbol} trim={is_trim} ({trim_pct}%) full_exit={is_full_exit}")
+                    print(f"[{fmt_name}] ✓ Registry stock STC: {reg_symbol} trim={is_trim} ({trim_pct}%) full_exit={is_full_exit} | _phoenix_trim={india_stock_signal.get('_phoenix_trim')}, is_trim={india_stock_signal.get('is_trim')}")
         except Exception as reg_err:
             print(f"[REGISTRY] Error checking format registry: {reg_err}")
 
@@ -14802,7 +14802,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if stk.get('profit_target_price') is None and stk.get('profit_targets'):
                 stk['profit_target_price'] = stk['profit_targets'][0] if stk['profit_targets'] else None
             
-            if stk.get('action') == 'STC' and (stk.get('_phoenix_trim') or stk.get('_phoenix_exit')):
+            _is_stc_with_trim = stk.get('action') == 'STC' and (
+                stk.get('_phoenix_trim') or stk.get('_phoenix_exit') or
+                stk.get('is_trim') or stk.get('is_full_exit')
+            )
+            if stk.get('action') == 'STC':
+                print(f"[TRIM DEBUG] STC flags: _phoenix_trim={stk.get('_phoenix_trim')}, _phoenix_exit={stk.get('_phoenix_exit')}, is_trim={stk.get('is_trim')}, is_full_exit={stk.get('is_full_exit')}, trim_percentage={stk.get('trim_percentage')}, qty={stk.get('qty')}, will_calc={_is_stc_with_trim}")
+            if _is_stc_with_trim:
                 try:
                     from gui_app.database import get_connection
                     conn = get_connection()
