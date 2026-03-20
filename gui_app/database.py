@@ -4849,6 +4849,125 @@ def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, or
     return False
 
 
+def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
+                                strike: float = None, expiry: str = None, call_put: str = None,
+                                quantity: int = 0, fill_price: float = 0, broker_order_id: str = None,
+                                filled_at: str = None):
+    """Reconcile trades table with actual broker fill price for STC orders.
+    
+    Finds the matching STC trade record by broker_order_id (deterministic) and
+    updates executed_price to the real broker fill. Then recalculates PNL on the
+    parent BTO trade using corrected price.
+    
+    Idempotent: skips if executed_price already matches fill_price.
+    Atomic: uses BEGIN IMMEDIATE to prevent concurrent wrong-row updates.
+    Deterministic: requires broker_order_id for matching. Skips with warning if absent.
+    """
+    if not broker_order_id:
+        print(f"[FILL-RECONCILE] ⚠️ No broker_order_id for {symbol} — skipping heuristic match (safety)")
+        return False
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('BEGIN IMMEDIATE')
+        
+        stc_query = '''
+            SELECT id, origin_trade_id, executed_price, quantity, asset_type, broker
+            FROM trades
+            WHERE direction = 'STC' AND broker = ? AND UPPER(symbol) = UPPER(?)
+              AND order_id = ?
+            LIMIT 1
+        '''
+        cursor.execute(stc_query, [broker, symbol, broker_order_id])
+        stc_trade = cursor.fetchone()
+        
+        if not stc_trade:
+            conn.rollback()
+            return False
+        
+        stc_id = stc_trade['id']
+        old_price = float(stc_trade['executed_price'] or 0)
+        
+        if abs(old_price - fill_price) < 0.0001:
+            conn.rollback()
+            return False
+        
+        cursor.execute('''
+            UPDATE trades SET executed_price = ? WHERE id = ?
+        ''', (fill_price, stc_id))
+        
+        if cursor.rowcount > 0:
+            print(f"[FILL-RECONCILE] ✓ STC trade #{stc_id} {symbol}: ${old_price:.4f} → ${fill_price:.4f} (broker fill)")
+        
+        origin_id = stc_trade['origin_trade_id']
+        if origin_id:
+            cursor.execute('''
+                SELECT id, executed_price, quantity, asset_type
+                FROM trades WHERE id = ? AND direction = 'BTO'
+            ''', (origin_id,))
+            bto_trade = cursor.fetchone()
+            
+            if bto_trade:
+                entry_price = float(bto_trade['executed_price'] or 0)
+                if entry_price > 0:
+                    cursor.execute('''
+                        SELECT id, quantity, executed_price FROM trades
+                        WHERE origin_trade_id = ? AND direction = 'STC'
+                          AND status IN ('CLOSED', 'OPEN', 'FILLED')
+                    ''', (origin_id,))
+                    all_stcs = cursor.fetchall()
+                    
+                    bto_qty = int(bto_trade['quantity'] or 0)
+                    multiplier = 100 if (bto_trade['asset_type'] or '').lower() == 'option' else 1
+                    total_pnl = 0
+                    total_closed_qty = 0
+                    
+                    for stc in all_stcs:
+                        sq = int(stc['quantity'] or 0)
+                        sp = float(stc['executed_price'] or 0)
+                        total_pnl += (sp - entry_price) * sq * multiplier
+                        total_closed_qty += sq
+                    
+                    if total_closed_qty > 0:
+                        weighted_exit = sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in all_stcs) / total_closed_qty
+                        pnl_percent = ((weighted_exit - entry_price) / entry_price * 100) if entry_price > 0 else 0
+                    else:
+                        pnl_percent = 0
+                    
+                    total_pnl = round(total_pnl, 2)
+                    pnl_percent = round(pnl_percent, 4)
+                    
+                    update_bto = 'UPDATE trades SET pnl = ?, pnl_percent = ?'
+                    update_params = [total_pnl, pnl_percent]
+                    
+                    if total_closed_qty >= bto_qty:
+                        update_bto += ', current_price = ?'
+                        update_params.append(fill_price)
+                    
+                    update_bto += ' WHERE id = ?'
+                    update_params.append(origin_id)
+                    cursor.execute(update_bto, update_params)
+                    
+                    if cursor.rowcount > 0:
+                        pnl_sign = '+' if total_pnl >= 0 else ''
+                        print(f"[FILL-RECONCILE] ✓ BTO trade #{origin_id} PNL recalculated: {pnl_sign}${total_pnl:.2f} ({pnl_percent:.2f}%)")
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        print(f"[FILL-RECONCILE] ⚠️ Error reconciling trade fill: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
 def find_lot_by_trade_id(trade_id: int):
     """Find a signal lot by its linked trade_id."""
     conn = get_connection()

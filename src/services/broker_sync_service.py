@@ -2740,6 +2740,25 @@ class BrokerSyncService:
                     await asyncio.to_thread(_update_lot_closure_fill)
                 except Exception as fill_err:
                     print(f"[EXEC] ⚠️ Could not update lot closure fill: {fill_err}")
+                
+                try:
+                    def _reconcile_trade_fill():
+                        from gui_app.database import reconcile_trade_fill_price
+                        reconcile_trade_fill_price(
+                            broker=broker,
+                            symbol=symbol,
+                            asset_type=asset_type,
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=call_put,
+                            quantity=quantity,
+                            fill_price=fill_price,
+                            broker_order_id=broker_order_id,
+                            filled_at=filled_at
+                        )
+                    await asyncio.to_thread(_reconcile_trade_fill)
+                except Exception as reconcile_err:
+                    print(f"[EXEC] ⚠️ Could not reconcile trade fill price: {reconcile_err}")
             
             return result
             

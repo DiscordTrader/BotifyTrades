@@ -19084,6 +19084,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             if cond_order_id and trade_id and channel_record_id:
                                                 try:
                                                     from datetime import datetime
+                                                    lot_author = signal.get('_channel_name') or signal.get('author', 'Conditional Order')
                                                     lot_id = db.create_signal_lot(
                                                         channel_id=channel_record_id,
                                                         signal_id=None,
@@ -19096,9 +19097,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         quantity=executed_qty,
                                                         open_price=signal.get('price'),
                                                         opened_at=datetime.now().isoformat(),
-                                                        author_name='Conditional Order'
+                                                        author_name=lot_author
                                                     )
-                                                    _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id}")
+                                                    _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id} (author={lot_author})")
                                                 except Exception as lot_err:
                                                     _original_print(f"[DATABASE] Warning: Could not create signal_lot for conditional order: {lot_err}")
                                             
@@ -19182,6 +19183,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         if cond_order_id and trade_id and channel_record_id:
                                             try:
                                                 from datetime import datetime
+                                                lot_author = signal.get('_channel_name') or signal.get('author', 'Conditional Order')
                                                 lot_id = db.create_signal_lot(
                                                     channel_id=channel_record_id,
                                                     signal_id=None,
@@ -19194,9 +19196,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     quantity=executed_qty,
                                                     open_price=signal.get('price'),
                                                     opened_at=datetime.now().isoformat(),
-                                                    author_name='Conditional Order'
+                                                    author_name=lot_author
                                                 )
-                                                _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id}")
+                                                _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id} (author={lot_author})")
                                             except Exception as lot_err:
                                                 _original_print(f"[DATABASE] Warning: Could not create signal_lot for conditional order: {lot_err}")
                                         
