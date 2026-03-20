@@ -4323,7 +4323,8 @@ class RiskManager:
                         rest_price = await self._try_rest_quote(pos)
                         if rest_price and rest_price > 0:
                             fresh_price = rest_price
-                            source = 'REST'
+                            rest_via = getattr(self, '_last_rest_source', None)
+                            source = f'REST/{rest_via}' if rest_via else 'REST'
                             rest_repairs_this_cycle += 1
                 if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
                     print(f"[RISK] 🔄 STUCK PRICE FIX ({source}): {pos.broker} {pos.symbol} "
@@ -4390,14 +4391,40 @@ class RiskManager:
 
     async def _try_rest_quote(self, pos):
         current = pos.current_price
-        price = await self._try_webull_rest_quote(pos.symbol)
-        if price and price > 0 and abs(price - current) > 0.0001:
-            return price
-        price = await self._try_schwab_rest_quote(pos.symbol)
-        if price and price > 0 and abs(price - current) > 0.0001:
-            return price
+        broker_upper = (pos.broker or '').upper()
+        self._last_rest_source = None
+
+        if 'WEBULL' in broker_upper:
+            price = await self._try_schwab_rest_quote(pos.symbol)
+            if price and price > 0 and abs(price - current) > 0.0001:
+                self._last_rest_source = 'Schwab'
+                return price
+            price = await self._try_webull_rest_quote(pos.symbol)
+            if price and price > 0 and abs(price - current) > 0.0001:
+                self._last_rest_source = 'Webull'
+                return price
+        elif 'SCHWAB' in broker_upper:
+            price = await self._try_webull_rest_quote(pos.symbol)
+            if price and price > 0 and abs(price - current) > 0.0001:
+                self._last_rest_source = 'Webull'
+                return price
+            price = await self._try_schwab_rest_quote(pos.symbol)
+            if price and price > 0 and abs(price - current) > 0.0001:
+                self._last_rest_source = 'Schwab'
+                return price
+        else:
+            price = await self._try_schwab_rest_quote(pos.symbol)
+            if price and price > 0 and abs(price - current) > 0.0001:
+                self._last_rest_source = 'Schwab'
+                return price
+            price = await self._try_webull_rest_quote(pos.symbol)
+            if price and price > 0 and abs(price - current) > 0.0001:
+                self._last_rest_source = 'Webull'
+                return price
+
         price = await self._try_broker_get_quote(pos)
         if price and price > 0 and abs(price - current) > 0.0001:
+            self._last_rest_source = pos.broker
             return price
         return None
 
