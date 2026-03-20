@@ -175,7 +175,7 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
         FROM lot_closures lc
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         WHERE {' AND '.join(where_closed)}
-          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
+          AND lc.pnl IS NOT NULL
         ORDER BY lc.closed_at ASC
     """
     rows = conn.execute(closed_sql, params_closed).fetchall()
@@ -1040,7 +1040,7 @@ def get_calendar_data(user_id, year, month, broker=None):
         FROM lot_closures lc
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         WHERE {' AND '.join(where)}
-          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
+          AND lc.pnl IS NOT NULL
         ORDER BY lc.closed_at ASC
     """
     rows = conn.execute(sql, params).fetchall()
