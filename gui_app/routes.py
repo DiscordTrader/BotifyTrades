@@ -13527,10 +13527,18 @@ def register_routes(app):
                 else:
                     status['alpaca_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
-                # IBKR broker
-                if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+                # IBKR broker - check actual IB connection state
+                ibkr_broker = getattr(_bot_instance, 'ibkr_broker', None)
+                ibkr_actually_connected = (ibkr_broker 
+                    and getattr(ibkr_broker, 'connected', False) 
+                    and hasattr(ibkr_broker, 'ib') 
+                    and ibkr_broker.ib.isConnected())
+                if ibkr_actually_connected:
                     set_broker_status('ibkr_live', True, 'connected')
                     status['ibkr_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
+                elif ibkr_broker:
+                    set_broker_status('ibkr_live', False, 'disconnected', error='TWS connection lost')
+                    status['ibkr_live'] = {'connected': False, 'status': 'disconnected', 'error': 'TWS connection lost', 'account_info': None}
                 else:
                     status['ibkr_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
@@ -14604,77 +14612,96 @@ def register_routes(app):
                     
                     bot_reconnected = False
                     if _bot_instance and hasattr(_bot_instance, 'ibkr_broker') and hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
-                        async def reconnect_bot_ibkr():
-                            from src.brokers.ibkr_broker import IBKRBroker
-                            if _bot_instance.ibkr_broker:
-                                try:
-                                    if _bot_instance.ibkr_broker.ib.isConnected():
-                                        _bot_instance.ibkr_broker.ib.disconnect()
-                                except Exception:
-                                    pass
-                            
-                            _bot_instance.ibkr_broker = IBKRBroker({
-                                'host': host,
-                                'port': port,
-                                'client_id': client_id,
-                                'paper_trade': is_paper
-                            })
-                            connected = await asyncio.wait_for(_bot_instance.ibkr_broker.connect(), timeout=15.0)
-                            if connected:
-                                acct_info = await _bot_instance.ibkr_broker.get_account_info()
-                                if hasattr(_bot_instance, '_broker_manager') and _bot_instance._broker_manager:
-                                    _bot_instance._broker_manager.ibkr_broker = _bot_instance.ibkr_broker
-                                try:
-                                    from src.services.signal_verification import set_broker_clients
-                                    import src.services.signal_verification as sv
-                                    sv._ibkr_broker = _bot_instance.ibkr_broker
-                                    print("[IBKR] ✓ Signal verification updated with new broker instance")
-                                except Exception:
-                                    pass
-                                try:
-                                    from src.services.quote_aggregator import register_broker_with_aggregator
-                                    register_broker_with_aggregator('ibkr', _bot_instance.ibkr_broker)
-                                    print("[IBKR] ✓ Quote aggregator updated with new broker instance")
-                                except Exception:
-                                    pass
-                                try:
-                                    from src.services.conditional_orders.router import conditional_order_router
-                                    conditional_order_router.set_broker_instance('IBKR', _bot_instance.ibkr_broker)
-                                    print("[IBKR] ✓ Conditional order router updated with new broker instance")
-                                except Exception:
-                                    pass
-                                try:
-                                    from src.services.ibkr_data_hub import get_ibkr_data_hub
-                                    _ibkr_hub = get_ibkr_data_hub()
-                                    _ibkr_hub.detach_broker()
-                                    _ibkr_hub.attach_broker(_bot_instance.ibkr_broker, loop=asyncio.get_event_loop())
-                                    asyncio.create_task(_ibkr_hub._refresh_positions_from_ib())
-                                    print("[IBKR] ✓ IBKRDataHub re-attached to new broker instance")
-                                except Exception as hub_err:
-                                    print(f"[IBKR] ⚠️ IBKRDataHub re-attach error: {hub_err}")
-                                try:
-                                    if hasattr(_bot_instance, 'risk_manager') and _bot_instance.risk_manager:
-                                        _bot_instance.risk_manager.ibkr_broker = _bot_instance.ibkr_broker
-                                        print("[IBKR] ✓ RiskManager updated with new broker instance")
-                                except Exception:
-                                    pass
-                                return True, acct_info
-                            return False, {}
+                        existing_broker = _bot_instance.ibkr_broker
+                        mode_matches = (existing_broker 
+                            and getattr(existing_broker, 'paper_trade', None) == is_paper
+                            and getattr(existing_broker, 'port', None) == port)
+                        if existing_broker and mode_matches and getattr(existing_broker, 'connected', False) and existing_broker.ib.isConnected():
+                            print(f"[IBKR] Bot already connected (paper={is_paper}, port={port}) — reading cached account data")
+                            try:
+                                async def _read_ibkr_account():
+                                    return await _bot_instance.ibkr_broker.get_account_info()
+                                future = asyncio.run_coroutine_threadsafe(_read_ibkr_account(), _bot_instance.loop)
+                                acct_data = future.result(timeout=10)
+                                connected = True
+                                bot_reconnected = True
+                            except Exception as read_err:
+                                print(f"[IBKR] Account read from live broker failed ({read_err}), will try reconnect")
+                                bot_reconnected = False
                         
-                        try:
-                            future = asyncio.run_coroutine_threadsafe(reconnect_bot_ibkr(), _bot_instance.loop)
-                            connected, acct_data = future.result(timeout=20)
-                            bot_reconnected = True
-                        except Exception as bot_err:
-                            print(f"[IBKR] Bot reconnect failed ({bot_err}), falling back to test connection")
-                            bot_reconnected = False
+                        if not bot_reconnected:
+                            async def reconnect_bot_ibkr():
+                                from src.brokers.ibkr_broker import IBKRBroker
+                                old_broker = _bot_instance.ibkr_broker
+                                new_broker = IBKRBroker({
+                                    'host': host,
+                                    'port': port,
+                                    'client_id': client_id,
+                                    'paper_trade': is_paper
+                                })
+                                try:
+                                    if old_broker and old_broker.ib.isConnected():
+                                        old_broker.ib.disconnect()
+                                except Exception:
+                                    pass
+                                
+                                conn = await asyncio.wait_for(new_broker.connect(), timeout=15.0)
+                                if conn:
+                                    _bot_instance.ibkr_broker = new_broker
+                                    acct_info = await new_broker.get_account_info()
+                                    if hasattr(_bot_instance, '_broker_manager') and _bot_instance._broker_manager:
+                                        _bot_instance._broker_manager.ibkr_broker = new_broker
+                                    try:
+                                        import src.services.signal_verification as sv
+                                        sv._ibkr_broker = new_broker
+                                        print("[IBKR] ✓ Signal verification updated with new broker instance")
+                                    except Exception:
+                                        pass
+                                    try:
+                                        from src.services.quote_aggregator import register_broker_with_aggregator
+                                        register_broker_with_aggregator('ibkr', new_broker)
+                                        print("[IBKR] ✓ Quote aggregator updated with new broker instance")
+                                    except Exception:
+                                        pass
+                                    try:
+                                        from src.services.conditional_orders.router import conditional_order_router
+                                        conditional_order_router.set_broker_instance('IBKR', new_broker)
+                                        print("[IBKR] ✓ Conditional order router updated with new broker instance")
+                                    except Exception:
+                                        pass
+                                    try:
+                                        from src.services.ibkr_data_hub import get_ibkr_data_hub
+                                        _ibkr_hub = get_ibkr_data_hub()
+                                        _ibkr_hub.detach_broker()
+                                        _ibkr_hub.attach_broker(new_broker, loop=asyncio.get_event_loop())
+                                        asyncio.create_task(_ibkr_hub._refresh_positions_from_ib())
+                                        print("[IBKR] ✓ IBKRDataHub re-attached to new broker instance")
+                                    except Exception as hub_err:
+                                        print(f"[IBKR] ⚠️ IBKRDataHub re-attach error: {hub_err}")
+                                    try:
+                                        if hasattr(_bot_instance, 'risk_manager') and _bot_instance.risk_manager:
+                                            _bot_instance.risk_manager.ibkr_broker = new_broker
+                                            print("[IBKR] ✓ RiskManager updated with new broker instance")
+                                    except Exception:
+                                        pass
+                                    return True, acct_info
+                                return False, {}
+                            
+                            try:
+                                future = asyncio.run_coroutine_threadsafe(reconnect_bot_ibkr(), _bot_instance.loop)
+                                connected, acct_data = future.result(timeout=25)
+                                bot_reconnected = True
+                            except Exception as bot_err:
+                                print(f"[IBKR] Bot reconnect failed ({bot_err}), falling back to test connection")
+                                bot_reconnected = False
                     
                     if not bot_reconnected:
+                        test_client_id = client_id + 100
                         ib = IB()
                         
                         async def try_connect():
                             try:
-                                await ib.connectAsync(host=host, port=port, clientId=client_id, timeout=10)
+                                await ib.connectAsync(host=host, port=port, clientId=test_client_id, timeout=10)
                                 if not ib.isConnected():
                                     return False, {}
                                 acct_info = {}
@@ -14682,19 +14709,21 @@ def register_routes(app):
                                     accounts = ib.managedAccounts()
                                     if accounts:
                                         acct_info['account_id'] = accounts[0]
-                                    summary = ib.accountSummary()
-                                    for item in summary:
-                                        if item.tag == 'BuyingPower':
-                                            acct_info['buying_power'] = float(item.value)
-                                        elif item.tag == 'NetLiquidation':
-                                            acct_info['portfolio_value'] = float(item.value)
-                                        elif item.tag == 'TotalCashValue':
-                                            acct_info['cash'] = float(item.value)
+                                    await asyncio.sleep(2)
+                                    acct_values = ib.accountValues()
+                                    for av in acct_values:
+                                        if av.currency in ('', 'USD', 'BASE'):
+                                            if av.tag == 'BuyingPower':
+                                                acct_info['buying_power'] = float(av.value)
+                                            elif av.tag == 'NetLiquidation':
+                                                acct_info['portfolio_value'] = float(av.value)
+                                            elif av.tag == 'TotalCashValue':
+                                                acct_info['cash'] = float(av.value)
                                 except Exception as ae:
                                     print(f"[IBKR] Account info fetch warning: {ae}")
                                 return True, acct_info
                             except Exception as e:
-                                print(f"[IBKR] Connection error: {e}")
+                                print(f"[IBKR] Test connection error: {e}")
                                 return False, {}
                         
                         loop = asyncio.new_event_loop()

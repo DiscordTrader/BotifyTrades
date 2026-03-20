@@ -87,13 +87,13 @@ class IBKRBroker(BrokerInterface):
                 print(f"[{self.name}] ✓ Connected successfully ({mode} trading)")
                 
                 try:
-                    account_summary = self.ib.accountSummary()
-                    for item in account_summary:
-                        if item.tag == 'BuyingPower':
-                            print(f"[{self.name}]   Buying power: ${float(item.value):,.2f}")
+                    account_values = self.ib.accountValues()
+                    for av in account_values:
+                        if av.tag == 'BuyingPower' and av.currency in ('', 'USD', 'BASE'):
+                            print(f"[{self.name}]   Buying power: ${float(av.value):,.2f}")
                             break
                 except Exception as e_summary:
-                    print(f"[{self.name}] ⚠️ Connected but could not fetch account summary: {e_summary}")
+                    print(f"[{self.name}] ⚠️ Connected but could not read account values: {e_summary}")
                 
                 return True
             
@@ -134,21 +134,49 @@ class IBKRBroker(BrokerInterface):
             return False
     
     async def get_account_info(self) -> Dict[str, Any]:
-        """Get account information"""
+        """Get account information using async-safe approach"""
         try:
-            account_summary = self.ib.accountSummary()
+            if not self.ib.isConnected():
+                print(f"[{self.name}] ⚠️ get_account_info called but not connected")
+                return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+
             result = {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
-            
-            for item in account_summary:
-                if item.tag == 'BuyingPower':
-                    result['buying_power'] = float(item.value)
-                elif item.tag == 'AvailableFunds':
-                    result['options_buying_power'] = float(item.value)
-                elif item.tag == 'TotalCashValue':
-                    result['cash'] = float(item.value)
-                elif item.tag == 'NetLiquidation':
-                    result['portfolio_value'] = float(item.value)
-            
+            need_async_fallback = False
+            try:
+                account_values = self.ib.accountValues()
+                if account_values:
+                    for av in account_values:
+                        if av.currency in ('', 'USD', 'BASE', 'CAD'):
+                            if av.tag == 'BuyingPower':
+                                result['buying_power'] = float(av.value)
+                            elif av.tag == 'AvailableFunds':
+                                result['options_buying_power'] = float(av.value)
+                            elif av.tag == 'TotalCashValue':
+                                result['cash'] = float(av.value)
+                            elif av.tag == 'NetLiquidation':
+                                result['portfolio_value'] = float(av.value)
+                    if result['buying_power'] <= 0 and result['portfolio_value'] <= 0:
+                        need_async_fallback = True
+                else:
+                    need_async_fallback = True
+            except Exception:
+                need_async_fallback = True
+
+            if need_async_fallback:
+                try:
+                    summary = await self.ib.accountSummaryAsync()
+                    for item in summary:
+                        if item.tag == 'BuyingPower':
+                            result['buying_power'] = float(item.value)
+                        elif item.tag == 'AvailableFunds':
+                            result['options_buying_power'] = float(item.value)
+                        elif item.tag == 'TotalCashValue':
+                            result['cash'] = float(item.value)
+                        elif item.tag == 'NetLiquidation':
+                            result['portfolio_value'] = float(item.value)
+                except Exception as e2:
+                    print(f"[{self.name}] ⚠️ accountSummaryAsync fallback failed: {e2}")
+
             if result['options_buying_power'] <= 0:
                 result['options_buying_power'] = result['buying_power']
             
