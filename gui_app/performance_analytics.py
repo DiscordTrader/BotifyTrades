@@ -1012,3 +1012,123 @@ def get_edge_analysis(user_id, start_date=None, end_date=None, broker=None, peri
         'by_channel': _build_breakdown(chan_data),
         'by_exit_reason': _build_breakdown(exit_data),
     }
+
+
+def get_calendar_data(user_id, year, month, broker=None):
+    import calendar
+    conn = get_connection()
+
+    first_day = datetime(year, month, 1)
+    if month == 12:
+        last_day = datetime(year + 1, 1, 1) - timedelta(seconds=1)
+    else:
+        last_day = datetime(year, month + 1, 1) - timedelta(seconds=1)
+
+    sd = first_day.strftime('%Y-%m-%d 00:00:00')
+    ed = last_day.strftime('%Y-%m-%d 23:59:59')
+
+    params = [user_id]
+    where = ["(lc.user_id IS NULL OR lc.user_id = ?)"]
+    where += _build_date_filter("lc.closed_at", sd, ed, params)
+
+    if broker:
+        where.append(_build_broker_filter(broker))
+        params.extend(_broker_filter_params(broker))
+
+    sql = f"""
+        SELECT lc.pnl, lc.closed_at, sl.symbol
+        FROM lot_closures lc
+        LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
+        WHERE {' AND '.join(where)}
+          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
+        ORDER BY lc.closed_at ASC
+    """
+    rows = conn.execute(sql, params).fetchall()
+
+    daily = defaultdict(lambda: {'pnl': 0.0, 'trades': 0, 'wins': 0, 'losses': 0, 'symbols': set()})
+    for r in rows:
+        pnl = float(r['pnl'] or 0)
+        closed_at = _utc_to_est(r['closed_at']) or ''
+        if not closed_at:
+            continue
+        day_key = closed_at[:10]
+        d = daily[day_key]
+        d['pnl'] += pnl
+        d['trades'] += 1
+        if pnl > 0:
+            d['wins'] += 1
+        elif pnl < 0:
+            d['losses'] += 1
+        if r['symbol']:
+            d['symbols'].add(r['symbol'])
+
+    days_out = {}
+    for day_key, d in daily.items():
+        wr = _safe_round((d['wins'] / d['trades'] * 100) if d['trades'] > 0 else 0)
+        days_out[day_key] = {
+            'pnl': _safe_round(d['pnl']),
+            'trades': d['trades'],
+            'wins': d['wins'],
+            'losses': d['losses'],
+            'win_rate': wr,
+        }
+
+    weekly = defaultdict(lambda: {'pnl': 0.0, 'days': 0, 'trades': 0, 'wins': 0, 'losses': 0})
+    cal = calendar.Calendar(firstweekday=6)
+    week_num = 0
+    prev_week_start = None
+    for week_dates in cal.monthdatescalendar(year, month):
+        week_start = week_dates[0]
+        if week_start == prev_week_start:
+            continue
+        prev_week_start = week_start
+        week_num += 1
+        for dt in week_dates:
+            if dt.month != month:
+                continue
+            day_str = dt.strftime('%Y-%m-%d')
+            if day_str in days_out:
+                dd = days_out[day_str]
+                w = weekly[week_num]
+                w['pnl'] += dd['pnl']
+                w['days'] += 1
+                w['trades'] += dd['trades']
+                w['wins'] += dd['wins']
+                w['losses'] += dd['losses']
+
+    weeks_out = []
+    for wn in sorted(weekly.keys()):
+        w = weekly[wn]
+        weeks_out.append({
+            'week': wn,
+            'pnl': _safe_round(w['pnl']),
+            'days': w['days'],
+            'trades': w['trades'],
+            'wins': w['wins'],
+            'losses': w['losses'],
+        })
+
+    total_pnl = sum(d['pnl'] for d in days_out.values())
+    total_days = len(days_out)
+    total_trades = sum(d['trades'] for d in days_out.values())
+
+    cumulative_daily = []
+    cum = 0.0
+    for day_key in sorted(days_out.keys()):
+        cum += days_out[day_key]['pnl']
+        cumulative_daily.append({
+            'date': day_key,
+            'pnl': days_out[day_key]['pnl'],
+            'cumulative': _safe_round(cum),
+        })
+
+    return {
+        'year': year,
+        'month': month,
+        'days': days_out,
+        'weeks': weeks_out,
+        'cumulative_daily': cumulative_daily,
+        'monthly_pnl': _safe_round(total_pnl),
+        'trading_days': total_days,
+        'total_trades': total_trades,
+    }

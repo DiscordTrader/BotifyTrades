@@ -18433,7 +18433,8 @@ def register_routes(app):
         try:
             from gui_app.performance_analytics import (
                 get_performance_v2, get_broker_breakdown, get_trade_journal,
-                get_time_breakdown, get_performance_heatmap, get_edge_analysis
+                get_time_breakdown, get_performance_heatmap, get_edge_analysis,
+                get_calendar_data
             )
             
             user_id = session.get('user_id')
@@ -18492,7 +18493,22 @@ def register_routes(app):
                     user_id, start_date=start_date, end_date=end_date,
                     broker=broker, period=period
                 )
-            
+
+            if section in ('all', 'calendar'):
+                cal_year = request.args.get('cal_year')
+                cal_month = request.args.get('cal_month')
+                if cal_year and cal_month:
+                    cal_year = int(cal_year)
+                    cal_month = int(cal_month)
+                else:
+                    from datetime import datetime as dt_now
+                    now = dt_now.now()
+                    cal_year = now.year
+                    cal_month = now.month
+                result['calendar'] = get_calendar_data(
+                    user_id, cal_year, cal_month, broker=broker
+                )
+
             return jsonify(result)
             
         except Exception as e:
