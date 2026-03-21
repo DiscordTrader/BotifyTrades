@@ -231,7 +231,7 @@
                     <optgroup label="🇺🇸 USA">
                         <option value="Webull" style="background-color: #2C2C2E; color: #FFFFFF;">Webull LIVE</option>
                         <option value="ALPACA" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca LIVE</option>
-                        <option value="ALPACA_PAPER" selected style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca PAPER</option>
+                        <option value="ALPACA_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca PAPER</option>
                         <option value="IBKR" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR LIVE</option>
                         <option value="IBKR_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR PAPER</option>
                         <option value="TASTYTRADE_LIVE" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade LIVE</option>
@@ -3446,15 +3446,27 @@ document.addEventListener('DOMContentLoaded', () => {
             currentBroker = savedBroker;
             if (brokerFilter) brokerFilter.value = savedBroker;
         }
+        let _autoSelectedBroker = false;
         BrokerStore.onUpdate((event) => {
             renderMultiBrokerSelector();
             renderRegionBrokers();
+            if (!_autoSelectedBroker && !BrokerStore.getSelected()) {
+                const connected = BrokerStore.getConnectedBrokers();
+                if (connected && connected.length > 0) {
+                    const live = connected.filter(b => !b.is_paper);
+                    const pick = live.length > 0 ? live[0] : connected[0];
+                    currentBroker = pick.broker_name;
+                    if (brokerFilter) brokerFilter.value = pick.broker_name;
+                    BrokerStore.setSelected(pick.broker_name);
+                    _autoSelectedBroker = true;
+                    loadStats();
+                }
+            }
         });
         BrokerStore.init();
         renderMultiBrokerSelector();
     }
     
-    // Fallback: If no broker selected from store, use dropdown's selected value
     if (!currentBroker && brokerFilter && brokerFilter.value) {
         currentBroker = brokerFilter.value;
     }
