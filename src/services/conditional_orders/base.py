@@ -450,13 +450,14 @@ class StreamingPriceMonitor(PriceMonitor):
         now = time.time()
         if now - self._last_rest_call < self.REST_FALLBACK_INTERVAL - 0.5:
             return self.last_price
-        if self._rate_limiter and not self._rate_limiter.can_make_call():
-            return self.last_price
-        self._last_rest_call = now
-        
+
         cross_price = self._try_cross_broker_hubs()
         if cross_price:
             return cross_price
+
+        if self._rate_limiter and not self._rate_limiter.can_make_call():
+            return self.last_price
+        self._last_rest_call = now
 
         if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
             try:
