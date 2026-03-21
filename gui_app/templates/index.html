@@ -3441,23 +3441,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const brokerFilter = document.getElementById('broker-filter');
     
     if (typeof BrokerStore !== 'undefined') {
+        const _brokerToDropdown = {
+            'WEBULL': 'Webull',
+            'ALPACA': 'ALPACA',
+            'ALPACA_PAPER': 'ALPACA_PAPER',
+            'IBKR': 'IBKR',
+            'IBKR_PAPER': 'IBKR_PAPER',
+            'TASTYTRADE': 'TASTYTRADE_LIVE',
+            'TASTYTRADE_LIVE': 'TASTYTRADE_LIVE',
+            'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
+            'SCHWAB': 'SCHWAB',
+            'ROBINHOOD': 'ROBINHOOD',
+            'QUESTRADE': 'QUESTRADE',
+            'TRADING212': 'TRADING212',
+            'TRADING212_PAPER': 'TRADING212_PAPER'
+        };
+        function toDropdownValue(apiName) {
+            return _brokerToDropdown[apiName] || apiName;
+        }
         const savedBroker = BrokerStore.getSelected();
         if (savedBroker) {
-            currentBroker = savedBroker;
-            if (brokerFilter) brokerFilter.value = savedBroker;
+            const ddVal = toDropdownValue(savedBroker);
+            currentBroker = ddVal;
+            if (brokerFilter) brokerFilter.value = ddVal;
         }
-        let _autoSelectedBroker = false;
+        let _autoSelectedBroker = !!savedBroker;
         BrokerStore.onUpdate((event) => {
             renderMultiBrokerSelector();
             renderRegionBrokers();
-            if (!_autoSelectedBroker && !BrokerStore.getSelected()) {
+            if (!_autoSelectedBroker) {
+                const allBrokers = BrokerStore.getState ? BrokerStore.getState().brokers : [];
                 const connected = BrokerStore.getConnectedBrokers();
+                let pick = null;
                 if (connected && connected.length > 0) {
                     const live = connected.filter(b => !b.is_paper);
-                    const pick = live.length > 0 ? live[0] : connected[0];
-                    currentBroker = pick.broker_name;
-                    if (brokerFilter) brokerFilter.value = pick.broker_name;
-                    BrokerStore.setSelected(pick.broker_name);
+                    pick = live.length > 0 ? live[0] : connected[0];
+                } else if (allBrokers.length > 0) {
+                    const liveCfg = allBrokers.filter(b => !b.is_paper);
+                    pick = liveCfg.length > 0 ? liveCfg[0] : allBrokers[0];
+                }
+                if (pick) {
+                    const ddVal = toDropdownValue(pick.broker_name);
+                    currentBroker = ddVal;
+                    if (brokerFilter) brokerFilter.value = ddVal;
+                    BrokerStore.setSelected(ddVal);
                     _autoSelectedBroker = true;
                     loadStats();
                 }
