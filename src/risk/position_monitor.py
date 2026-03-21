@@ -1211,6 +1211,8 @@ class RiskManager:
         self._STUCK_PRICE_THRESHOLD = 3
         self._rest_repaired_prices = {}
         self._rest_repair_cycle_keys = {}
+        self._price_unverified = {}
+        self._STALENESS_EXIT_BLOCK_THRESHOLD = 10
         
         self._sync_ready_event = sync_ready_event
         self.cache = PositionCache()
@@ -2798,6 +2800,40 @@ class RiskManager:
         if freshness_result is not None:
             return freshness_result
 
+        if _repair_key in self._price_unverified:
+            import time as _sv
+            session_unv = self._get_market_session()
+            if session_unv in ('regular', 'extended'):
+                unv = self._price_unverified[_repair_key]
+                unv_age = _sv.time() - unv['since']
+                if unv_age < 30:
+                    if not unv.get('logged'):
+                        print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price ${position.current_price:.2f} "
+                              f"unverified (all sources returned same frozen price) — blocking exits for up to 30s")
+                        unv['logged'] = True
+                    return ExitDecision.no_exit()
+                else:
+                    del self._price_unverified[_repair_key]
+            else:
+                del self._price_unverified[_repair_key]
+
+        tracker = self._stuck_price_tracker.get(_repair_key)
+        if tracker and not _is_repair_cycle:
+            import time as _st
+            change_age = _st.time() - tracker['last_changed']
+            if change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD:
+                session = self._get_market_session()
+                if session in ('regular', 'extended'):
+                    if not hasattr(self, '_staleness_block_logged'):
+                        self._staleness_block_logged = {}
+                    _sbl_key = f"{_repair_key}_{int(change_age)//10}"
+                    if _sbl_key not in self._staleness_block_logged:
+                        self._staleness_block_logged[_sbl_key] = True
+                        print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
+                              f"{change_age:.0f}s (>{self._STALENESS_EXIT_BLOCK_THRESHOLD}s) — "
+                              f"blocking exit until fresh price arrives")
+                    return ExitDecision.no_exit()
+
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
             if not _is_repair_cycle:
@@ -4290,6 +4326,8 @@ class RiskManager:
                 tracker['last_price'] = pos.current_price
                 tracker['last_changed'] = now
                 tracker['rest_refreshed'] = 0
+                if key in self._price_unverified:
+                    del self._price_unverified[key]
                 continue
             stuck_seconds = now - tracker['last_changed']
 
@@ -4317,8 +4355,10 @@ class RiskManager:
             try:
                 fresh_price = self._try_cross_hub_price(pos, now)
                 source = 'cross-hub'
+                _rest_checked = False
                 if not fresh_price or abs(fresh_price - pos.current_price) < 0.0001:
                     if rest_repairs_this_cycle < _MAX_REST_REPAIRS_PER_CYCLE:
+                        _rest_checked = True
                         tracker['rest_refreshed'] = now
                         rest_price = await self._try_rest_quote(pos)
                         if rest_price and rest_price > 0:
@@ -4336,6 +4376,13 @@ class RiskManager:
                         'price': fresh_price, 'until': now + self._HUB_PRICE_MAX_AGE
                     }
                     self._rest_repair_cycle_keys[key] = now
+                    if key in self._price_unverified:
+                        del self._price_unverified[key]
+                elif stuck_seconds >= self._STALENESS_EXIT_BLOCK_THRESHOLD and _rest_checked:
+                    if key not in self._price_unverified:
+                        self._price_unverified[key] = {'since': now, 'logged': False}
+                        print(f"[RISK] ⚠️ UNVERIFIED: {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
+                              f"all sources returned same price ${pos.current_price:.4f} — marking unverified")
             except Exception as e:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
@@ -4355,6 +4402,13 @@ class RiskManager:
             stale_defer = [k for k in self._price_deferred_once if k not in active_keys]
             for k in stale_defer:
                 del self._price_deferred_once[k]
+        stale_unverified = [k for k in self._price_unverified if k not in active_keys]
+        for k in stale_unverified:
+            del self._price_unverified[k]
+        if hasattr(self, '_staleness_block_logged'):
+            stale_sbl = [k for k in self._staleness_block_logged if not any(k.startswith(ak) for ak in active_keys)]
+            for k in stale_sbl:
+                del self._staleness_block_logged[k]
 
     def _try_cross_hub_price(self, pos, now):
         broker_upper = (pos.broker or '').upper()
