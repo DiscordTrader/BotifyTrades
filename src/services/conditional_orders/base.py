@@ -109,17 +109,33 @@ class PriceMonitor(ABC):
         self.callback = callback
         self.is_running = False
         self.last_price = None
-        self._last_price_update_time: float = 0  # Universal staleness tracking
+        self._last_price_update_time: float = 0
+        self._last_price_change_time: float = 0
+        self._last_changed_price: Optional[float] = None
     
     def get_staleness_seconds(self) -> int:
-        """Get seconds since last successful price update."""
+        """Get seconds since last price CHANGE (not just last poll).
+        This ensures frozen feeds are detected by the staleness guard."""
+        if self._last_price_change_time == 0:
+            if self._last_price_update_time == 0:
+                return 0
+            return int(time.time() - self._last_price_update_time)
+        return int(time.time() - self._last_price_change_time)
+    
+    def get_poll_staleness_seconds(self) -> int:
+        """Get seconds since last successful price poll (any value)."""
         if self._last_price_update_time == 0:
-            return 0  # No price yet, not considered stale
+            return 0
         return int(time.time() - self._last_price_update_time)
     
-    def _update_price_timestamp(self):
-        """Update the last price update timestamp. Call after successful price fetch."""
-        self._last_price_update_time = time.time()
+    def _update_price_timestamp(self, price: Optional[float] = None):
+        """Update the last price update timestamp. Call after successful price fetch.
+        Also tracks when price actually changes for staleness detection."""
+        now = time.time()
+        self._last_price_update_time = now
+        if price is not None and (self._last_changed_price is None or abs(price - self._last_changed_price) > 0.0001):
+            self._last_changed_price = price
+            self._last_price_change_time = now
     
     @abstractmethod
     async def start(self):
@@ -158,12 +174,11 @@ class FinnhubPriceMonitor(PriceMonitor):
                                 sys.stderr.write(f"[FINNHUB] Poll #{poll_count} {self.symbol}: ${price}\n")
                                 sys.stderr.flush()
                             if price:
-                                self._update_price_timestamp()  # Track staleness
+                                self._update_price_timestamp(float(price))
                                 if price != self.last_price:
                                     self.last_price = price
                                     await self.callback(self.symbol, float(price))
                                 elif poll_count % 10 == 0:
-                                    # Heartbeat update - refreshes timestamp even if price unchanged
                                     await self.callback(self.symbol, float(price))
                 except Exception as e:
                     sys.stderr.write(f"[FINNHUB] Error for {self.symbol}: {e}\n")
@@ -193,12 +208,11 @@ class YFinancePriceMonitor(PriceMonitor):
                     sys.stderr.write(f"[YFINANCE] Poll #{poll_count} {self.symbol}: ${price}\n")
                     sys.stderr.flush()
                 if price:
-                    self._update_price_timestamp()  # Track staleness
+                    self._update_price_timestamp(float(price))
                     if price != self.last_price:
                         self.last_price = price
                         await self.callback(self.symbol, float(price))
                     elif poll_count % 10 == 0:
-                        # Heartbeat update - refreshes timestamp
                         await self.callback(self.symbol, float(price))
             except Exception as e:
                 sys.stderr.write(f"[YFINANCE] Error for {self.symbol}: {e}\n")
@@ -234,6 +248,20 @@ class StreamingPriceMonitor(PriceMonitor):
     REST_FALLBACK_INTERVAL = 3
     HUB_STALE_THRESHOLD = 10
     
+    @staticmethod
+    def _is_us_market_hours() -> bool:
+        """Check if current time is within extended US market hours (pre-market 4am to after-hours 8pm ET).
+        Returns True if we should expect price movement, False if frozen prices are normal."""
+        try:
+            now_et = datetime.now(EST) if EST else datetime.utcnow()
+            hour = now_et.hour
+            weekday = now_et.weekday()
+            if weekday >= 5:
+                return False
+            return 4 <= hour < 20
+        except Exception:
+            return True
+    
     def __init__(self, symbol: str, callback: Callable[[str, float], None],
                  data_hub: Any, broker_name: str, broker_instance: Any = None):
         super().__init__(symbol, callback)
@@ -250,6 +278,7 @@ class StreamingPriceMonitor(PriceMonitor):
         self._last_frozen_probe_ts: float = 0
         self.FROZEN_THRESHOLD = 3.0
         self.FROZEN_PROBE_COOLDOWN = 3.0
+        self._rate_limiter: Optional[RateLimitTracker] = None
     
     def _try_subscribe_streaming(self):
         try:
@@ -336,7 +365,7 @@ class StreamingPriceMonitor(PriceMonitor):
                 if price:
                     self._hub_miss_count = 0
                     self._using_rest_fallback = False
-                    self._update_price_timestamp()
+                    self._update_price_timestamp(price)
 
                     now = time.time()
                     if self._last_hub_price is None or abs(price - self._last_hub_price) > 0.0001:
@@ -344,7 +373,7 @@ class StreamingPriceMonitor(PriceMonitor):
                         self._last_hub_change_ts = now
 
                     frozen_seconds = now - self._last_hub_change_ts if self._last_hub_change_ts > 0 else 0
-                    if frozen_seconds >= self.FROZEN_THRESHOLD and (now - self._last_frozen_probe_ts) >= self.FROZEN_PROBE_COOLDOWN:
+                    if frozen_seconds >= self.FROZEN_THRESHOLD and (now - self._last_frozen_probe_ts) >= self.FROZEN_PROBE_COOLDOWN and self._is_us_market_hours():
                         self._last_frozen_probe_ts = now
                         cross_price = self._try_cross_broker_hubs()
                         if cross_price and cross_price > 0 and abs(cross_price - price) > 0.0001:
@@ -355,11 +384,12 @@ class StreamingPriceMonitor(PriceMonitor):
                             price = cross_price
                             self._last_hub_price = price
                             self._last_hub_change_ts = now
-                        elif not cross_price:
+                        else:
                             rest_price = await self._fetch_rest_price_no_cross_hub()
                             if rest_price and rest_price > 0 and abs(rest_price - price) > 0.0001:
                                 if not getattr(self, '_frozen_rest_logged', False):
-                                    sys.stderr.write(f"[STREAM_MON] {self.symbol}: Price frozen {frozen_seconds:.0f}s, cross-hub empty, REST returned ${rest_price:.2f}\n")
+                                    reason = "cross-hub same" if cross_price else "cross-hub empty"
+                                    sys.stderr.write(f"[STREAM_MON] {self.symbol}: Price frozen {frozen_seconds:.0f}s, {reason}, REST returned ${rest_price:.2f}\n")
                                     sys.stderr.flush()
                                     self._frozen_rest_logged = True
                                 price = rest_price
@@ -394,7 +424,7 @@ class StreamingPriceMonitor(PriceMonitor):
                     if self._using_rest_fallback:
                         rest_price = await self._fetch_rest_price()
                         if rest_price:
-                            self._update_price_timestamp()
+                            self._update_price_timestamp(rest_price)
                             self.last_price = rest_price
                             await self.callback(self.symbol, rest_price)
                         await asyncio.sleep(self.REST_FALLBACK_INTERVAL)
@@ -420,10 +450,14 @@ class StreamingPriceMonitor(PriceMonitor):
         now = time.time()
         if now - self._last_rest_call < self.REST_FALLBACK_INTERVAL - 0.5:
             return self.last_price
+        if self._rate_limiter and not self._rate_limiter.can_make_call():
+            return self.last_price
         self._last_rest_call = now
         
         if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
             try:
+                if self._rate_limiter:
+                    self._rate_limiter.record_call()
                 import inspect
                 quote_method = self.broker_instance.get_quote
                 if inspect.iscoroutinefunction(quote_method):
@@ -451,10 +485,14 @@ class StreamingPriceMonitor(PriceMonitor):
         now = time.time()
         if now - self._last_rest_call < self.REST_FALLBACK_INTERVAL - 0.5:
             return self.last_price
+        if self._rate_limiter and not self._rate_limiter.can_make_call():
+            return self.last_price
         self._last_rest_call = now
 
         if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
             try:
+                if self._rate_limiter:
+                    self._rate_limiter.record_call()
                 import inspect
                 quote_method = self.broker_instance.get_quote
                 if inspect.iscoroutinefunction(quote_method):
@@ -474,18 +512,34 @@ class StreamingPriceMonitor(PriceMonitor):
 
         return None
 
+    _cross_hub_cache: Dict[str, Any] = {}
+    _cross_hub_cache_ts: float = 0
+    _CROSS_HUB_CACHE_TTL: float = 30.0
+
     def _try_cross_broker_hubs(self) -> Optional[float]:
-        for hub_getter, hub_name in [
-            ('src.services.webull_data_hub', 'get_webull_data_hub'),
-            ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
-            ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
-            ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
-        ]:
+        now = time.time()
+        if now - StreamingPriceMonitor._cross_hub_cache_ts > StreamingPriceMonitor._CROSS_HUB_CACHE_TTL:
+            StreamingPriceMonitor._cross_hub_cache = {}
+            for mod_path, func_name in [
+                ('src.services.webull_data_hub', 'get_webull_data_hub'),
+                ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
+                ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+                ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+            ]:
+                try:
+                    import importlib
+                    mod = importlib.import_module(mod_path)
+                    hub = getattr(mod, func_name)()
+                    if hub:
+                        StreamingPriceMonitor._cross_hub_cache[func_name] = hub
+                except Exception:
+                    pass
+            StreamingPriceMonitor._cross_hub_cache_ts = now
+
+        sym_upper = self.symbol.upper().strip()
+        for hub_name, hub in StreamingPriceMonitor._cross_hub_cache.items():
             try:
-                import importlib
-                mod = importlib.import_module(hub_getter)
-                hub = getattr(mod, hub_name)()
-                price = hub.get_quote_price(self.symbol)
+                price = hub.get_quote_price(sym_upper)
                 if price and price > 0:
                     return float(price)
             except Exception:
@@ -584,7 +638,7 @@ class BrokerPriceMonitor(PriceMonitor):
                     sys.stderr.flush()
                 
                 if price:
-                    self._update_price_timestamp()
+                    self._update_price_timestamp(price)
                     if price != self.last_price:
                         self.last_price = price
                         await self.callback(self.symbol, price)
@@ -616,18 +670,31 @@ class BrokerPriceMonitor(PriceMonitor):
     
     def _try_any_streaming_hub(self) -> Optional[float]:
         """Check all available streaming/polling hubs for price data (zero extra API cost).
-        Useful for brokers without their own hub (Alpaca, Robinhood, Tastytrade, etc.)."""
-        for hub_getter, hub_name in [
-            ('src.services.webull_data_hub', 'get_webull_data_hub'),
-            ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
-            ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
-            ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
-        ]:
+        Useful for brokers without their own hub (Alpaca, Robinhood, Tastytrade, etc.).
+        Uses StreamingPriceMonitor's shared hub cache for efficiency."""
+        now = time.time()
+        if now - StreamingPriceMonitor._cross_hub_cache_ts > StreamingPriceMonitor._CROSS_HUB_CACHE_TTL:
+            StreamingPriceMonitor._cross_hub_cache = {}
+            for mod_path, func_name in [
+                ('src.services.webull_data_hub', 'get_webull_data_hub'),
+                ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
+                ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+                ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+            ]:
+                try:
+                    import importlib
+                    mod = importlib.import_module(mod_path)
+                    hub = getattr(mod, func_name)()
+                    if hub:
+                        StreamingPriceMonitor._cross_hub_cache[func_name] = hub
+                except Exception:
+                    pass
+            StreamingPriceMonitor._cross_hub_cache_ts = now
+
+        sym_upper = self.symbol.upper().strip()
+        for hub_name, hub in StreamingPriceMonitor._cross_hub_cache.items():
             try:
-                import importlib
-                mod = importlib.import_module(hub_getter)
-                hub = getattr(mod, hub_name)()
-                price = hub.get_quote_price(self.symbol)
+                price = hub.get_quote_price(sym_upper)
                 if price and price > 0:
                     return float(price)
             except Exception:
@@ -771,10 +838,9 @@ class BaseConditionalOrderService(ABC):
         self._thread_logs = deque(maxlen=100)
         self.finnhub_api_key = os.getenv('FINNHUB_API_KEY', '')
         self.data_hubs: Dict[str, Any] = {}
-        # Breakout-reset guard: if the price is already past the trigger when an
-        # order is created, wait for it to pull back to the other side first
-        # before allowing the order to fire. Prevents immediate execution.
         self._price_reset_needed: Dict[int, bool] = {}
+        self._execution_locks: Dict[int, asyncio.Lock] = {}
+        self._executing_orders: set = set()
         
         self._init_rate_limiters()
     
@@ -1485,24 +1551,72 @@ class BaseConditionalOrderService(ABC):
             )
             return
         
+        if isinstance(monitor, StreamingPriceMonitor) and broker:
+            broker_lower = broker.lower().replace('_paper', '').replace('_live', '')
+            if broker_lower in self.rate_limiters:
+                monitor._rate_limiter = self.rate_limiters[broker_lower]
+        
         self.monitors[order_id] = monitor
         
         def _on_monitor_done(task: asyncio.Task, oid: int = order_id):
             try:
                 result = task.result()
                 if result is False:
-                    self._log(f"Order #{oid}: Monitor returned False")
+                    self._log(f"Order #{oid}: Monitor returned False — marking ERROR")
                     if oid in self.monitors:
                         del self.monitors[oid]
-                    if oid in self.pending_orders:
-                        del self.pending_orders[oid]
                     if oid in self.monitor_tasks:
                         del self.monitor_tasks[oid]
                     self._price_reset_needed.pop(oid, None)
+                    self._executing_orders.discard(oid)
+                    self._execution_locks.pop(oid, None)
+                    try:
+                        update_conditional_order_status(
+                            oid, 'ERROR',
+                            event='MONITOR_FAILED',
+                            error_message='Price monitor returned False — no data source available'
+                        )
+                    except Exception:
+                        pass
+                    if oid in self.pending_orders:
+                        del self.pending_orders[oid]
             except asyncio.CancelledError:
                 self._log(f"Monitor #{oid} cancelled")
             except Exception as e:
-                self._log(f"Monitor error #{oid}: {e}")
+                self._log(f"Monitor error #{oid}: {e} — attempting restart")
+                if oid in self.monitor_tasks:
+                    del self.monitor_tasks[oid]
+                if oid in self.monitors:
+                    del self.monitors[oid]
+                order_data = self.pending_orders.get(oid)
+                if order_data and self._loop:
+                    async def _restart_monitor(oid_inner=oid, order_inner=order_data):
+                        try:
+                            await asyncio.sleep(1)
+                            if oid_inner not in self.pending_orders:
+                                return
+                            await self._start_monitor(oid_inner, order_inner)
+                            if oid_inner in self.monitors:
+                                self._log(f"Monitor #{oid_inner}: Restarted successfully")
+                                return
+                            self._log(f"Monitor #{oid_inner}: Restart failed — marking ERROR")
+                            update_conditional_order_status(
+                                oid_inner, 'ERROR',
+                                event='MONITOR_RESTART_FAILED',
+                                error_message=f'Monitor crashed ({str(e)[:100]}) and restart failed'
+                            )
+                            if oid_inner in self.pending_orders:
+                                del self.pending_orders[oid_inner]
+                            self._executing_orders.discard(oid_inner)
+                            self._execution_locks.pop(oid_inner, None)
+                        except Exception as re_err:
+                            self._log(f"Monitor #{oid_inner}: Restart exception — {re_err}")
+                            update_conditional_order_status(
+                                oid_inner, 'ERROR',
+                                event='MONITOR_RESTART_FAILED',
+                                error_message=str(re_err)[:200]
+                            )
+                    asyncio.ensure_future(_restart_monitor(), loop=self._loop)
         
         async def price_callback(sym: str, price: float):
             await self._on_price_update(order_id, sym, price)
@@ -1519,10 +1633,18 @@ class BaseConditionalOrderService(ABC):
         """Remove an order from all in-memory tracking structures."""
         order = self.pending_orders.get(order_id)
         if order_id in self.monitors:
-            await self.monitors[order_id].stop()
+            try:
+                await self.monitors[order_id].stop()
+            except Exception:
+                pass
             del self.monitors[order_id]
         if order_id in self.monitor_tasks:
-            self.monitor_tasks[order_id].cancel()
+            task = self.monitor_tasks[order_id]
+            task.cancel()
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                pass
             del self.monitor_tasks[order_id]
         if order and order.get('broker', '').lower().replace('_paper', '').replace('_live', '') == 'trading212':
             try:
@@ -1535,6 +1657,8 @@ class BaseConditionalOrderService(ABC):
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
         self._price_reset_needed.pop(order_id, None)
+        self._executing_orders.discard(order_id)
+        self._execution_locks.pop(order_id, None)
         if hasattr(self, '_price_log_counters'):
             self._price_log_counters.pop(order_id, None)
     
@@ -1657,6 +1781,9 @@ class BaseConditionalOrderService(ABC):
             triggered = True
         
         if triggered:
+            if order_id in self._executing_orders:
+                return
+            self._executing_orders.add(order_id)
             self._log(f"TRIGGERED #{order_id} {symbol}")
             try:
                 notify_conditional_triggered(
@@ -1668,14 +1795,24 @@ class BaseConditionalOrderService(ABC):
                 )
             except Exception as e:
                 self._log(f"Notification error (triggered): {e}")
-            await self._execute_order(order_id, order, price)
+            if order_id not in self._execution_locks:
+                self._execution_locks[order_id] = asyncio.Lock()
+            async with self._execution_locks[order_id]:
+                await self._execute_order(order_id, order, price)
     
     async def _execute_order(self, order_id: int, order: Dict, trigger_price: float):
         """Execute triggered order with safety checks."""
         symbol = order.get('symbol', 'UNKNOWN')
         channel_id = order.get('channel_id')
         
-        # SAFETY CHECK 0: Final expiry guard (defense-in-depth)
+        db_status_check = get_conditional_order_by_id(order_id)
+        if db_status_check:
+            cur_status = db_status_check.get('status', '')
+            if cur_status in ('TRIGGERED', 'EXECUTING', 'EXECUTED', 'EXPIRED', 'CANCELLED', 'ERROR'):
+                self._log(f"⚠️ BLOCKED #{order_id} {symbol}: DB status already '{cur_status}' — skipping duplicate execution")
+                await self._cleanup_order(order_id)
+                return
+        
         expires_at = order.get('expires_at')
         if expires_at:
             try:
@@ -1702,12 +1839,6 @@ class BaseConditionalOrderService(ABC):
             except (ValueError, TypeError):
                 pass
         
-        db_order = get_conditional_order_by_id(order_id)
-        if db_order and db_order.get('status') == 'EXPIRED':
-            self._log(f"⚠️ BLOCKED #{order_id} {symbol}: DB status is EXPIRED — blocking execution")
-            await self._cleanup_order(order_id)
-            return
-        
         # SAFETY CHECK 1: Price staleness guard (30 second threshold)
         monitor = self.monitors.get(order_id)
         if monitor:
@@ -1720,9 +1851,9 @@ class BaseConditionalOrderService(ABC):
                     event='STALENESS_BLOCK',
                     details=f"Price stale ({staleness_sec}s) - waiting for fresh data"
                 )
-                return  # Don't execute, wait for fresh price
+                self._executing_orders.discard(order_id)
+                return
         
-        # SAFETY CHECK 2: Circuit breaker check
         try:
             from src.services.circuit_breaker import circuit_breaker
             if circuit_breaker.is_halted:
@@ -1733,9 +1864,9 @@ class BaseConditionalOrderService(ABC):
                     event='CIRCUIT_BREAKER_BLOCK',
                     details="Global trading halted by circuit breaker"
                 )
-                return  # Don't execute, trading is halted
+                self._executing_orders.discard(order_id)
+                return
             
-            # Check channel-specific halt
             if channel_id:
                 channel_state = circuit_breaker.get_channel_state(str(channel_id))
                 if channel_state and channel_state.is_halted:
@@ -1746,9 +1877,10 @@ class BaseConditionalOrderService(ABC):
                         event='CHANNEL_HALT_BLOCK',
                         details=f"Channel trading halted: {channel_state.reason}"
                     )
+                    self._executing_orders.discard(order_id)
                     return
         except ImportError:
-            pass  # Circuit breaker not available, continue with execution
+            pass
         except Exception as cb_err:
             self._log(f"Circuit breaker check error: {cb_err}")
 
@@ -1775,6 +1907,7 @@ class BaseConditionalOrderService(ABC):
                         event='DAILY_PNL_BLOCK',
                         details=block_detail
                     )
+                    self._executing_orders.discard(order_id)
                     return
         except ImportError:
             pass
@@ -1939,10 +2072,13 @@ class BaseConditionalOrderService(ABC):
         
         if order_id in self.monitors:
             if self._loop:
-                asyncio.run_coroutine_threadsafe(
-                    self.monitors[order_id].stop(),
-                    self._loop
-                )
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self.monitors[order_id].stop(),
+                        self._loop
+                    ).result(timeout=3)
+                except Exception:
+                    pass
             del self.monitors[order_id]
         
         if order_id in self.monitor_tasks:
@@ -1952,6 +2088,8 @@ class BaseConditionalOrderService(ABC):
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
         self._price_reset_needed.pop(order_id, None)
+        self._executing_orders.discard(order_id)
+        self._execution_locks.pop(order_id, None)
         
         result = cancel_conditional_order(order_id)
         
@@ -1972,6 +2110,19 @@ class BaseConditionalOrderService(ABC):
         self._log("Shutting down...")
         self.is_running = False
         
+        for order_id, monitor in list(self.monitors.items()):
+            try:
+                monitor.is_running = False
+                if self._loop and self._loop.is_running():
+                    try:
+                        asyncio.run_coroutine_threadsafe(
+                            monitor.stop(), self._loop
+                        ).result(timeout=2)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        
         for order_id, task in list(self.monitor_tasks.items()):
             task.cancel()
         
@@ -1979,6 +2130,8 @@ class BaseConditionalOrderService(ABC):
         self.monitor_tasks.clear()
         self.pending_orders.clear()
         self._price_reset_needed.clear()
+        self._executing_orders.clear()
+        self._execution_locks.clear()
         
         if self._loop:
             self._loop.call_soon_threadsafe(self._loop.stop)

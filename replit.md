@@ -50,7 +50,13 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Streaming Liveness TTL**: Data hubs track `_last_quote_ts` to detect silently dead streams and gracefully degrade to REST fallback.
 - **Webull Option Streaming Fixes**: Ensures correct option subscription and price overlay for Webull options in the streaming hub.
 - **Streaming Hub-First Architecture**: Comprehensive hub-first + REST fallback pattern across all services, caching account info, positions, orders, and quotes.
-- **Conditional Order Frozen Price Detection**: StreamingPriceMonitor detects price frozen ≥3s, probes cross-broker streaming hubs first, then broker REST (no Finnhub/yfinance). Fallback chain: streaming hub → cross-broker hub → broker REST.
+- **Conditional Order Frozen Price Detection**: StreamingPriceMonitor detects price frozen ≥3s (market hours only), probes cross-broker streaming hubs first, then broker REST. Fallback chain: streaming hub → cross-broker hub → broker REST. Cross-hub stale confirmation escalates to REST when all hubs return same stale price.
+- **Execution Idempotency**: Per-order asyncio.Lock + set guard + DB CAS status check prevents duplicate trade execution during monitor upgrades/restarts. Terminal statuses (TRIGGERED/EXECUTING/EXECUTED/EXPIRED/CANCELLED/ERROR) block re-entry.
+- **Staleness Guard (Price Change Tracking)**: `get_staleness_seconds()` now tracks time since last price CHANGE, not last poll. Frozen feeds trigger the 30s staleness block even while polls succeed.
+- **Monitor Failure Recovery**: `_on_monitor_done` marks orders as ERROR on monitor crash and attempts automatic restart with a new monitor. Failed restarts set ERROR status with details.
+- **Rate Limit Enforcement**: REST fallback calls in StreamingPriceMonitor and frozen probes check `RateLimitTracker.can_make_call()` and call `record_call()` on each API hit.
+- **Cross-Hub Cache**: Shared class-level hub reference cache (30s TTL) eliminates redundant dynamic imports across all monitors. Both StreamingPriceMonitor and BrokerPriceMonitor use the same cache.
+- **Cleanup Race Fix**: `_cleanup_order` awaits task cancellation with 2s timeout. `cancel_order` waits for monitor stop. `shutdown` stops all monitors before cancelling tasks. All paths clean up execution locks and sets.
 - **Trading212 Market Order Override**: Expands the T212-specific market order override to also force market orders for EMA exits and profit targets, ensuring all risk-triggered exits execute immediately.
 - **Bracket SL/PT Channel Resolution**: Fixes issues where positions with signal-embedded SL/PT were not showing proper risk protection due to NULL handling and missing trade ID fallbacks.
 - **Channel Pre-Configured Defaults**: Database initialization applies recommended risk settings for default channels on fresh installs.
