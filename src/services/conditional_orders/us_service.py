@@ -16,7 +16,6 @@ from .base import (
     FinnhubPriceMonitor,
     YFinancePriceMonitor,
     RateLimitTracker,
-    YFINANCE_AVAILABLE,
 )
 
 
@@ -94,15 +93,12 @@ class USConditionalOrderService(BaseConditionalOrderService):
                     if alt_hub_streaming:
                         break
         
-        finnhub_key = self.finnhub_api_key or None
-
         if hub and hub_is_streaming:
             data_source = f"{broker_key}_stream"
             self._log(f"Using STREAMING hub for {symbol} via {broker_name} (sub-100ms, zero API calls)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
-                broker_instance=broker_instance,
-                finnhub_api_key=finnhub_key
+                broker_instance=broker_instance
             )
         
         elif hub:
@@ -110,8 +106,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"Using data hub for {symbol} via {broker_name} (hub cache + broker REST fallback, will auto-upgrade when streaming connects)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
-                broker_instance=broker_instance,
-                finnhub_api_key=finnhub_key
+                broker_instance=broker_instance
             )
         
         elif alt_hub and alt_hub_streaming:
@@ -119,8 +114,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"Using STREAMING hub for {symbol} via {alt_hub_name} (cross-broker WebSocket for {broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
-                broker_instance=alt_hub_broker,
-                finnhub_api_key=finnhub_key
+                broker_instance=alt_hub_broker
             )
         
         elif alt_hub:
@@ -128,8 +122,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"Using data hub for {symbol} via {alt_hub_name} (cross-broker cache for {broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
-                broker_instance=alt_hub_broker,
-                finnhub_api_key=finnhub_key
+                broker_instance=alt_hub_broker
             )
         
         elif broker_instance and broker_rate_ok:

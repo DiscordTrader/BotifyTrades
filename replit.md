@@ -50,7 +50,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Streaming Liveness TTL**: Data hubs track `_last_quote_ts` to detect silently dead streams and gracefully degrade to REST fallback.
 - **Webull Option Streaming Fixes**: Ensures correct option subscription and price overlay for Webull options in the streaming hub.
 - **Streaming Hub-First Architecture**: Comprehensive hub-first + REST fallback pattern across all services, caching account info, positions, orders, and quotes.
-- **Trading212 Conditional Order Price Fallback**: Adds Finnhub and YFinance as final fallbacks for conditional order price monitoring for T212-only users.
+- **Conditional Order Frozen Price Detection**: StreamingPriceMonitor detects price frozen ≥3s, probes cross-broker streaming hubs first, then broker REST (no Finnhub/yfinance). Fallback chain: streaming hub → cross-broker hub → broker REST.
 - **Trading212 Market Order Override**: Expands the T212-specific market order override to also force market orders for EMA exits and profit targets, ensuring all risk-triggered exits execute immediately.
 - **Bracket SL/PT Channel Resolution**: Fixes issues where positions with signal-embedded SL/PT were not showing proper risk protection due to NULL handling and missing trade ID fallbacks.
 - **Channel Pre-Configured Defaults**: Database initialization applies recommended risk settings for default channels on fresh installs.

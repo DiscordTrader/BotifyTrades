@@ -235,18 +235,21 @@ class StreamingPriceMonitor(PriceMonitor):
     HUB_STALE_THRESHOLD = 10
     
     def __init__(self, symbol: str, callback: Callable[[str, float], None],
-                 data_hub: Any, broker_name: str, broker_instance: Any = None,
-                 finnhub_api_key: str = None):
+                 data_hub: Any, broker_name: str, broker_instance: Any = None):
         super().__init__(symbol, callback)
         self.data_hub = data_hub
         self.broker_name = broker_name
         self.broker_instance = broker_instance
-        self.finnhub_api_key = finnhub_api_key
         self._hub_miss_count = 0
         self._using_rest_fallback = False
         self._rest_monitor: Optional['BrokerPriceMonitor'] = None
         self._rest_session: Optional[aiohttp.ClientSession] = None
         self._last_rest_call = 0
+        self._last_hub_price: Optional[float] = None
+        self._last_hub_change_ts: float = 0
+        self._last_frozen_probe_ts: float = 0
+        self.FROZEN_THRESHOLD = 3.0
+        self.FROZEN_PROBE_COOLDOWN = 3.0
     
     def _try_subscribe_streaming(self):
         try:
@@ -334,12 +337,42 @@ class StreamingPriceMonitor(PriceMonitor):
                     self._hub_miss_count = 0
                     self._using_rest_fallback = False
                     self._update_price_timestamp()
-                    
+
+                    now = time.time()
+                    if self._last_hub_price is None or abs(price - self._last_hub_price) > 0.0001:
+                        self._last_hub_price = price
+                        self._last_hub_change_ts = now
+
+                    frozen_seconds = now - self._last_hub_change_ts if self._last_hub_change_ts > 0 else 0
+                    if frozen_seconds >= self.FROZEN_THRESHOLD and (now - self._last_frozen_probe_ts) >= self.FROZEN_PROBE_COOLDOWN:
+                        self._last_frozen_probe_ts = now
+                        cross_price = self._try_cross_broker_hubs()
+                        if cross_price and cross_price > 0 and abs(cross_price - price) > 0.0001:
+                            if not getattr(self, '_frozen_cross_logged', False):
+                                sys.stderr.write(f"[STREAM_MON] {self.symbol}: Price frozen {frozen_seconds:.0f}s at ${price:.2f}, cross-hub returned ${cross_price:.2f}\n")
+                                sys.stderr.flush()
+                                self._frozen_cross_logged = True
+                            price = cross_price
+                            self._last_hub_price = price
+                            self._last_hub_change_ts = now
+                        elif not cross_price:
+                            rest_price = await self._fetch_rest_price_no_cross_hub()
+                            if rest_price and rest_price > 0 and abs(rest_price - price) > 0.0001:
+                                if not getattr(self, '_frozen_rest_logged', False):
+                                    sys.stderr.write(f"[STREAM_MON] {self.symbol}: Price frozen {frozen_seconds:.0f}s, cross-hub empty, REST returned ${rest_price:.2f}\n")
+                                    sys.stderr.flush()
+                                    self._frozen_rest_logged = True
+                                price = rest_price
+                                self._last_hub_price = price
+                                self._last_hub_change_ts = now
+                    else:
+                        self._frozen_cross_logged = False
+                        self._frozen_rest_logged = False
+
                     if poll_count <= 3 or poll_count % 40 == 0:
                         sys.stderr.write(f"[STREAM_MON] {self.symbol}: ${price:.2f} (hub, poll #{poll_count})\n")
                         sys.stderr.flush()
-                    
-                    now = time.time()
+
                     last_cb = getattr(self, '_last_callback_time', 0)
                     if price != self.last_price:
                         self.last_price = price
@@ -412,31 +445,30 @@ class StreamingPriceMonitor(PriceMonitor):
         if cross_price:
             return cross_price
 
-        if self.finnhub_api_key:
-            try:
-                finnhub_price = await self._fetch_finnhub_price()
-                if finnhub_price and finnhub_price > 0:
-                    if not getattr(self, '_finnhub_fallback_logged', False):
-                        sys.stderr.write(f"[STREAM_MON] {self.symbol}: Using Finnhub fallback (no hub/broker price available)\n")
-                        sys.stderr.flush()
-                        self._finnhub_fallback_logged = True
-                    return finnhub_price
-            except Exception:
-                pass
+        return None
 
-        if YFINANCE_AVAILABLE:
+    async def _fetch_rest_price_no_cross_hub(self) -> Optional[float]:
+        now = time.time()
+        if now - self._last_rest_call < self.REST_FALLBACK_INTERVAL - 0.5:
+            return self.last_price
+        self._last_rest_call = now
+
+        if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
             try:
-                import yfinance as yf
-                loop = asyncio.get_event_loop()
-                ticker = await loop.run_in_executor(None, lambda: yf.Ticker(self.symbol))
-                info = await loop.run_in_executor(None, lambda: ticker.fast_info)
-                price = getattr(info, 'last_price', None) or getattr(info, 'previous_close', None)
-                if price and float(price) > 0:
-                    if not getattr(self, '_yfinance_fallback_logged', False):
-                        sys.stderr.write(f"[STREAM_MON] {self.symbol}: Using YFinance fallback (no hub/broker/Finnhub price available)\n")
-                        sys.stderr.flush()
-                        self._yfinance_fallback_logged = True
-                    return float(price)
+                import inspect
+                quote_method = self.broker_instance.get_quote
+                if inspect.iscoroutinefunction(quote_method):
+                    result = await quote_method(self.symbol)
+                else:
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, lambda: quote_method(self.symbol))
+                if isinstance(result, (int, float)) and result > 0:
+                    return float(result)
+                elif isinstance(result, dict):
+                    for key in ('close', 'last', 'lastTradePrice', 'price', 'last_trade_price'):
+                        val = result.get(key)
+                        if val and float(val) > 0:
+                            return float(val)
             except Exception:
                 pass
 
@@ -458,22 +490,6 @@ class StreamingPriceMonitor(PriceMonitor):
                     return float(price)
             except Exception:
                 pass
-        return None
-    
-    async def _fetch_finnhub_price(self) -> Optional[float]:
-        if not self.finnhub_api_key:
-            return None
-        try:
-            url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        price = data.get('c')
-                        return float(price) if price else None
-        except Exception as e:
-            sys.stderr.write(f"[STREAM_MON] Finnhub fallback error for {self.symbol}: {e}\n")
-            sys.stderr.flush()
         return None
 
     def _try_unsubscribe_streaming(self):
