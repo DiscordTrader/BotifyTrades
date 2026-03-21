@@ -454,6 +454,10 @@ class StreamingPriceMonitor(PriceMonitor):
             return self.last_price
         self._last_rest_call = now
         
+        cross_price = self._try_cross_broker_hubs()
+        if cross_price:
+            return cross_price
+
         if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
             try:
                 if self._rate_limiter:
@@ -474,10 +478,6 @@ class StreamingPriceMonitor(PriceMonitor):
                             return float(val)
             except Exception:
                 pass
-
-        cross_price = self._try_cross_broker_hubs()
-        if cross_price:
-            return cross_price
 
         return None
 
@@ -1201,7 +1201,8 @@ class BaseConditionalOrderService(ABC):
                     self.pending_orders[order_id] = order
                     self._price_reset_needed[order_id] = False
                     update_conditional_order_status(order_id, 'ACTIVE_MONITORING')
-                    await self._execute_order(order_id, order)
+                    restore_trigger = float(order.get('trigger_price', 0) or 0)
+                    await self._execute_order(order_id, order, restore_trigger)
                 except Exception as e:
                     self._log(f"Re-execution failed for #{order_id}: {e}")
                     update_conditional_order_status(
@@ -2047,7 +2048,11 @@ class BaseConditionalOrderService(ABC):
                         )
                 if callback_success:
                     update_conditional_order_status(order_id, 'EXECUTING')
+                self._executing_orders.discard(order_id)
+                self._execution_locks.pop(order_id, None)
             except Exception as e:
+                self._executing_orders.discard(order_id)
+                self._execution_locks.pop(order_id, None)
                 self._log(f"Execution error #{order_id}: {e}")
                 update_conditional_order_status(
                     order_id,
