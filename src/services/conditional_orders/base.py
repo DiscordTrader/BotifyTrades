@@ -1854,6 +1854,7 @@ class BaseConditionalOrderService(ABC):
                     details=f"Price stale ({staleness_sec}s) - waiting for fresh data"
                 )
                 self._executing_orders.discard(order_id)
+                self._execution_locks.pop(order_id, None)
                 return
         
         try:
@@ -1867,6 +1868,7 @@ class BaseConditionalOrderService(ABC):
                     details="Global trading halted by circuit breaker"
                 )
                 self._executing_orders.discard(order_id)
+                self._execution_locks.pop(order_id, None)
                 return
             
             if channel_id:
@@ -1880,6 +1882,7 @@ class BaseConditionalOrderService(ABC):
                         details=f"Channel trading halted: {channel_state.reason}"
                     )
                     self._executing_orders.discard(order_id)
+                    self._execution_locks.pop(order_id, None)
                     return
         except ImportError:
             pass
@@ -1910,6 +1913,7 @@ class BaseConditionalOrderService(ABC):
                         details=block_detail
                     )
                     self._executing_orders.discard(order_id)
+                    self._execution_locks.pop(order_id, None)
                     return
         except ImportError:
             pass
@@ -1973,6 +1977,8 @@ class BaseConditionalOrderService(ABC):
                 if order_id in self.pending_orders:
                     del self.pending_orders[order_id]
                 self._price_reset_needed.pop(order_id, None)
+                self._executing_orders.discard(order_id)
+                self._execution_locks.pop(order_id, None)
                 
                 update_conditional_order_status(
                     order_id, 'CANCELLED',
