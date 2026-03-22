@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import threading
 import time
 import hashlib
 import collections
@@ -18,7 +19,16 @@ class Trading212RateLimiter:
 
     def __init__(self):
         self._last_call = {}
-        self._lock = asyncio.Lock()
+        self._locks: Dict[int, asyncio.Lock] = {}
+        self._thread_lock = threading.Lock()
+
+    def _get_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_event_loop()
+        loop_id = id(loop)
+        with self._thread_lock:
+            if loop_id not in self._locks:
+                self._locks[loop_id] = asyncio.Lock()
+            return self._locks[loop_id]
 
     def _classify(self, path: str) -> str:
         if '/portfolio' in path:
@@ -38,7 +48,7 @@ class Trading212RateLimiter:
         max_calls, window = self.ENDPOINT_LIMITS.get(category, (1, 5))
         min_interval = window / max_calls
 
-        async with self._lock:
+        async with self._get_lock():
             now = time.monotonic()
             last = self._last_call.get(category, 0)
             wait = min_interval - (now - last)
@@ -79,7 +89,8 @@ class Trading212Client:
         self._api_secret = api_secret
         self._environment = environment.lower()
         self._base_url = self.LIVE_BASE if self._environment == 'live' else self.DEMO_BASE
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._sessions: Dict[int, aiohttp.ClientSession] = {}
+        self._session_lock = threading.Lock()
         self._rate_limiter = Trading212RateLimiter()
         self._throttle_detector = SoftThrottleDetector()
 
@@ -91,30 +102,41 @@ class Trading212Client:
             return f"Basic {encoded}"
         return self._api_key
 
-    async def _ensure_session(self):
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(
-                headers={
-                    'Authorization': self._build_auth_header(),
-                    'Content-Type': 'application/json',
-                },
-                timeout=aiohttp.ClientTimeout(total=15)
-            )
+    async def _ensure_session(self) -> aiohttp.ClientSession:
+        loop = asyncio.get_event_loop()
+        loop_id = id(loop)
+        with self._session_lock:
+            session = self._sessions.get(loop_id)
+            if session and not session.closed:
+                return session
+        new_session = aiohttp.ClientSession(
+            headers={
+                'Authorization': self._build_auth_header(),
+                'Content-Type': 'application/json',
+            },
+            timeout=aiohttp.ClientTimeout(total=15)
+        )
+        with self._session_lock:
+            self._sessions[loop_id] = new_session
+        return new_session
 
     async def close(self):
-        if self._session and not self._session.closed:
-            await self._session.close()
-            self._session = None
+        loop = asyncio.get_event_loop()
+        loop_id = id(loop)
+        with self._session_lock:
+            session = self._sessions.pop(loop_id, None)
+        if session and not session.closed:
+            await session.close()
 
     async def _request(self, method: str, path: str, json_data: dict = None, params: dict = None) -> Dict[str, Any]:
-        await self._ensure_session()
+        session = await self._ensure_session()
         await self._rate_limiter.acquire(path)
 
         url = f'{self._base_url}{path}'
         start = time.monotonic()
 
         try:
-            async with self._session.request(method, url, json=json_data, params=params) as resp:
+            async with session.request(method, url, json=json_data, params=params) as resp:
                 elapsed_ms = (time.monotonic() - start) * 1000
                 self._throttle_detector.record(elapsed_ms)
 
@@ -211,7 +233,16 @@ class DuplicateOrderGuard:
     def __init__(self, ttl_seconds: int = 10):
         self._ttl = ttl_seconds
         self._fingerprints: Dict[str, float] = {}
-        self._lock = asyncio.Lock()
+        self._locks: Dict[int, asyncio.Lock] = {}
+        self._thread_lock = threading.Lock()
+
+    def _get_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_event_loop()
+        loop_id = id(loop)
+        with self._thread_lock:
+            if loop_id not in self._locks:
+                self._locks[loop_id] = asyncio.Lock()
+            return self._locks[loop_id]
 
     def _make_fingerprint(self, broker: str, channel: str, action: str, symbol: str, quantity: float) -> str:
         bucket = int(time.time() / 5)
@@ -220,7 +251,7 @@ class DuplicateOrderGuard:
 
     async def check_and_mark(self, broker: str, channel: str, action: str, symbol: str, quantity: float) -> bool:
         fp = self._make_fingerprint(broker, channel, action, symbol, quantity)
-        async with self._lock:
+        async with self._get_lock():
             now = time.time()
             expired = [k for k, v in self._fingerprints.items() if now - v > self._ttl]
             for k in expired:

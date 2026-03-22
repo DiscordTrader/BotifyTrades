@@ -107,6 +107,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Signal Exit Broker Routing Fix**: Ensures `broker` field is included in all signal-based STC paths.
 - **Worker Routing Type Safety Fix**: Handles both list and string types for `enabled_brokers` to prevent routing rejections.
 - **Phoenix BTO/STC Execution Gap Fix**: Correctly routes Phoenix stock BTO/STC actions with proper field mapping.
+- **Trading212 Event Loop Mismatch Fix (v7.1.9)**: Fixed `asyncio.Lock` in `Trading212RateLimiter`, `DuplicateOrderGuard`, and `aiohttp.ClientSession` in `Trading212Client` being bound to the wrong event loop. Locks and sessions are now lazily initialized on first use, with automatic re-creation when accessed from a different event loop. This prevented conditional order monitors from starting on T212 (`"got Future attached to a different loop"`) and blocked position fetching (`"Lock is bound to a different event loop"`).
 
 ## External Dependencies
 
