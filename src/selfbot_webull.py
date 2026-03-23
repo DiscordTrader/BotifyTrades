@@ -14665,34 +14665,76 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Use India stock signal if parsed, otherwise try US stock parser
         stk = india_stock_signal if india_stock_signal else parse_stock_signal(normalized_content)
         if stk:
-            # Apply tiered quantity defaults for BTO signals without qty from signal text
-            # IMPORTANT: Skip if _calculate_qty is True - those signals want dynamic sizing at execution time
-            # based on actual buying power, not static max_position_size
-            if stk.get('action') == 'BTO' and stk.get('qty') is None and not stk.get('_qty_from_signal', False) and not stk.get('_calculate_qty', False):
-                # Tiered default: channel fixed qty → channel % sizing → global → max_position_size → 1
+            if stk.get('action') == 'BTO' and not stk.get('_calculate_qty', False):
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 channel_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
-                
+                channel_max_position_size = channel_info.get('channel_max_position_size') if channel_info else None
+                signal_qty = stk.get('qty')
+
+                stk['_trader_signal_qty'] = signal_qty if signal_qty else 1
+
+                if channel_max_position_size:
+                    stk['_channel_max_position_size'] = float(channel_max_position_size)
+                    print(f"[POSITION SIZE] ✓ Channel max position size: ${channel_max_position_size}")
+
+                channel_sizing_mode = channel_info.get('sizing_mode', 'live') if channel_info else 'live'
+                if channel_sizing_mode in ('start_of_day', 'pre_market'):
+                    stk['_sizing_mode'] = channel_sizing_mode
+
                 if channel_default_qty:
-                    stk['qty'] = int(channel_default_qty)
-                    print(f"[DEFAULT QTY] ✓ Using channel default: {stk['qty']} shares")
+                    signal_qty_val = stk.get('qty')
+                    channel_qty_val = int(channel_default_qty)
+                    qty_actually_from_signal = stk.get('qty_specified', stk.get('_qty_from_signal', False))
+                    if signal_qty_val and signal_qty_val > 0 and qty_actually_from_signal:
+                        final_qty = min(signal_qty_val, channel_qty_val)
+                        stk['qty'] = final_qty
+                        if final_qty < signal_qty_val:
+                            print(f"[POSITION SIZE] ✓ Signal qty={signal_qty_val} CAPPED to channel limit={channel_qty_val} → executing {final_qty}")
+                        else:
+                            print(f"[POSITION SIZE] ✓ Using signal qty={signal_qty_val} (within channel limit={channel_qty_val})")
+                    else:
+                        stk['qty'] = channel_qty_val
+                        print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {stk['qty']} shares (auto-calc qty={signal_qty_val} overridden by channel setting)")
+
+                    if channel_max_position_size:
+                        price = stk.get('price')
+                        if price and price > 0:
+                            total_position_value = float(price) * stk['qty']
+                            max_pos_val = float(channel_max_position_size)
+                            if total_position_value > max_pos_val:
+                                max_affordable_qty = int(max_pos_val / float(price))
+                                if max_affordable_qty <= 0:
+                                    print(f"[POSITION SIZE] ❌ BLOCKING TRADE: 1 share costs ${price:.2f} but MAX POSITION$ is ${max_pos_val:.0f}")
+                                    stk['_blocked_by_max_position'] = True
+                                    stk['_block_reason'] = f"Position value ${price:.2f} exceeds MAX POSITION$ ${max_pos_val:.0f}"
+                                else:
+                                    old_qty = stk['qty']
+                                    stk['qty'] = max_affordable_qty
+                                    print(f"[POSITION SIZE] ⚠️ MAX POSITION$ cap: {old_qty} shares (${total_position_value:.0f}) → {max_affordable_qty} shares (${float(price) * max_affordable_qty:.0f}) to stay within ${max_pos_val:.0f}")
                 elif channel_position_size_pct:
+                    signal_qty_val = stk.get('qty')
                     stk['_position_size_pct'] = float(channel_position_size_pct)
                     stk['_pct_from_channel'] = True
                     stk['_calculate_qty'] = True
-                    stk['qty'] = 1
-                    print(f"[DEFAULT QTY] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
-                else:
-                    # Check global default and max_position_size settings
+
+                    if signal_qty_val and signal_qty_val > 0:
+                        stk['_signal_qty_to_cap'] = signal_qty_val
+                        stk['qty'] = signal_qty_val
+                        print(f"[POSITION SIZE] ✓ Signal qty={signal_qty_val} with channel {channel_position_size_pct}% limit (will use MIN)")
+                    else:
+                        stk['qty'] = 1
+                        print(f"[POSITION SIZE] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
+                elif signal_qty and stk.get('_qty_from_signal', False):
+                    print(f"[POSITION SIZE] ✓ Using signal quantity: {signal_qty} shares (no channel override)")
+                elif signal_qty is None or not stk.get('_qty_from_signal', False):
                     _current_trading_settings = get_trading_settings()
                     global_default_qty = _current_trading_settings.get('global_default_quantity')
                     max_position_size_enabled = _current_trading_settings.get('max_position_size_enabled', True)
-                    
+
                     if global_default_qty:
                         stk['qty'] = int(global_default_qty)
                         print(f"[DEFAULT QTY] ✓ Using global default: {stk['qty']} shares")
                     elif max_position_size_enabled:
-                        # Use max_position_size calculation only if enabled
                         max_position_size = _current_trading_settings['max_position_size']
                         price = stk.get('price')
                         if price and price > 0:
@@ -14704,9 +14746,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     else:
                         stk['qty'] = 1
                         print(f"[DEFAULT QTY] ⚠️ Max position size disabled, no global default set - using 1 share")
-                
-                # GLOBAL MAX_POSITION_SIZE CAP for stocks: Final safety check
-                if not stk.get('_calculate_qty'):
+
+                if not stk.get('_blocked_by_max_position') and not stk.get('_calculate_qty'):
                     _current_trading_settings = get_trading_settings()
                     max_position_size_enabled = _current_trading_settings.get('max_position_size_enabled', True)
                     if max_position_size_enabled:
@@ -15040,7 +15081,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 stk['_exit_strategy_mode'] = ch_exit_mode
                 
-                # Entry Confirmation for stocks: require price to go +X% above signal's watching price
+                try:
+                    from gui_app.database import is_circuit_breaker_tripped
+                    circuit_status = is_circuit_breaker_tripped()
+                    if circuit_status.get('tripped'):
+                        reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                        print(f"[CIRCUIT BREAKER] ⛔ BLOCKED: {reason}")
+                        print(f"[CIRCUIT BREAKER] Stock signal NOT queued for execution")
+                        return
+                except Exception as cb_err:
+                    print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+
                 stk_entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
                 if stk_entry_confirmation_pct > 0 and stk.get('action', '').upper() == 'BTO':
                     stk_watching_price = stk.get('trigger_price') or stk.get('price')
@@ -15170,6 +15221,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         stk['author'] = author_name
                         print(f"[DATABASE] ✓ Added channel_record_id={stk['channel_record_id']} for paper trade tracking")
                     
+                    try:
+                        from gui_app.database import is_circuit_breaker_tripped
+                        circuit_status = is_circuit_breaker_tripped()
+                        if circuit_status.get('tripped'):
+                            reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                            print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (stock paper): {reason}")
+                            return
+                    except Exception as cb_err:
+                        print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+
                     await self.order_queue.put(stk)
                     print(f"[QUEUE] ✓ Signal queued for PAPER execution")
                 else:
