@@ -73,7 +73,7 @@ class IBKRBroker(BrokerInterface):
     async def connect(self) -> bool:
         """Connect to Interactive Brokers TWS/Gateway"""
         try:
-            # Connect to TWS or IB Gateway
+            self._event_loop = asyncio.get_event_loop()
             await self.ib.connectAsync(
                 host=self.host,
                 port=self.port,

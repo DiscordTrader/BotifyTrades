@@ -431,7 +431,30 @@ class StreamingPriceMonitor(PriceMonitor):
 
     def _try_alt_broker_rest_quote_sync(self, symbol: str) -> Optional[float]:
         import inspect
+        hub_modules = [
+            ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+            ('src.services.webull_data_hub', 'get_webull_data_hub'),
+            ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
+            ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+        ]
         primary_lower = self.broker_name.lower().replace('_paper', '').replace('_live', '')
+        for mod_path, func_name in hub_modules:
+            hub_broker = mod_path.split('.')[-1].replace('_data_hub', '')
+            if hub_broker == primary_lower:
+                continue
+            try:
+                import importlib
+                mod = importlib.import_module(mod_path)
+                hub = getattr(mod, func_name)()
+                if hub and hasattr(hub, 'get_quote_price'):
+                    price = hub.get_quote_price(symbol.upper())
+                    if price and float(price) > 0:
+                        sys.stderr.write(f"[ALT_QUOTE] Got hub quote for {symbol} via {hub_broker}: ${float(price)}\n")
+                        sys.stderr.flush()
+                        return float(price)
+            except Exception:
+                continue
+
         for bname, binst in self.alt_broker_instances.items():
             bname_norm = bname.lower().replace('_paper', '').replace('_live', '')
             if bname_norm == primary_lower or bname_norm == 'trading212':
@@ -450,22 +473,18 @@ class StreamingPriceMonitor(PriceMonitor):
                         future = asyncio.run_coroutine_threadsafe(quote_method(symbol), main_loop)
                         result = future.result(timeout=10)
                     else:
-                        new_loop = asyncio.new_event_loop()
-                        try:
-                            result = new_loop.run_until_complete(quote_method(symbol))
-                        finally:
-                            new_loop.close()
+                        continue
                 else:
                     result = quote_method(symbol)
                 if isinstance(result, (int, float)) and result > 0:
-                    sys.stderr.write(f"[TRADING212] Got REST quote for {symbol} via alt broker {bname}: ${result}\n")
+                    sys.stderr.write(f"[ALT_QUOTE] Got REST quote for {symbol} via alt broker {bname}: ${result}\n")
                     sys.stderr.flush()
                     return float(result)
                 elif isinstance(result, dict):
                     for key in ('close', 'last', 'lastTradePrice', 'price', 'last_trade_price'):
                         val = result.get(key)
                         if val and float(val) > 0:
-                            sys.stderr.write(f"[TRADING212] Got REST quote for {symbol} via alt broker {bname}: ${float(val)}\n")
+                            sys.stderr.write(f"[ALT_QUOTE] Got REST quote for {symbol} via alt broker {bname}: ${float(val)}\n")
                             sys.stderr.flush()
                             return float(val)
             except Exception:
@@ -716,7 +735,30 @@ class BrokerPriceMonitor(PriceMonitor):
 
     def _try_alt_broker_rest_quote_sync(self, symbol: str) -> Optional[float]:
         import inspect
+        hub_modules = [
+            ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+            ('src.services.webull_data_hub', 'get_webull_data_hub'),
+            ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
+            ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+        ]
         primary_lower = self.broker_name.lower().replace('_paper', '').replace('_live', '')
+        for mod_path, func_name in hub_modules:
+            hub_broker = mod_path.split('.')[-1].replace('_data_hub', '')
+            if hub_broker == primary_lower:
+                continue
+            try:
+                import importlib
+                mod = importlib.import_module(mod_path)
+                hub = getattr(mod, func_name)()
+                if hub and hasattr(hub, 'get_quote_price'):
+                    price = hub.get_quote_price(symbol.upper())
+                    if price and float(price) > 0:
+                        sys.stderr.write(f"[ALT_QUOTE] Got hub quote for {symbol} via {hub_broker}: ${float(price)}\n")
+                        sys.stderr.flush()
+                        return float(price)
+            except Exception:
+                continue
+
         for bname, binst in self.alt_broker_instances.items():
             bname_norm = bname.lower().replace('_paper', '').replace('_live', '')
             if bname_norm == primary_lower or bname_norm == 'trading212':
@@ -735,22 +777,18 @@ class BrokerPriceMonitor(PriceMonitor):
                         future = asyncio.run_coroutine_threadsafe(quote_method(symbol), main_loop)
                         result = future.result(timeout=10)
                     else:
-                        new_loop = asyncio.new_event_loop()
-                        try:
-                            result = new_loop.run_until_complete(quote_method(symbol))
-                        finally:
-                            new_loop.close()
+                        continue
                 else:
                     result = quote_method(symbol)
                 if isinstance(result, (int, float)) and result > 0:
-                    sys.stderr.write(f"[TRADING212] Got REST quote for {symbol} via alt broker {bname}: ${result}\n")
+                    sys.stderr.write(f"[ALT_QUOTE] Got REST quote for {symbol} via alt broker {bname}: ${result}\n")
                     sys.stderr.flush()
                     return float(result)
                 elif isinstance(result, dict):
                     for key in ('close', 'last', 'lastTradePrice', 'price', 'last_trade_price'):
                         val = result.get(key)
                         if val and float(val) > 0:
-                            sys.stderr.write(f"[TRADING212] Got REST quote for {symbol} via alt broker {bname}: ${float(val)}\n")
+                            sys.stderr.write(f"[ALT_QUOTE] Got REST quote for {symbol} via alt broker {bname}: ${float(val)}\n")
                             sys.stderr.flush()
                             return float(val)
             except Exception:
