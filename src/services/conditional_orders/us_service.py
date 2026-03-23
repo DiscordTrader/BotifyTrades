@@ -13,8 +13,6 @@ from .base import (
     PriceMonitor,
     StreamingPriceMonitor,
     BrokerPriceMonitor,
-    FinnhubPriceMonitor,
-    YFinancePriceMonitor,
     RateLimitTracker,
 )
 
@@ -39,7 +37,6 @@ class USConditionalOrderService(BaseConditionalOrderService):
             'robinhood': RateLimitTracker('robinhood', 60),
             'schwab': RateLimitTracker('schwab', 60),
             'trading212': RateLimitTracker('trading212', 30),
-            'finnhub': RateLimitTracker('finnhub', 60),
         }
     
     def get_supported_brokers(self) -> List[str]:

@@ -2,7 +2,7 @@
 India Market Conditional Order Service
 
 Handles conditional orders for Indian markets (NSE, BSE, MCX)
-Price monitoring fallback chain: Upstox/Zerodha/DhanQ → yfinance
+Price monitoring fallback chain: Upstox/Zerodha/DhanQ → Cross-Broker Hub
 """
 
 import sys
@@ -13,8 +13,8 @@ from datetime import datetime
 from .base import (
     BaseConditionalOrderService,
     PriceMonitor,
+    BrokerPriceMonitor,
     RateLimitTracker,
-    YFINANCE_AVAILABLE,
 )
 
 try:
@@ -139,11 +139,9 @@ class IndiaPriceMonitor(PriceMonitor):
             await asyncio.sleep(self.poll_interval)
     
     async def _fetch_price(self) -> Optional[float]:
-        """Fetch price from broker or fallback."""
+        """Fetch price from broker or cross-broker hub fallback."""
         if self.broker_instance and self._instrument_key:
             return await self._fetch_from_broker()
-        elif YFINANCE_AVAILABLE:
-            return await self._fetch_from_yfinance()
         return None
     
     async def _fetch_from_broker(self) -> Optional[float]:
@@ -187,28 +185,6 @@ class IndiaPriceMonitor(PriceMonitor):
         
         return None
     
-    async def _fetch_from_yfinance(self) -> Optional[float]:
-        """Fetch index price from yfinance as fallback."""
-        try:
-            import yfinance as yf
-            loop = asyncio.get_event_loop()
-            
-            yf_symbol = {
-                'NIFTY': '^NSEI',
-                'BANKNIFTY': '^NSEBANK',
-            }.get(self.symbol.upper(), f'{self.symbol}.NS')
-            
-            def get_price():
-                ticker = yf.Ticker(yf_symbol)
-                info = ticker.fast_info
-                return info.get('lastPrice') or info.get('regularMarketPrice')
-            
-            price = await loop.run_in_executor(None, get_price)
-            return float(price) if price else None
-        except Exception as e:
-            sys.stderr.write(f"[INDIA] yfinance error: {e}\n")
-            sys.stderr.flush()
-            return None
 
 
 class IndiaConditionalOrderService(BaseConditionalOrderService):
@@ -216,7 +192,7 @@ class IndiaConditionalOrderService(BaseConditionalOrderService):
     Conditional order service for Indian markets.
     
     Supports brokers: Upstox, Zerodha, DhanQ
-    Fallback chain: Channel Broker → yfinance (for indices)
+    Fallback chain: Channel Broker → Cross-Broker Hub
     """
     
     MARKET = 'INDIA'
@@ -239,7 +215,7 @@ class IndiaConditionalOrderService(BaseConditionalOrderService):
         
         Fallback chain:
         1. Channel-configured broker (Upstox/Zerodha/DhanQ) - real-time
-        2. yfinance - for index prices as fallback
+        2. Cross-broker hub fallback
         """
         symbol = order['symbol']
         strike = order.get('strike', 0)
@@ -257,25 +233,34 @@ class IndiaConditionalOrderService(BaseConditionalOrderService):
                     self._log(f"Using registered broker: {b_name}")
                     break
         
-        if effective_broker:
-            data_source = effective_broker_name
-            self._log(f"Using {effective_broker_name} for {symbol} {strike}{opt_type} (real-time)")
-        else:
-            data_source = 'yfinance'
-            self._log(f"Using yfinance fallback for {symbol} (index price only)")
-        
         async def price_callback(sym: str, price: float):
             await self._on_price_update(order['id'], sym, price)
         
-        monitor = IndiaPriceMonitor(
-            symbol,
-            strike,
-            opt_type,
-            price_callback,
-            effective_broker,
-            expiry,
-            effective_broker_name or 'yfinance'
-        )
+        if effective_broker:
+            data_source = effective_broker_name
+            self._log(f"Using {effective_broker_name} for {symbol} {strike}{opt_type} (real-time)")
+            monitor = IndiaPriceMonitor(
+                symbol,
+                strike,
+                opt_type,
+                price_callback,
+                effective_broker,
+                expiry,
+                effective_broker_name
+            )
+        else:
+            data_source = 'cross_hub'
+            self._log(f"No India broker connected for {symbol}, using cross-broker hub fallback")
+            monitor = None
+            for bname, binst in self.broker_instances.items():
+                if binst and hasattr(binst, 'get_quote'):
+                    data_source = bname.lower()
+                    self._log(f"Using {bname} for {symbol} (fallback broker REST)")
+                    monitor = BrokerPriceMonitor(symbol, price_callback, bname, binst)
+                    break
+            if not monitor:
+                self._log(f"ERROR: No price source for {symbol} — no brokers connected")
+                return None
         
         from gui_app.database import update_conditional_order_status
         status = 'ACTIVE_MONITORING' if effective_broker else 'FALLBACK_MONITORING'

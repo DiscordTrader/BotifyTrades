@@ -12,10 +12,7 @@ from .base import (
     BaseConditionalOrderService,
     PriceMonitor,
     BrokerPriceMonitor,
-    FinnhubPriceMonitor,
-    YFinancePriceMonitor,
     RateLimitTracker,
-    YFINANCE_AVAILABLE,
 )
 
 
@@ -33,7 +30,6 @@ class CanadaConditionalOrderService(BaseConditionalOrderService):
         """Initialize rate limiters for Canada brokers."""
         self.rate_limiters = {
             'questrade': RateLimitTracker('questrade', 100),
-            'finnhub': RateLimitTracker('finnhub', 60),
         }
     
     def get_supported_brokers(self) -> List[str]:

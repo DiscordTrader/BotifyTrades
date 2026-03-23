@@ -47,8 +47,6 @@ class Trading212DataHub:
         self._conditional_symbols: set = set()
         self._conditional_lock = threading.Lock()
         self._last_conditional_quote_ts: float = 0
-        self._yfinance_fail_cache: Dict[str, float] = {}
-        self._YFINANCE_FAIL_COOLDOWN = 120
 
     def set_broker(self, broker):
         self._broker = broker
@@ -163,26 +161,6 @@ class Trading212DataHub:
                 pass
         return None
 
-    def _fetch_yfinance_quote(self, symbol: str) -> Optional[float]:
-        now = time.time()
-        fail_ts = self._yfinance_fail_cache.get(symbol.upper(), 0)
-        if now - fail_ts < self._YFINANCE_FAIL_COOLDOWN:
-            return None
-        try:
-            import yfinance as yf
-            ticker = yf.Ticker(symbol)
-            info = ticker.fast_info
-            price = getattr(info, 'last_price', None)
-            if not price or price <= 0:
-                price = getattr(info, 'previous_close', None)
-            if price and price > 0:
-                return float(price)
-            self._yfinance_fail_cache[symbol.upper()] = now
-        except Exception as e:
-            self._yfinance_fail_cache[symbol.upper()] = now
-            print(f"[T212-HUB] yfinance quote error for {symbol}: {e}")
-        return None
-
     async def _fetch_conditional_quotes(self):
         uncovered = self._get_uncovered_conditional_symbols()
         if not uncovered:
@@ -193,25 +171,14 @@ class Trading212DataHub:
             return
         self._last_conditional_quote_ts = now
 
-        loop = asyncio.get_event_loop()
         for sym in uncovered:
             cross_price = self._try_cross_hub_quote(sym)
             if cross_price:
                 with self._quotes_lock:
                     self._quotes[sym] = {'price': cross_price, 'ts': time.time()}
-                print(f"[T212-HUB] ✓ Cross-hub quote for {sym}: ${cross_price:.4f}")
-                continue
-
-            try:
-                yf_price = await loop.run_in_executor(None, self._fetch_yfinance_quote, sym)
-                if yf_price:
-                    with self._quotes_lock:
-                        self._quotes[sym] = {'price': yf_price, 'ts': time.time()}
-                    print(f"[T212-HUB] ✓ yfinance quote for {sym}: ${yf_price:.4f}")
-                else:
-                    print(f"[T212-HUB] ⚠ No quote source for conditional symbol {sym}")
-            except Exception as e:
-                print(f"[T212-HUB] Conditional quote error for {sym}: {e}")
+                print(f"[T212-HUB] Cross-hub quote for {sym}: ${cross_price:.4f}")
+            else:
+                print(f"[T212-HUB] No cross-hub quote for conditional symbol {sym} — need Webull/Schwab/IBKR connected")
 
     async def poll_once(self):
         if not self._broker or not self._broker.connected:

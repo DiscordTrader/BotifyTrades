@@ -31,11 +31,7 @@ except ImportError:
     IST = None
     EST = None
 
-try:
-    import yfinance as yf
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    YFINANCE_AVAILABLE = False
+YFINANCE_AVAILABLE = False
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -145,96 +141,6 @@ class PriceMonitor(ABC):
     async def stop(self):
         """Stop monitoring."""
         self.is_running = False
-
-
-class FinnhubPriceMonitor(PriceMonitor):
-    """Price monitor using Finnhub API (US stocks)."""
-    
-    def __init__(self, symbol: str, callback: Callable[[str, float], None], api_key: str):
-        super().__init__(symbol, callback)
-        self.api_key = api_key
-        self.poll_interval = 1  # 60 req/min limit - can poll every 1 second
-    
-    async def start(self):
-        self.is_running = True
-        sys.stderr.write(f"[FINNHUB] Starting price monitor for {self.symbol}\n")
-        sys.stderr.flush()
-        
-        async with aiohttp.ClientSession() as session:
-            poll_count = 0
-            while self.is_running:
-                try:
-                    url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.api_key}"
-                    async with session.get(url) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            price = data.get('c')
-                            poll_count += 1
-                            if poll_count <= 3 or poll_count % 20 == 0:
-                                sys.stderr.write(f"[FINNHUB] Poll #{poll_count} {self.symbol}: ${price}\n")
-                                sys.stderr.flush()
-                            if price:
-                                self._update_price_timestamp(float(price))
-                                if price != self.last_price:
-                                    self.last_price = price
-                                    await self.callback(self.symbol, float(price))
-                                elif poll_count % 10 == 0:
-                                    await self.callback(self.symbol, float(price))
-                except Exception as e:
-                    sys.stderr.write(f"[FINNHUB] Error for {self.symbol}: {e}\n")
-                    sys.stderr.flush()
-                
-                await asyncio.sleep(self.poll_interval)
-
-
-class YFinancePriceMonitor(PriceMonitor):
-    """Price monitor using yfinance (delayed data fallback)."""
-    
-    def __init__(self, symbol: str, callback: Callable[[str, float], None]):
-        super().__init__(symbol, callback)
-        self.poll_interval = 15
-    
-    async def start(self):
-        self.is_running = True
-        sys.stderr.write(f"[YFINANCE] Starting price monitor for {self.symbol} (delayed ~15min)\n")
-        sys.stderr.flush()
-        
-        poll_count = 0
-        while self.is_running:
-            try:
-                price = await self._fetch_price()
-                poll_count += 1
-                if poll_count <= 3 or poll_count % 10 == 0:
-                    sys.stderr.write(f"[YFINANCE] Poll #{poll_count} {self.symbol}: ${price}\n")
-                    sys.stderr.flush()
-                if price:
-                    self._update_price_timestamp(float(price))
-                    if price != self.last_price:
-                        self.last_price = price
-                        await self.callback(self.symbol, float(price))
-                    elif poll_count % 10 == 0:
-                        await self.callback(self.symbol, float(price))
-            except Exception as e:
-                sys.stderr.write(f"[YFINANCE] Error for {self.symbol}: {e}\n")
-                sys.stderr.flush()
-            
-            await asyncio.sleep(self.poll_interval)
-    
-    async def _fetch_price(self) -> Optional[float]:
-        if not YFINANCE_AVAILABLE:
-            return None
-        try:
-            loop = asyncio.get_event_loop()
-            def get_fast_price():
-                ticker = yf.Ticker(self.symbol)
-                fast_info = ticker.fast_info
-                return fast_info.get('lastPrice') or fast_info.get('regularMarketPrice')
-            price = await loop.run_in_executor(None, get_fast_price)
-            return float(price) if price else None
-        except Exception as e:
-            sys.stderr.write(f"[YFINANCE] Fetch error for {self.symbol}: {e}\n")
-            sys.stderr.flush()
-            return None
 
 
 class StreamingPriceMonitor(PriceMonitor):
@@ -585,19 +491,16 @@ class BrokerPriceMonitor(PriceMonitor):
     }
     
     # Stale price detection threshold
-    STALE_THRESHOLD_POLLS = 10  # After 10 unchanged polls, check Finnhub
+    STALE_THRESHOLD_POLLS = 10
     
-    def __init__(self, symbol: str, callback: Callable[[str, float], None], broker_name: str, broker_instance: Any = None, finnhub_api_key: str = None):
+    def __init__(self, symbol: str, callback: Callable[[str, float], None], broker_name: str, broker_instance: Any = None):
         super().__init__(symbol, callback)
         self.broker_name = broker_name
         self.broker_instance = broker_instance
-        self.finnhub_api_key = finnhub_api_key
-        # Set poll interval based on broker API limits
         broker_lower = broker_name.lower()
-        self.poll_interval = self.BROKER_POLL_INTERVALS.get(broker_lower, 2)  # Default 2 sec
-        # Stale price detection
+        self.poll_interval = self.BROKER_POLL_INTERVALS.get(broker_lower, 2)
         self.unchanged_count = 0
-        self.using_finnhub_fallback = False
+        self.using_cross_hub_fallback = False
     
     HUB_FAST_INTERVAL = 0.5
 
@@ -615,25 +518,25 @@ class BrokerPriceMonitor(PriceMonitor):
                 
                 if price and price == self.last_price:
                     self.unchanged_count += 1
-                    if self.unchanged_count >= self.STALE_THRESHOLD_POLLS and not self.using_finnhub_fallback:
+                    if self.unchanged_count >= self.STALE_THRESHOLD_POLLS and not self.using_cross_hub_fallback:
                         cross_price = self._try_any_streaming_hub()
                         if cross_price and abs(cross_price - price) > 0.05:
                             sys.stderr.write(f"[{self.broker_name.upper()}] STALE DATA DETECTED for {self.symbol}: broker=${price:.2f}, cross-hub=${cross_price:.2f}\n")
                             sys.stderr.write(f"[{self.broker_name.upper()}] Switching to cross-broker hub for {self.symbol}\n")
                             sys.stderr.flush()
-                            self.using_finnhub_fallback = True
+                            self.using_cross_hub_fallback = True
                             price = cross_price
                             self.unchanged_count = 0
                 else:
                     self.unchanged_count = 0
 
-                if self.using_finnhub_fallback:
+                if self.using_cross_hub_fallback:
                     cross_price = self._try_any_streaming_hub()
                     if cross_price and cross_price > 0:
                         price = cross_price
 
                 if poll_count <= 3 or poll_count % 10 == 0:
-                    source = "CROSS-HUB" if self.using_finnhub_fallback else self.broker_name.upper()
+                    source = "CROSS-HUB" if self.using_cross_hub_fallback else self.broker_name.upper()
                     hub_tag = " (via hub)" if self._hub_available else ""
                     sys.stderr.write(f"[{source}] Poll #{poll_count} for {self.symbol}: price={price}{hub_tag}\n")
                     sys.stderr.flush()
@@ -651,23 +554,6 @@ class BrokerPriceMonitor(PriceMonitor):
             
             interval = self.HUB_FAST_INTERVAL if self._hub_available else self.poll_interval
             await asyncio.sleep(interval)
-    
-    async def _fetch_finnhub_price(self) -> Optional[float]:
-        """Fetch price from Finnhub as fallback for stale broker data."""
-        if not self.finnhub_api_key:
-            return None
-        try:
-            url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        price = data.get('c')
-                        return float(price) if price else None
-        except Exception as e:
-            sys.stderr.write(f"[FINNHUB FALLBACK] Error for {self.symbol}: {e}\n")
-            sys.stderr.flush()
-        return None
     
     def _try_any_streaming_hub(self) -> Optional[float]:
         """Check all available streaming/polling hubs for price data (zero extra API cost).
@@ -837,7 +723,6 @@ class BaseConditionalOrderService(ABC):
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._thread_logs = deque(maxlen=100)
-        self.finnhub_api_key = os.getenv('FINNHUB_API_KEY', '')
         self.data_hubs: Dict[str, Any] = {}
         self._price_reset_needed: Dict[int, bool] = {}
         self._execution_locks: Dict[int, asyncio.Lock] = {}
@@ -887,12 +772,12 @@ class BaseConditionalOrderService(ABC):
                 return
     
     async def _upgrade_to_streaming(self, broker_key: str, hub: Any):
-        """Upgrade Finnhub/REST monitors to streaming when a hub becomes available."""
+        """Upgrade REST/fallback monitors to streaming when a hub becomes available."""
         broker_lower = broker_key.lower()
         upgraded_count = 0
         
         fallback_monitors = [oid for oid, mon in self.monitors.items()
-                              if isinstance(mon, (FinnhubPriceMonitor, YFinancePriceMonitor, BrokerPriceMonitor))]
+                              if isinstance(mon, BrokerPriceMonitor)]
         if not fallback_monitors:
             return
         
@@ -1076,10 +961,10 @@ class BaseConditionalOrderService(ABC):
                 update_conditional_order_status(order_id, 'ACTIVE_MONITORING', data_source_active=broker_lower)
                 self._log(f"✓ #{order_id} {symbol} monitor created via {broker_name}")
 
-        fallback_monitors = [(oid, mon) for oid, mon in self.monitors.items()
-                              if isinstance(mon, (FinnhubPriceMonitor, YFinancePriceMonitor))]
+        remaining_fallbacks = [(oid, mon) for oid, mon in self.monitors.items()
+                              if isinstance(mon, BrokerPriceMonitor) and oid not in [x for x in self.monitors if isinstance(self.monitors.get(x), StreamingPriceMonitor)]]
 
-        for order_id, monitor in fallback_monitors:
+        for order_id, monitor in remaining_fallbacks:
             order = self.pending_orders.get(order_id)
             if not order:
                 continue
@@ -1940,12 +1825,11 @@ class BaseConditionalOrderService(ABC):
             self._log(f"✓ Slippage check: ${trigger_price:.2f} vs trigger ${original_trigger:.2f} (threshold {slippage_max_pct}%) — enforcement deferred to broker pipeline")
         
         cur_monitor = self.monitors.get(order_id)
-        is_fallback_source = isinstance(cur_monitor, (FinnhubPriceMonitor, YFinancePriceMonitor)) if cur_monitor else False
+        is_fallback_source = isinstance(cur_monitor, BrokerPriceMonitor) if cur_monitor else False
         broker_primary = order.get('broker_primary', '')
         
         if is_fallback_source and broker_primary:
-            source_name = 'Finnhub' if isinstance(cur_monitor, FinnhubPriceMonitor) else 'YFinance'
-            self._log(f"⚠️ #{order_id} {symbol} triggered on {source_name} fallback — stopping monitor and waiting up to 5s for broker {broker_primary} recovery")
+            self._log(f"⚠️ #{order_id} {symbol} triggered on cross-hub fallback — stopping monitor and waiting up to 5s for broker {broker_primary} recovery")
             
             if order_id in self.monitors:
                 await self.monitors[order_id].stop()

@@ -30,11 +30,7 @@ except ImportError:
     IST = None
     EST = None
 
-try:
-    import yfinance as yf
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    YFINANCE_AVAILABLE = False
+YFINANCE_AVAILABLE = False
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -109,88 +105,6 @@ class PriceMonitor(ABC):
     async def stop(self):
         """Stop monitoring."""
         self.is_running = False
-
-
-class FinnhubPriceMonitor(PriceMonitor):
-    """Price monitor using Finnhub API (US stocks)."""
-    
-    def __init__(self, symbol: str, callback: Callable[[str, float], None], api_key: str):
-        super().__init__(symbol, callback)
-        self.api_key = api_key
-        self.poll_interval = 5
-    
-    async def start(self):
-        self.is_running = True
-        sys.stderr.write(f"[FINNHUB] Starting price monitor for {self.symbol}\n")
-        sys.stderr.flush()
-        
-        async with aiohttp.ClientSession() as session:
-            poll_count = 0
-            while self.is_running:
-                try:
-                    url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.api_key}"
-                    async with session.get(url) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            price = data.get('c')
-                            poll_count += 1
-                            if poll_count <= 3 or poll_count % 20 == 0:
-                                sys.stderr.write(f"[FINNHUB] Poll #{poll_count} {self.symbol}: ${price}\n")
-                                sys.stderr.flush()
-                            if price and price != self.last_price:
-                                self.last_price = price
-                                await self.callback(self.symbol, float(price))
-                except Exception as e:
-                    sys.stderr.write(f"[FINNHUB] Error for {self.symbol}: {e}\n")
-                    sys.stderr.flush()
-                
-                await asyncio.sleep(self.poll_interval)
-
-
-class YFinancePriceMonitor(PriceMonitor):
-    """Price monitor using yfinance (delayed data fallback)."""
-    
-    def __init__(self, symbol: str, callback: Callable[[str, float], None]):
-        super().__init__(symbol, callback)
-        self.poll_interval = 15
-    
-    async def start(self):
-        self.is_running = True
-        sys.stderr.write(f"[YFINANCE] Starting price monitor for {self.symbol} (delayed ~15min)\n")
-        sys.stderr.flush()
-        
-        poll_count = 0
-        while self.is_running:
-            try:
-                price = await self._fetch_price()
-                poll_count += 1
-                if poll_count <= 3 or poll_count % 10 == 0:
-                    sys.stderr.write(f"[YFINANCE] Poll #{poll_count} {self.symbol}: ${price}\n")
-                    sys.stderr.flush()
-                if price and price != self.last_price:
-                    self.last_price = price
-                    await self.callback(self.symbol, float(price))
-            except Exception as e:
-                sys.stderr.write(f"[YFINANCE] Error for {self.symbol}: {e}\n")
-                sys.stderr.flush()
-            
-            await asyncio.sleep(self.poll_interval)
-    
-    async def _fetch_price(self) -> Optional[float]:
-        if not YFINANCE_AVAILABLE:
-            return None
-        try:
-            loop = asyncio.get_event_loop()
-            def get_fast_price():
-                ticker = yf.Ticker(self.symbol)
-                fast_info = ticker.fast_info
-                return fast_info.get('lastPrice') or fast_info.get('regularMarketPrice')
-            price = await loop.run_in_executor(None, get_fast_price)
-            return float(price) if price else None
-        except Exception as e:
-            sys.stderr.write(f"[YFINANCE] Fetch error for {self.symbol}: {e}\n")
-            sys.stderr.flush()
-            return None
 
 
 class BrokerPriceMonitor(PriceMonitor):
@@ -290,8 +204,6 @@ class BaseConditionalOrderService(ABC):
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._thread_logs = deque(maxlen=100)
-        self.finnhub_api_key = os.getenv('FINNHUB_API_KEY', '')
-        
         self._init_rate_limiters()
     
     @abstractmethod

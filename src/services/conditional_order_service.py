@@ -118,117 +118,6 @@ class PriceMonitor:
         self.is_running = False
 
 
-class FinnhubPriceMonitor(PriceMonitor):
-    """Price monitor using Finnhub API."""
-    
-    def __init__(self, symbol: str, callback: Callable[[str, float], None], api_key: str):
-        super().__init__(symbol, callback)
-        self.api_key = api_key
-        self.base_url = "https://finnhub.io/api/v1"
-        self.poll_interval = 5  # seconds
-    
-    async def start(self):
-        """Start polling Finnhub for price updates."""
-        self.is_running = True
-        print(f"[FINNHUB] Starting price monitor for {self.symbol}")
-        
-        async with aiohttp.ClientSession() as session:
-            while self.is_running:
-                try:
-                    price = await self._fetch_price(session)
-                    if price and price != self.last_price:
-                        self.last_price = price
-                        await self.callback(self.symbol, price)
-                except Exception as e:
-                    print(f"[FINNHUB] Error fetching price for {self.symbol}: {e}")
-                
-                await asyncio.sleep(self.poll_interval)
-    
-    async def _fetch_price(self, session: aiohttp.ClientSession) -> Optional[float]:
-        """Fetch current price from Finnhub."""
-        url = f"{self.base_url}/quote"
-        params = {'symbol': self.symbol, 'token': self.api_key}
-        
-        try:
-            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get('c')  # Current price
-        except Exception as e:
-            print(f"[FINNHUB] Request error for {self.symbol}: {e}")
-        
-        return None
-
-
-def _check_yfinance_available() -> bool:
-    """Check if yfinance is available."""
-    try:
-        import yfinance
-        return True
-    except ImportError:
-        return False
-
-
-YFINANCE_AVAILABLE = _check_yfinance_available()
-
-
-class YFinancePriceMonitor(PriceMonitor):
-    """Price monitor using yfinance (free, no API key required)."""
-    
-    def __init__(self, symbol: str, callback: Callable[[str, float], None]):
-        super().__init__(symbol, callback)
-        self.poll_interval = 10  # seconds (be respectful to free API)
-        self._yf_available = YFINANCE_AVAILABLE
-        self._error_count = 0
-        self._max_errors = 5
-    
-    async def start(self):
-        """Start polling yfinance for price updates."""
-        self.is_running = True
-        
-        if not self._yf_available:
-            print(f"[YFINANCE] ERROR: yfinance not installed - install with: pip install yfinance")
-            return
-        
-        print(f"[YFINANCE] Starting price monitor for {self.symbol}")
-        
-        while self.is_running:
-            try:
-                price = await self._fetch_price()
-                if price and price != self.last_price:
-                    self.last_price = price
-                    self._error_count = 0  # Reset on success
-                    await self.callback(self.symbol, price)
-            except Exception as e:
-                self._error_count += 1
-                print(f"[YFINANCE] Error fetching price for {self.symbol}: {e}")
-                if self._error_count >= self._max_errors:
-                    print(f"[YFINANCE] Too many errors, stopping monitor for {self.symbol}")
-                    break
-            
-            await asyncio.sleep(self.poll_interval)
-    
-    async def _fetch_price(self) -> Optional[float]:
-        """Fetch current price from yfinance."""
-        if not self._yf_available:
-            return None
-        
-        try:
-            import yfinance as yf
-            loop = asyncio.get_event_loop()
-            
-            def get_fast_price():
-                ticker = yf.Ticker(self.symbol)
-                fast_info = ticker.fast_info
-                return fast_info.get('lastPrice') or fast_info.get('regularMarketPrice')
-            
-            price = await loop.run_in_executor(None, get_fast_price)
-            return float(price) if price else None
-        except Exception as e:
-            print(f"[YFINANCE] Request error for {self.symbol}: {e}")
-            return None
-
-
 class BrokerPriceMonitor(PriceMonitor):
     """Price monitor using broker API (Webull, Alpaca, etc.)."""
     
@@ -602,8 +491,7 @@ class ConditionalOrderService:
         self.monitor_tasks: Dict[int, asyncio.Task] = {}  # Track background monitoring tasks
         self.rate_limiters: Dict[str, RateLimitTracker] = {}
         self.pending_orders: Dict[int, Dict] = {}
-        self.finnhub_api_key = os.getenv('FINNHUB_API_KEY', '')
-        self.broker_instances: Dict[str, Any] = {}  # broker_name -> broker instance
+        self.broker_instances: Dict[str, Any] = {}
         self.execution_callback: Optional[Callable] = None
         self.notification_callback: Optional[Callable] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -627,7 +515,6 @@ class ConditionalOrderService:
             'alpaca': RateLimitTracker('alpaca', 200),
             'tastytrade': RateLimitTracker('tastytrade', 60),
             'ibkr': RateLimitTracker('ibkr', 100),
-            'finnhub': RateLimitTracker('finnhub', 60),
             'zerodha': RateLimitTracker('zerodha', 180),
             'upstox': RateLimitTracker('upstox', 250),
             'dhanq': RateLimitTracker('dhanq', 60),
@@ -908,8 +795,8 @@ class ConditionalOrderService:
     async def _start_monitor(self, order_id: int, order: Dict):
         """Start a price monitor for an order.
         
-        Priority: Broker API -> Finnhub -> yfinance
-        For India orders: India broker API (Upstox/Zerodha) -> yfinance
+        Priority: Broker API -> Cross-Broker Hub
+        For India orders: India broker API (Upstox/Zerodha) -> Cross-Broker Hub
         """
         import sys
         symbol = order['symbol']
@@ -925,9 +812,7 @@ class ConditionalOrderService:
             rate_limiter = self.rate_limiters.get(broker.lower()) if broker else None
             broker_instance = self.broker_instances.get(broker.lower()) if broker else None
             broker_rate_ok = rate_limiter and not rate_limiter.should_fallback(threshold)
-            finnhub_available = bool(self.finnhub_api_key)
-            
-            sys.stderr.write(f"[CONDITIONAL] broker_instance={broker_instance is not None}, rate_ok={broker_rate_ok}, finnhub={finnhub_available}\n")
+            sys.stderr.write(f"[CONDITIONAL] broker_instance={broker_instance is not None}, rate_ok={broker_rate_ok}\n")
             sys.stderr.flush()
         except Exception as e:
             sys.stderr.write(f"[CONDITIONAL] ❌ Error in setup: {e}\n")
@@ -971,7 +856,7 @@ class ConditionalOrderService:
                 india_broker_instance,
                 expiry
             )
-            data_source = india_broker_name or 'yfinance'
+            data_source = india_broker_name or 'cross_hub'
             update_conditional_order_status(
                 order_id,
                 'ACTIVE_MONITORING',
@@ -997,12 +882,12 @@ class ConditionalOrderService:
         else:
             fallback_reason = 'broker_rate_limit' if (rate_limiter and rate_limiter.should_fallback(threshold)) else 'no_broker_instance'
             print(f"[CONDITIONAL] ERROR: No broker price source available for {symbol} (reason: {fallback_reason})")
-            print(f"[CONDITIONAL]   Finnhub/yfinance fallbacks disabled (delayed data unsuitable for conditional orders)")
+            print(f"[CONDITIONAL]   No external fallbacks available — need at least one broker connected")
             update_conditional_order_status(
                 order_id,
                 'ERROR',
                 event='NO_PRICE_SOURCE',
-                error_message=f'No broker available for price monitoring (reason: {fallback_reason}). Finnhub/yfinance fallbacks disabled.'
+                error_message=f'No broker available for price monitoring (reason: {fallback_reason}). Connect a broker with streaming data.'
             )
             return
         
