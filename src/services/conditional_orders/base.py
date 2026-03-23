@@ -1511,6 +1511,13 @@ class BaseConditionalOrderService(ABC):
             self._log(f"Monitor already active for #{order_id} — skipping")
             return
         
+        if not hasattr(self, '_starting_monitors'):
+            self._starting_monitors = set()
+        if order_id in self._starting_monitors:
+            self._log(f"Monitor already being built for #{order_id} — skipping")
+            return
+        self._starting_monitors.add(order_id)
+        
         symbol = order['symbol']
         broker = order['broker_primary']
         
@@ -1528,6 +1535,7 @@ class BaseConditionalOrderService(ABC):
         monitor = await self.build_price_monitor(order, broker_instance, broker or '')
         
         if not monitor:
+            self._starting_monitors.discard(order_id)
             self._log(f"No price monitor available for #{order_id} — scheduling retry in 5s")
             update_conditional_order_status(
                 order_id,
@@ -1544,6 +1552,10 @@ class BaseConditionalOrderService(ABC):
                 monitor._rate_limiter = self.rate_limiters[broker_lower]
         
         self.monitors[order_id] = monitor
+        self._starting_monitors.discard(order_id)
+        
+        if not hasattr(self, '_monitor_restart_counts'):
+            self._monitor_restart_counts = {}
         
         def _on_monitor_done(task: asyncio.Task, oid: int = order_id):
             try:
@@ -1557,6 +1569,7 @@ class BaseConditionalOrderService(ABC):
                     self._price_reset_needed.pop(oid, None)
                     self._executing_orders.discard(oid)
                     self._execution_locks.pop(oid, None)
+                    self._monitor_restart_counts.pop(oid, None)
                     try:
                         update_conditional_order_status(
                             oid, 'ERROR',
@@ -1569,24 +1582,46 @@ class BaseConditionalOrderService(ABC):
                         del self.pending_orders[oid]
             except asyncio.CancelledError:
                 self._log(f"Monitor #{oid} cancelled")
+                self._monitor_restart_counts.pop(oid, None)
             except Exception as e:
-                self._log(f"Monitor error #{oid}: {e} — attempting restart")
+                max_restarts = 3
+                restart_count = self._monitor_restart_counts.get(oid, 0)
+                
                 if oid in self.monitor_tasks:
                     del self.monitor_tasks[oid]
                 if oid in self.monitors:
                     del self.monitors[oid]
+                
+                if restart_count >= max_restarts:
+                    self._log(f"Monitor #{oid}: Crashed {restart_count + 1} times — giving up ({e})")
+                    self._monitor_restart_counts.pop(oid, None)
+                    update_conditional_order_status(
+                        oid, 'ERROR',
+                        event='MONITOR_RESTART_LIMIT',
+                        error_message=f'Monitor crashed {restart_count + 1} times: {str(e)[:150]}'
+                    )
+                    if oid in self.pending_orders:
+                        del self.pending_orders[oid]
+                    self._executing_orders.discard(oid)
+                    self._execution_locks.pop(oid, None)
+                    return
+                
+                self._monitor_restart_counts[oid] = restart_count + 1
+                self._log(f"Monitor error #{oid}: {e} — restart attempt {restart_count + 1}/{max_restarts}")
+                
                 order_data = self.pending_orders.get(oid)
                 if order_data and self._loop:
                     async def _restart_monitor(oid_inner=oid, order_inner=order_data):
                         try:
-                            await asyncio.sleep(1)
+                            await asyncio.sleep(2 ** restart_count)
                             if oid_inner not in self.pending_orders:
                                 return
                             await self._start_monitor(oid_inner, order_inner)
                             if oid_inner in self.monitors:
-                                self._log(f"Monitor #{oid_inner}: Restarted successfully")
+                                self._log(f"Monitor #{oid_inner}: Restarted successfully (attempt {restart_count + 1})")
                                 return
                             self._log(f"Monitor #{oid_inner}: Restart failed — marking ERROR")
+                            self._monitor_restart_counts.pop(oid_inner, None)
                             update_conditional_order_status(
                                 oid_inner, 'ERROR',
                                 event='MONITOR_RESTART_FAILED',
@@ -1598,6 +1633,7 @@ class BaseConditionalOrderService(ABC):
                             self._execution_locks.pop(oid_inner, None)
                         except Exception as re_err:
                             self._log(f"Monitor #{oid_inner}: Restart exception — {re_err}")
+                            self._monitor_restart_counts.pop(oid_inner, None)
                             update_conditional_order_status(
                                 oid_inner, 'ERROR',
                                 event='MONITOR_RESTART_FAILED',
@@ -1710,6 +1746,10 @@ class BaseConditionalOrderService(ABC):
         self._price_reset_needed.pop(order_id, None)
         self._executing_orders.discard(order_id)
         self._execution_locks.pop(order_id, None)
+        if hasattr(self, '_starting_monitors'):
+            self._starting_monitors.discard(order_id)
+        if hasattr(self, '_monitor_restart_counts'):
+            self._monitor_restart_counts.pop(order_id, None)
         if hasattr(self, '_price_log_counters'):
             self._price_log_counters.pop(order_id, None)
     

@@ -41,9 +41,8 @@ class CanadaConditionalOrderService(BaseConditionalOrderService):
         Build price monitor for Canada market orders.
         
         Fallback chain:
-        1. Channel-configured broker (Questrade) - real-time
-        2. Finnhub API - real-time
-        3. yfinance - delayed
+        1. Channel-configured broker (Questrade) - real-time REST
+        2. Any connected broker REST API (cross-broker fallback)
         """
         symbol = order['symbol']
         settings_threshold = 0.8
