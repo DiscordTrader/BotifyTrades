@@ -358,6 +358,35 @@ class StreamingPriceMonitor(PriceMonitor):
             sys.stderr.flush()
         return None
     
+    def _call_broker_get_quote_sync(self, symbol: str) -> Optional[float]:
+        """Call broker's get_quote in a thread-safe way, handling cross-loop brokers."""
+        import inspect
+        quote_method = self.broker_instance.get_quote
+        
+        if inspect.iscoroutinefunction(quote_method):
+            main_loop = getattr(self.broker_instance, '_event_loop', None)
+            if not main_loop:
+                bot_ref = getattr(self.broker_instance, 'bot', None) or getattr(self.broker_instance, '_bot', None)
+                if bot_ref and hasattr(bot_ref, 'loop'):
+                    main_loop = bot_ref.loop
+            
+            if main_loop and main_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(quote_method(symbol), main_loop)
+                try:
+                    return future.result(timeout=10)
+                except Exception:
+                    return None
+            else:
+                new_loop = asyncio.new_event_loop()
+                try:
+                    return new_loop.run_until_complete(quote_method(symbol))
+                except Exception:
+                    return None
+                finally:
+                    new_loop.close()
+        else:
+            return quote_method(symbol)
+
     async def _fetch_rest_price(self) -> Optional[float]:
         now = time.time()
         if now - self._last_rest_call < self.REST_FALLBACK_INTERVAL - 0.5:
@@ -375,13 +404,8 @@ class StreamingPriceMonitor(PriceMonitor):
             try:
                 if self._rate_limiter:
                     self._rate_limiter.record_call()
-                import inspect
-                quote_method = self.broker_instance.get_quote
-                if inspect.iscoroutinefunction(quote_method):
-                    result = await quote_method(self.symbol)
-                else:
-                    loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, lambda: quote_method(self.symbol))
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, self._call_broker_get_quote_sync, self.symbol)
                 if isinstance(result, (int, float)) and result > 0:
                     return float(result)
                 elif isinstance(result, dict):
@@ -406,13 +430,8 @@ class StreamingPriceMonitor(PriceMonitor):
             try:
                 if self._rate_limiter:
                     self._rate_limiter.record_call()
-                import inspect
-                quote_method = self.broker_instance.get_quote
-                if inspect.iscoroutinefunction(quote_method):
-                    result = await quote_method(self.symbol)
-                else:
-                    loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, lambda: quote_method(self.symbol))
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, self._call_broker_get_quote_sync, self.symbol)
                 if isinstance(result, (int, float)) and result > 0:
                     return float(result)
                 elif isinstance(result, dict):
@@ -608,6 +627,38 @@ class BrokerPriceMonitor(PriceMonitor):
                 pass
         return None
 
+    def _call_broker_quote_sync(self) -> Optional[Any]:
+        """Call broker's get_quote safely across event loops."""
+        import inspect
+        if not hasattr(self.broker_instance, 'get_quote'):
+            return None
+        
+        quote_method = self.broker_instance.get_quote
+        
+        if inspect.iscoroutinefunction(quote_method):
+            main_loop = getattr(self.broker_instance, '_event_loop', None)
+            if not main_loop:
+                bot_ref = getattr(self.broker_instance, 'bot', None) or getattr(self.broker_instance, '_bot', None)
+                if bot_ref and hasattr(bot_ref, 'loop'):
+                    main_loop = bot_ref.loop
+            
+            if main_loop and main_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(quote_method(self.symbol), main_loop)
+                try:
+                    return future.result(timeout=10)
+                except Exception:
+                    return None
+            else:
+                new_loop = asyncio.new_event_loop()
+                try:
+                    return new_loop.run_until_complete(quote_method(self.symbol))
+                except Exception:
+                    return None
+                finally:
+                    new_loop.close()
+        else:
+            return quote_method(self.symbol)
+
     async def _fetch_price(self) -> Optional[float]:
         hub_price = self._try_any_streaming_hub()
         if hub_price:
@@ -621,16 +672,12 @@ class BrokerPriceMonitor(PriceMonitor):
         try:
             loop = asyncio.get_event_loop()
             broker_lower = self.broker_name.lower()
-            
-            # Normalize broker name: 'alpaca_paper' -> 'alpaca'
             broker_normalized = broker_lower.replace('_paper', '').replace('_live', '')
             
-            # Handle Alpaca and Alpaca Paper
             if broker_normalized == 'alpaca':
                 from alpaca.data import StockHistoricalDataClient
                 from alpaca.data.requests import StockLatestQuoteRequest
                 
-                # AlpacaBroker stores credentials in config dict
                 api_key = None
                 api_secret = None
                 if hasattr(self.broker_instance, 'config'):
@@ -646,7 +693,6 @@ class BrokerPriceMonitor(PriceMonitor):
                     quotes = await loop.run_in_executor(None, lambda: client.get_stock_latest_quote(request))
                     if self.symbol in quotes:
                         quote = quotes[self.symbol]
-                        # Use midpoint of bid/ask for more accurate price
                         bid = float(quote.bid_price) if quote.bid_price else 0
                         ask = float(quote.ask_price) if quote.ask_price else 0
                         if bid > 0 and ask > 0:
@@ -655,46 +701,6 @@ class BrokerPriceMonitor(PriceMonitor):
                             return ask
                         elif bid > 0:
                             return bid
-            
-            elif broker_lower == 'webull':
-                if hasattr(self.broker_instance, 'get_quote'):
-                    quote = await self.broker_instance.get_quote(self.symbol)
-                    if quote and isinstance(quote, dict) and 'close' in quote:
-                        return float(quote['close'])
-                    elif isinstance(quote, (int, float)) and quote > 0:
-                        return float(quote)
-            
-            elif broker_lower == 'questrade':
-                if hasattr(self.broker_instance, 'get_quote'):
-                    quote = await self.broker_instance.get_quote(self.symbol)
-                    if quote and isinstance(quote, dict) and 'lastTradePrice' in quote:
-                        return float(quote['lastTradePrice'])
-            
-            elif broker_normalized == 'schwab':
-                if hasattr(self.broker_instance, 'get_quote'):
-                    price = await self.broker_instance.get_quote(self.symbol)
-                    if price and price > 0:
-                        return float(price)
-            
-            elif broker_normalized == 'robinhood':
-                if hasattr(self.broker_instance, 'get_quote'):
-                    quote = await self.broker_instance.get_quote(self.symbol)
-                    if isinstance(quote, (int, float)) and quote > 0:
-                        return float(quote)
-                    elif isinstance(quote, dict):
-                        price = quote.get('last_trade_price') or quote.get('last_extended_hours_trade_price') or quote.get('price')
-                        if price:
-                            return float(price)
-            
-            elif broker_normalized in ('tastytrade', 'ibkr'):
-                if hasattr(self.broker_instance, 'get_quote'):
-                    result = await self.broker_instance.get_quote(self.symbol)
-                    if isinstance(result, (int, float)) and result > 0:
-                        return float(result)
-                    elif isinstance(result, dict):
-                        price = result.get('last', 0) or result.get('price', 0) or result.get('close', 0)
-                        if price and float(price) > 0:
-                            return float(price)
 
             elif broker_normalized == 'trading212':
                 try:
@@ -705,10 +711,21 @@ class BrokerPriceMonitor(PriceMonitor):
                         return float(hub_price)
                 except Exception:
                     pass
-                if hasattr(self.broker_instance, 'get_quote'):
-                    result = await self.broker_instance.get_quote(self.symbol)
-                    if isinstance(result, (int, float)) and result > 0:
-                        return float(result)
+                result = await loop.run_in_executor(None, self._call_broker_quote_sync)
+                if isinstance(result, (int, float)) and result > 0:
+                    return float(result)
+
+            else:
+                result = await loop.run_in_executor(None, self._call_broker_quote_sync)
+                if result is None:
+                    return None
+                if isinstance(result, (int, float)) and result > 0:
+                    return float(result)
+                elif isinstance(result, dict):
+                    for key in ('close', 'last', 'lastTradePrice', 'price', 'last_trade_price', 'last_extended_hours_trade_price'):
+                        val = result.get(key)
+                        if val and float(val) > 0:
+                            return float(val)
 
         except Exception as e:
             sys.stderr.write(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}\n")
@@ -1465,6 +1482,7 @@ class BaseConditionalOrderService(ABC):
                     'trading212': getattr(bot_ref, 'trading212_broker', None),
                     'tastytrade': getattr(bot_ref, 'tastytrade_broker', None),
                 }
+                bot_loop = getattr(bot_ref, 'loop', None)
                 for bname, binst in broker_map.items():
                     if binst and bname in [b.lower() for b in self.get_supported_brokers()]:
                         connected = getattr(binst, 'connected', None)
@@ -1473,6 +1491,8 @@ class BaseConditionalOrderService(ABC):
                             continue
                         if logged_in is not None and not logged_in:
                             continue
+                        if bot_loop and not hasattr(binst, '_event_loop'):
+                            binst._event_loop = bot_loop
                         self.broker_instances[bname] = binst
                         self._log(f"Auto-discovered broker: {bname}")
                 

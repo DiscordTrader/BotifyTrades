@@ -7882,6 +7882,7 @@ class SelfClient(discord.Client):
                         'api_secret': t212_api_secret,
                         'environment': t212_env
                     })
+                    self.trading212_broker._event_loop = self.loop
                     connected = await asyncio.wait_for(self.trading212_broker.connect(), timeout=15.0)
                     if connected:
                         env_label = t212_env.upper()
