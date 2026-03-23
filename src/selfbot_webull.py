@@ -6703,13 +6703,10 @@ def try_parse_with_learned_formats(text: str) -> Optional[dict]:
                         elif len(parts) == 3:
                             expiry = f"{parts[0].zfill(2)}/{parts[1].zfill(2)}"
                 
-                if quantity is None:
-                    quantity = 1
-                
                 return {
                     "asset": "option",
                     "action": action,
-                    "qty": int(quantity) if quantity else 1,
+                    "qty": int(quantity) if quantity else None,
                     "symbol": symbol,
                     "strike": float(strike) if strike else 0,
                     "opt_type": opt_type,
@@ -6721,17 +6718,15 @@ def try_parse_with_learned_formats(text: str) -> Optional[dict]:
                     "stop_loss": result.get('stop_loss')
                 }
             else:
-                if quantity is None:
-                    quantity = 1
-                
                 return {
                     "asset": "stock",
                     "action": action,
-                    "qty": int(quantity) if quantity else 1,
+                    "qty": int(quantity) if quantity else None,
                     "symbol": symbol,
                     "price": float(entry_price) if entry_price else None,
                     "is_market_order": entry_price is None,
                     "parsed_by": "learned_format",
+                    "_qty_from_signal": quantity is not None,
                     "profit_targets": result.get('profit_targets'),
                     "stop_loss": result.get('stop_loss')
                 }
