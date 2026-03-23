@@ -937,14 +937,14 @@ class SchwabBroker(BrokerInterface):
                     bid = float(quote.get('bid', 0) or 0)
                     last = float(quote.get('last', 0) or 0)
                     if bid > 0:
-                        aggressive = max(0.01, round(bid * 0.95, 2))
+                        aggressive = max(0.01, round(bid, 2))
                         aggressive = self._round_to_cboe_increment(aggressive, is_sell=True)
-                        print(f"[{self.name}] 💰 Option exit: bid=${bid:.2f} → aggressive LIMIT ${aggressive:.2f}")
+                        print(f"[{self.name}] 💰 Option exit: bid=${bid:.2f} → LIMIT ${aggressive:.2f}")
                         return aggressive
                     if last > 0:
-                        aggressive = max(0.01, round(last * 0.90, 2))
+                        aggressive = max(0.01, round(last * 0.95, 2))
                         aggressive = self._round_to_cboe_increment(aggressive, is_sell=True)
-                        print(f"[{self.name}] 💰 Option exit: last=${last:.2f} → aggressive LIMIT ${aggressive:.2f}")
+                        print(f"[{self.name}] 💰 Option exit: last=${last:.2f} → LIMIT ${aggressive:.2f}")
                         return aggressive
             else:
                 hub_price = self.get_hub_quote(symbol)
@@ -1367,8 +1367,12 @@ class SchwabBroker(BrokerInterface):
                             
                             if fresh_quote and fresh_quote['bid'] > 0:
                                 if is_stc:
-                                    price = max(0.01, round(fresh_quote['bid'] * 0.90, 2))
-                                    print(f"[{self.name}] ✓ STC aggressive price: bid ${fresh_quote['bid']:.2f} × 0.90 = ${price:.2f}")
+                                    if _fallback_price and 0 < _fallback_price < fresh_quote['bid']:
+                                        price = max(0.01, round(_fallback_price, 2))
+                                        print(f"[{self.name}] ✓ STC using signal price ${price:.2f} (below fresh bid ${fresh_quote['bid']:.2f})")
+                                    else:
+                                        price = max(0.01, round(fresh_quote['bid'], 2))
+                                        print(f"[{self.name}] ✓ STC at fresh bid: ${price:.2f}")
                                 else:
                                     price = round((fresh_quote['bid'] + fresh_quote['ask']) / 2, 2)
                                     print(f"[{self.name}] ✓ Using fresh mid-price ${price:.2f}")
@@ -1380,8 +1384,12 @@ class SchwabBroker(BrokerInterface):
                                     price = round(_fallback_price * 1.03, 2)
                                     print(f"[{self.name}] ✓ BTO using fallback: ${_fallback_price:.4f} × 1.03 = ${price:.2f}")
                         elif is_stc:
-                            price = max(0.01, round(bid_price * 0.90, 2))
-                            print(f"[{self.name}] ✓ STC aggressive limit: bid ${bid_price:.2f} × 0.90 = ${price:.2f} (mid was ${mid_price:.2f})")
+                            if _fallback_price and 0 < _fallback_price < bid_price:
+                                price = max(0.01, round(_fallback_price, 2))
+                                print(f"[{self.name}] ✓ STC using signal price ${price:.2f} (below bid ${bid_price:.2f}) for quick fill")
+                            else:
+                                price = max(0.01, round(bid_price, 2))
+                                print(f"[{self.name}] ✓ STC at bid: ${price:.2f} (mid was ${mid_price:.2f})")
                         else:
                             price = mid_price
                             print(f"[{self.name}] ✓ Using mid-price ${mid_price:.2f} (bid: ${quote['bid']:.2f}, ask: ${quote['ask']:.2f})")
