@@ -176,6 +176,9 @@ class StreamingPriceMonitor(PriceMonitor):
         self.broker_instance = broker_instance
         self._hub_miss_count = 0
         self._using_rest_fallback = False
+        self._hub_available = False
+        self._ds_label_is_stream = True
+        self.order_id: Optional[int] = None
         self._rest_monitor: Optional['BrokerPriceMonitor'] = None
         self._rest_session: Optional[aiohttp.ClientSession] = None
         self._last_rest_call = 0
@@ -270,7 +273,9 @@ class StreamingPriceMonitor(PriceMonitor):
                 
                 if price:
                     self._hub_miss_count = 0
-                    self._using_rest_fallback = False
+                    if self._using_rest_fallback:
+                        self._using_rest_fallback = False
+                        self._update_ds_label(is_stream=True)
                     self._update_price_timestamp(price)
 
                     now = time.time()
@@ -324,6 +329,7 @@ class StreamingPriceMonitor(PriceMonitor):
                     
                     if self._hub_miss_count >= 4 and not self._using_rest_fallback:
                         self._using_rest_fallback = True
+                        self._update_ds_label(is_stream=False)
                         sys.stderr.write(f"[STREAM_MON] Hub miss for {self.symbol} x{self._hub_miss_count}, falling back to REST\n")
                         sys.stderr.flush()
                     
@@ -452,6 +458,20 @@ class StreamingPriceMonitor(PriceMonitor):
             except Exception:
                 pass
         return None
+
+    def _update_ds_label(self, is_stream: bool):
+        if is_stream == self._ds_label_is_stream:
+            return
+        self._ds_label_is_stream = is_stream
+        if not self.order_id:
+            return
+        try:
+            from gui_app.database import update_conditional_order_status
+            broker_lower = self.broker_name.lower()
+            new_ds = f"{broker_lower}_stream" if is_stream else broker_lower
+            update_conditional_order_status(self.order_id, 'ACTIVE_MONITORING', data_source_active=new_ds)
+        except Exception:
+            pass
 
     def _try_unsubscribe_streaming(self):
         try:

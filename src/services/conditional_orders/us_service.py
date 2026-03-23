@@ -99,8 +99,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
             )
         
         elif hub:
-            data_source = broker_key
-            self._log(f"Using data hub for {symbol} via {broker_name} (hub cache + broker REST fallback, will auto-upgrade when streaming connects)")
+            data_source = f"{broker_key}_stream"
+            self._log(f"Using data hub for {symbol} via {broker_name} (hub cache + streaming subscription, will auto-upgrade when streaming connects)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
                 broker_instance=broker_instance
@@ -115,8 +115,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
             )
         
         elif alt_hub:
-            data_source = alt_hub_name
-            self._log(f"Using data hub for {symbol} via {alt_hub_name} (cross-broker cache for {broker_name})")
+            data_source = f"{alt_hub_name}_stream"
+            self._log(f"Using data hub for {symbol} via {alt_hub_name} (cross-broker hub + streaming subscription for {broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
                 broker_instance=alt_hub_broker
@@ -148,6 +148,9 @@ class USConditionalOrderService(BaseConditionalOrderService):
                 self._log(f"ERROR: No price source for {symbol} — no brokers connected and no streaming hubs available")
                 return None
         
+        if monitor and hasattr(monitor, 'order_id'):
+            monitor.order_id = order['id']
+
         from gui_app.database import update_conditional_order_status
         is_streaming = data_source and data_source.endswith('_stream')
         status = 'ACTIVE_MONITORING' if (is_streaming or data_source in self.get_supported_brokers()) else 'FALLBACK_MONITORING'
