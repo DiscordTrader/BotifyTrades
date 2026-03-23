@@ -76,7 +76,13 @@ class ConditionalOrderRouter:
         }
         
         self.is_running = False
+        self._bot_ref = None
         self._log("Router initialized with market-isolated services")
+    
+    def set_bot_ref(self, bot):
+        """Store reference to bot instance for broker auto-discovery."""
+        self._bot_ref = bot
+        self._log(f"Bot reference registered for broker auto-discovery")
     
     def _log(self, msg: str):
         sys.stderr.write(f"[ROUTER] {msg}\n")

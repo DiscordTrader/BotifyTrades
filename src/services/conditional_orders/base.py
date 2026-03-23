@@ -1048,6 +1048,14 @@ class BaseConditionalOrderService(ABC):
     
     async def _main_loop(self):
         """Main monitoring loop."""
+        deferred = getattr(self, '_deferred_monitors', [])
+        if deferred:
+            self._log(f"Processing {len(deferred)} deferred monitor(s)")
+            for order_id, order in deferred:
+                if order_id in self.pending_orders:
+                    await self._start_monitor(order_id, order)
+            self._deferred_monitors = []
+        
         await self._restore_active_orders()
         
         while self.is_running:
@@ -1429,33 +1437,105 @@ class BaseConditionalOrderService(ABC):
                 self._start_monitor(order_id, order),
                 self._loop
             )
+        elif self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._start_monitor(order_id, order),
+                self._loop
+            )
+        else:
+            self._log(f"Service loop not ready for #{order_id} — will start when loop initializes")
+            self._deferred_monitors = getattr(self, '_deferred_monitors', [])
+            self._deferred_monitors.append((order_id, order))
     
+    def _auto_discover_brokers(self):
+        """Auto-discover broker instances from the global bot if none are registered."""
+        if self.broker_instances:
+            return
+        
+        try:
+            from src.services.conditional_orders.router import conditional_order_router
+            bot_ref = getattr(conditional_order_router, '_bot_ref', None)
+            if bot_ref:
+                broker_map = {
+                    'webull': getattr(bot_ref, 'broker', None),
+                    'schwab': getattr(bot_ref, 'schwab_broker', None),
+                    'alpaca': getattr(bot_ref, 'paper_broker', None),
+                    'robinhood': getattr(bot_ref, 'robinhood_broker', None),
+                    'ibkr': getattr(bot_ref, 'ibkr_broker', None),
+                    'trading212': getattr(bot_ref, 'trading212_broker', None),
+                    'tastytrade': getattr(bot_ref, 'tastytrade_broker', None),
+                }
+                for bname, binst in broker_map.items():
+                    if binst and bname in [b.lower() for b in self.get_supported_brokers()]:
+                        connected = getattr(binst, 'connected', None)
+                        logged_in = getattr(binst, '_logged_in', None)
+                        if connected is not None and not connected:
+                            continue
+                        if logged_in is not None and not logged_in:
+                            continue
+                        self.broker_instances[bname] = binst
+                        self._log(f"Auto-discovered broker: {bname}")
+                
+                hub_map = {
+                    'webull': None,
+                    'schwab': None,
+                }
+                if broker_map.get('webull'):
+                    wb = broker_map['webull']
+                    if hasattr(wb, '_data_hub') and wb._data_hub:
+                        hub_map['webull'] = wb._data_hub
+                    else:
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            hub_map['webull'] = get_webull_data_hub()
+                        except Exception:
+                            pass
+                try:
+                    from src.services.schwab_data_hub import get_schwab_data_hub
+                    hub_map['schwab'] = get_schwab_data_hub()
+                except Exception:
+                    pass
+                for hname, hub in hub_map.items():
+                    if hub and hname not in self.data_hubs:
+                        self.data_hubs[hname] = hub
+                        self._log(f"Auto-discovered data hub: {hname}")
+                
+                if self.broker_instances:
+                    self._log(f"Auto-discovery found {len(self.broker_instances)} broker(s), {len(self.data_hubs)} hub(s)")
+        except Exception as e:
+            self._log(f"Auto-discovery error: {e}")
+
     async def _start_monitor(self, order_id: int, order: Dict):
         """Start a price monitor for an order using market-specific logic."""
+        if order_id in self.monitors:
+            self._log(f"Monitor already active for #{order_id} — skipping")
+            return
+        
         symbol = order['symbol']
         broker = order['broker_primary']
         
         self._log(f"Starting monitor for #{order_id} {symbol} broker={broker}")
         
-        # Normalize broker name for lookup: 'alpaca_paper' -> 'alpaca', 'ALPACA_PAPER' -> 'alpaca'
+        self._auto_discover_brokers()
+        
         broker_lower = broker.lower() if broker else ''
         broker_key = broker_lower.replace('_paper', '').replace('_live', '')
         broker_instance = self.broker_instances.get(broker_key) if broker_key else None
         
         if not broker_instance and broker_lower:
-            # Fallback: try direct lookup
             broker_instance = self.broker_instances.get(broker_lower)
         
         monitor = await self.build_price_monitor(order, broker_instance, broker or '')
         
         if not monitor:
-            self._log(f"No price monitor available for #{order_id} — will retry when broker registers")
+            self._log(f"No price monitor available for #{order_id} — scheduling retry in 5s")
             update_conditional_order_status(
                 order_id,
                 'ACTIVE_MONITORING',
                 event='WAITING_FOR_BROKER',
-                error_message=f'Waiting for {broker or "broker"} to connect'
+                error_message=f'Waiting for {broker or "broker"} to connect — will retry'
             )
+            asyncio.ensure_future(self._retry_start_monitor(order_id, order))
             return
         
         if isinstance(monitor, StreamingPriceMonitor) and broker:
@@ -1536,6 +1616,69 @@ class BaseConditionalOrderService(ABC):
         
         self._log(f"Started monitor task for #{order_id}")
     
+    async def _retry_start_monitor(self, order_id: int, order: Dict, max_retries: int = 12, interval: float = 5.0):
+        """Retry starting a monitor for an order that couldn't find a broker."""
+        for attempt in range(1, max_retries + 1):
+            await asyncio.sleep(interval)
+            
+            if order_id not in self.pending_orders:
+                return
+            if order_id in self.monitors:
+                return
+            
+            self._log(f"Retry #{attempt}/{max_retries} for order #{order_id} {order.get('symbol', '?')}")
+            
+            self.broker_instances.clear()
+            self.data_hubs.clear()
+            self._auto_discover_brokers()
+            
+            if not self.broker_instances:
+                if attempt < max_retries:
+                    continue
+                self._log(f"Order #{order_id}: All {max_retries} retries exhausted — no brokers available")
+                update_conditional_order_status(
+                    order_id, 'ERROR',
+                    event='BROKER_DISCOVERY_FAILED',
+                    error_message=f'No brokers available after {max_retries} retries'
+                )
+                if order_id in self.pending_orders:
+                    del self.pending_orders[order_id]
+                return
+            
+            broker = order.get('broker_primary', '')
+            broker_lower = broker.lower() if broker else ''
+            broker_key = broker_lower.replace('_paper', '').replace('_live', '')
+            broker_instance = self.broker_instances.get(broker_key)
+            if not broker_instance and broker_lower:
+                broker_instance = self.broker_instances.get(broker_lower)
+            
+            monitor = await self.build_price_monitor(order, broker_instance, broker)
+            if monitor:
+                self.monitors[order_id] = monitor
+                
+                async def price_callback(sym: str, price: float, oid=order_id):
+                    await self._on_price_update(oid, sym, price)
+                monitor.callback = price_callback
+                
+                task = asyncio.create_task(monitor.start())
+                self.monitor_tasks[order_id] = task
+                self._log(f"✓ Order #{order_id}: Monitor started on retry #{attempt}")
+                update_conditional_order_status(
+                    order_id, 'ACTIVE_MONITORING',
+                    event='MONITOR_STARTED_RETRY',
+                    details=f'Monitor started after {attempt} retries'
+                )
+                return
+        
+        self._log(f"Order #{order_id}: All {max_retries} retries exhausted — monitor failed")
+        update_conditional_order_status(
+            order_id, 'ERROR',
+            event='MONITOR_RETRY_EXHAUSTED',
+            error_message=f'Could not start monitor after {max_retries} retries'
+        )
+        if order_id in self.pending_orders:
+            del self.pending_orders[order_id]
+
     async def _cleanup_order(self, order_id: int):
         """Remove an order from all in-memory tracking structures."""
         order = self.pending_orders.get(order_id)

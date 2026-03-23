@@ -8564,30 +8564,42 @@ class SelfClient(discord.Client):
             import traceback
             traceback.print_exc()
         
-        # Register brokers with Conditional Order Service (after all brokers connected)
         try:
             from src.services.conditional_orders.router import conditional_order_router
+            try:
+                _cond_print = _original_print
+            except NameError:
+                _cond_print = print
+            _reg_count = 0
             if self.broker:
                 conditional_order_router.set_broker_instance('Webull', self.broker)
-                _original_print("[CONDITIONAL] ✓ Webull registered for price monitoring", flush=True)
-            if self.webull_paper_broker and getattr(self.webull_paper_broker, '_logged_in', False):
+                _cond_print("[CONDITIONAL] ✓ Webull registered for price monitoring", flush=True)
+                _reg_count += 1
+            if getattr(self, 'webull_paper_broker', None) and getattr(self.webull_paper_broker, '_logged_in', False):
                 conditional_order_router.set_broker_instance('Webull_Paper', self.webull_paper_broker)
-                _original_print("[CONDITIONAL] ✓ Webull Paper registered for price monitoring", flush=True)
-            if self.paper_broker:
+                _cond_print("[CONDITIONAL] ✓ Webull Paper registered for price monitoring", flush=True)
+                _reg_count += 1
+            if getattr(self, 'paper_broker', None):
                 conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
-                _original_print("[CONDITIONAL] ✓ Alpaca registered for price monitoring", flush=True)
-            if self.robinhood_broker:
+                _cond_print("[CONDITIONAL] ✓ Alpaca registered for price monitoring", flush=True)
+                _reg_count += 1
+            if getattr(self, 'robinhood_broker', None):
                 conditional_order_router.set_broker_instance('Robinhood', self.robinhood_broker)
-                _original_print("[CONDITIONAL] ✓ Robinhood registered for price monitoring", flush=True)
-            if self.schwab_broker and getattr(self.schwab_broker, 'connected', False):
+                _cond_print("[CONDITIONAL] ✓ Robinhood registered for price monitoring", flush=True)
+                _reg_count += 1
+            if getattr(self, 'schwab_broker', None) and getattr(self.schwab_broker, 'connected', False):
                 conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
-                _original_print("[CONDITIONAL] ✓ Schwab registered for price monitoring", flush=True)
-            if self.trading212_broker and getattr(self.trading212_broker, 'connected', False):
+                _cond_print("[CONDITIONAL] ✓ Schwab registered for price monitoring", flush=True)
+                _reg_count += 1
+            if getattr(self, 'trading212_broker', None) and getattr(self.trading212_broker, 'connected', False):
                 conditional_order_router.set_broker_instance('Trading212', self.trading212_broker)
-                _original_print("[CONDITIONAL] ✓ Trading212 registered for price monitoring (portfolio quotes)", flush=True)
-            if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
+                _cond_print("[CONDITIONAL] ✓ Trading212 registered for price monitoring (portfolio quotes)", flush=True)
+                _reg_count += 1
+            if getattr(self, 'ibkr_broker', None) and getattr(self.ibkr_broker, 'connected', False):
                 conditional_order_router.set_broker_instance('IBKR', self.ibkr_broker)
-                _original_print("[CONDITIONAL] ✓ IBKR registered for price monitoring", flush=True)
+                _cond_print("[CONDITIONAL] ✓ IBKR registered for price monitoring", flush=True)
+                _reg_count += 1
+            _cond_print(f"[CONDITIONAL] Broker registration complete: {_reg_count} broker(s)", flush=True)
             
             webull_hub = None
             if self.broker and hasattr(self.broker, '_data_hub') and self.broker._data_hub:
@@ -8600,14 +8612,14 @@ class SelfClient(discord.Client):
                     pass
             if webull_hub:
                 conditional_order_router.set_data_hub('webull', webull_hub)
-                _original_print("[CONDITIONAL] ✓ Webull streaming data hub registered (sub-100ms pricing)", flush=True)
+                _cond_print("[CONDITIONAL] ✓ Webull streaming data hub registered (sub-100ms pricing)", flush=True)
             try:
                 from src.services.schwab_data_hub import get_schwab_data_hub
                 schwab_hub = get_schwab_data_hub()
                 if schwab_hub:
                     conditional_order_router.set_data_hub('schwab', schwab_hub)
                     streaming_status = "streaming" if schwab_hub.is_streaming() else "registered, will activate when streaming starts"
-                    _original_print(f"[CONDITIONAL] ✓ Schwab data hub {streaming_status}", flush=True)
+                    _cond_print(f"[CONDITIONAL] ✓ Schwab data hub {streaming_status}", flush=True)
             except Exception:
                 pass
             try:
@@ -8615,11 +8627,13 @@ class SelfClient(discord.Client):
                 t212_hub = get_trading212_data_hub()
                 if t212_hub:
                     conditional_order_router.set_data_hub('trading212', t212_hub)
-                    _original_print(f"[CONDITIONAL] ✓ Trading212 data hub registered (REST polling)", flush=True)
+                    _cond_print(f"[CONDITIONAL] ✓ Trading212 data hub registered (REST polling)", flush=True)
             except Exception:
                 pass
         except Exception as e:
-            _original_print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
+            print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
         
         # Start EMA Candlestick Risk Engine pre-warm service
         try:
@@ -10172,9 +10186,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         try:
             from src.services.conditional_orders.router import conditional_order_router
             
-            # Only set up execution callback if global service is enabled
+            conditional_order_router.set_bot_ref(self)
+            
             if conditional_order_router.is_enabled():
-                # Use the global sync signal queue (same as Telegram) for thread-safe handoff
                 global _telegram_signal_queue
                 
                 # Set up async execution callback
