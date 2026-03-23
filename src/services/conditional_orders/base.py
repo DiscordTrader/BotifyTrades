@@ -1197,6 +1197,12 @@ class BaseConditionalOrderService(ABC):
             return None
         self._log(f"Using broker: {effective_broker} for channel {channel_id}")
         
+        is_option_signal = bool(parsed_signal.get('strike') or parsed_signal.get('asset_type') == 'option' or (parsed_signal.get('opt_type') and parsed_signal.get('expiry')))
+        if 'trading212' in effective_broker.lower() and is_option_signal:
+            self._log(f"⚠️ REJECTED: Trading212 does not support options — cannot create conditional order for {parsed_signal.get('symbol')} {parsed_signal.get('strike', '')}{parsed_signal.get('opt_type', 'C')}")
+            print(f"[CONDITIONAL] ⚠️ Trading212 options order REJECTED — T212 is stocks-only. Symbol: {parsed_signal.get('symbol')}", flush=True)
+            return None
+        
         trigger_price = parsed_signal.get('trigger_price', 0)
         trigger_type = parsed_signal.get('trigger_type', 'over')
         

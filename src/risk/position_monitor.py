@@ -4441,6 +4441,18 @@ class RiskManager:
             price = self._get_fresh_hub_price(hub, pos.symbol, max_age=2)
             if price and price > 0:
                 return price
+        if 'TRADING212' not in broker_upper:
+            try:
+                from src.services.trading212_data_hub import get_trading212_data_hub
+                t212_hub = get_trading212_data_hub()
+                if t212_hub:
+                    import time as _t
+                    t212_price = t212_hub.get_quote_price(pos.symbol)
+                    t212_ts = t212_hub.get_quote_timestamp(pos.symbol)
+                    if t212_price and t212_price > 0 and t212_ts and (_t.time() - t212_ts) < 2:
+                        return t212_price
+            except Exception:
+                pass
         return None
 
     async def _try_rest_quote(self, pos):

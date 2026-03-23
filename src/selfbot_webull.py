@@ -10314,6 +10314,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     broker_instance = self.tastytrade_broker
                                 elif 'schwab' in broker_lower and hasattr(self, 'schwab_broker') and self.schwab_broker:
                                     broker_instance = self.schwab_broker
+                                elif 'ibkr' in broker_lower and hasattr(self, 'ibkr_broker') and self.ibkr_broker:
+                                    broker_instance = self.ibkr_broker
                                 
                                 if broker_instance and hasattr(broker_instance, 'get_option_quote'):
                                     # Use broker's async get_option_quote method

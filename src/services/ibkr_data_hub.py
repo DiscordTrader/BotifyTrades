@@ -89,7 +89,7 @@ class IBKRDataHub:
 
         self.POSITION_CACHE_TTL = 15
         self.ACCOUNT_CACHE_TTL = 30
-        self.QUOTE_STALE_THRESHOLD = 120
+        self.QUOTE_STALE_THRESHOLD = 30
 
         self._risk_eval_requested = threading.Event()
         self._reconcile_task = None
@@ -251,7 +251,8 @@ class IBKRDataHub:
             q = self._quotes.get(symbol)
             if not q:
                 return None
-            if max_age and (time.time() - q.timestamp) > max_age:
+            effective_max_age = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
+            if (time.time() - q.timestamp) > effective_max_age:
                 return None
             return q
 
