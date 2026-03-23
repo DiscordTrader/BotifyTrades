@@ -1680,10 +1680,31 @@ class BrokerSyncService:
                         trade_id,
                         status='CLOSED',
                         closed_at=datetime.now().isoformat(),
+                        current_price=exit_price,
                         pnl=pnl,
                         pnl_percent=pnl_percent,
                         close_reason='broker_closed_position'
                     )
+                    
+                    if exit_price_source != 'last_sync' and exit_price > 0:
+                        try:
+                            from gui_app.database import get_connection as _get_fill_conn, update_closure_exit_fill
+                            _fill_conn = _get_fill_conn()
+                            _fill_cur = _fill_conn.cursor()
+                            _fill_cur.execute('''
+                                SELECT lc.id, lc.exit_fill_price
+                                FROM lot_closures lc
+                                JOIN signal_lots sl ON lc.lot_id = sl.id
+                                WHERE UPPER(sl.symbol) = UPPER(?) AND lc.exit_fill_price IS NULL
+                                ORDER BY lc.closed_at DESC
+                                LIMIT 10
+                            ''', (symbol,))
+                            _unfilled_closures = _fill_cur.fetchall()
+                            for _uc in _unfilled_closures:
+                                update_closure_exit_fill(_uc['id'], exit_price, broker_name, filled_at=datetime.now().isoformat(), exit_source='broker_sync')
+                                print(f"[SYNC] ✓ Updated lot_closure #{_uc['id']} exit fill: ${exit_price:.4f} via {broker_name}")
+                        except Exception as fill_err:
+                            print(f"[SYNC] ⚠️ Lot closure fill update warning: {fill_err}")
                     
                     try:
                         if hasattr(self, '_risk_manager') and self._risk_manager:

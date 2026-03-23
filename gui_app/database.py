@@ -3202,11 +3202,20 @@ def add_trade(signal_data: Dict) -> int:
     intended_price = signal_data.get('intended_price')
     executed_price = signal_data.get('executed_price')
     
-    # For STC trades linked to origin BTO, use original entry price for display
-    if signal_data.get('direction') == 'STC' and signal_data.get('origin_trade_id'):
+    # For STC trades, calculate PNL from matching BTO entry price
+    if signal_data.get('direction') == 'STC':
+        origin_id = signal_data.get('origin_trade_id')
         try:
-            cursor.execute('SELECT executed_price, asset_type FROM trades WHERE id = ?', 
-                          (signal_data['origin_trade_id'],))
+            if origin_id:
+                cursor.execute('SELECT executed_price, asset_type FROM trades WHERE id = ?', (origin_id,))
+            else:
+                cursor.execute('''
+                    SELECT executed_price, asset_type FROM trades
+                    WHERE UPPER(symbol) = UPPER(?) AND direction = 'BTO'
+                      AND LOWER(broker) = LOWER(?)
+                      AND status IN ('OPEN', 'CLOSED')
+                    ORDER BY executed_at DESC LIMIT 1
+                ''', (signal_data['symbol'], signal_data.get('broker', '')))
             origin = cursor.fetchone()
             if origin and origin[0]:
                 entry_price = float(origin[0])
@@ -3214,7 +3223,6 @@ def add_trade(signal_data: Dict) -> int:
                 qty = int(signal_data.get('quantity', 0))
                 asset_type = origin[1] or signal_data.get('asset_type', 'option')
                 
-                # Store original entry price for ENTRY column, exit price for CURRENT column
                 intended_price = entry_price
                 executed_price = exit_price
                 

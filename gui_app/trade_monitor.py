@@ -739,6 +739,22 @@ class TradeMonitor:
             
             db.close_trade(trade_id, close_price, pnl, pnl_percent)
             
+            try:
+                from gui_app.database import get_connection as _get_fill_conn, update_closure_exit_fill
+                _fill_conn = _get_fill_conn()
+                _fill_cur = _fill_conn.cursor()
+                _fill_cur.execute('''
+                    SELECT lc.id FROM lot_closures lc
+                    JOIN signal_lots sl ON lc.lot_id = sl.id
+                    WHERE UPPER(sl.symbol) = UPPER(?) AND lc.exit_fill_price IS NULL
+                    ORDER BY lc.closed_at DESC LIMIT 5
+                ''', (symbol,))
+                for row in _fill_cur.fetchall():
+                    update_closure_exit_fill(row['id'], close_price, broker_name, exit_source='trade_monitor')
+                    print(f"[TRADE MONITOR] ✓ Updated lot_closure #{row['id']} exit fill: ${close_price:.2f}", flush=True)
+            except Exception as fill_err:
+                print(f"[TRADE MONITOR] ⚠️ Lot closure fill update: {fill_err}", flush=True)
+            
             return {
                 'trade_id': trade_id,
                 'entry_price': entry_price,

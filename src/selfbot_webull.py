@@ -17600,7 +17600,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 
                                                 # Close the original BTO trade
                                                 if signal.get('origin_trade_id'):
-                                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat())
+                                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
                                                     _original_print(f"[RISK] ✓ Closed origin trade #{signal['origin_trade_id']}")
                                                 
                                                 # Process lot matching for PNL calculation
@@ -19256,7 +19256,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 
                                 # If this is a risk management exit, close the original BTO trade
                                 if signal.get('origin_trade_id'):
-                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat())
+                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
                                     _original_print(f"[DATABASE] ✓ Closed origin trade #{signal['origin_trade_id']}")
                                 
                                 # Process lot matching for PNL calculation
