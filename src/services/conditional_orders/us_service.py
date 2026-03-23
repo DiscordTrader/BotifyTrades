@@ -103,7 +103,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
                 broker_instance=alt_hub_broker
             )
         
-        elif broker_instance:
+        elif broker_instance and broker_key != 'trading212':
             data_source = broker_name.lower()
             self._log(f"[P3] REST API for {symbol} via {broker_name}")
             monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)

@@ -325,7 +325,41 @@ class Trading212Broker(BrokerInterface):
             if sym and price:
                 self._quote_cache[sym] = price
 
-        return self._quote_cache.get(symbol.upper())
+        price = self._quote_cache.get(symbol.upper())
+        if price:
+            return price
+
+        price = self._cross_hub_quote(symbol)
+        if price:
+            self._quote_cache[symbol.upper()] = price
+        return price
+
+    def _cross_hub_quote(self, symbol: str) -> Optional[float]:
+        sym_upper = symbol.upper()
+        try:
+            from src.services.trading212_data_hub import get_trading212_data_hub
+            t212_hub = get_trading212_data_hub()
+            if t212_hub:
+                price = t212_hub.get_quote_price(sym_upper)
+                if price and price > 0:
+                    return float(price)
+        except Exception:
+            pass
+        for mod_path, func_name in [
+            ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
+            ('src.services.webull_data_hub', 'get_webull_data_hub'),
+        ]:
+            try:
+                import importlib
+                mod = importlib.import_module(mod_path)
+                hub = getattr(mod, func_name)()
+                if hub:
+                    price = hub.get_quote_price(sym_upper)
+                    if price and price > 0:
+                        return float(price)
+            except Exception:
+                pass
+        return None
 
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         if not self._client or not self.connected:
