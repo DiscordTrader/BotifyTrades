@@ -7512,6 +7512,11 @@ def register_routes(app):
             # Create order_id -> status mapping for quick lookup
             order_status_map = {order.get('order_id', ''): order.get('status', '') for order in webull_orders if order.get('order_id')}
             
+            _SYMBOL_ALIASES = {'SPXW': 'SPX', 'NDXP': 'NDX', 'RUTW': 'RUT'}
+            def normalize_option_symbol(sym):
+                s = (sym or '').upper().strip()
+                return _SYMBOL_ALIASES.get(s, s)
+
             # Helper to normalize call_put to single character
             def normalize_call_put(val):
                 val = (val or '').upper().strip()
@@ -7561,10 +7566,11 @@ def register_routes(app):
                 broker_norm = str(pos.get('broker', '')).upper()
                 
                 pos_asset = pos.get('asset', pos.get('asset_type', 'stock'))
+                sym_norm = normalize_option_symbol(pos.get('symbol', ''))
                 if pos_asset == 'option':
-                    pos_key = f"{broker_norm}|{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
+                    pos_key = f"{broker_norm}|{sym_norm}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                 else:
-                    pos_key = f"{broker_norm}|{pos['symbol']}_stock"
+                    pos_key = f"{broker_norm}|{sym_norm}_stock"
                 live_position_map[pos_key] = pos
             
             # Group database trades by position key (including broker) for consolidation
@@ -7574,10 +7580,11 @@ def register_routes(app):
                 expiry_norm = normalize_expiry(trade.get('expiry', ''))
                 broker_norm = str(trade.get('broker', '')).upper()
                 
+                sym_norm = normalize_option_symbol(trade.get('symbol', ''))
                 if trade['asset_type'] == 'option':
-                    pos_key = f"{broker_norm}|{trade['symbol']}_{trade.get('strike', '')}_{expiry_norm}_{call_put_norm}"
+                    pos_key = f"{broker_norm}|{sym_norm}_{trade.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                 else:
-                    pos_key = f"{broker_norm}|{trade['symbol']}_stock"
+                    pos_key = f"{broker_norm}|{sym_norm}_stock"
                 
                 if pos_key not in position_groups:
                     position_groups[pos_key] = []
@@ -7699,10 +7706,11 @@ def register_routes(app):
                 broker_norm = str(pos.get('broker', '')).upper()
                 
                 pos_asset = pos.get('asset', pos.get('asset_type', 'stock'))
+                sym_norm = normalize_option_symbol(pos.get('symbol', ''))
                 if pos_asset == 'option':
-                    pos_key = f"{broker_norm}|{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
+                    pos_key = f"{broker_norm}|{sym_norm}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                 else:
-                    pos_key = f"{broker_norm}|{pos['symbol']}_stock"
+                    pos_key = f"{broker_norm}|{sym_norm}_stock"
                 
                 if pos_key not in tracked_positions and (not status_filter or status_filter == 'OPEN'):
                     import hashlib
