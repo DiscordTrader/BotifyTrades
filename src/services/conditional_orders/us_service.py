@@ -87,12 +87,16 @@ class USConditionalOrderService(BaseConditionalOrderService):
                 if alt_hub_streaming:
                     break
         
+        is_t212 = broker_key == 'trading212'
+        alt_brokers = self.broker_instances if is_t212 else {}
+
         if hub and hub_is_streaming:
             data_source = f"{broker_key}_stream"
             self._log(f"[P1] STREAMING hub for {symbol} via {broker_name} (sub-100ms)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
-                broker_instance=broker_instance
+                broker_instance=broker_instance,
+                alt_broker_instances=alt_brokers
             )
         
         elif alt_hub and alt_hub_streaming:
@@ -100,7 +104,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"[P2] Alt STREAMING hub for {symbol} via {alt_hub_name} (cross-broker WebSocket)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
-                broker_instance=alt_hub_broker
+                broker_instance=alt_hub_broker,
+                alt_broker_instances=alt_brokers
             )
         
         elif broker_instance and broker_key != 'trading212':
@@ -113,7 +118,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"[P4] Hub (pending stream) for {symbol} via {broker_name} (will auto-upgrade)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, hub, broker_name,
-                broker_instance=broker_instance
+                broker_instance=broker_instance,
+                alt_broker_instances=alt_brokers
             )
         
         elif alt_hub:
@@ -121,7 +127,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"[P5] Alt hub (pending stream) for {symbol} via {alt_hub_name} (will auto-upgrade)")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
-                broker_instance=alt_hub_broker
+                broker_instance=alt_hub_broker,
+                alt_broker_instances=alt_brokers
             )
         
         else:
@@ -135,7 +142,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             if any_broker_inst:
                 data_source = any_broker_name.lower()
                 self._log(f"[P6] Fallback REST for {symbol} via {any_broker_name} (no primary broker)")
-                monitor = BrokerPriceMonitor(symbol, price_callback, any_broker_name, any_broker_inst)
+                monitor = BrokerPriceMonitor(symbol, price_callback, any_broker_name, any_broker_inst, alt_broker_instances=alt_brokers)
             else:
                 self._log(f"ERROR: No price source for {symbol} — no brokers or hubs available")
                 return None
