@@ -14669,12 +14669,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             # IMPORTANT: Skip if _calculate_qty is True - those signals want dynamic sizing at execution time
             # based on actual buying power, not static max_position_size
             if stk.get('action') == 'BTO' and stk.get('qty') is None and not stk.get('_qty_from_signal', False) and not stk.get('_calculate_qty', False):
-                # Tiered default: channel → global → max_position_size calculation (if enabled) → 1
+                # Tiered default: channel fixed qty → channel % sizing → global → max_position_size → 1
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
+                channel_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
                 
                 if channel_default_qty:
                     stk['qty'] = int(channel_default_qty)
                     print(f"[DEFAULT QTY] ✓ Using channel default: {stk['qty']} shares")
+                elif channel_position_size_pct:
+                    stk['_position_size_pct'] = float(channel_position_size_pct)
+                    stk['_pct_from_channel'] = True
+                    stk['_calculate_qty'] = True
+                    stk['qty'] = 1
+                    print(f"[DEFAULT QTY] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
                 else:
                     # Check global default and max_position_size settings
                     _current_trading_settings = get_trading_settings()
