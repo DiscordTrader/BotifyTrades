@@ -107,6 +107,7 @@ class SplashScreen(QWidget):
         self.skip_license = skip_license
         self.license_controller = LicenseController() if LicenseController else None
         self._license_check_started = False
+        self.license_rejected = False
         self._drag_pos = None
         self._setup_ui()
         self._connect_signals()
@@ -582,6 +583,7 @@ class SplashScreen(QWidget):
                 self.status_label.setText("Starting...")
                 QTimer.singleShot(0, self.startup_ready.emit)
             else:
+                self.license_rejected = True
                 self._show_license_panel()
     
     def start_license_check(self):
@@ -652,6 +654,7 @@ class SplashScreen(QWidget):
             self._show_progress_panel()
             QTimer.singleShot(0, self.startup_ready.emit)
         elif state == LicenseState.REQUIRE_KEY:
+            self.license_rejected = True
             self._show_license_panel()
             self.license_input.setEnabled(True)
             self.trial_button.setEnabled(True)
@@ -659,6 +662,7 @@ class SplashScreen(QWidget):
             if message:
                 self._show_status(message, error=True)
         elif state == LicenseState.EXPIRED:
+            self.license_rejected = True
             self._show_license_panel()
             self.license_title.setText("License Expired")
             self.license_title.setStyleSheet("color: #fc8181; background: transparent;")
@@ -669,6 +673,7 @@ class SplashScreen(QWidget):
     
     def _on_license_activated(self, license_data: dict):
         """Handle successful license activation"""
+        self.license_rejected = False
         days = license_data.get('days_remaining', 0)
         license_type = license_data.get('license_type', 'subscription').title()
         

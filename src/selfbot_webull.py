@@ -20004,6 +20004,10 @@ Environment Variables:
                 time.sleep(60)
                 if startup_state.get('startup_thread') is not None:
                     return
+                if getattr(splash, 'license_rejected', False):
+                    _original_print("[STARTUP WATCHDOG] License was explicitly rejected - bot will NOT start without valid license")
+                    logging.warning("[STARTUP WATCHDOG] License rejected by splash screen - startup blocked")
+                    return
                 if not startup_state.get('license_ready'):
                     _original_print("[STARTUP WATCHDOG] ⚠️ No license signal received after 60s and no startup thread exists")
                     _original_print("[STARTUP WATCHDOG] Attempting startup (license signal may have been lost)...")
