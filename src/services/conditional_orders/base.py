@@ -1500,6 +1500,7 @@ class BaseConditionalOrderService(ABC):
                     'webull': None,
                     'schwab': None,
                     'trading212': None,
+                    'ibkr': None,
                 }
                 if broker_map.get('webull'):
                     wb = broker_map['webull']
@@ -1523,6 +1524,13 @@ class BaseConditionalOrderService(ABC):
                         if broker_map.get('trading212') and not t212_hub._broker:
                             t212_hub.set_broker(broker_map['trading212'])
                         hub_map['trading212'] = t212_hub
+                except Exception:
+                    pass
+                try:
+                    from src.services.ibkr_data_hub import get_ibkr_data_hub
+                    ibkr_hub = get_ibkr_data_hub()
+                    if ibkr_hub and ibkr_hub._broker:
+                        hub_map['ibkr'] = ibkr_hub
                 except Exception:
                     pass
                 for hname, hub in hub_map.items():

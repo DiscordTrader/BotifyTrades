@@ -73,7 +73,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
         alt_hub_name = None
         alt_hub_streaming = False
         alt_hub_broker = None
-        for alt_key in ['schwab', 'webull']:
+        for alt_key in ['schwab', 'webull', 'ibkr']:
             if alt_key == broker_key:
                 continue
             alt = self.get_data_hub(alt_key)

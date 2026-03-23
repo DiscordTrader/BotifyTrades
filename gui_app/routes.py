@@ -14755,6 +14755,18 @@ def register_routes(app):
                             'cash': acct_data.get('cash', 0),
                         }
                         set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                        try:
+                            from .broker_credentials_service import save_ibkr_credentials
+                            save_ibkr_credentials(
+                                host=host,
+                                port_live=creds.get('port_live', 7496),
+                                port_paper=creds.get('port_paper', 7497),
+                                client_id=client_id,
+                                paper_mode=is_paper
+                            )
+                            print(f"[IBKR] ✓ Credentials saved to database for auto-restore on restart")
+                        except Exception as save_err:
+                            print(f"[IBKR] ⚠️ Failed to save credentials: {save_err}")
                         mode = "Paper" if is_paper else "Live"
                         bp = acct_data.get('buying_power', 0)
                         pv = acct_data.get('portfolio_value', 0)
