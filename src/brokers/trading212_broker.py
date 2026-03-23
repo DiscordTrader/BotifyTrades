@@ -224,6 +224,93 @@ class Trading212Broker(BrokerInterface):
 
         return self._positions_cache or []
 
+    async def place_stop_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        stop_price: float,
+        time_validity: str = 'GOOD_TILL_CANCEL',
+        **kwargs
+    ) -> OrderResult:
+        if not self._client or not self.connected:
+            return OrderResult(success=False, message="Not connected to Trading 212")
+
+        if not self._instruments_ready:
+            return OrderResult(success=False, message="Instrument cache still loading. Try again in a few seconds.")
+
+        ticker = self._translate_ticker(symbol)
+        if not ticker:
+            return OrderResult(
+                success=False, symbol=symbol, action=action,
+                message=f"Symbol '{symbol}' not found in Trading 212 instrument list"
+            )
+
+        action_upper = action.upper()
+        qty = -abs(float(quantity)) if action_upper in ('STC', 'SELL') else abs(float(quantity))
+
+        try:
+            result = await self._client.place_stop_order(ticker, qty, stop_price, time_validity)
+            if result.get('success') and result.get('data'):
+                order_data = result['data']
+                order_id = str(order_data.get('id', ''))
+                status = order_data.get('status', 'UNKNOWN')
+                self._schedule_post_order_refresh()
+                return OrderResult(
+                    success=True, order_id=order_id, symbol=symbol, action=action,
+                    quantity=abs(int(quantity)), price=stop_price,
+                    message=f"T212 stop order {order_id} placed at ${stop_price} (status: {status})"
+                )
+            else:
+                error = result.get('error', 'Unknown error')
+                return OrderResult(success=False, symbol=symbol, action=action, message=f"T212 stop order failed: {error}")
+        except Exception as e:
+            return OrderResult(success=False, symbol=symbol, action=action, message=f"T212 stop order exception: {e}")
+
+    async def place_stop_limit_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        stop_price: float,
+        limit_price: float,
+        time_validity: str = 'GOOD_TILL_CANCEL',
+        **kwargs
+    ) -> OrderResult:
+        if not self._client or not self.connected:
+            return OrderResult(success=False, message="Not connected to Trading 212")
+
+        if not self._instruments_ready:
+            return OrderResult(success=False, message="Instrument cache still loading. Try again in a few seconds.")
+
+        ticker = self._translate_ticker(symbol)
+        if not ticker:
+            return OrderResult(
+                success=False, symbol=symbol, action=action,
+                message=f"Symbol '{symbol}' not found in Trading 212 instrument list"
+            )
+
+        action_upper = action.upper()
+        qty = -abs(float(quantity)) if action_upper in ('STC', 'SELL') else abs(float(quantity))
+
+        try:
+            result = await self._client.place_stop_limit_order(ticker, qty, stop_price, limit_price, time_validity)
+            if result.get('success') and result.get('data'):
+                order_data = result['data']
+                order_id = str(order_data.get('id', ''))
+                status = order_data.get('status', 'UNKNOWN')
+                self._schedule_post_order_refresh()
+                return OrderResult(
+                    success=True, order_id=order_id, symbol=symbol, action=action,
+                    quantity=abs(int(quantity)), price=limit_price,
+                    message=f"T212 stop-limit order {order_id} placed stop=${stop_price} limit=${limit_price} (status: {status})"
+                )
+            else:
+                error = result.get('error', 'Unknown error')
+                return OrderResult(success=False, symbol=symbol, action=action, message=f"T212 stop-limit order failed: {error}")
+        except Exception as e:
+            return OrderResult(success=False, symbol=symbol, action=action, message=f"T212 stop-limit order exception: {e}")
+
     async def place_stock_order(
         self,
         symbol: str,
@@ -253,8 +340,15 @@ class Trading212Broker(BrokerInterface):
         else:
             qty = abs(float(quantity))
 
+        stop_price = kwargs.get('stop_price')
+        limit_price = kwargs.get('limit_price')
+
         try:
-            if price and price > 0:
+            if stop_price and stop_price > 0 and limit_price and limit_price > 0:
+                return await self.place_stop_limit_order(symbol, action, quantity, stop_price, limit_price)
+            elif stop_price and stop_price > 0:
+                return await self.place_stop_order(symbol, action, quantity, stop_price)
+            elif price and price > 0:
                 result = await self._client.place_limit_order(ticker, qty, price)
             else:
                 result = await self._client.place_market_order(ticker, qty)

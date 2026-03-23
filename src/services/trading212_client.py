@@ -31,7 +31,7 @@ class Trading212RateLimiter:
             return self._locks[loop_id]
 
     def _classify(self, path: str) -> str:
-        if '/portfolio' in path:
+        if '/portfolio' in path or '/positions' in path:
             return 'portfolio'
         if '/orders' in path:
             return 'orders'
@@ -194,7 +194,10 @@ class Trading212Client:
         return await self.get('/equity/account/cash')
 
     async def get_portfolio(self) -> Dict[str, Any]:
-        return await self.get('/equity/portfolio')
+        return await self.get('/equity/positions')
+
+    async def get_position(self, ticker: str) -> Dict[str, Any]:
+        return await self.get(f'/equity/positions?ticker={ticker}')
 
     async def get_orders(self) -> Dict[str, Any]:
         return await self.get('/equity/orders')
@@ -213,11 +216,31 @@ class Trading212Client:
             'timeValidity': time_validity,
         })
 
+    async def place_stop_order(self, ticker: str, quantity: float, stop_price: float, time_validity: str = 'GOOD_TILL_CANCEL') -> Dict[str, Any]:
+        return await self.post('/equity/orders/stop', {
+            'ticker': ticker,
+            'quantity': quantity,
+            'stopPrice': stop_price,
+            'timeValidity': time_validity,
+        })
+
+    async def place_stop_limit_order(self, ticker: str, quantity: float, stop_price: float, limit_price: float, time_validity: str = 'GOOD_TILL_CANCEL') -> Dict[str, Any]:
+        return await self.post('/equity/orders/stop_limit', {
+            'ticker': ticker,
+            'quantity': quantity,
+            'stopPrice': stop_price,
+            'limitPrice': limit_price,
+            'timeValidity': time_validity,
+        })
+
     async def cancel_order(self, order_id: int) -> Dict[str, Any]:
         return await self.delete(f'/equity/orders/{order_id}')
 
     async def get_instruments(self) -> Dict[str, Any]:
         return await self.get('/equity/metadata/instruments')
+
+    async def get_exchanges(self) -> Dict[str, Any]:
+        return await self.get('/equity/metadata/exchanges')
 
     async def get_order_history(self, cursor: int = None, limit: int = 50) -> Dict[str, Any]:
         params = {'limit': limit}
