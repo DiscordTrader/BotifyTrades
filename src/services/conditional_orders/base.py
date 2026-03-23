@@ -1617,7 +1617,12 @@ class BaseConditionalOrderService(ABC):
         self._log(f"Started monitor task for #{order_id}")
     
     async def _retry_start_monitor(self, order_id: int, order: Dict, max_retries: int = 12, interval: float = 5.0):
-        """Retry starting a monitor for an order that couldn't find a broker."""
+        """Retry starting a monitor for an order that couldn't find its assigned broker."""
+        broker = order.get('broker_primary', '')
+        broker_lower = broker.lower() if broker else ''
+        broker_key = broker_lower.replace('_paper', '').replace('_live', '')
+        symbol = order.get('symbol', '?')
+        
         for attempt in range(1, max_retries + 1):
             await asyncio.sleep(interval)
             
@@ -1626,33 +1631,29 @@ class BaseConditionalOrderService(ABC):
             if order_id in self.monitors:
                 return
             
-            self._log(f"Retry #{attempt}/{max_retries} for order #{order_id} {order.get('symbol', '?')}")
+            self._log(f"Retry #{attempt}/{max_retries} for order #{order_id} {symbol} (need broker: {broker})")
             
-            self.broker_instances.clear()
-            self.data_hubs.clear()
-            self._auto_discover_brokers()
+            needed_broker = self.broker_instances.get(broker_key) or self.broker_instances.get(broker_lower)
+            if not needed_broker:
+                self.broker_instances.clear()
+                self.data_hubs.clear()
+                self._auto_discover_brokers()
+                needed_broker = self.broker_instances.get(broker_key) or self.broker_instances.get(broker_lower)
             
-            if not self.broker_instances:
+            if not needed_broker:
                 if attempt < max_retries:
                     continue
-                self._log(f"Order #{order_id}: All {max_retries} retries exhausted — no brokers available")
+                self._log(f"Order #{order_id}: All {max_retries} retries exhausted — {broker} broker not available")
                 update_conditional_order_status(
                     order_id, 'ERROR',
                     event='BROKER_DISCOVERY_FAILED',
-                    error_message=f'No brokers available after {max_retries} retries'
+                    error_message=f'{broker} broker not available after {max_retries} retries ({max_retries * interval:.0f}s)'
                 )
                 if order_id in self.pending_orders:
                     del self.pending_orders[order_id]
                 return
             
-            broker = order.get('broker_primary', '')
-            broker_lower = broker.lower() if broker else ''
-            broker_key = broker_lower.replace('_paper', '').replace('_live', '')
-            broker_instance = self.broker_instances.get(broker_key)
-            if not broker_instance and broker_lower:
-                broker_instance = self.broker_instances.get(broker_lower)
-            
-            monitor = await self.build_price_monitor(order, broker_instance, broker)
+            monitor = await self.build_price_monitor(order, needed_broker, broker)
             if monitor:
                 self.monitors[order_id] = monitor
                 
@@ -1662,19 +1663,19 @@ class BaseConditionalOrderService(ABC):
                 
                 task = asyncio.create_task(monitor.start())
                 self.monitor_tasks[order_id] = task
-                self._log(f"✓ Order #{order_id}: Monitor started on retry #{attempt}")
+                self._log(f"✓ Order #{order_id}: {symbol} monitor started via {broker} on retry #{attempt}")
                 update_conditional_order_status(
                     order_id, 'ACTIVE_MONITORING',
                     event='MONITOR_STARTED_RETRY',
-                    details=f'Monitor started after {attempt} retries'
+                    details=f'Monitor started via {broker} after {attempt} retries'
                 )
                 return
         
-        self._log(f"Order #{order_id}: All {max_retries} retries exhausted — monitor failed")
+        self._log(f"Order #{order_id}: All {max_retries} retries exhausted — monitor failed for {broker}")
         update_conditional_order_status(
             order_id, 'ERROR',
             event='MONITOR_RETRY_EXHAUSTED',
-            error_message=f'Could not start monitor after {max_retries} retries'
+            error_message=f'Could not start {symbol} monitor via {broker} after {max_retries} retries'
         )
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
