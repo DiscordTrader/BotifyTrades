@@ -73,7 +73,10 @@ class IBKRBroker(BrokerInterface):
     async def connect(self) -> bool:
         """Connect to Interactive Brokers TWS/Gateway"""
         try:
-            self._event_loop = asyncio.get_event_loop()
+            try:
+                self._event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._event_loop = asyncio.get_event_loop()
             await self.ib.connectAsync(
                 host=self.host,
                 port=self.port,
@@ -472,6 +475,33 @@ class IBKRBroker(BrokerInterface):
                 action=action
             )
     
+    def _is_on_ib_loop(self) -> bool:
+        """Check if we're currently running on the IB event loop."""
+        if not self._event_loop:
+            return False
+        try:
+            return asyncio.get_running_loop() is self._event_loop
+        except RuntimeError:
+            return False
+
+    async def _ib_get_quote_impl(self, symbol: str) -> Optional[float]:
+        """Internal: fetch quote via IB API — must run on IB's event loop."""
+        contract = Stock(symbol, 'SMART', 'USD')
+        await self.ib.qualifyContractsAsync(contract)
+        
+        ticker = self.ib.reqMktData(contract, '', False, False)
+        await asyncio.sleep(2)
+        
+        if ticker.last and ticker.last > 0:
+            price = float(ticker.last)
+        elif ticker.close and ticker.close > 0:
+            price = float(ticker.close)
+        else:
+            price = None
+        
+        self.ib.cancelMktData(contract)
+        return price
+
     async def get_quote(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol — checks hub cache first"""
         try:
@@ -486,26 +516,48 @@ class IBKRBroker(BrokerInterface):
             except (ImportError, Exception):
                 pass
 
-            contract = Stock(symbol, 'SMART', 'USD')
-            await self.ib.qualifyContractsAsync(contract)
-            
-            ticker = self.ib.reqMktData(contract, '', False, False)
-            await asyncio.sleep(2)
-            
-            if ticker.last and ticker.last > 0:
-                price = float(ticker.last)
-            elif ticker.close and ticker.close > 0:
-                price = float(ticker.close)
+            if self._is_on_ib_loop():
+                return await self._ib_get_quote_impl(symbol)
+            elif self._event_loop and self._event_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    self._ib_get_quote_impl(symbol), self._event_loop
+                )
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.wrap_future(future), timeout=10
+                    )
+                except asyncio.TimeoutError:
+                    future.cancel()
+                    print(f"[{self.name}] get_quote timeout for {symbol} (cross-loop)")
+                    return None
             else:
-                price = None
-            
-            self.ib.cancelMktData(contract)
-            
-            return price
+                print(f"[{self.name}] No IB event loop for get_quote — skipping REST for {symbol}")
+                return None
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return None
     
+    async def _ib_get_quote_detailed_impl(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Internal: fetch detailed quote via IB API — must run on IB's event loop."""
+        contract = Stock(symbol, 'SMART', 'USD')
+        await self.ib.qualifyContractsAsync(contract)
+        
+        ticker = self.ib.reqMktData(contract, '', False, False)
+        await asyncio.sleep(2)
+        
+        result = {
+            'symbol': symbol,
+            'bid': float(ticker.bid) if ticker.bid and ticker.bid > 0 else 0,
+            'ask': float(ticker.ask) if ticker.ask and ticker.ask > 0 else 0,
+            'last': float(ticker.last) if ticker.last and ticker.last > 0 else 0,
+            'close': float(ticker.close) if ticker.close and ticker.close > 0 else 0,
+            'volume': int(ticker.volume) if ticker.volume else 0,
+            'source': 'IBKR'
+        }
+        
+        self.ib.cancelMktData(contract)
+        return result
+
     async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get detailed quote with bid/ask/last — checks hub cache first"""
         try:
@@ -523,61 +575,80 @@ class IBKRBroker(BrokerInterface):
             except (ImportError, Exception):
                 pass
 
-            contract = Stock(symbol, 'SMART', 'USD')
-            await self.ib.qualifyContractsAsync(contract)
-            
-            ticker = self.ib.reqMktData(contract, '', False, False)
-            await asyncio.sleep(2)
-            
-            result = {
-                'symbol': symbol,
-                'bid': float(ticker.bid) if ticker.bid and ticker.bid > 0 else 0,
-                'ask': float(ticker.ask) if ticker.ask and ticker.ask > 0 else 0,
-                'last': float(ticker.last) if ticker.last and ticker.last > 0 else 0,
-                'close': float(ticker.close) if ticker.close and ticker.close > 0 else 0,
-                'volume': int(ticker.volume) if ticker.volume else 0,
-                'source': 'IBKR'
-            }
-            
-            self.ib.cancelMktData(contract)
-            return result
+            if self._is_on_ib_loop():
+                return await self._ib_get_quote_detailed_impl(symbol)
+            elif self._event_loop and self._event_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    self._ib_get_quote_detailed_impl(symbol), self._event_loop
+                )
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.wrap_future(future), timeout=10
+                    )
+                except asyncio.TimeoutError:
+                    future.cancel()
+                    print(f"[{self.name}] get_quote_detailed timeout for {symbol} (cross-loop)")
+                    return None
+            else:
+                print(f"[{self.name}] No IB event loop for get_quote_detailed — skipping REST for {symbol}")
+                return None
         except Exception as e:
             print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
             return None
     
+    async def _ib_get_option_quote_impl(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[Dict[str, Any]]:
+        """Internal: fetch option quote via IB API — must run on IB's event loop."""
+        exp_ib = expiry.replace('-', '')
+        right = 'C' if option_type.upper() in ['C', 'CALL'] else 'P'
+        
+        contract = Option(symbol, exp_ib, strike, right, 'SMART')
+        qualified = await self.ib.qualifyContractsAsync(contract)
+        
+        if not qualified:
+            return None
+        
+        ticker = self.ib.reqMktData(contract, '', False, False)
+        await asyncio.sleep(2)
+        
+        result = {
+            'symbol': symbol,
+            'strike': strike,
+            'expiry': expiry,
+            'type': option_type,
+            'bid': float(ticker.bid) if ticker.bid and ticker.bid > 0 else 0,
+            'ask': float(ticker.ask) if ticker.ask and ticker.ask > 0 else 0,
+            'last': float(ticker.last) if ticker.last and ticker.last > 0 else 0,
+            'volume': int(ticker.volume) if ticker.volume else 0,
+            'open_interest': 0,
+            'source': 'IBKR'
+        }
+        
+        self.ib.cancelMktData(contract)
+        return result
+
     async def get_option_quote(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[Dict[str, Any]]:
         """Get real-time option quote for signal verification"""
         try:
             if not self.ib.isConnected():
                 return None
             
-            exp_ib = expiry.replace('-', '')
-            right = 'C' if option_type.upper() in ['C', 'CALL'] else 'P'
-            
-            contract = Option(symbol, exp_ib, strike, right, 'SMART')
-            qualified = await self.ib.qualifyContractsAsync(contract)
-            
-            if not qualified:
+            if self._is_on_ib_loop():
+                return await self._ib_get_option_quote_impl(symbol, strike, expiry, option_type)
+            elif self._event_loop and self._event_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    self._ib_get_option_quote_impl(symbol, strike, expiry, option_type), self._event_loop
+                )
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.wrap_future(future), timeout=10
+                    )
+                except asyncio.TimeoutError:
+                    future.cancel()
+                    print(f"[{self.name}] get_option_quote timeout for {symbol} (cross-loop)")
+                    return None
+            else:
+                print(f"[{self.name}] No IB event loop for get_option_quote — skipping REST for {symbol}")
                 return None
-            
-            ticker = self.ib.reqMktData(contract, '', False, False)
-            await asyncio.sleep(2)
-            
-            result = {
-                'symbol': symbol,
-                'strike': strike,
-                'expiry': expiry,
-                'type': option_type,
-                'bid': float(ticker.bid) if ticker.bid and ticker.bid > 0 else 0,
-                'ask': float(ticker.ask) if ticker.ask and ticker.ask > 0 else 0,
-                'last': float(ticker.last) if ticker.last and ticker.last > 0 else 0,
-                'volume': int(ticker.volume) if ticker.volume else 0,
-                'open_interest': 0,
-                'source': 'IBKR'
-            }
-            
-            self.ib.cancelMktData(contract)
-            return result
         except Exception as e:
             print(f"[{self.name}] Error getting option quote for {symbol} {strike}{option_type} {expiry}: {e}")
             return None
