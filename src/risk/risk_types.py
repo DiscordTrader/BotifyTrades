@@ -468,7 +468,7 @@ class PositionCacheEntry:
             backoff_seconds = min(5 * self.exit_retry_count, 15)
             phase = "FAST-TRANSIENT"
         elif self.exit_retry_count <= self.MAX_FAST_RETRIES:
-            backoff_seconds = min(3 * (2 ** (self.exit_retry_count - 1)), 10)
+            backoff_seconds = min(max(4, 3 * (2 ** (self.exit_retry_count - 1))), 10)
             phase = "FAST"
         else:
             # Extended retry phase: Fixed 5-minute intervals, keep trying forever

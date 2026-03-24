@@ -4977,8 +4977,8 @@ class WebullBroker:
                 base_payload = {
                     'stock': base_sym,
                     'tId': int(tId),
-                    'price': round(float(effective_price), 2),
-                    'lmtPrice': round(float(effective_price), 2),
+                    'price': round(float(effective_price), 4 if effective_price < 1.0 else 2),
+                    'lmtPrice': round(float(effective_price), 4 if effective_price < 1.0 else 2),
                     'action': side,
                     'orderType': 'LMT',
                     'enforce': stock_enforce,

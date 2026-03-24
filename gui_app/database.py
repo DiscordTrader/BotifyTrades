@@ -3339,7 +3339,7 @@ def find_open_bto_trade(symbol: str, asset_type: str, broker: str = None,
                 if broker:
                     query += ' AND broker = ?'
                     params.append(broker)
-                query += ' ORDER BY id DESC LIMIT 1'
+                query += " ORDER BY CASE status WHEN 'OPEN' THEN 0 WHEN 'PARTIAL' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END, id DESC LIMIT 1"
                 cursor.execute(query, params)
                 row = cursor.fetchone()
                 if row:
@@ -3363,7 +3363,7 @@ def find_open_bto_trade(symbol: str, asset_type: str, broker: str = None,
             query += ' AND broker = ?'
             params.append(broker)
         
-        query += ' ORDER BY id DESC LIMIT 1'
+        query += " ORDER BY CASE status WHEN 'OPEN' THEN 0 WHEN 'PARTIAL' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END, id DESC LIMIT 1"
         
         cursor.execute(query, params)
         row = cursor.fetchone()
