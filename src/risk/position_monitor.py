@@ -2337,10 +2337,10 @@ class RiskManager:
                             avg = float(pos.get('avg_cost', 0))
                             cur = float(pos.get('current_price', 0))
                             snap = PositionSnapshot(
-                                symbol=sym, asset_type='stock',
-                                strike=None, expiry=None, option_type=None,
+                                symbol=sym, asset='stock',
+                                strike=None, expiry=None,
                                 quantity=qty, avg_cost=avg, current_price=cur,
-                                broker=broker_label, direction='long' if qty > 0 else 'short',
+                                broker=broker_label, direction=None,
                             )
                             t212_snaps.append(snap)
                         self._last_trading212_positions = t212_snaps
