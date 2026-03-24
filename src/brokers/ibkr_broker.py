@@ -473,15 +473,25 @@ class IBKRBroker(BrokerInterface):
             )
     
     async def get_quote(self, symbol: str) -> Optional[float]:
-        """Get current price for a symbol"""
+        """Get current price for a symbol — checks hub cache first"""
         try:
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                hub = get_ibkr_data_hub()
+                if hub.is_streaming():
+                    cached = hub.get_quote_price(symbol)
+                    if cached and cached > 0:
+                        return cached
+                    hub.subscribe_symbol(symbol)
+            except (ImportError, Exception):
+                pass
+
             contract = Stock(symbol, 'SMART', 'USD')
             await self.ib.qualifyContractsAsync(contract)
             
             ticker = self.ib.reqMktData(contract, '', False, False)
             await asyncio.sleep(2)
             
-            # Get last price or close price
             if ticker.last and ticker.last > 0:
                 price = float(ticker.last)
             elif ticker.close and ticker.close > 0:
@@ -489,7 +499,6 @@ class IBKRBroker(BrokerInterface):
             else:
                 price = None
             
-            # Cancel market data
             self.ib.cancelMktData(contract)
             
             return price
@@ -498,11 +507,22 @@ class IBKRBroker(BrokerInterface):
             return None
     
     async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Get detailed quote with bid/ask/last for signal verification"""
+        """Get detailed quote with bid/ask/last — checks hub cache first"""
         try:
             if not self.ib.isConnected():
                 return None
             
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                hub = get_ibkr_data_hub()
+                if hub.is_streaming():
+                    cached = hub.get_quote_detailed(symbol, max_age=10)
+                    if cached and (cached.get('last', 0) > 0 or cached.get('bid', 0) > 0):
+                        return cached
+                    hub.subscribe_symbol(symbol)
+            except (ImportError, Exception):
+                pass
+
             contract = Stock(symbol, 'SMART', 'USD')
             await self.ib.qualifyContractsAsync(contract)
             

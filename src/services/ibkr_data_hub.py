@@ -348,21 +348,34 @@ class IBKRDataHub:
             return True
         return False
 
+    def _is_on_ib_loop(self) -> bool:
+        if not self._loop:
+            return False
+        try:
+            return asyncio.get_running_loop() is self._loop
+        except RuntimeError:
+            return False
+
     def subscribe_symbol(self, symbol: str, contract=None):
         if symbol in self._subscribed_symbols:
             return
         if not self._ib or not self._streaming_active:
             self._pending_subscriptions.add(symbol)
             return
+        if self._loop and not self._loop.is_closed():
+            asyncio.run_coroutine_threadsafe(
+                self._subscribe_on_loop(symbol, contract), self._loop
+            )
+        else:
+            self._pending_subscriptions.add(symbol)
+
+    async def _subscribe_on_loop(self, symbol: str, contract=None):
+        if symbol in self._subscribed_symbols:
+            return
         if contract:
             self._start_market_data(symbol, contract)
         else:
-            if self._loop and not self._loop.is_closed():
-                asyncio.run_coroutine_threadsafe(
-                    self._qualify_and_subscribe(symbol), self._loop
-                )
-            else:
-                self._pending_subscriptions.add(symbol)
+            await self._qualify_and_subscribe(symbol)
 
     async def _qualify_and_subscribe(self, symbol: str):
         try:
@@ -394,30 +407,38 @@ class IBKRDataHub:
     def unsubscribe_symbol(self, symbol: str):
         with self._contract_lock:
             contract = self._symbol_to_contract.pop(symbol, None)
-        if contract and self._ib:
+        if not contract:
+            self._subscribed_symbols.discard(symbol)
+            return
+        con_id = contract.conId if contract else 0
+        self._subscribed_conids.discard(con_id)
+        with self._contract_lock:
+            self._conid_to_symbol.pop(con_id, None)
+        self._subscribed_symbols.discard(symbol)
+        if self._ib and self._loop and not self._loop.is_closed():
             try:
-                self._ib.cancelMktData(contract)
-                con_id = contract.conId if contract else 0
-                self._subscribed_conids.discard(con_id)
-                with self._contract_lock:
-                    self._conid_to_symbol.pop(con_id, None)
+                self._loop.call_soon_threadsafe(
+                    lambda c=contract: self._ib.cancelMktData(c) if self._ib else None
+                )
             except Exception:
                 pass
-        self._subscribed_symbols.discard(symbol)
 
     def _cancel_all_subscriptions(self):
         with self._contract_lock:
             contracts = list(self._symbol_to_contract.values())
             self._symbol_to_contract.clear()
             self._conid_to_symbol.clear()
-        for contract in contracts:
-            try:
-                if self._ib:
-                    self._ib.cancelMktData(contract)
-            except Exception:
-                pass
         self._subscribed_symbols.clear()
         self._subscribed_conids.clear()
+        if self._ib and contracts:
+            if self._loop and not self._loop.is_closed():
+                for contract in contracts:
+                    try:
+                        self._loop.call_soon_threadsafe(
+                            lambda c=contract: self._ib.cancelMktData(c) if self._ib else None
+                        )
+                    except Exception:
+                        pass
 
     def _sync_subscriptions(self, current_symbols: Set[str]):
         if not self._ib or not self._streaming_active:
