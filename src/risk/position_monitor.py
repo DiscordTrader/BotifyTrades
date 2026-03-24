@@ -3558,11 +3558,21 @@ class RiskManager:
                             return
                         self._exit_executed_keys.add(pos_key)
                     print(f"[RISK] [DIRECT-EXIT] ⚡ Worker hasn't handled {pos_key} after 5s — executing directly")
-                    loop = asyncio.new_event_loop()
-                    try:
-                        loop.run_until_complete(self._direct_execute_exit(stc_signal, pos_key))
-                    finally:
-                        loop.close()
+                    bot_loop = self.loop
+                    if bot_loop and bot_loop.is_running():
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._direct_execute_exit(stc_signal, pos_key), bot_loop
+                        )
+                        try:
+                            future.result(timeout=15)
+                        except Exception as fut_ex:
+                            print(f"[RISK] [DIRECT-EXIT] ✗ {pos_key} execution error: {fut_ex}")
+                    else:
+                        loop = asyncio.new_event_loop()
+                        try:
+                            loop.run_until_complete(self._direct_execute_exit(stc_signal, pos_key))
+                        finally:
+                            loop.close()
                 except Exception as ex:
                     print(f"[RISK] [DIRECT-EXIT] ✗ Thread execution failed for {pos_key}: {ex}")
                     import traceback
@@ -4309,6 +4319,12 @@ class RiskManager:
             return None
         return _t.time() - quote.timestamp
 
+    def _get_hub_quote_ts(self, hub, symbol):
+        quote = hub.get_quote(symbol)
+        if not quote:
+            return None
+        return quote.timestamp
+
     def _get_market_session(self):
         from datetime import datetime
         try:
@@ -4405,7 +4421,8 @@ class RiskManager:
                     tracker['last_price'] = fresh_price
                     tracker['last_changed'] = now
                     self._rest_repaired_prices[key] = {
-                        'price': fresh_price, 'until': now + self._HUB_PRICE_MAX_AGE
+                        'price': fresh_price, 'until': now + self._HUB_PRICE_MAX_AGE,
+                        'created_at': now
                     }
                     self._rest_repair_cycle_keys[key] = now
                     if key in self._price_unverified:
@@ -4611,11 +4628,13 @@ class RiskManager:
             pass
         return None
 
-    def _is_rest_repair_active(self, pos, hub_quote_age=None):
+    def _is_rest_repair_active(self, pos, hub_quote_age=None, hub_quote_ts=None):
         """Check if a REST-repaired price is protecting this position from hub overwrite.
         
-        If hub_quote_age is provided and is < 3s, the stream has genuinely recovered
-        and the repair guard is released early regardless of TTL.
+        The guard is released early only if the hub tick is genuinely NEW —
+        meaning its timestamp is newer than when the repair was created.
+        A stale tick with age < 3s just means the subscription is recent,
+        not that the market data changed.
         """
         import time as _rt
         key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
@@ -4625,7 +4644,7 @@ class RiskManager:
         if _rt.time() > repair['until']:
             del self._rest_repaired_prices[key]
             return False
-        if hub_quote_age is not None and hub_quote_age < 3.0:
+        if hub_quote_ts is not None and hub_quote_ts > repair.get('created_at', 0):
             del self._rest_repaired_prices[key]
             return False
         return True
@@ -4677,10 +4696,10 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
-                        _qa = self._get_hub_quote_age(hub, pos.symbol)
-                        if self._is_rest_repair_active(pos, hub_quote_age=_qa):
+                        _hub_ts = self._get_hub_quote_ts(hub, pos.symbol)
+                        if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
                             repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
-                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
+                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
                                 pos.current_price = price
                                 del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 webull_updated += 1
@@ -4716,10 +4735,10 @@ class RiskManager:
                             continue
                     if price and price > 0:
                         _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
-                        _qa = self._get_hub_quote_age(schwab_hub, _lookup)
-                        if self._is_rest_repair_active(pos, hub_quote_age=_qa):
+                        _hub_ts = self._get_hub_quote_ts(schwab_hub, _lookup)
+                        if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
                             repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
-                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
+                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
                                 pos.current_price = price
                                 del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 schwab_updated += 1
@@ -4756,10 +4775,10 @@ class RiskManager:
                             continue
                     if price and price > 0:
                         _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
-                        _qa = self._get_hub_quote_age(ibkr_hub, _lookup)
-                        if self._is_rest_repair_active(pos, hub_quote_age=_qa):
+                        _hub_ts = self._get_hub_quote_ts(ibkr_hub, _lookup)
+                        if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
                             repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
-                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
+                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
                                 pos.current_price = price
                                 del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 ibkr_updated += 1
@@ -4803,14 +4822,14 @@ class RiskManager:
             if pos.asset == 'option':
                 continue
             price = None
-            _cross_qa = None
+            _cross_ts = None
             try:
                 from src.services.webull_data_hub import get_webull_data_hub
                 wb_hub = get_webull_data_hub()
                 if wb_hub.is_streaming():
                     price = self._get_fresh_hub_price(wb_hub, pos.symbol)
                     if price:
-                        _cross_qa = self._get_hub_quote_age(wb_hub, pos.symbol)
+                        _cross_ts = self._get_hub_quote_ts(wb_hub, pos.symbol)
             except Exception:
                 pass
             if not price:
@@ -4820,13 +4839,13 @@ class RiskManager:
                     if sc_hub.is_streaming():
                         price = self._get_fresh_hub_price(sc_hub, pos.symbol)
                         if price:
-                            _cross_qa = self._get_hub_quote_age(sc_hub, pos.symbol)
+                            _cross_ts = self._get_hub_quote_ts(sc_hub, pos.symbol)
                 except Exception:
                     pass
             if price and price > 0:
-                if self._is_rest_repair_active(pos, hub_quote_age=_cross_qa):
+                if self._is_rest_repair_active(pos, hub_quote_ts=_cross_ts):
                     repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
-                    if abs(price - repair['price']) > max(0.02, repair['price'] * 0.003):
+                    if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
                         pos.current_price = price
                         del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                         cross_updated += 1
