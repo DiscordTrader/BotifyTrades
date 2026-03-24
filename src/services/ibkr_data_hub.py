@@ -360,8 +360,9 @@ class IBKRDataHub:
             try:
                 from ib_insync import Stock
                 auto_contract = Stock(symbol, 'SMART', 'USD')
+                self._ib.qualifyContracts(auto_contract)
                 self._start_market_data(symbol, auto_contract)
-                logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} subscription")
+                logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
             except Exception as e:
                 logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
                 self._pending_subscriptions.add(symbol)
@@ -491,6 +492,16 @@ class IBKRDataHub:
                         if contract:
                             self._start_market_data(sym, contract)
                             self._pending_subscriptions.discard(sym)
+                        elif sym not in self._subscribed_symbols:
+                            try:
+                                from ib_insync import Stock
+                                auto_contract = Stock(sym, 'SMART', 'USD')
+                                self._ib.qualifyContracts(auto_contract)
+                                if auto_contract.conId:
+                                    self._start_market_data(sym, auto_contract)
+                                    self._pending_subscriptions.discard(sym)
+                            except Exception:
+                                pass
             except asyncio.CancelledError:
                 break
             except Exception as e:
