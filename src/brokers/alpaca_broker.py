@@ -55,6 +55,10 @@ class AlpacaBroker(BrokerInterface):
     async def connect(self) -> bool:
         """Connect to Alpaca"""
         try:
+            try:
+                self._event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._event_loop = None
             api_key = self.config.get('api_key')
             api_secret = self.config.get('api_secret')
             

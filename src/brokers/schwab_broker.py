@@ -88,6 +88,10 @@ class SchwabBroker(BrokerInterface):
     async def connect(self) -> bool:
         """Connect to Schwab using stored tokens"""
         try:
+            try:
+                self._event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._event_loop = None
             self._init_data_hub()
 
             if not self.client_id or not self.client_secret:

@@ -37,7 +37,11 @@ class WebullBroker(BrokerInterface):
     async def connect(self) -> bool:
         """Connect to Webull"""
         try:
-            # Initialize Webull object
+            try:
+                self._event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._event_loop = None
+
             if self.paper_trade:
                 self.wb = paper_webull()
                 print(f"[{self.name}] Using paper trading mode")

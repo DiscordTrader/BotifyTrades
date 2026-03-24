@@ -176,7 +176,7 @@ class StreamingPriceMonitor(PriceMonitor):
         self.data_hub = data_hub
         self.broker_name = broker_name
         self.broker_instance = broker_instance
-        self.alt_broker_instances = alt_broker_instances or {}
+        self.alt_broker_instances = alt_broker_instances if alt_broker_instances is not None else {}
         self.order_broker = order_broker or broker_name
         self._hub_miss_count = 0
         self._using_rest_fallback = False
@@ -426,7 +426,7 @@ class StreamingPriceMonitor(PriceMonitor):
             except Exception:
                 pass
 
-        if self.alt_broker_instances and self.broker_name.lower().replace('_paper', '').replace('_live', '') == 'trading212':
+        if self.alt_broker_instances:
             try:
                 loop = asyncio.get_event_loop()
                 alt_price = await loop.run_in_executor(None, self._try_alt_broker_rest_quote_sync, self.symbol)
@@ -630,7 +630,7 @@ class BrokerPriceMonitor(PriceMonitor):
         super().__init__(symbol, callback)
         self.broker_name = broker_name
         self.broker_instance = broker_instance
-        self.alt_broker_instances = alt_broker_instances or {}
+        self.alt_broker_instances = alt_broker_instances if alt_broker_instances is not None else {}
         broker_lower = broker_name.lower()
         self.poll_interval = self.BROKER_POLL_INTERVALS.get(broker_lower, 2)
         self.unchanged_count = 0

@@ -88,7 +88,8 @@ class USConditionalOrderService(BaseConditionalOrderService):
                     break
         
         is_t212 = broker_key == 'trading212'
-        alt_brokers = self.broker_instances if is_t212 else {}
+        is_cross_broker = alt_hub is not None and alt_hub_name != broker_key
+        alt_brokers = self.broker_instances if (is_t212 or is_cross_broker) else {}
 
         if hub and hub_is_streaming:
             data_source = f"{broker_key}_stream"

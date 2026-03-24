@@ -73,6 +73,10 @@ class TastytradeBroker(BrokerInterface):
     async def connect(self) -> bool:
         """Connect to Tastytrade using OAuth2 (preferred) or legacy username/password"""
         try:
+            try:
+                self._event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._event_loop = None
             if not TASTYTRADE_AVAILABLE:
                 print(f"[{self.name}] ❌ tastytrade package not installed")
                 return False

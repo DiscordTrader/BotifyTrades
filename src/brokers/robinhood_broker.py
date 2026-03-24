@@ -70,6 +70,10 @@ class RobinhoodBroker(BrokerInterface):
             return False
         
         try:
+            try:
+                self._event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._event_loop = None
             username = self.config.get('username')
             password = self.config.get('password')
             totp_secret = self.config.get('totp_secret')
