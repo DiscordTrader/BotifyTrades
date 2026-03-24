@@ -1734,6 +1734,8 @@ class SchwabBroker(BrokerInterface):
         'DJX': 'DJXW',
     }
 
+    _INDEX_OPTION_REVERSE_MAP = {v: k for k, v in _INDEX_OPTION_MAP.items()}
+
     _INDEX_STRIKE_INCREMENT = {
         'SPX': 5.0,
         'SPXW': 5.0,
@@ -2129,7 +2131,11 @@ class SchwabBroker(BrokerInterface):
                         position_data['strike'] = float(strike_price) if strike_price else 0.0
                         position_data['expiry'] = expiration[:10] if expiration else ''
                         position_data['direction'] = put_call[0].upper() if put_call else ''
-                        position_data['symbol'] = underlying or symbol.split()[0] if symbol else symbol
+                        raw_underlying = underlying or symbol.split()[0] if symbol else symbol
+                        normalized_underlying = self._INDEX_OPTION_REVERSE_MAP.get(raw_underlying.upper(), raw_underlying) if raw_underlying else raw_underlying
+                        if normalized_underlying != raw_underlying:
+                            print(f"[{self.name}] Position symbol normalized: {raw_underlying} → {normalized_underlying}")
+                        position_data['symbol'] = normalized_underlying
                     
                     result.append(position_data)
                 

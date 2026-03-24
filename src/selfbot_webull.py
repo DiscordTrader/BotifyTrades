@@ -1930,7 +1930,7 @@ def _get_webull_min_lot_size(price: float) -> int:
     else:
         return 1
 
-INDEX_ALIASES_IN = {'SPXW': 'SPX', 'NDXP': 'NDX', 'VIXW': 'VIX', 'RUTW': 'RUT'}
+INDEX_ALIASES_IN = {'SPXW': 'SPX', 'NDXP': 'NDX', 'VIXW': 'VIX', 'RUTW': 'RUT', 'DJXW': 'DJX'}
 INDEX_ALIASES_OUT = {v: k for k, v in INDEX_ALIASES_IN.items()}
 
 def fix_symbol(symbol: str, direction: str) -> str:
@@ -14116,6 +14116,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'SPXW': {'SPX', 'SPXW'},
                         'NDX': {'NDX', 'NDXP'},
                         'NDXP': {'NDX', 'NDXP'},
+                        'VIX': {'VIX', 'VIXW'},
+                        'VIXW': {'VIX', 'VIXW'},
+                        'RUT': {'RUT', 'RUTW'},
+                        'RUTW': {'RUT', 'RUTW'},
+                        'DJX': {'DJX', 'DJXW'},
+                        'DJXW': {'DJX', 'DJXW'},
                     }
                     stc_sym_set = _STC_PRE_ALIASES.get(stc_symbol, {stc_symbol})
                     
@@ -15946,6 +15952,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'SPXW': {'SPX', 'SPXW'},
                             'NDX': {'NDX', 'NDXP'},
                             'NDXP': {'NDX', 'NDXP'},
+                            'VIX': {'VIX', 'VIXW'},
+                            'VIXW': {'VIX', 'VIXW'},
+                            'RUT': {'RUT', 'RUTW'},
+                            'RUTW': {'RUT', 'RUTW'},
+                            'DJX': {'DJX', 'DJXW'},
+                            'DJXW': {'DJX', 'DJXW'},
                         }
                         sig_symbol_set = _STC_SYMBOL_ALIASES.get(sig_symbol, {sig_symbol})
                         

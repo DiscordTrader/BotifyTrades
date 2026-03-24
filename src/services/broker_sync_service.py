@@ -1798,18 +1798,13 @@ class BrokerSyncService:
         """Normalize symbol for matching across brokers
         
         Handles broker-specific symbol variations:
-        - SPXW (Robinhood weekly) -> SPX
-        - NDXW (weekly) -> NDX
+        - SPXW -> SPX, NDXP -> NDX, RUTW -> RUT, DJXW -> DJX, VIXW -> VIX
         - XSP stays as XSP
         """
         if not symbol:
             return symbol
-        symbol_upper = symbol.upper()
-        if symbol_upper in ('SPXW',):
-            return 'SPX'
-        if symbol_upper in ('NDXW', 'NDXP'):
-            return 'NDX'
-        return symbol_upper
+        from src.risk.risk_types import normalize_index_symbol
+        return normalize_index_symbol(symbol.upper())
 
     def _build_position_key(self, symbol: str, asset_type: str, strike=None, expiry=None, call_put=None) -> str:
         """Build a normalized position key for matching between broker and database"""

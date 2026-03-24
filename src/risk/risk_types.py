@@ -7,6 +7,19 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 from datetime import datetime
 
+INDEX_OPTION_NORMALIZE = {
+    'SPXW': 'SPX',
+    'NDXP': 'NDX',
+    'RUTW': 'RUT',
+    'DJXW': 'DJX',
+    'VIXW': 'VIX',
+}
+
+def normalize_index_symbol(symbol: str) -> str:
+    if not symbol:
+        return symbol
+    return INDEX_OPTION_NORMALIZE.get(symbol.upper(), symbol)
+
 
 @dataclass
 class PositionSnapshot:

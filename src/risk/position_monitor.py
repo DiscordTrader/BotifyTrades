@@ -18,7 +18,8 @@ from .risk_types import (
     RiskSettings,
     ChannelRiskSettings,
     ExitDecision,
-    PositionCacheEntry
+    PositionCacheEntry,
+    normalize_index_symbol
 )
 from .position_cache import PositionCache
 from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluate_channel_stop_loss, get_trim_order_price
@@ -295,6 +296,12 @@ class RiskDBAdapter:
             'SPXW': ['SPX', 'SPXW'],
             'NDX': ['NDXP', 'NDX'],
             'NDXP': ['NDX', 'NDXP'],
+            'VIX': ['VIXW', 'VIX'],
+            'VIXW': ['VIX', 'VIXW'],
+            'RUT': ['RUTW', 'RUT'],
+            'RUTW': ['RUT', 'RUTW'],
+            'DJX': ['DJXW', 'DJX'],
+            'DJXW': ['DJX', 'DJXW'],
         }
         symbols_to_check = [symbol] + [s for s in SYMBOL_ALIASES.get(symbol, []) if s != symbol]
         
@@ -717,6 +724,12 @@ class RiskDBAdapter:
             'SPXW': ['SPX', 'SPXW'],
             'NDX': ['NDXP', 'NDX'],
             'NDXP': ['NDX', 'NDXP'],
+            'VIX': ['VIXW', 'VIX'],
+            'VIXW': ['VIX', 'VIXW'],
+            'RUT': ['RUTW', 'RUT'],
+            'RUTW': ['RUT', 'RUTW'],
+            'DJX': ['DJXW', 'DJX'],
+            'DJXW': ['DJX', 'DJXW'],
         }
         symbols_to_check = [symbol] + [s for s in SYMBOL_ALIASES.get(symbol, []) if s != symbol]
         
@@ -979,6 +992,9 @@ class RiskDBAdapter:
                 SYMBOL_ALIASES = {
                     'SPX': ['SPXW', 'SPX'], 'SPXW': ['SPX', 'SPXW'],
                     'NDX': ['NDXP', 'NDX'], 'NDXP': ['NDX', 'NDXP'],
+                    'VIX': ['VIXW', 'VIX'], 'VIXW': ['VIX', 'VIXW'],
+                    'RUT': ['RUTW', 'RUT'], 'RUTW': ['RUT', 'RUTW'],
+                    'DJX': ['DJXW', 'DJX'], 'DJXW': ['DJX', 'DJXW'],
                 }
                 symbols_to_match = set([position.symbol] + SYMBOL_ALIASES.get(position.symbol, []))
 
@@ -2466,8 +2482,10 @@ class RiskManager:
             for pos in schwab_raw:
                 asset_type = pos.get('asset', 'stock')
                 
+                raw_sym = pos.get('symbol', '')
+                normalized_sym = normalize_index_symbol(raw_sym) if asset_type == 'option' else raw_sym
                 positions.append(PositionSnapshot(
-                    symbol=pos.get('symbol', ''),
+                    symbol=normalized_sym,
                     quantity=abs(float(pos.get('quantity', 0))),
                     avg_cost=float(pos.get('avg_cost', 0)),
                     current_price=float(pos.get('current_price', 0)),
@@ -2513,7 +2531,7 @@ class RiskManager:
                     
                     raw_sym = f"{symbol}_{expiry_raw}_{contract.strike}_{contract.right}"
                     positions.append(PositionSnapshot(
-                        symbol=symbol,
+                        symbol=normalize_index_symbol(symbol),
                         quantity=quantity,
                         avg_cost=avg_cost / 100 if avg_cost > 0 else 0,
                         current_price=0,
@@ -2555,8 +2573,10 @@ class RiskManager:
                 for pos in raw_positions:
                     asset_type = pos.get('asset_type', 'stock')
                     
+                    tt_sym = pos.get('symbol', '')
+                    normalized_tt_sym = normalize_index_symbol(tt_sym) if asset_type == 'option' else tt_sym
                     positions.append(PositionSnapshot(
-                        symbol=pos.get('symbol', ''),
+                        symbol=normalized_tt_sym,
                         quantity=abs(float(pos.get('quantity', 0))),
                         avg_cost=float(pos.get('avg_price', 0)),
                         current_price=float(pos.get('current_price', 0)),
@@ -2591,8 +2611,10 @@ class RiskManager:
                     elif pos.get('option_type') == 'put':
                         call_put = 'P'
                     
+                    rh_sym = pos.get('symbol', '')
+                    normalized_rh_sym = normalize_index_symbol(rh_sym) if pos_type == 'option' else rh_sym
                     positions.append(PositionSnapshot(
-                        symbol=pos.get('symbol', ''),
+                        symbol=normalized_rh_sym,
                         quantity=abs(float(pos.get('quantity', 0))),
                         avg_cost=float(pos.get('average_buy_price') or pos.get('average_price') or 0),
                         current_price=float(pos.get('current_price', 0) or 0),
