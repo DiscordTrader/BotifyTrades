@@ -2026,8 +2026,8 @@ class WebullBroker:
         the worker's _blocking_place() runs. Eliminates 4-6s REST lookup
         from the critical order-execution path.
         
-        IMPORTANT: Only works for Webull-tradable symbols. Index options
-        (SPXW, SPX, NDX, etc.) are skipped since they aren't on Webull.
+        IMPORTANT: Index options (SPXW, SPX, NDX, etc.) skip prefetch
+        since Webull uses a different option chain lookup for index options.
         A 10s timeout prevents hanging if the Webull API doesn't respond.
         """
         import time as _pf_time

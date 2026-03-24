@@ -4888,8 +4888,11 @@ class RiskManager:
                             expiry = cached['expiry']
                         break
 
+        raw_sym = pos.get('symbol', '')
+        pos_symbol = normalize_index_symbol(raw_sym) if asset == 'option' else raw_sym
+
         return PositionSnapshot(
-            symbol=pos.get('symbol', ''),
+            symbol=pos_symbol,
             quantity=float(pos.get('quantity', 0)),
             avg_cost=float(pos.get('avg_cost', 0)),
             current_price=float(pos.get('current_price', 0)),

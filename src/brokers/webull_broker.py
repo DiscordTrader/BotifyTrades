@@ -726,9 +726,10 @@ class WebullBroker(BrokerInterface):
                     if opt_id_val and expiry and opt_direction:
                         self.cache_option_id(symbol, strike, expiry, opt_direction, str(opt_id_val))
                     
+                    from src.risk.risk_types import normalize_index_symbol as _norm_idx
                     positions.append({
                         'asset': 'option',
-                        'symbol': symbol,
+                        'symbol': _norm_idx(symbol),
                         'quantity': position_qty,
                         'avg_cost': float(pos.get('costPrice', 0)),
                         'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
