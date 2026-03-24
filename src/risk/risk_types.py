@@ -413,7 +413,7 @@ class PositionCacheEntry:
     
     # Industry-grade retry management
     MAX_FAST_RETRIES = 5  # Fast retries with exponential backoff
-    MARKET_ORDER_THRESHOLD = 3  # Switch to market after N limit order failures
+    MARKET_ORDER_THRESHOLD = 2  # Switch to market after N limit order failures
     EXTENDED_RETRY_INTERVAL = 300  # 5 minutes between extended retries
     extended_retry_mode: bool = False  # Persistent retry after fast retries exhausted
     exhausted_notified: bool = False  # Track if Discord notification was sent
@@ -461,14 +461,14 @@ class PositionCacheEntry:
         is_transient_broker_error = reason and ('system' in reason.lower() and 'busy' in reason.lower())
         
         if self.is_emergency_exit:
-            backoff_seconds = min(5 * self.exit_retry_count, 15)
+            backoff_seconds = min(3 * self.exit_retry_count, 10)
             phase = "EMERGENCY"
             self.use_market_order = True
         elif is_transient_broker_error and self.exit_retry_count <= self.MAX_FAST_RETRIES:
-            backoff_seconds = min(10 * self.exit_retry_count, 30)
+            backoff_seconds = min(5 * self.exit_retry_count, 15)
             phase = "FAST-TRANSIENT"
         elif self.exit_retry_count <= self.MAX_FAST_RETRIES:
-            backoff_seconds = min(15 * (2 ** (self.exit_retry_count - 1)), 120)
+            backoff_seconds = min(3 * (2 ** (self.exit_retry_count - 1)), 10)
             phase = "FAST"
         else:
             # Extended retry phase: Fixed 5-minute intervals, keep trying forever

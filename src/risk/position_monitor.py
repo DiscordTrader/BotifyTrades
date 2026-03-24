@@ -3368,12 +3368,18 @@ class RiskManager:
             hub_ask = hub_quotes['ask']
             hub_mid = hub_quotes['mid']
             hub_src = hub_quotes['source']
+            is_penny_stock = position.asset == 'stock' and position.current_price < 1.0
             if hub_bid > 0 or hub_ask > 0:
                 last_price = stc_signal['price']
                 spread_pct = 0
                 if hub_bid > 0 and hub_ask > 0:
                     spread_pct = (hub_ask - hub_bid) / hub_bid * 100
-                if is_stop_exit or is_trailing_exit or is_giveback_exit:
+                if is_penny_stock and hub_bid > 0:
+                    stc_signal['price'] = hub_bid
+                    print(f"[RISK] 💰 Penny stock exit: bid ${hub_bid:.4f} "
+                          f"(ask ${hub_ask:.4f}, mid ${hub_mid:.4f}, last ${last_price:.4f}, spread {spread_pct:.1f}%) "
+                          f"via {hub_src}")
+                elif is_stop_exit or is_trailing_exit or is_giveback_exit:
                     if hub_bid > 0:
                         stc_signal['price'] = hub_bid
                         print(f"[RISK] 💰 Exit price: bid ${hub_bid:.2f} "
@@ -3480,6 +3486,10 @@ class RiskManager:
                             offset_display = f"${channel_settings.trim_limit_offset}"
                         print(f"[RISK] 📊 Trim Limit Order: market ${original_price:.2f} → limit ${trim_price:.2f} ({offset_display} offset)")
             
+            if not use_market and is_penny_stock:
+                use_market = True
+                print(f"[RISK] 📊 Penny stock (${position.current_price:.4f}) — forcing market order for fast exit")
+
             if not use_market and 'TRADING212' in position.broker.upper():
                 if is_sl_type_exit or decision.risk_trigger in ('ema_exit', 'ema_no_trend', 'profit_target'):
                     use_market = True
@@ -3497,7 +3507,7 @@ class RiskManager:
             import threading
             def _thread_exit_executor():
                 import time as _t
-                _t.sleep(10)
+                _t.sleep(5)
                 try:
                     from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_WORKER, OWNER_BACKUP, LEASE_EXECUTING
                     lease_mgr = get_exit_lease_manager()
@@ -3525,7 +3535,7 @@ class RiskManager:
                         if pos_key in self._exit_executed_keys:
                             return
                         self._exit_executed_keys.add(pos_key)
-                    print(f"[RISK] [DIRECT-EXIT] ⚡ Worker hasn't handled {pos_key} after 10s — executing directly")
+                    print(f"[RISK] [DIRECT-EXIT] ⚡ Worker hasn't handled {pos_key} after 5s — executing directly")
                     loop = asyncio.new_event_loop()
                     try:
                         loop.run_until_complete(self._direct_execute_exit(stc_signal, pos_key))

@@ -4948,10 +4948,13 @@ class WebullBroker:
                         except Exception:
                             pass
                     if _ext_price and _ext_price > 0:
+                        _is_penny = _ext_price < 1.0
+                        _sell_offset = 0.92 if _is_penny else 0.97
+                        _buy_offset = 1.08 if _is_penny else 1.03
                         if side == 'SELL':
-                            _ext_price = round(_ext_price * 0.97, 4)
+                            _ext_price = round(_ext_price * _sell_offset, 4)
                         else:
-                            _ext_price = round(_ext_price * 1.03, 4)
+                            _ext_price = round(_ext_price * _buy_offset, 4)
                         effective_price = _ext_price
                         is_market_order = False
                         print(f"[WEBULL] ⚠️ Extended hours — converting MKT to LMT @ ${_ext_price:.4f} for {side} {adjusted_qty} {base_sym}")
