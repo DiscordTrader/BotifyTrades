@@ -1168,8 +1168,43 @@ class BaseConditionalOrderService(ABC):
                 update_conditional_order_status(order_id, 'ACTIVE_MONITORING', data_source_active=broker_lower)
                 self._log(f"✓ #{order_id} {symbol} monitor created via {broker_name}")
 
+        brokerless_streaming = []
+        for oid, mon in self.monitors.items():
+            if isinstance(mon, StreamingPriceMonitor) and mon.broker_instance is None:
+                order = self.pending_orders.get(oid)
+                if not order:
+                    continue
+                order_broker = order.get('broker_primary', '').lower()
+                order_broker_key = order_broker.replace('_paper', '').replace('_live', '')
+                if order_broker_key == broker_key or order_broker == broker_lower:
+                    brokerless_streaming.append((oid, mon))
+
+        already_upgraded = set()
+        for order_id, monitor in brokerless_streaming:
+            order = self.pending_orders.get(order_id)
+            if not order:
+                continue
+            self._log(f"Upgrading #{order_id} {monitor.symbol} — injecting broker {broker_name} into streaming monitor")
+            await monitor.stop()
+            if order_id in self.monitor_tasks:
+                self.monitor_tasks[order_id].cancel()
+                try:
+                    await self.monitor_tasks[order_id]
+                except asyncio.CancelledError:
+                    pass
+            new_monitor = await self.build_price_monitor(order, broker_instance, broker_name)
+            if new_monitor:
+                self.monitors[order_id] = new_monitor
+                task = asyncio.create_task(new_monitor.start())
+                self.monitor_tasks[order_id] = task
+                upgraded_count += 1
+                already_upgraded.add(order_id)
+                from gui_app.database import update_conditional_order_status
+                update_conditional_order_status(order_id, 'ACTIVE_MONITORING', data_source_active=broker_lower)
+                self._log(f"✓ #{order_id} {monitor.symbol} rebuilt with broker {broker_name}")
+
         remaining_fallbacks = [(oid, mon) for oid, mon in self.monitors.items()
-                              if isinstance(mon, BrokerPriceMonitor) and oid not in [x for x in self.monitors if isinstance(self.monitors.get(x), StreamingPriceMonitor)]]
+                              if oid not in already_upgraded and isinstance(mon, BrokerPriceMonitor) and oid not in [x for x in self.monitors if isinstance(self.monitors.get(x), StreamingPriceMonitor)]]
 
         for order_id, monitor in remaining_fallbacks:
             order = self.pending_orders.get(order_id)
