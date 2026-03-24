@@ -3792,13 +3792,13 @@ def register_routes(app):
                             broker.get_account_info(),
                             _bot_instance.loop
                         )
-                        account_info = account_future.result(timeout=20)
+                        account_info = account_future.result(timeout=7)
 
                         positions_future = asyncio.run_coroutine_threadsafe(
                             broker.get_positions(),
                             _bot_instance.loop
                         )
-                        positions_raw = positions_future.result(timeout=20)
+                        positions_raw = positions_future.result(timeout=7)
 
                         positions_list = []
                         if isinstance(positions_raw, list):
