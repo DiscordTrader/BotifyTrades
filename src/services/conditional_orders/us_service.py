@@ -101,11 +101,12 @@ class USConditionalOrderService(BaseConditionalOrderService):
         
         elif alt_hub and alt_hub_streaming:
             data_source = f"{alt_hub_name}_stream"
-            self._log(f"[P2] Alt STREAMING hub for {symbol} via {alt_hub_name} (cross-broker WebSocket)")
+            self._log(f"[P2] Alt STREAMING hub for {symbol} via {alt_hub_name} (cross-broker WebSocket, order broker={broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
                 broker_instance=alt_hub_broker,
-                alt_broker_instances=alt_brokers
+                alt_broker_instances=alt_brokers,
+                order_broker=broker_name
             )
         
         elif broker_instance and broker_key != 'trading212':
@@ -124,11 +125,12 @@ class USConditionalOrderService(BaseConditionalOrderService):
         
         elif alt_hub:
             data_source = f"{alt_hub_name}_stream"
-            self._log(f"[P5] Alt hub (pending stream) for {symbol} via {alt_hub_name} (will auto-upgrade)")
+            self._log(f"[P5] Alt hub (pending stream) for {symbol} via {alt_hub_name} (will auto-upgrade, order broker={broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
                 broker_instance=alt_hub_broker,
-                alt_broker_instances=alt_brokers
+                alt_broker_instances=alt_brokers,
+                order_broker=broker_name
             )
         
         else:

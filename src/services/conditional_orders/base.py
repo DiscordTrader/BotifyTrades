@@ -170,12 +170,14 @@ class StreamingPriceMonitor(PriceMonitor):
     
     def __init__(self, symbol: str, callback: Callable[[str, float], None],
                  data_hub: Any, broker_name: str, broker_instance: Any = None,
-                 alt_broker_instances: Optional[Dict[str, Any]] = None):
+                 alt_broker_instances: Optional[Dict[str, Any]] = None,
+                 order_broker: Optional[str] = None):
         super().__init__(symbol, callback)
         self.data_hub = data_hub
         self.broker_name = broker_name
         self.broker_instance = broker_instance
         self.alt_broker_instances = alt_broker_instances or {}
+        self.order_broker = order_broker or broker_name
         self._hub_miss_count = 0
         self._using_rest_fallback = False
         self._hub_available = False
@@ -531,24 +533,37 @@ class StreamingPriceMonitor(PriceMonitor):
         now = time.time()
         if now - StreamingPriceMonitor._cross_hub_cache_ts > StreamingPriceMonitor._CROSS_HUB_CACHE_TTL:
             StreamingPriceMonitor._cross_hub_cache = {}
-            for mod_path, func_name in [
-                ('src.services.webull_data_hub', 'get_webull_data_hub'),
-                ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
-                ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
-                ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+            for broker_key, mod_path, func_name in [
+                ('webull', 'src.services.webull_data_hub', 'get_webull_data_hub'),
+                ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
+                ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+                ('trading212', 'src.services.trading212_data_hub', 'get_trading212_data_hub'),
             ]:
                 try:
                     import importlib
                     mod = importlib.import_module(mod_path)
                     hub = getattr(mod, func_name)()
                     if hub:
-                        StreamingPriceMonitor._cross_hub_cache[func_name] = hub
+                        StreamingPriceMonitor._cross_hub_cache[broker_key] = hub
                 except Exception:
                     pass
             StreamingPriceMonitor._cross_hub_cache_ts = now
 
         sym_upper = self.symbol.upper().strip()
-        for hub_name, hub in StreamingPriceMonitor._cross_hub_cache.items():
+        order_key = self.order_broker.lower().replace('_paper', '').replace('_live', '') if self.order_broker else ''
+        primary_key = order_key or (self.broker_name.lower().replace('_paper', '').replace('_live', '') if self.broker_name else '')
+
+        if primary_key and primary_key in StreamingPriceMonitor._cross_hub_cache:
+            try:
+                price = StreamingPriceMonitor._cross_hub_cache[primary_key].get_quote_price(sym_upper)
+                if price and price > 0:
+                    return float(price)
+            except Exception:
+                pass
+
+        for hub_key, hub in StreamingPriceMonitor._cross_hub_cache.items():
+            if hub_key == primary_key:
+                continue
             try:
                 price = hub.get_quote_price(sym_upper)
                 if price and price > 0:
@@ -677,28 +692,41 @@ class BrokerPriceMonitor(PriceMonitor):
     def _try_any_streaming_hub(self) -> Optional[float]:
         """Check all available streaming/polling hubs for price data (zero extra API cost).
         Useful for brokers without their own hub (Alpaca, Robinhood, Tastytrade, etc.).
-        Uses StreamingPriceMonitor's shared hub cache for efficiency."""
+        Uses StreamingPriceMonitor's shared hub cache for efficiency.
+        Prioritizes the order's assigned broker hub first."""
         now = time.time()
         if now - StreamingPriceMonitor._cross_hub_cache_ts > StreamingPriceMonitor._CROSS_HUB_CACHE_TTL:
             StreamingPriceMonitor._cross_hub_cache = {}
-            for mod_path, func_name in [
-                ('src.services.webull_data_hub', 'get_webull_data_hub'),
-                ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
-                ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
-                ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+            for broker_key, mod_path, func_name in [
+                ('webull', 'src.services.webull_data_hub', 'get_webull_data_hub'),
+                ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
+                ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+                ('trading212', 'src.services.trading212_data_hub', 'get_trading212_data_hub'),
             ]:
                 try:
                     import importlib
                     mod = importlib.import_module(mod_path)
                     hub = getattr(mod, func_name)()
                     if hub:
-                        StreamingPriceMonitor._cross_hub_cache[func_name] = hub
+                        StreamingPriceMonitor._cross_hub_cache[broker_key] = hub
                 except Exception:
                     pass
             StreamingPriceMonitor._cross_hub_cache_ts = now
 
         sym_upper = self.symbol.upper().strip()
-        for hub_name, hub in StreamingPriceMonitor._cross_hub_cache.items():
+        primary_key = self.broker_name.lower().replace('_paper', '').replace('_live', '') if self.broker_name else ''
+
+        if primary_key and primary_key in StreamingPriceMonitor._cross_hub_cache:
+            try:
+                price = StreamingPriceMonitor._cross_hub_cache[primary_key].get_quote_price(sym_upper)
+                if price and price > 0:
+                    return float(price)
+            except Exception:
+                pass
+
+        for hub_key, hub in StreamingPriceMonitor._cross_hub_cache.items():
+            if hub_key == primary_key:
+                continue
             try:
                 price = hub.get_quote_price(sym_upper)
                 if price and price > 0:

@@ -153,34 +153,36 @@ class BrokerPriceMonitor(PriceMonitor):
     
     def _try_streaming_hub_price(self) -> Optional[float]:
         """Try to get price from streaming hubs (Webull MQTT, Schwab WebSocket, IBKR).
-        Zero API cost — checks all available hubs regardless of which broker owns the order."""
-        try:
-            from src.services.webull_data_hub import get_webull_data_hub
-            hub = get_webull_data_hub()
-            price = hub.get_quote_price(self.symbol)
-            if price and price > 0:
-                return price
-        except Exception:
-            pass
-        
-        try:
-            from src.services.schwab_data_hub import get_schwab_data_hub
-            hub = get_schwab_data_hub()
-            price = hub.get_quote_price(self.symbol)
-            if price and price > 0:
-                return price
-        except Exception:
-            pass
-        
-        try:
-            from src.services.ibkr_data_hub import get_ibkr_data_hub
-            hub = get_ibkr_data_hub()
-            price = hub.get_quote_price(self.symbol)
-            if price and price > 0:
-                return price
-        except Exception:
-            pass
-        
+        Zero API cost — prioritizes the order's assigned broker hub first,
+        then falls through to other hubs."""
+        hub_sources = [
+            ('webull', 'src.services.webull_data_hub', 'get_webull_data_hub'),
+            ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
+            ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+        ]
+
+        broker_key = self.broker_name.lower().replace('_paper', '').replace('_live', '') if self.broker_name else ''
+
+        ordered = []
+        rest = []
+        for bkey, mod_path, func_name in hub_sources:
+            if bkey == broker_key:
+                ordered.insert(0, (mod_path, func_name))
+            else:
+                rest.append((mod_path, func_name))
+        ordered.extend(rest)
+
+        for mod_path, func_name in ordered:
+            try:
+                import importlib
+                mod = importlib.import_module(mod_path)
+                hub = getattr(mod, func_name)()
+                price = hub.get_quote_price(self.symbol)
+                if price and price > 0:
+                    return price
+            except Exception:
+                pass
+
         return None
 
     async def _fetch_price(self) -> Optional[float]:
