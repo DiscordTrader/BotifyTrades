@@ -8742,22 +8742,38 @@ def register_routes(app):
                 
                 broker_normalized = broker.lower().replace('_paper', '').replace('_live', '') if broker else ''
                 for market, service in conditional_order_router._services.items():
-                    hub = service.get_data_hub(broker_normalized) if broker_normalized else None
-                    if hub:
-                        hub_price = hub.get_quote_price(symbol)
-                        if hub_price and hub_price > 0:
-                            price_info['price'] = hub_price
-                            price_info['source'] = 'streaming'
-                            quote = hub.get_quote(symbol)
-                            if quote:
-                                price_info['age'] = round(time.time() - quote.timestamp, 1) if hasattr(quote, 'timestamp') else 0
-                            break
+                    if broker_normalized:
+                        hub = service.get_data_hub(broker_normalized)
+                        if hub:
+                            hub_price = hub.get_quote_price(symbol)
+                            if hub_price and hub_price > 0:
+                                price_info['price'] = hub_price
+                                price_info['source'] = 'streaming'
+                                quote = hub.get_quote(symbol)
+                                if quote:
+                                    price_info['age'] = round(time.time() - quote.timestamp, 1) if hasattr(quote, 'timestamp') else 0
+                                break
+                    if not price_info['price'] and hasattr(service, 'data_hubs'):
+                        for hub_key, hub_obj in service.data_hubs.items():
+                            if hub_obj and hub_key != broker_normalized:
+                                try:
+                                    hp = hub_obj.get_quote_price(symbol)
+                                    if hp and hp > 0:
+                                        price_info['price'] = hp
+                                        price_info['source'] = 'streaming'
+                                        break
+                                except Exception:
+                                    pass
+                    if price_info['price']:
+                        break
                 
                 if not price_info['price']:
-                    monitor = conditional_order_router._services.get('US', conditional_order_router.us_service).monitors.get(order_id)
-                    if monitor and hasattr(monitor, 'last_price') and monitor.last_price:
-                        price_info['price'] = monitor.last_price
-                        price_info['source'] = 'monitor'
+                    for market, service in conditional_order_router._services.items():
+                        monitor = service.monitors.get(order_id)
+                        if monitor and hasattr(monitor, 'last_price') and monitor.last_price:
+                            price_info['price'] = monitor.last_price
+                            price_info['source'] = 'monitor'
+                            break
                 
                 prices[str(order_id)] = price_info
             
