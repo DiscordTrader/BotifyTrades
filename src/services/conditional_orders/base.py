@@ -193,6 +193,17 @@ class StreamingPriceMonitor(PriceMonitor):
     
     def _try_subscribe_streaming(self):
         try:
+            if hasattr(self.data_hub, 'subscribe_symbol') and hasattr(self.data_hub, '_ib'):
+                try:
+                    self.data_hub.subscribe_symbol(self.symbol)
+                    sys.stderr.write(f"[STREAM_MON] ✓ IBKR: subscribing {self.symbol} via DataHub reqMktData\n")
+                    sys.stderr.flush()
+                    return True
+                except Exception as e:
+                    sys.stderr.write(f"[STREAM_MON] IBKR subscribe error for {self.symbol}: {e}\n")
+                    sys.stderr.flush()
+                return False
+
             has_broker = self.broker_instance is not None
             has_client = has_broker and hasattr(self.broker_instance, '_streaming_client') and self.broker_instance._streaming_client is not None
             
@@ -227,13 +238,11 @@ class StreamingPriceMonitor(PriceMonitor):
                     sys.stderr.write(f"[STREAM_MON] Ticker lookup error for {self.symbol}: {e}\n")
                     sys.stderr.flush()
                     
-            # ── Schwab WebSocket (subscribe_equities / subscribe_options) ──
             if hasattr(client, 'subscribe_equities'):
                 try:
                     import asyncio as _asyncio
                     loop = _asyncio.get_event_loop()
                     if self.symbol.count(' ') >= 1 and len(self.symbol) >= 15:
-                        # Looks like an OCC option key → use subscribe_options
                         loop.create_task(client.subscribe_options([self.symbol]))
                         sys.stderr.write(f"[STREAM_MON] ✓ Schwab: subscribing option {self.symbol} to WebSocket stream\n")
                     else:
@@ -246,7 +255,6 @@ class StreamingPriceMonitor(PriceMonitor):
                     sys.stderr.flush()
                 return False
 
-            # ── Webull MQTT (subscribe_symbol with ticker_id) ──────────────
             if ticker_id and str(ticker_id) != '0':
                 client.subscribe_symbol(self.symbol, str(ticker_id))
                 sys.stderr.write(f"[STREAM_MON] ✓ Subscribed {self.symbol} to streaming (tid={ticker_id})\n")
@@ -363,6 +371,8 @@ class StreamingPriceMonitor(PriceMonitor):
     def _call_broker_get_quote_sync(self, symbol: str) -> Optional[float]:
         """Call broker's get_quote in a thread-safe way, handling cross-loop brokers."""
         import inspect
+        if not self.broker_instance or not hasattr(self.broker_instance, 'get_quote'):
+            return None
         quote_method = self.broker_instance.get_quote
         
         if inspect.iscoroutinefunction(quote_method):
@@ -379,13 +389,9 @@ class StreamingPriceMonitor(PriceMonitor):
                 except Exception:
                     return None
             else:
-                new_loop = asyncio.new_event_loop()
-                try:
-                    return new_loop.run_until_complete(quote_method(symbol))
-                except Exception:
-                    return None
-                finally:
-                    new_loop.close()
+                sys.stderr.write(f"[STREAM_MON] Skipping async get_quote for {symbol} — no running event loop for {self.broker_name}\n")
+                sys.stderr.flush()
+                return None
         else:
             return quote_method(symbol)
 
@@ -723,13 +729,9 @@ class BrokerPriceMonitor(PriceMonitor):
                 except Exception:
                     return None
             else:
-                new_loop = asyncio.new_event_loop()
-                try:
-                    return new_loop.run_until_complete(quote_method(self.symbol))
-                except Exception:
-                    return None
-                finally:
-                    new_loop.close()
+                sys.stderr.write(f"[REST_MON] Skipping async get_quote for {self.symbol} — no running event loop for {self.broker_name}\n")
+                sys.stderr.flush()
+                return None
         else:
             return quote_method(self.symbol)
 

@@ -357,7 +357,14 @@ class IBKRDataHub:
         if contract:
             self._start_market_data(symbol, contract)
         else:
-            self._pending_subscriptions.add(symbol)
+            try:
+                from ib_insync import Stock
+                auto_contract = Stock(symbol, 'SMART', 'USD')
+                self._start_market_data(symbol, auto_contract)
+                logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} subscription")
+            except Exception as e:
+                logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
+                self._pending_subscriptions.add(symbol)
 
     def _start_market_data(self, symbol: str, contract):
         if not self._ib:
