@@ -433,6 +433,7 @@ class PositionCacheEntry:
     is_emergency_exit: bool = False  # Flag for stop loss / emergency exits (faster retry)
     permanent_failure: bool = False  # Set True when error is unrecoverable (expired symbol, etc.)
     permanent_failure_reason: Optional[str] = None
+    no_position_streak: int = 0
     
     PERMANENT_ERROR_PATTERNS = [
         'symbol is expired', 'expired', 'symbol not found', 'invalid symbol',
@@ -441,12 +442,24 @@ class PositionCacheEntry:
         'unknown symbol', 'security not found', 'instrument not found',
     ]
     
+    NO_POSITION_PATTERNS = [
+        'no stock position', 'no option position',
+    ]
+    NO_POSITION_PERMANENT_THRESHOLD = 3
+    
     def _is_permanent_error(self, reason: str) -> bool:
         """Check if error indicates a permanent/unrecoverable failure."""
         if not reason:
             return False
         reason_lower = reason.lower()
         return any(pattern in reason_lower for pattern in self.PERMANENT_ERROR_PATTERNS)
+    
+    def _is_no_position_error(self, reason: str) -> bool:
+        """Check if error indicates broker has no matching position to sell."""
+        if not reason:
+            return False
+        reason_lower = reason.lower()
+        return any(pattern in reason_lower for pattern in self.NO_POSITION_PATTERNS)
     
     def record_exit_failure(self, reason: str, is_stop_loss: bool = False) -> None:
         """Record a failed exit attempt with backoff.
@@ -466,6 +479,18 @@ class PositionCacheEntry:
             print(f"[RISK-RETRY] 🛑 Reason: {reason}")
             print(f"[RISK-RETRY] 🛑 Position should be removed from tracking (expired/invalid symbol)")
             return
+        
+        if self._is_no_position_error(reason):
+            self.no_position_streak += 1
+            if self.no_position_streak >= self.NO_POSITION_PERMANENT_THRESHOLD:
+                self.permanent_failure = True
+                self.permanent_failure_reason = reason
+                print(f"[RISK-RETRY] 🛑 NO POSITION on broker for {self.no_position_streak} consecutive attempts — marking as phantom position")
+                print(f"[RISK-RETRY] 🛑 Reason: {reason}")
+                print(f"[RISK-RETRY] 🛑 Position will be removed from risk tracking (no actual broker position exists)")
+                return
+        else:
+            self.no_position_streak = 0
         
         # Track if this is an emergency exit (stop loss)
         if is_stop_loss:
