@@ -315,22 +315,15 @@ class QuoteAggregator:
             try:
                 from src.services.ibkr_data_hub import get_ibkr_data_hub
                 ibkr_hub = get_ibkr_data_hub()
+                hub_price = None
                 if ibkr_hub.is_streaming():
                     hub_price = ibkr_hub.get_quote_price(symbol)
                     if hub_price and hub_price > 0:
                         return float(hub_price)
-            except ImportError:
+                if not hub_price and ibkr_hub._loop and not ibkr_hub._loop.is_closed():
+                    ibkr_hub.subscribe_symbol(symbol)
+            except (ImportError, Exception):
                 pass
-            if hasattr(broker, 'ib') and broker.ib and broker.ib.isConnected():
-                from ib_insync import Stock
-                contract = Stock(symbol, 'SMART', 'USD')
-                broker.ib.qualifyContracts(contract)
-                ticker = broker.ib.reqMktData(contract, '', False, False)
-                broker.ib.sleep(1)
-                if ticker.last and ticker.last > 0:
-                    return float(ticker.last)
-                if ticker.close and ticker.close > 0:
-                    return float(ticker.close)
         
         return None
     

@@ -357,15 +357,23 @@ class IBKRDataHub:
         if contract:
             self._start_market_data(symbol, contract)
         else:
-            try:
-                from ib_insync import Stock
-                auto_contract = Stock(symbol, 'SMART', 'USD')
-                self._ib.qualifyContracts(auto_contract)
-                self._start_market_data(symbol, auto_contract)
-                logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
-            except Exception as e:
-                logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
+            if self._loop and not self._loop.is_closed():
+                asyncio.run_coroutine_threadsafe(
+                    self._qualify_and_subscribe(symbol), self._loop
+                )
+            else:
                 self._pending_subscriptions.add(symbol)
+
+    async def _qualify_and_subscribe(self, symbol: str):
+        try:
+            from ib_insync import Stock
+            auto_contract = Stock(symbol, 'SMART', 'USD')
+            await self._ib.qualifyContractsAsync(auto_contract)
+            self._start_market_data(symbol, auto_contract)
+            logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
+        except Exception as e:
+            logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
+            self._pending_subscriptions.add(symbol)
 
     def _start_market_data(self, symbol: str, contract):
         if not self._ib:
@@ -432,7 +440,7 @@ class IBKRDataHub:
         if not self._ib or not self._ib.isConnected():
             return
         try:
-            raw_positions = await asyncio.to_thread(self._ib.positions)
+            raw_positions = self._ib.positions()
             parsed = []
             for pos in raw_positions:
                 contract = pos.contract
@@ -496,7 +504,7 @@ class IBKRDataHub:
                             try:
                                 from ib_insync import Stock
                                 auto_contract = Stock(sym, 'SMART', 'USD')
-                                self._ib.qualifyContracts(auto_contract)
+                                await self._ib.qualifyContractsAsync(auto_contract)
                                 if auto_contract.conId:
                                     self._start_market_data(sym, auto_contract)
                                     self._pending_subscriptions.discard(sym)

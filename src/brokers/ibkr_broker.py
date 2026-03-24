@@ -341,23 +341,17 @@ class IBKRBroker(BrokerInterface):
             # Create contract
             contract = Stock(symbol, 'SMART', 'USD')
             
-            # Qualify contract (get full details from IB)
-            self.ib.qualifyContracts(contract)
+            await self.ib.qualifyContractsAsync(contract)
             
-            # Create order
             side = 'BUY' if action == 'BTO' else 'SELL'
             
             if price is None:
-                # Market order
                 order = MarketOrder(side, quantity)
             else:
-                # Limit order
                 order = LimitOrder(side, quantity, price)
             
-            # Enable extended hours trading if configured
             order.outsideRth = self._get_extended_hours_enabled()
             
-            # Place order
             trade = self.ib.placeOrder(contract, order)
             
             # Wait for order to be acknowledged
@@ -430,8 +424,7 @@ class IBKRBroker(BrokerInterface):
             right = 'C' if option_type.lower() in ['c', 'call'] else 'P'
             contract = Option(symbol, expiry_formatted, strike, right, 'SMART')
             
-            # Qualify contract
-            self.ib.qualifyContracts(contract)
+            await self.ib.qualifyContractsAsync(contract)
             
             # Create order
             side = 'BUY' if action == 'BTO' else 'SELL'
@@ -483,11 +476,10 @@ class IBKRBroker(BrokerInterface):
         """Get current price for a symbol"""
         try:
             contract = Stock(symbol, 'SMART', 'USD')
-            self.ib.qualifyContracts(contract)
+            await self.ib.qualifyContractsAsync(contract)
             
-            # Request market data
             ticker = self.ib.reqMktData(contract, '', False, False)
-            await asyncio.sleep(2)  # Wait for data
+            await asyncio.sleep(2)
             
             # Get last price or close price
             if ticker.last and ticker.last > 0:
@@ -512,7 +504,7 @@ class IBKRBroker(BrokerInterface):
                 return None
             
             contract = Stock(symbol, 'SMART', 'USD')
-            self.ib.qualifyContracts(contract)
+            await self.ib.qualifyContractsAsync(contract)
             
             ticker = self.ib.reqMktData(contract, '', False, False)
             await asyncio.sleep(2)
@@ -543,7 +535,7 @@ class IBKRBroker(BrokerInterface):
             right = 'C' if option_type.upper() in ['C', 'CALL'] else 'P'
             
             contract = Option(symbol, exp_ib, strike, right, 'SMART')
-            qualified = self.ib.qualifyContracts(contract)
+            qualified = await self.ib.qualifyContractsAsync(contract)
             
             if not qualified:
                 return None
@@ -577,12 +569,10 @@ class IBKRBroker(BrokerInterface):
                 print(f"[{self.name}] Not connected - cannot get expirations")
                 return []
             
-            # Create stock contract
             stock = Stock(symbol, 'SMART', 'USD')
-            self.ib.qualifyContracts(stock)
+            await self.ib.qualifyContractsAsync(stock)
             
-            # Get option chain details
-            chains = self.ib.reqSecDefOptParams(
+            chains = await self.ib.reqSecDefOptParamsAsync(
                 stock.symbol, 
                 '', 
                 stock.secType, 
@@ -623,12 +613,10 @@ class IBKRBroker(BrokerInterface):
             # Convert expiry format from YYYY-MM-DD to YYYYMMDD
             exp_ib = expiration_date.replace('-', '')
             
-            # Create stock contract
             stock = Stock(symbol, 'SMART', 'USD')
-            self.ib.qualifyContracts(stock)
+            await self.ib.qualifyContractsAsync(stock)
             
-            # Get option chain parameters
-            chains = self.ib.reqSecDefOptParams(
+            chains = await self.ib.reqSecDefOptParamsAsync(
                 stock.symbol, 
                 '', 
                 stock.secType, 
@@ -663,7 +651,7 @@ class IBKRBroker(BrokerInterface):
                 for right in ['C', 'P']:
                     try:
                         contract = Option(symbol, exp_ib, strike, right, 'SMART')
-                        qualified = self.ib.qualifyContracts(contract)
+                        qualified = await self.ib.qualifyContractsAsync(contract)
                         
                         if qualified:
                             option_data = {
