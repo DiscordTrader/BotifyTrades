@@ -199,7 +199,7 @@ class IBKRDataHub:
         try:
             if self._loop and not self._loop.is_closed():
                 self._loop.call_soon_threadsafe(
-                    lambda: self._loop.create_task(self._refresh_positions_from_ib())
+                    lambda: self._loop.create_task(self._refresh_positions_from_ib(from_event_callback=True))
                 )
         except Exception as e:
             print(f"[IBKR_HUB] Position event refresh error: {e}")
@@ -211,7 +211,7 @@ class IBKRDataHub:
                 self._risk_eval_requested.set()
                 if self._loop and not self._loop.is_closed():
                     self._loop.call_soon_threadsafe(
-                        lambda: self._loop.create_task(self._refresh_positions_from_ib())
+                        lambda: self._loop.create_task(self._refresh_positions_from_ib(from_event_callback=True))
                     )
                 self._emit('order_event', {
                     'status': status,
@@ -457,11 +457,14 @@ class IBKRDataHub:
             else:
                 self._pending_subscriptions.add(sym)
 
-    async def _refresh_positions_from_ib(self):
+    async def _refresh_positions_from_ib(self, from_event_callback=False):
         if not self._ib or not self._ib.isConnected():
             return
         try:
-            raw_positions = self._ib.positions()
+            if from_event_callback:
+                raw_positions = self._ib.portfolio()
+            else:
+                raw_positions = self._ib.positions()
             parsed = []
             for pos in raw_positions:
                 contract = pos.contract
@@ -469,7 +472,7 @@ class IBKRDataHub:
                 quantity = abs(int(pos.position))
                 if quantity == 0:
                     continue
-                avg_cost = float(pos.avgCost) if pos.avgCost else 0
+                avg_cost = float(pos.averageCost if hasattr(pos, 'averageCost') else pos.avgCost) if (getattr(pos, 'averageCost', None) or getattr(pos, 'avgCost', None)) else 0
                 sym_key = self._build_symbol_key(contract)
 
                 with self._contract_lock:
