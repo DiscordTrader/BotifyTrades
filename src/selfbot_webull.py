@@ -14491,17 +14491,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[RISK CONFIG] ✓ Channel risk settings attached for LIVE execution")
                     opt['_exit_strategy_mode'] = channel_info.get('exit_strategy_mode', 'signal')
                 
-                # GAP FIX: Check circuit breaker before execution (same as conditional orders)
-                try:
-                    from gui_app.database import is_circuit_breaker_tripped
-                    circuit_status = is_circuit_breaker_tripped()
-                    if circuit_status.get('tripped'):
-                        reason = circuit_status.get('reason', 'Circuit breaker tripped')
-                        print(f"[CIRCUIT BREAKER] ⛔ BLOCKED: {reason}")
-                        print(f"[CIRCUIT BREAKER] Signal NOT queued for execution")
-                        return
-                except Exception as cb_err:
-                    print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+                if opt.get('action', '').upper() in ('BTO', 'BTC'):
+                    try:
+                        from gui_app.database import is_circuit_breaker_tripped
+                        circuit_status = is_circuit_breaker_tripped()
+                        if circuit_status.get('tripped'):
+                            reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                            print(f"[CIRCUIT BREAKER] ⛔ BLOCKED: {reason}")
+                            print(f"[CIRCUIT BREAKER] Signal NOT queued for execution")
+                            return
+                    except Exception as cb_err:
+                        print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
                 
                 # Entry Confirmation: require price to go +X% above signal's watching price
                 entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
@@ -14675,16 +14675,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['author'] = author_name
                         print(f"[DATABASE] ✓ Added channel_record_id={opt['channel_record_id']} for paper trade tracking")
                     
-                    # GAP FIX: Check circuit breaker before paper trading
-                    try:
-                        from gui_app.database import is_circuit_breaker_tripped
-                        circuit_status = is_circuit_breaker_tripped()
-                        if circuit_status.get('tripped'):
-                            reason = circuit_status.get('reason', 'Circuit breaker tripped')
-                            print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (paper): {reason}")
-                            return
-                    except Exception as cb_err:
-                        print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+                    if opt.get('action', '').upper() in ('BTO', 'BTC'):
+                        try:
+                            from gui_app.database import is_circuit_breaker_tripped
+                            circuit_status = is_circuit_breaker_tripped()
+                            if circuit_status.get('tripped'):
+                                reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                                print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (paper): {reason}")
+                                return
+                        except Exception as cb_err:
+                            print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
                     
                     await self.order_queue.put(opt)
                     print(f"[QUEUE] ✓ Signal queued for PAPER execution")
@@ -15115,16 +15115,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 stk['_exit_strategy_mode'] = ch_exit_mode
                 
-                try:
-                    from gui_app.database import is_circuit_breaker_tripped
-                    circuit_status = is_circuit_breaker_tripped()
-                    if circuit_status.get('tripped'):
-                        reason = circuit_status.get('reason', 'Circuit breaker tripped')
-                        print(f"[CIRCUIT BREAKER] ⛔ BLOCKED: {reason}")
-                        print(f"[CIRCUIT BREAKER] Stock signal NOT queued for execution")
-                        return
-                except Exception as cb_err:
-                    print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+                if stk.get('action', '').upper() in ('BTO', 'BTC'):
+                    try:
+                        from gui_app.database import is_circuit_breaker_tripped
+                        circuit_status = is_circuit_breaker_tripped()
+                        if circuit_status.get('tripped'):
+                            reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                            print(f"[CIRCUIT BREAKER] ⛔ BLOCKED: {reason}")
+                            print(f"[CIRCUIT BREAKER] Stock signal NOT queued for execution")
+                            return
+                    except Exception as cb_err:
+                        print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
 
                 stk_entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
                 if stk_entry_confirmation_pct > 0 and stk.get('action', '').upper() == 'BTO':
@@ -15255,15 +15256,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         stk['author'] = author_name
                         print(f"[DATABASE] ✓ Added channel_record_id={stk['channel_record_id']} for paper trade tracking")
                     
-                    try:
-                        from gui_app.database import is_circuit_breaker_tripped
-                        circuit_status = is_circuit_breaker_tripped()
-                        if circuit_status.get('tripped'):
-                            reason = circuit_status.get('reason', 'Circuit breaker tripped')
-                            print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (stock paper): {reason}")
-                            return
-                    except Exception as cb_err:
-                        print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+                    if stk.get('action', '').upper() in ('BTO', 'BTC'):
+                        try:
+                            from gui_app.database import is_circuit_breaker_tripped
+                            circuit_status = is_circuit_breaker_tripped()
+                            if circuit_status.get('tripped'):
+                                reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                                print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (stock paper): {reason}")
+                                return
+                        except Exception as cb_err:
+                            print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
 
                     await self.order_queue.put(stk)
                     print(f"[QUEUE] ✓ Signal queued for PAPER execution")

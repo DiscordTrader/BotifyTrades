@@ -11456,14 +11456,14 @@ def is_circuit_breaker_tripped() -> Dict:
     try:
         cursor.execute('''
             SELECT COALESCE(SUM(CASE WHEN pnl < 0 THEN pnl ELSE 0 END), 0) as daily_loss
-            FROM signal_instances 
-            WHERE DATE(closed_at) = DATE('now') AND status = 'closed'
+            FROM trades 
+            WHERE DATE(closed_at) = DATE('now') AND UPPER(status) = 'CLOSED'
         ''')
         row = cursor.fetchone()
         daily_loss = abs(row[0]) if row else 0
         
         cursor.execute('''
-            SELECT COUNT(*) FROM signal_instances WHERE status = 'open'
+            SELECT COUNT(*) FROM trades WHERE UPPER(status) = 'OPEN' AND UPPER(direction) IN ('BTO', 'BTC')
         ''')
         open_positions = cursor.fetchone()[0] or 0
         
