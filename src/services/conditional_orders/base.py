@@ -1641,8 +1641,9 @@ class BaseConditionalOrderService(ABC):
             self._deferred_monitors.append((order_id, order))
     
     def _auto_discover_brokers(self):
-        """Auto-discover broker instances from the global bot if none are registered."""
-        if self.broker_instances:
+        """Auto-discover broker instances from the global bot.
+        Re-checks for newly connected brokers and hubs even if some are already registered."""
+        if self.broker_instances and self.data_hubs:
             return
         
         try:

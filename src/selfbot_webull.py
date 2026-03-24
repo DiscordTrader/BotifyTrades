@@ -8634,6 +8634,14 @@ class SelfClient(discord.Client):
                     _cond_print(f"[CONDITIONAL] ✓ Trading212 data hub registered (REST polling)", flush=True)
             except Exception:
                 pass
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                ibkr_hub = get_ibkr_data_hub()
+                if ibkr_hub and getattr(ibkr_hub, '_broker', None):
+                    conditional_order_router.set_data_hub('ibkr', ibkr_hub)
+                    _cond_print(f"[CONDITIONAL] ✓ IBKR data hub registered (TWS streaming)", flush=True)
+            except Exception:
+                pass
         except Exception as e:
             print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
             import traceback
