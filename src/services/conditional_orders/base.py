@@ -2227,6 +2227,24 @@ class BaseConditionalOrderService(ABC):
             pass
         except Exception as cb_err:
             self._log(f"Circuit breaker check error: {cb_err}")
+        
+        try:
+            from gui_app.database import is_circuit_breaker_tripped
+            db_circuit = is_circuit_breaker_tripped()
+            if db_circuit.get('tripped'):
+                cb_reason = db_circuit.get('reason', 'Circuit breaker tripped')
+                self._log(f"⚠️ BLOCKED #{order_id} {symbol}: {cb_reason}")
+                update_conditional_order_status(
+                    order_id,
+                    'PENDING_MONITOR',
+                    event='CIRCUIT_BREAKER_BLOCK',
+                    details=cb_reason
+                )
+                self._executing_orders.discard(order_id)
+                self._execution_locks.pop(order_id, None)
+                return
+        except Exception as db_cb_err:
+            self._log(f"DB circuit breaker check error: {db_cb_err}")
 
         try:
             from src.services.daily_pnl_limit_service import get_daily_pnl_service

@@ -20,7 +20,6 @@ from collections import defaultdict
 from enum import Enum
 
 from gui_app.database import (
-    is_circuit_breaker_tripped,
     get_effective_exit_strategy_mode,
     log_risk_event,
     find_matching_execution_lot,

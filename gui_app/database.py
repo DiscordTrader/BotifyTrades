@@ -11463,7 +11463,8 @@ def is_circuit_breaker_tripped() -> Dict:
         daily_loss = abs(row[0]) if row else 0
         
         cursor.execute('''
-            SELECT COUNT(*) FROM trades WHERE UPPER(status) = 'OPEN' AND UPPER(direction) IN ('BTO', 'BTC')
+            SELECT COUNT(*) FROM trades 
+            WHERE UPPER(status) IN ('OPEN', 'PENDING') AND UPPER(direction) IN ('BTO', 'BTC')
         ''')
         open_positions = cursor.fetchone()[0] or 0
         
@@ -11487,7 +11488,10 @@ def is_circuit_breaker_tripped() -> Dict:
                 'max_positions': max_positions
             }
         
-        return {'tripped': False, 'reason': None, 'daily_loss': daily_loss, 'limit': daily_loss_limit}
+        return {
+            'tripped': False, 'reason': None, 'daily_loss': daily_loss, 'limit': daily_loss_limit,
+            'open_positions': open_positions, 'max_positions': max_positions
+        }
     except Exception as e:
         print(f"[CIRCUIT BREAKER] Error checking status: {e}")
         return {'tripped': False, 'reason': None, 'error': str(e)}

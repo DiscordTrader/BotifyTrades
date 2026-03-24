@@ -16765,6 +16765,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     _original_print(f"[TELEGRAM BRIDGE] Received signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
                     
+                    if signal.get('action', '').upper() in ('BTO', 'BTC'):
+                        try:
+                            from gui_app.database import is_circuit_breaker_tripped
+                            cb_status = is_circuit_breaker_tripped()
+                            if cb_status.get('tripped'):
+                                cb_reason = cb_status.get('reason', 'Circuit breaker tripped')
+                                _original_print(f"[TELEGRAM BRIDGE] ⛔ BLOCKED: {cb_reason}", flush=True)
+                                continue
+                        except Exception as cb_err:
+                            _original_print(f"[TELEGRAM BRIDGE] ⚠️ Circuit breaker check failed (continuing): {cb_err}", flush=True)
+                    
                     if signal.get('_conditional_order') and signal.get('market') == 'INDIA':
                         await self._route_telegram_conditional_order(signal)
                     else:
