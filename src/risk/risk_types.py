@@ -444,6 +444,8 @@ class PositionCacheEntry:
     
     NO_POSITION_PATTERNS = [
         'no stock position', 'no option position',
+        'insufficient position', 'position not found',
+        'no shares available', 'no position to sell',
     ]
     NO_POSITION_PERMANENT_THRESHOLD = 3
     
@@ -455,7 +457,7 @@ class PositionCacheEntry:
         return any(pattern in reason_lower for pattern in self.PERMANENT_ERROR_PATTERNS)
     
     def _is_no_position_error(self, reason: str) -> bool:
-        """Check if error indicates broker has no matching position to sell."""
+        """Check if broker confirmed no matching position exists for exit."""
         if not reason:
             return False
         reason_lower = reason.lower()
@@ -485,10 +487,12 @@ class PositionCacheEntry:
             if self.no_position_streak >= self.NO_POSITION_PERMANENT_THRESHOLD:
                 self.permanent_failure = True
                 self.permanent_failure_reason = reason
-                print(f"[RISK-RETRY] 🛑 NO POSITION on broker for {self.no_position_streak} consecutive attempts — marking as phantom position")
+                print(f"[RISK-RETRY] 🛑 BROKER CONFIRMED no position for {self.no_position_streak} consecutive attempts")
                 print(f"[RISK-RETRY] 🛑 Reason: {reason}")
-                print(f"[RISK-RETRY] 🛑 Position will be removed from risk tracking (no actual broker position exists)")
+                print(f"[RISK-RETRY] 🛑 Position is phantom (never filled or already closed) — removing from risk tracking")
                 return
+            else:
+                print(f"[RISK-RETRY] ⚠️ No-position response from broker (streak {self.no_position_streak}/{self.NO_POSITION_PERMANENT_THRESHOLD}) — will retry")
         else:
             self.no_position_streak = 0
         

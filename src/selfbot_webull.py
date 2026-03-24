@@ -16277,6 +16277,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 broker_upper = broker_name.upper()
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL', 'TRADING212'])
                 
+                is_risk_stc = signal.get('_risk_management_order', False)
                 if signal['action'] == 'STC' and hasattr(broker_instance, 'get_positions_detailed'):
                     try:
                         pos_list = await broker_instance.get_positions_detailed()
@@ -16295,10 +16296,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         matched_qty = int(matched_qty_raw) if matched_qty_raw >= 1 else (1 if matched_qty_raw > 0 else 0)
                         
                         if matched_qty <= 0:
-                            _original_print(f"[{broker_name}] ⚠️ STC rejected: No stock position for {sig_symbol} on {broker_name}")
-                            return {'success': False, 'msg': f'No stock position for {sig_symbol} on {broker_name}', 'broker': broker_name}
+                            if is_risk_stc:
+                                _original_print(f"[{broker_name}] ⚠️ RISK STC: No stock position found for {sig_symbol} via REST — proceeding anyway (broker will reject if truly empty)")
+                            else:
+                                _original_print(f"[{broker_name}] ⚠️ STC rejected: No stock position for {sig_symbol} on {broker_name}")
+                                return {'success': False, 'msg': f'No stock position for {sig_symbol} on {broker_name}', 'broker': broker_name}
                         
-                        if signal['qty'] > matched_qty:
+                        if matched_qty > 0 and signal['qty'] > matched_qty:
                             _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
                             signal['qty'] = matched_qty
                     except Exception as e:
