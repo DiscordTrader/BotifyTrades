@@ -16230,6 +16230,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
                     if action == 'BTO':
                         try:
+                            from src.risk.position_monitor import notify_order_placed as _notify_fill_watch
+                            _fw_order_id = ''
+                            if hasattr(result, 'order_id'):
+                                _fw_order_id = str(result.order_id or '')
+                            elif isinstance(result, dict):
+                                _fw_order_id = str(result.get('orderId') or result.get('order_id') or '')
+                            _notify_fill_watch(broker_name, order_id=_fw_order_id, symbol=signal.get('symbol', ''))
+                        except Exception as _fw_err:
+                            _original_print(f"[FILL_WATCH] Warning: Could not activate fill watch: {_fw_err}", flush=True)
+
+                        try:
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
                             pnl_svc = get_daily_pnl_service()
                             pnl_svc.record_bto_trade(broker_name)
@@ -16475,6 +16486,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _original_print(f"[NOTIFY] Warning: Could not send stock order placed notification: {notify_err}", flush=True)
 
                     if action == 'BTO':
+                        try:
+                            from src.risk.position_monitor import notify_order_placed as _notify_fill_watch_stk
+                            _fw_stk_oid = ''
+                            if hasattr(result, 'order_id'):
+                                _fw_stk_oid = str(result.order_id or '')
+                            elif isinstance(result, dict):
+                                _fw_stk_oid = str(result.get('orderId') or result.get('order_id') or '')
+                            elif isinstance(resp, dict):
+                                _fw_stk_oid = str(resp.get('orderId') or '')
+                            _notify_fill_watch_stk(broker_name, order_id=_fw_stk_oid, symbol=signal.get('symbol', ''))
+                        except Exception as _fw_stk_err:
+                            _original_print(f"[FILL_WATCH] Warning: Could not activate stock fill watch: {_fw_stk_err}", flush=True)
+
                         try:
                             from src.services.daily_pnl_limit_service import get_daily_pnl_service
                             pnl_svc = get_daily_pnl_service()
@@ -18519,6 +18543,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _original_print(f"[DEBUG] After broker call, order_success: {order_success}, resp type: {type(resp).__name__}", flush=True)
 
                         if order_success and signal.get('action', '').upper() == 'BTO':
+                            try:
+                                from src.risk.position_monitor import notify_order_placed as _notify_fill_watch_live
+                                _fw_live_oid = ''
+                                if hasattr(resp, 'order_id'):
+                                    _fw_live_oid = str(resp.order_id or '')
+                                elif isinstance(resp, dict):
+                                    _fw_live_oid = str(resp.get('orderId') or resp.get('order_id') or '')
+                                _notify_fill_watch_live(broker_name_used or 'Unknown', order_id=_fw_live_oid, symbol=signal.get('symbol', ''))
+                            except Exception as _fw_live_err:
+                                _original_print(f"[FILL_WATCH] Warning: Could not activate live trade fill watch: {_fw_live_err}", flush=True)
+
                             try:
                                 from src.services.daily_pnl_limit_service import get_daily_pnl_service
                                 get_daily_pnl_service().record_bto_trade(broker_name_used or 'Unknown')

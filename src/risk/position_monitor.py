@@ -111,6 +111,27 @@ def check_and_process_invalidation_request() -> int:
         return 0
 
 
+def notify_order_placed(broker_name: str, order_id: str = '', symbol: str = ''):
+    with _risk_manager_lock:
+        instance = risk_manager_instance
+    if instance is not None:
+        instance.notify_order_placed(broker_name, order_id=order_id, symbol=symbol)
+    else:
+        try:
+            broker_upper = broker_name.upper()
+            if 'WEBULL' in broker_upper:
+                from src.services.webull_data_hub import get_webull_data_hub
+                get_webull_data_hub().request_risk_eval()
+            elif 'SCHWAB' in broker_upper:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                get_schwab_data_hub().request_risk_eval()
+            elif 'IBKR' in broker_upper:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                get_ibkr_data_hub().request_risk_eval()
+        except Exception:
+            pass
+
+
 class RiskDBAdapter:
     """
     Database adapter for risk management operations.
@@ -1250,6 +1271,122 @@ class RiskManager:
         self._tick_eval_count = 0
         self._tick_eval_total_latency_ms = 0.0
 
+        self._fill_watch_orders = {}
+        self._fill_watch_lock = _threading.Lock()
+        self._FILL_WATCH_INTERVAL = 0.5
+        self._FILL_WATCH_TIMEOUT = 30
+
+    def notify_order_placed(self, broker_name: str, order_id: str = '', symbol: str = ''):
+        import time as _nop_time
+        watch_key = f"{broker_name}_{order_id or symbol or _nop_time.time()}"
+        broker_upper = broker_name.upper()
+        baseline = self._get_broker_symbol_baseline(broker_upper, symbol.upper() if symbol else '')
+        with self._fill_watch_lock:
+            self._fill_watch_orders[watch_key] = {
+                'broker': broker_upper,
+                'order_id': order_id,
+                'symbol': symbol.upper() if symbol else '',
+                'placed_at': _nop_time.time(),
+                'baseline_total_qty': baseline['total_qty'],
+                'baseline_position_count': baseline['position_count'],
+                'symbol_existed': baseline['symbol_existed'],
+            }
+        self._force_rest_refresh = True
+        try:
+            if 'WEBULL' in broker_upper:
+                from src.services.webull_data_hub import get_webull_data_hub
+                get_webull_data_hub().request_risk_eval()
+            elif 'SCHWAB' in broker_upper:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                get_schwab_data_hub().request_risk_eval()
+            elif 'IBKR' in broker_upper:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                get_ibkr_data_hub().request_risk_eval()
+        except Exception:
+            pass
+        existed_tag = " (scale-in)" if baseline['symbol_existed'] else " (new position)"
+        print(f"[RISK] ⚡ FILL WATCH: Order placed on {broker_name} for {symbol}{existed_tag} — rapid polling {self._FILL_WATCH_INTERVAL}s for {self._FILL_WATCH_TIMEOUT}s")
+
+    def _has_active_fill_watches(self) -> bool:
+        with self._fill_watch_lock:
+            return len(self._fill_watch_orders) > 0
+
+    def _get_broker_symbol_baseline(self, broker_upper: str, symbol_upper: str) -> dict:
+        try:
+            snapshot = list(self._last_positions_snapshot or [])
+        except Exception:
+            snapshot = []
+        total_qty = 0.0
+        position_count = 0
+        symbol_existed = False
+        for p in snapshot:
+            p_broker = (getattr(p, 'broker', '') or '').upper()
+            if broker_upper not in p_broker:
+                continue
+            position_count += 1
+            if symbol_upper and symbol_upper in (getattr(p, 'symbol', '') or '').upper():
+                symbol_existed = True
+                total_qty += float(getattr(p, 'quantity', 0) or 0)
+        return {
+            'total_qty': total_qty,
+            'position_count': position_count,
+            'symbol_existed': symbol_existed,
+        }
+
+    def _expire_fill_watches(self):
+        import time as _efw_time
+        now = _efw_time.time()
+        with self._fill_watch_lock:
+            expired = [k for k, v in self._fill_watch_orders.items()
+                       if (now - v['placed_at']) > self._FILL_WATCH_TIMEOUT]
+            for k in expired:
+                w = self._fill_watch_orders.pop(k)
+                elapsed = now - w['placed_at']
+                print(f"[RISK] ⏱ Fill watch expired for {w['broker']} order {w.get('order_id', '?')} after {elapsed:.1f}s — order chaser will handle")
+
+    def _check_fill_watch_detected(self, positions):
+        import time as _cfw_time
+        now = _cfw_time.time()
+
+        broker_data = {}
+        for p in (positions or []):
+            b = (getattr(p, 'broker', '') or '').upper()
+            if b not in broker_data:
+                broker_data[b] = {'count': 0, 'symbols': {}}
+            broker_data[b]['count'] += 1
+            sym = (getattr(p, 'symbol', '') or '').upper()
+            qty = float(getattr(p, 'quantity', 0) or 0)
+            broker_data[b]['symbols'][sym] = broker_data[b]['symbols'].get(sym, 0) + qty
+
+        with self._fill_watch_lock:
+            resolved = []
+            for key, watch in self._fill_watch_orders.items():
+                broker_upper = watch['broker']
+                bd = broker_data.get(broker_upper, {'count': 0, 'symbols': {}})
+                sym = watch.get('symbol', '')
+                elapsed_ms = (now - watch['placed_at']) * 1000
+
+                if sym and sym in bd['symbols']:
+                    if not watch.get('symbol_existed'):
+                        print(f"[RISK] ⚡ FILL DETECTED: {sym} on {broker_upper} (new position) — {elapsed_ms:.0f}ms after order placement")
+                        resolved.append(key)
+                        continue
+                    else:
+                        current_qty = bd['symbols'].get(sym, 0)
+                        baseline_qty = watch.get('baseline_total_qty', 0)
+                        if current_qty > baseline_qty:
+                            print(f"[RISK] ⚡ FILL DETECTED: {sym} on {broker_upper} (scale-in qty {baseline_qty:.0f}→{current_qty:.0f}) — {elapsed_ms:.0f}ms after order placement")
+                            resolved.append(key)
+                            continue
+
+                baseline_count = watch.get('baseline_position_count', -1)
+                if baseline_count >= 0 and bd['count'] > baseline_count:
+                    print(f"[RISK] ⚡ FILL DETECTED: New position on {broker_upper} (count {baseline_count}→{bd['count']}) — {elapsed_ms:.0f}ms after order placement")
+                    resolved.append(key)
+
+            for k in resolved:
+                self._fill_watch_orders.pop(k, None)
+
     def release_exit_marker(self, pos_key: str):
         """Clear the exit-executed marker for a position key.
         
@@ -1607,12 +1744,16 @@ class RiskManager:
         """Get monitoring interval - configurable via GUI settings.
         
         Priority:
-        1. Global risk setting 'risk_check_interval_seconds' (if set)
-        2. Default 1 second for real-time live position monitoring
+        1. Fill watch active → 0.5s rapid polling for immediate fill detection
+        2. Global risk setting 'risk_check_interval_seconds' (if set)
+        3. Default 1 second for real-time live position monitoring
         
         Configure in Settings → Risk Management → Check Interval
         Supports sub-second intervals (0.2s minimum) for faster risk evaluation.
         """
+        if self._has_active_fill_watches():
+            return self._FILL_WATCH_INTERVAL
+
         try:
             from gui_app.database import get_global_risk_settings
             settings = get_global_risk_settings()
@@ -1629,6 +1770,7 @@ class RiskManager:
     async def _standby_cycle(self) -> None:
         """Standby cycle - process invalidations WITHOUT making broker API calls."""
         check_and_process_invalidation_request()
+        self._expire_fill_watches()
         
         import time
         now = time.time()
@@ -1695,6 +1837,12 @@ class RiskManager:
         except Exception:
             pass
 
+        _fill_watch_active = self._has_active_fill_watches()
+        if _fill_watch_active:
+            self._force_webull_rest_refresh = True
+            self._force_rest_refresh = True
+            self._expire_fill_watches()
+
         _pos_refresh_interval = self._POSITION_REST_REFRESH_INTERVAL if _streaming_live else self._PERIODIC_REST_FALLBACK_INTERVAL
 
         if (_now - _last_refresh) > _pos_refresh_interval:
@@ -1729,6 +1877,9 @@ class RiskManager:
             return
         self._empty_pos_logged = False
         
+        if _fill_watch_active:
+            self._check_fill_watch_detected(positions)
+
         self._rest_repair_cycle_keys.clear()
         self._update_prices_from_hub(positions)
         await self._detect_and_fix_stuck_prices(positions)
