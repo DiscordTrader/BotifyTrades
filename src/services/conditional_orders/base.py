@@ -1678,9 +1678,6 @@ class BaseConditionalOrderService(ABC):
     def _auto_discover_brokers(self):
         """Auto-discover broker instances from the global bot.
         Re-checks for newly connected brokers and hubs even if some are already registered."""
-        if self.broker_instances and self.data_hubs:
-            return
-        
         try:
             from src.services.conditional_orders.router import conditional_order_router
             bot_ref = getattr(conditional_order_router, '_bot_ref', None)
@@ -1696,6 +1693,8 @@ class BaseConditionalOrderService(ABC):
                 }
                 bot_loop = getattr(bot_ref, 'loop', None)
                 for bname, binst in broker_map.items():
+                    if bname in self.broker_instances:
+                        continue
                     if binst and bname in [b.lower() for b in self.get_supported_brokers()]:
                         connected = getattr(binst, 'connected', None)
                         logged_in = getattr(binst, '_logged_in', None)
