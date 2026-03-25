@@ -1295,9 +1295,14 @@ class BaseConditionalOrderService(ABC):
         
         await self._restore_active_orders()
         
+        self._rediscovery_count = 0
+        
         while self.is_running:
             try:
                 await self._check_expirations()
+                if self._rediscovery_count < 6 and self.pending_orders:
+                    self._auto_discover_brokers()
+                    self._rediscovery_count += 1
                 await asyncio.sleep(30)
             except asyncio.CancelledError:
                 break
@@ -1707,6 +1712,7 @@ class BaseConditionalOrderService(ABC):
                     'tastytrade': getattr(bot_ref, 'tastytrade_broker', None),
                 }
                 bot_loop = getattr(bot_ref, 'loop', None)
+                newly_discovered = []
                 for bname, binst in broker_map.items():
                     if bname in self.broker_instances:
                         continue
@@ -1720,7 +1726,15 @@ class BaseConditionalOrderService(ABC):
                         if bot_loop and not hasattr(binst, '_event_loop'):
                             binst._event_loop = bot_loop
                         self.broker_instances[bname] = binst
+                        newly_discovered.append((bname, binst))
                         self._log(f"Auto-discovered broker: {bname}")
+                
+                for bname, binst in newly_discovered:
+                    if self._loop:
+                        asyncio.run_coroutine_threadsafe(
+                            self._upgrade_fallback_monitors(bname, binst),
+                            self._loop
+                        )
                 
                 hub_map = {
                     'webull': None,
