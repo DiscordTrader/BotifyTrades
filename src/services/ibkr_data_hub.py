@@ -388,15 +388,25 @@ class IBKRDataHub:
         else:
             await self._qualify_and_subscribe(symbol)
 
+    _subscribe_fail_cache: dict = {}
+    _SUBSCRIBE_FAIL_BACKOFF = 120.0
+
     async def _qualify_and_subscribe(self, symbol: str):
+        import time as _time
+        fail_ts = self._subscribe_fail_cache.get(symbol, 0)
+        if fail_ts and _time.time() - fail_ts < self._SUBSCRIBE_FAIL_BACKOFF:
+            return
         try:
             from ib_insync import Stock
             auto_contract = Stock(symbol, 'SMART', 'USD')
             await self._ib.qualifyContractsAsync(auto_contract)
             self._start_market_data(symbol, auto_contract)
+            self._subscribe_fail_cache.pop(symbol, None)
             logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
         except Exception as e:
-            logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
+            self._subscribe_fail_cache[symbol] = _time.time()
+            if 'event loop' not in str(e).lower():
+                logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
             self._pending_subscriptions.add(symbol)
 
     def _start_market_data(self, symbol: str, contract):

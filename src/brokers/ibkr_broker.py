@@ -502,8 +502,16 @@ class IBKRBroker(BrokerInterface):
         self.ib.cancelMktData(contract)
         return price
 
+    _quote_fail_cache: Dict[str, float] = {}
+    _QUOTE_FAIL_BACKOFF = 60.0
+
     async def get_quote(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol — checks hub cache first"""
+        now = __import__('time').time()
+        fail_ts = self._quote_fail_cache.get(symbol, 0)
+        if fail_ts and now - fail_ts < self._QUOTE_FAIL_BACKOFF:
+            return None
+
         try:
             try:
                 from src.services.ibkr_data_hub import get_ibkr_data_hub
@@ -511,30 +519,37 @@ class IBKRBroker(BrokerInterface):
                 if hub.is_streaming():
                     cached = hub.get_quote_price(symbol)
                     if cached and cached > 0:
+                        self._quote_fail_cache.pop(symbol, None)
                         return cached
                     hub.subscribe_symbol(symbol)
             except (ImportError, Exception):
                 pass
 
             if self._is_on_ib_loop():
-                return await self._ib_get_quote_impl(symbol)
+                result = await self._ib_get_quote_impl(symbol)
+                if result and result > 0:
+                    self._quote_fail_cache.pop(symbol, None)
+                    return result
             elif self._event_loop and self._event_loop.is_running():
                 future = asyncio.run_coroutine_threadsafe(
                     self._ib_get_quote_impl(symbol), self._event_loop
                 )
                 try:
-                    return await asyncio.wait_for(
+                    result = await asyncio.wait_for(
                         asyncio.wrap_future(future), timeout=10
                     )
+                    if result and result > 0:
+                        self._quote_fail_cache.pop(symbol, None)
+                        return result
                 except asyncio.TimeoutError:
                     future.cancel()
-                    print(f"[{self.name}] get_quote timeout for {symbol} (cross-loop)")
-                    return None
-            else:
-                print(f"[{self.name}] No IB event loop for get_quote — skipping REST for {symbol}")
-                return None
+
+            self._quote_fail_cache[symbol] = now
+            return None
         except Exception as e:
-            print(f"[{self.name}] Error getting quote for {symbol}: {e}")
+            if 'event loop' not in str(e).lower():
+                print(f"[{self.name}] Error getting quote for {symbol}: {e}")
+            self._quote_fail_cache[symbol] = now
             return None
     
     async def _ib_get_quote_detailed_impl(self, symbol: str) -> Optional[Dict[str, Any]]:

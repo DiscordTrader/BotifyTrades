@@ -3461,12 +3461,18 @@ class WebullBroker:
             print(f"[SLIPPAGE] Error fetching stock quote: {e}")
             return None
     
+    _ticker_not_found_cache: Dict[str, float] = {}
+    _TICKER_NOT_FOUND_BACKOFF = 300.0
+
     def get_quote(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Public method to get stock quote for conditional order monitoring.
         Returns dict with 'close' key for compatibility with conditional order service.
         Supports pre-market and after-hours pricing via pPrice field.
         """
+        nf_ts = self._ticker_not_found_cache.get(symbol, 0)
+        if nf_ts and time.time() - nf_ts < self._TICKER_NOT_FOUND_BACKOFF:
+            return None
         try:
             try:
                 from src.services.webull_data_hub import get_webull_data_hub
@@ -3527,7 +3533,16 @@ class WebullBroker:
                 'symbol': symbol
             }
         except Exception as e:
-            print(f"[WEBULL] Error in get_quote for {symbol}: {e}")
+            err_str = str(e).lower()
+            if 'could not find ticker' in err_str or 'not found' in err_str:
+                self._ticker_not_found_cache[symbol] = time.time()
+                if symbol not in getattr(self, '_nf_logged', set()):
+                    if not hasattr(self, '_nf_logged'):
+                        self._nf_logged = set()
+                    self._nf_logged.add(symbol)
+                    print(f"[WEBULL] Ticker not found: {symbol} (suppressing for {int(self._TICKER_NOT_FOUND_BACKOFF)}s)")
+            else:
+                print(f"[WEBULL] Error in get_quote for {symbol}: {e}")
             return None
     
     def _evaluate_slippage(self, signal_price: float, current_price: Optional[float], threshold_override: Optional[float] = None) -> Tuple[SlippageDecision, float]:

@@ -635,6 +635,8 @@ class BrokerPriceMonitor(PriceMonitor):
         self.poll_interval = self.BROKER_POLL_INTERVALS.get(broker_lower, 2)
         self.unchanged_count = 0
         self.using_cross_hub_fallback = False
+        self._rest_fail_count = 0
+        self._rest_fail_logged = False
     
     HUB_FAST_INTERVAL = 0.5
 
@@ -829,8 +831,18 @@ class BrokerPriceMonitor(PriceMonitor):
         hub_price = self._try_any_streaming_hub()
         if hub_price:
             self._hub_available = True
+            self._rest_fail_count = 0
             return hub_price
         self._hub_available = False
+
+        if self._rest_fail_count >= 10:
+            if not self._rest_fail_logged:
+                sys.stderr.write(f"[{self.broker_name.upper()}] REST quote for {self.symbol} failed {self._rest_fail_count}x, backing off to 30s intervals\n")
+                sys.stderr.flush()
+                self._rest_fail_logged = True
+            await asyncio.sleep(27)
+            self._rest_fail_count += 1
+            return self.last_price
 
         if not self.broker_instance:
             return None
@@ -887,20 +899,23 @@ class BrokerPriceMonitor(PriceMonitor):
 
             else:
                 result = await loop.run_in_executor(None, self._call_broker_quote_sync)
-                if result is None:
-                    return None
                 if isinstance(result, (int, float)) and result > 0:
+                    self._rest_fail_count = 0
+                    self._rest_fail_logged = False
                     return float(result)
                 elif isinstance(result, dict):
                     for key in ('close', 'last', 'lastTradePrice', 'price', 'last_trade_price', 'last_extended_hours_trade_price'):
                         val = result.get(key)
                         if val and float(val) > 0:
+                            self._rest_fail_count = 0
+                            self._rest_fail_logged = False
                             return float(val)
 
         except Exception as e:
             sys.stderr.write(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}\n")
             sys.stderr.flush()
         
+        self._rest_fail_count += 1
         return None
 
 
