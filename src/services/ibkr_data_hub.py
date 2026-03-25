@@ -169,28 +169,37 @@ class IBKRDataHub:
                 if not symbol:
                     continue
 
-                if symbol not in self._quotes:
+                is_new = symbol not in self._quotes
+                if is_new:
                     self._quotes[symbol] = IBKRQuoteData(symbol=symbol, contract_id=con_id)
                 q = self._quotes[symbol]
+                has_real_data = False
                 if ticker.bid is not None and ticker.bid > 0:
                     q.bid = float(ticker.bid)
+                    has_real_data = True
                 if ticker.ask is not None and ticker.ask > 0:
                     q.ask = float(ticker.ask)
+                    has_real_data = True
                 if ticker.last is not None and ticker.last > 0:
                     q.last = float(ticker.last)
+                    has_real_data = True
                 elif ticker.close is not None and ticker.close > 0:
-                    q.last = float(ticker.close)
+                    if is_new and q.last <= 0:
+                        q.last = float(ticker.close)
+                    elif q.bid > 0 and q.ask > 0:
+                        q.last = round((q.bid + q.ask) / 2, 4)
+                        has_real_data = True
                 if ticker.volume is not None:
                     q.volume = int(ticker.volume)
                 if ticker.high is not None and ticker.high > 0:
                     q.high = float(ticker.high)
                 if ticker.low is not None and ticker.low > 0:
                     q.low = float(ticker.low)
-                q.timestamp = now
-                updated_symbols.append(symbol)
+                if has_real_data or is_new:
+                    q.timestamp = now
+                    updated_symbols.append(symbol)
 
-        if updated_symbols:
-            self._last_quote_ts = now
+        self._last_quote_ts = now
         for sym in updated_symbols:
             self._emit('quote_updated', {'symbol': sym, 'source': 'ibkr_stream'})
 

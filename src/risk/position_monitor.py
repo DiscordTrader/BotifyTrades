@@ -4379,6 +4379,14 @@ class RiskManager:
                             fresh_price = self._get_fresh_hub_price(s_hub, position.symbol, max_age=60)
                     except Exception:
                         pass
+                if not fresh_price:
+                    try:
+                        from src.services.ibkr_data_hub import get_ibkr_data_hub
+                        ib_hub = get_ibkr_data_hub()
+                        if ib_hub and ib_hub.is_streaming():
+                            fresh_price = self._get_fresh_hub_price(ib_hub, position.symbol, max_age=60)
+                    except Exception:
+                        pass
 
                 if fresh_price and fresh_price > 0:
                     fresh_dev = abs(fresh_price - entry_price) / entry_price * 100
