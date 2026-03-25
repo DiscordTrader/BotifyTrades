@@ -1273,8 +1273,17 @@ class RiskManager:
 
         self._fill_watch_orders = {}
         self._fill_watch_lock = _threading.Lock()
-        self._FILL_WATCH_INTERVAL = 0.5
         self._FILL_WATCH_TIMEOUT = 30
+        self._FILL_WATCH_BROKER_INTERVALS = {
+            'WEBULL': 2.0,
+            'SCHWAB': 0.5,
+            'IBKR': 0.5,
+            'ALPACA': 0.5,
+            'TASTYTRADE': 0.5,
+            'ROBINHOOD': 8.0,
+            'TRADING212': 5.0,
+        }
+        self._FILL_WATCH_DEFAULT_INTERVAL = 1.0
 
     def notify_order_placed(self, broker_name: str, order_id: str = '', symbol: str = ''):
         import time as _nop_time
@@ -1304,8 +1313,13 @@ class RiskManager:
                 get_ibkr_data_hub().request_risk_eval()
         except Exception:
             pass
+        _fw_interval = self._FILL_WATCH_DEFAULT_INTERVAL
+        for bk, bv in self._FILL_WATCH_BROKER_INTERVALS.items():
+            if bk in broker_upper:
+                _fw_interval = bv
+                break
         existed_tag = " (scale-in)" if baseline['symbol_existed'] else " (new position)"
-        print(f"[RISK] ⚡ FILL WATCH: Order placed on {broker_name} for {symbol}{existed_tag} — rapid polling {self._FILL_WATCH_INTERVAL}s for {self._FILL_WATCH_TIMEOUT}s")
+        print(f"[RISK] ⚡ FILL WATCH: Order placed on {broker_name} for {symbol}{existed_tag} — rapid polling {_fw_interval}s for {self._FILL_WATCH_TIMEOUT}s")
 
     def _has_active_fill_watches(self) -> bool:
         with self._fill_watch_lock:
@@ -1752,7 +1766,15 @@ class RiskManager:
         Supports sub-second intervals (0.2s minimum) for faster risk evaluation.
         """
         if self._has_active_fill_watches():
-            return self._FILL_WATCH_INTERVAL
+            with self._fill_watch_lock:
+                min_interval = self._FILL_WATCH_DEFAULT_INTERVAL
+                for w in self._fill_watch_orders.values():
+                    broker = w.get('broker', '')
+                    for bk, bv in self._FILL_WATCH_BROKER_INTERVALS.items():
+                        if bk in broker:
+                            min_interval = min(min_interval, bv)
+                            break
+            return min_interval
 
         try:
             from gui_app.database import get_global_risk_settings
@@ -1839,9 +1861,15 @@ class RiskManager:
 
         _fill_watch_active = self._has_active_fill_watches()
         if _fill_watch_active:
-            self._force_webull_rest_refresh = True
-            self._force_rest_refresh = True
             self._expire_fill_watches()
+            _fw_brokers = set()
+            with self._fill_watch_lock:
+                for w in self._fill_watch_orders.values():
+                    _fw_brokers.add(w['broker'])
+            if any('WEBULL' in b for b in _fw_brokers):
+                self._force_webull_rest_refresh = True
+            if len(_fw_brokers - {'WEBULL'}) > 0:
+                self._force_rest_refresh = True
 
         _pos_refresh_interval = self._POSITION_REST_REFRESH_INTERVAL if _streaming_live else self._PERIODIC_REST_FALLBACK_INTERVAL
 
@@ -2052,14 +2080,20 @@ class RiskManager:
             self._force_webull_rest_refresh = False
 
         if _force_webull or _force_global:
-            try:
-                from src.services.webull_data_hub import get_webull_data_hub as _gwdh
-                _fhub = _gwdh()
-                _raw_wb = self._get_raw_webull_client()
-                if _raw_wb:
-                    await _fhub.refresh_positions_once(_raw_wb)
-            except Exception:
-                pass
+            _wb_rate_ok = True
+            if rate_manager:
+                _wb_rate_ok, _ = rate_manager.can_make_request('webull')
+            if _wb_rate_ok:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub as _gwdh
+                    _fhub = _gwdh()
+                    _raw_wb = self._get_raw_webull_client()
+                    if _raw_wb:
+                        if rate_manager:
+                            rate_manager.record_request('webull')
+                        await _fhub.refresh_positions_once(_raw_wb)
+                except Exception:
+                    pass
         
         try:
             from src.services.webull_data_hub import get_webull_data_hub
