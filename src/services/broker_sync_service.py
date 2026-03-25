@@ -458,6 +458,7 @@ class BrokerSyncService:
                 # Get positions using detailed method (supports options)
                 if hasattr(broker_instance, 'get_positions_detailed'):
                     print(f"[SYNC] [DEBUG] Calling get_positions_detailed for {broker_name}, type={type(broker_instance).__name__}", flush=True)
+                    _prev_wb_count = len(result['positions'])
                     positions = await broker_instance.get_positions_detailed() or []
                     print(f"[SYNC] [DEBUG] get_positions_detailed returned {len(positions)} positions for {broker_name}", flush=True)
                     
@@ -465,15 +466,22 @@ class BrokerSyncService:
                         result['positions'].append({
                             'symbol': pos.get('symbol'),
                             'quantity': pos.get('quantity'),
-                            'avg_price': pos.get('avg_cost'),  # Corrected from entry_price
+                            'avg_price': pos.get('avg_cost'),
                             'current_price': pos.get('current_price'),
-                            'unrealized_pnl': pos.get('unrealized_pl'),  # Corrected from pnl
+                            'unrealized_pnl': pos.get('unrealized_pl'),
                             'position_id': pos.get('option_id') or pos.get('ticker_id'),
-                            'asset_type': pos.get('asset', 'stock'),  # Corrected from asset_type
+                            'asset_type': pos.get('asset', 'stock'),
                             'strike': pos.get('strike'),
                             'expiry': pos.get('expiry'),
-                            'call_put': pos.get('direction')  # Corrected from call_put
+                            'call_put': pos.get('direction')
                         })
+                    _new_wb_count = len(result['positions']) - _prev_wb_count
+                    if _new_wb_count > 0:
+                        try:
+                            from src.services.webull_data_hub import get_webull_data_hub
+                            get_webull_data_hub().request_risk_eval()
+                        except Exception:
+                            pass
                 else:
                     print("[SYNC] Webull broker missing get_positions_detailed() method", flush=True)
                 

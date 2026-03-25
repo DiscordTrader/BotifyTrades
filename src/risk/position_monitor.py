@@ -1656,6 +1656,7 @@ class RiskManager:
         return self.cache.invalidate_channel_settings(channel_id)
     
     _PERIODIC_REST_FALLBACK_INTERVAL = 3
+    _POSITION_REST_REFRESH_INTERVAL = 5
 
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
@@ -1694,18 +1695,21 @@ class RiskManager:
         except Exception:
             pass
 
+        _pos_refresh_interval = self._POSITION_REST_REFRESH_INTERVAL if _streaming_live else self._PERIODIC_REST_FALLBACK_INTERVAL
+
+        if (_now - _last_refresh) > _pos_refresh_interval:
+            self._force_webull_rest_refresh = True
+            self._last_periodic_webull_rest_ts = _now
+
         if _streaming_live:
             if not getattr(self, '_streaming_mode_logged', False):
-                print("[RISK] ✓ Streaming live — REST position polling STOPPED (zero API usage)")
+                print(f"[RISK] ✓ Streaming live — quotes via MQTT, position refresh every {self._POSITION_REST_REFRESH_INTERVAL}s")
                 self._streaming_mode_logged = True
             self._rest_fallback_logged = False
         else:
-            if (_now - _last_refresh) > self._PERIODIC_REST_FALLBACK_INTERVAL:
-                self._force_webull_rest_refresh = True
-                self._last_periodic_webull_rest_ts = _now
-                if not getattr(self, '_rest_fallback_logged', False):
-                    print("[RISK] ⚠️ Streaming dead — REST fallback active (every 3s)")
-                    self._rest_fallback_logged = True
+            if not getattr(self, '_rest_fallback_logged', False):
+                print(f"[RISK] ⚠️ Streaming dead — REST fallback active (every {self._PERIODIC_REST_FALLBACK_INTERVAL}s)")
+                self._rest_fallback_logged = True
             self._streaming_mode_logged = False
         
         try:
@@ -1910,6 +1914,10 @@ class RiskManager:
             from src.services.webull_data_hub import get_webull_data_hub
             hub = get_webull_data_hub()
             hub_positions = hub.get_positions(max_age_seconds=_hub_max_age)
+            if hub_positions is not None and len(hub_positions) == 0:
+                _empty_age = hub.get_positions_age()
+                if _empty_age > 2.0:
+                    hub_positions = None
             if hub_positions is not None and len(hub_positions) > 0:
                 fetched = []
                 for pos in hub_positions:
@@ -2029,7 +2037,7 @@ class RiskManager:
                     positions.extend(fetched)
             elif hub_positions is not None:
                 hub_age = hub.get_positions_age()
-                if hub_age < 30:
+                if hub_age < 2:
                     webull_snapshots = []
                     self._last_webull_positions = []
                     self._webull_cache_ts = _time.time()
