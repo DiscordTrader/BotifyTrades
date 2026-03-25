@@ -38,6 +38,9 @@ class IBKRBroker(BrokerInterface):
         # Paper trading: 7497, Live trading: 7496
         self.port = config.get('port', 7497 if self.paper_trade else 7496)
         self.client_id = config.get('client_id', 1)
+        self._quote_fail_cache = {}
+        self._event_loop_broken = False
+        self._event_loop_broken_ts = 0
     
     @staticmethod
     def _normalize_expiry_yyyymmdd(expiry: str) -> str:
@@ -504,12 +507,24 @@ class IBKRBroker(BrokerInterface):
 
     _quote_fail_cache: Dict[str, float] = {}
     _QUOTE_FAIL_BACKOFF = 60.0
+    _QUOTE_FAIL_BACKOFF_EVENT_LOOP = 600.0
+    _event_loop_broken: bool = False
+    _event_loop_broken_ts: float = 0
+
+    def _check_event_loop_reset(self, now: float):
+        if self._event_loop_broken and now - self._event_loop_broken_ts >= self._QUOTE_FAIL_BACKOFF_EVENT_LOOP:
+            print(f"[{self.name}] ✓ Event loop circuit breaker reset after {self._QUOTE_FAIL_BACKOFF_EVENT_LOOP:.0f}s — retrying REST quotes")
+            self._event_loop_broken = False
+            self._event_loop_broken_ts = 0
+            self._quote_fail_cache.clear()
 
     async def get_quote(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol — checks hub cache first"""
         now = __import__('time').time()
+        self._check_event_loop_reset(now)
         fail_ts = self._quote_fail_cache.get(symbol, 0)
-        if fail_ts and now - fail_ts < self._QUOTE_FAIL_BACKOFF:
+        backoff = self._QUOTE_FAIL_BACKOFF_EVENT_LOOP if self._event_loop_broken else self._QUOTE_FAIL_BACKOFF
+        if fail_ts and now - fail_ts < backoff:
             return None
 
         try:
@@ -521,14 +536,20 @@ class IBKRBroker(BrokerInterface):
                     if cached and cached > 0:
                         self._quote_fail_cache.pop(symbol, None)
                         return cached
-                    hub.subscribe_symbol(symbol)
+                    if not self._event_loop_broken:
+                        hub.subscribe_symbol(symbol)
             except (ImportError, Exception):
                 pass
+
+            if self._event_loop_broken:
+                self._quote_fail_cache[symbol] = now
+                return None
 
             if self._is_on_ib_loop():
                 result = await self._ib_get_quote_impl(symbol)
                 if result and result > 0:
                     self._quote_fail_cache.pop(symbol, None)
+                    self._event_loop_broken = False
                     return result
             elif self._event_loop and self._event_loop.is_running():
                 future = asyncio.run_coroutine_threadsafe(
@@ -540,6 +561,7 @@ class IBKRBroker(BrokerInterface):
                     )
                     if result and result > 0:
                         self._quote_fail_cache.pop(symbol, None)
+                        self._event_loop_broken = False
                         return result
                 except asyncio.TimeoutError:
                     future.cancel()
@@ -547,9 +569,15 @@ class IBKRBroker(BrokerInterface):
             self._quote_fail_cache[symbol] = now
             return None
         except Exception as e:
-            if 'event loop' not in str(e).lower():
+            if 'event loop' in str(e).lower():
+                if not self._event_loop_broken:
+                    print(f"[{self.name}] ⚠️ Event loop conflict detected — IBKR REST quotes disabled for 10min (hub-only mode)")
+                    self._event_loop_broken = True
+                    self._event_loop_broken_ts = now
+                self._quote_fail_cache[symbol] = now
+            else:
                 print(f"[{self.name}] Error getting quote for {symbol}: {e}")
-            self._quote_fail_cache[symbol] = now
+                self._quote_fail_cache[symbol] = now
             return None
     
     async def _ib_get_quote_detailed_impl(self, symbol: str) -> Optional[Dict[str, Any]]:
@@ -575,6 +603,13 @@ class IBKRBroker(BrokerInterface):
 
     async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get detailed quote with bid/ask/last — checks hub cache first"""
+        now = __import__('time').time()
+        self._check_event_loop_reset(now)
+        fail_key = f"detailed_{symbol}"
+        fail_ts = self._quote_fail_cache.get(fail_key, 0)
+        backoff = self._QUOTE_FAIL_BACKOFF_EVENT_LOOP if self._event_loop_broken else self._QUOTE_FAIL_BACKOFF
+        if fail_ts and now - fail_ts < backoff:
+            return None
         try:
             if not self.ib.isConnected():
                 return None
@@ -586,9 +621,14 @@ class IBKRBroker(BrokerInterface):
                     cached = hub.get_quote_detailed(symbol, max_age=10)
                     if cached and (cached.get('last', 0) > 0 or cached.get('bid', 0) > 0):
                         return cached
-                    hub.subscribe_symbol(symbol)
+                    if not self._event_loop_broken:
+                        hub.subscribe_symbol(symbol)
             except (ImportError, Exception):
                 pass
+
+            if self._event_loop_broken:
+                self._quote_fail_cache[fail_key] = now
+                return None
 
             if self._is_on_ib_loop():
                 return await self._ib_get_quote_detailed_impl(symbol)
@@ -602,13 +642,20 @@ class IBKRBroker(BrokerInterface):
                     )
                 except asyncio.TimeoutError:
                     future.cancel()
-                    print(f"[{self.name}] get_quote_detailed timeout for {symbol} (cross-loop)")
+                    self._quote_fail_cache[fail_key] = now
                     return None
             else:
-                print(f"[{self.name}] No IB event loop for get_quote_detailed — skipping REST for {symbol}")
+                self._quote_fail_cache[fail_key] = now
                 return None
         except Exception as e:
-            print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
+            if 'event loop' in str(e).lower():
+                if not self._event_loop_broken:
+                    print(f"[{self.name}] ⚠️ Event loop conflict detected — IBKR REST quotes disabled for 10min (hub-only mode)")
+                    self._event_loop_broken = True
+                    self._event_loop_broken_ts = now
+            else:
+                print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
+            self._quote_fail_cache[fail_key] = now
             return None
     
     async def _ib_get_option_quote_impl(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[Dict[str, Any]]:
@@ -643,6 +690,9 @@ class IBKRBroker(BrokerInterface):
 
     async def get_option_quote(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[Dict[str, Any]]:
         """Get real-time option quote for signal verification"""
+        self._check_event_loop_reset(__import__('time').time())
+        if self._event_loop_broken:
+            return None
         try:
             if not self.ib.isConnected():
                 return None
@@ -659,13 +709,17 @@ class IBKRBroker(BrokerInterface):
                     )
                 except asyncio.TimeoutError:
                     future.cancel()
-                    print(f"[{self.name}] get_option_quote timeout for {symbol} (cross-loop)")
                     return None
             else:
-                print(f"[{self.name}] No IB event loop for get_option_quote — skipping REST for {symbol}")
                 return None
         except Exception as e:
-            print(f"[{self.name}] Error getting option quote for {symbol} {strike}{option_type} {expiry}: {e}")
+            if 'event loop' in str(e).lower():
+                if not self._event_loop_broken:
+                    print(f"[{self.name}] ⚠️ Event loop conflict detected — IBKR REST quotes disabled for 10min")
+                    self._event_loop_broken = True
+                    self._event_loop_broken_ts = __import__('time').time()
+            else:
+                print(f"[{self.name}] Error getting option quote for {symbol} {strike}{option_type} {expiry}: {e}")
             return None
     
     async def get_options_expiration_dates(self, symbol: str) -> list:

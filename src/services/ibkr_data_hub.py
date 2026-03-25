@@ -405,9 +405,11 @@ class IBKRDataHub:
             logger.info(f"[IBKR_HUB] Auto-created Stock contract for {symbol} (conId={auto_contract.conId})")
         except Exception as e:
             self._subscribe_fail_cache[symbol] = _time.time()
-            if 'event loop' not in str(e).lower():
+            if 'event loop' in str(e).lower():
+                pass
+            else:
                 logger.warning(f"[IBKR_HUB] Could not auto-create contract for {symbol}: {e}")
-            self._pending_subscriptions.add(symbol)
+                self._pending_subscriptions.add(symbol)
 
     def _start_market_data(self, symbol: str, contract):
         if not self._ib:
