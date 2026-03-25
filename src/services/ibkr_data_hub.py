@@ -261,6 +261,8 @@ class IBKRDataHub:
             q = self._quotes.get(symbol)
             if not q:
                 return None
+            if (time.time() - q.timestamp) > self.QUOTE_STALE_THRESHOLD:
+                return None
             if q.last and q.last > 0:
                 return q.last
             if q.bid > 0 and q.ask > 0:
