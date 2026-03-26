@@ -3735,6 +3735,10 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
             broker_fill = stc.get('broker_fill_price')
             exit_price = float(broker_fill) if broker_fill and float(broker_fill) > 0 else float(stc.get('executed_price') or stc.get('intended_price') or 0)
             stc_qty = int(stc.get('quantity') or 0)
+            remaining = pos['bto_qty'] - pos['total_closed_qty']
+            stc_qty = min(stc_qty, remaining)
+            if stc_qty <= 0:
+                continue
             entry_price = pos['entry_price']
             
             multiplier = 100 if pos['asset_type'] == 'option' else 1
@@ -3753,7 +3757,63 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
                 'closed_at': stc.get('executed_at') or stc.get('closed_at') or ''
             })
             pos['total_closed_qty'] += stc_qty
-    
+
+    try:
+        cursor.execute('''
+            SELECT lc.id, lc.closed_qty, lc.close_price, lc.exit_fill_price, lc.pnl, lc.pnl_percent,
+                   lc.exit_reason, lc.closed_at, lc.exit_fill_broker,
+                   sl.trade_id as bto_trade_id, sl.symbol, sl.open_price, sl.asset_type,
+                   sl.entry_fill_price
+            FROM lot_closures lc
+            JOIN signal_lots sl ON lc.lot_id = sl.id
+            WHERE sl.trade_id IS NOT NULL
+            ORDER BY lc.id
+        ''')
+        lot_closure_rows = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        lot_closure_rows = []
+
+    for lc in lot_closure_rows:
+        bto_id = lc.get('bto_trade_id')
+        if bto_id not in positions:
+            continue
+        pos = positions[bto_id]
+        remaining = pos['bto_qty'] - pos['total_closed_qty']
+        if remaining <= 0:
+            continue
+
+        lc_qty = int(lc.get('closed_qty') or 0)
+        if lc_qty <= 0:
+            continue
+        lc_qty = min(lc_qty, remaining)
+
+        exit_fill = lc.get('exit_fill_price')
+        exit_price = float(exit_fill) if exit_fill and float(exit_fill) > 0 else float(lc.get('close_price') or 0)
+        if exit_price <= 0:
+            continue
+
+        entry_price = pos['entry_price']
+        entry_fill = lc.get('entry_fill_price')
+        if entry_fill and float(entry_fill) > 0:
+            entry_price = float(entry_fill)
+
+        multiplier = 100 if pos['asset_type'] == 'option' else 1
+        closure_pnl = (exit_price - entry_price) * lc_qty * multiplier
+        closure_pnl_pct = ((exit_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+
+        exit_reason = lc.get('exit_reason') or 'lot_closure'
+
+        pos['closures'].append({
+            'stc_id': f"LC-{lc['id']}",
+            'stc_qty': lc_qty,
+            'exit_price': exit_price,
+            'pnl': closure_pnl,
+            'pnl_percent': closure_pnl_pct,
+            'exit_reason': exit_reason,
+            'closed_at': lc.get('closed_at') or ''
+        })
+        pos['total_closed_qty'] += lc_qty
+
     for tid, pos in positions.items():
         bto_qty = pos['bto_qty']
         if pos['closures']:
