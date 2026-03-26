@@ -1,12 +1,12 @@
 {
   "Webull_VSA_stock": {
-    "entry_price": 1.568,
-    "highest_price": 1.47,
+    "entry_price": 1.9,
+    "highest_price": 1.9,
     "trailing_activated": false,
     "closing": true,
     "closing_cycles": 0,
-    "stop_loss_price": 1.44,
-    "profit_target_price": 1.76,
+    "stop_loss_price": null,
+    "profit_target_price": null,
     "broker": "Webull",
     "raw_symbol": null,
     "tier1_hit": false,
@@ -15,11 +15,11 @@
     "tier4_hit": false,
     "original_qty": 10,
     "pending_orders": {},
-    "created_at": "2026-03-26T19:36:57.508292",
+    "created_at": "2026-03-26T20:54:20.713157",
     "max_pnl_seen": 0.0,
-    "dynamic_sl_price": null,
+    "dynamic_sl_price": 1.5541295272631392,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.445,
+    "last_evaluated_price": 1.69,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
@@ -31,7 +31,7 @@
     "seed_time": null,
     "ema_no_trend_count": 0,
     "ema_last_cross_state": "above",
-    "ema_last_eval_candle_ts": 1774553700.0,
-    "ema_post_entry_candles": 1
+    "ema_last_eval_candle_ts": 1774558500.0,
+    "ema_post_entry_candles": 3
   }
 }
