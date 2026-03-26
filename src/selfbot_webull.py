@@ -1946,6 +1946,28 @@ class SlippageDecision(Enum):
     WAIT = "wait"            # Wait for better price - high slippage
     ABORT = "abort"          # Cancel order - price never improved or illiquid
 
+def _evaluate_slippage_check(signal_price: float, current_price: Optional[float], threshold_override: Optional[float] = None) -> Tuple['SlippageDecision', float]:
+    if current_price is None or current_price <= 0:
+        if ALLOW_ORDER_WHEN_NO_QUOTE:
+            print(f"[SLIPPAGE] ⚠️  No valid current price - proceeding anyway (allow_when_no_quote=true)")
+            return (SlippageDecision.IMMEDIATE, 0.0)
+        else:
+            print(f"[SLIPPAGE] ❌ No valid current price - marking as ABORT (illiquid)")
+            return (SlippageDecision.ABORT, 0.0)
+    if signal_price <= 0:
+        print(f"[SLIPPAGE] ⚠️  Signal price is ${signal_price} - cannot calculate slippage, proceeding")
+        return (SlippageDecision.IMMEDIATE, 0.0)
+    slippage_pct = abs(current_price - signal_price) / signal_price * 100
+    threshold = threshold_override if threshold_override is not None else HIGH_SLIPPAGE_THRESHOLD_PCT
+    print(f"[SLIPPAGE] Signal price: ${signal_price:.2f}, Current price: ${current_price:.2f}")
+    print(f"[SLIPPAGE] Slippage: {slippage_pct:.2f}% (threshold: {threshold}%)")
+    if slippage_pct <= threshold:
+        print(f"[SLIPPAGE] ✅ FILL - slippage {slippage_pct:.2f}% <= {threshold}%")
+        return (SlippageDecision.IMMEDIATE, slippage_pct)
+    else:
+        print(f"[SLIPPAGE] ❌ ABORT - slippage {slippage_pct:.2f}% > {threshold}%")
+        return (SlippageDecision.ABORT, slippage_pct)
+
 # --------------------------------- WEBULL BROKER -------------------------------------
 class WebullBroker:
     # Class-level order deduplication (shared across instances)
@@ -3546,40 +3568,7 @@ class WebullBroker:
             return None
     
     def _evaluate_slippage(self, signal_price: float, current_price: Optional[float], threshold_override: Optional[float] = None) -> Tuple[SlippageDecision, float]:
-        """
-        Evaluate price slippage and return decision.
-        Uses a single threshold from channel or global settings - no hardcoded values.
-        Under threshold = fill immediately, over threshold = abort.
-        Args:
-            signal_price: Price from signal
-            current_price: Current market price
-            threshold_override: Optional threshold to use instead of global HIGH_SLIPPAGE_THRESHOLD_PCT
-        Returns: (SlippageDecision, slippage_percentage)
-        """
-        if current_price is None or current_price <= 0:
-            if ALLOW_ORDER_WHEN_NO_QUOTE:
-                print(f"[SLIPPAGE] ⚠️  No valid current price - proceeding anyway (allow_when_no_quote=true)")
-                return (SlippageDecision.IMMEDIATE, 0.0)
-            else:
-                print(f"[SLIPPAGE] ❌ No valid current price - marking as ABORT (illiquid)")
-                return (SlippageDecision.ABORT, 0.0)
-        
-        if signal_price <= 0:
-            print(f"[SLIPPAGE] ⚠️  Signal price is ${signal_price} - cannot calculate slippage, proceeding")
-            return (SlippageDecision.IMMEDIATE, 0.0)
-        slippage_pct = abs(current_price - signal_price) / signal_price * 100
-        
-        threshold = threshold_override if threshold_override is not None else HIGH_SLIPPAGE_THRESHOLD_PCT
-        
-        print(f"[SLIPPAGE] Signal price: ${signal_price:.2f}, Current price: ${current_price:.2f}")
-        print(f"[SLIPPAGE] Slippage: {slippage_pct:.2f}% (threshold: {threshold}%)")
-        
-        if slippage_pct <= threshold:
-            print(f"[SLIPPAGE] ✅ FILL - slippage {slippage_pct:.2f}% <= {threshold}%")
-            return (SlippageDecision.IMMEDIATE, slippage_pct)
-        else:
-            print(f"[SLIPPAGE] ❌ ABORT - slippage {slippage_pct:.2f}% > {threshold}%")
-            return (SlippageDecision.ABORT, slippage_pct)
+        return _evaluate_slippage_check(signal_price, current_price, threshold_override)
     
     async def _wait_for_better_price(self, signal: dict, get_current_price_func,
                                       wait_minutes: int = None,
@@ -16117,7 +16106,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             return None
 
                         _cur_opt_price = await _get_option_q()
-                        _decision_c, _slippage_pct_c = self._evaluate_slippage(
+                        _decision_c, _slippage_pct_c = _evaluate_slippage_check(
                             order_price, _cur_opt_price,
                             threshold_override=_slippage_cfg['threshold_percent'])
 
@@ -16432,7 +16421,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             return None
 
                         _cur_stk_price = await _get_stock_q()
-                        _decision_s, _slippage_pct_s = self._evaluate_slippage(
+                        _decision_s, _slippage_pct_s = _evaluate_slippage_check(
                             stock_order_price, _cur_stk_price,
                             threshold_override=_slippage_cfg_s['threshold_percent'])
 

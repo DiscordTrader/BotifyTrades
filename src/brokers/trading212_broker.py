@@ -28,6 +28,7 @@ class Trading212Broker(BrokerInterface):
         self._instruments_ready = False
         self._ticker_cache = {}
         self._reverse_ticker_cache = {}
+        self._logged_position_keys = False
         self._positions_cache = []
         self._positions_cache_ts = 0
         self._account_cache = {}
@@ -196,9 +197,22 @@ class Trading212Broker(BrokerInterface):
                     return self._positions_cache or []
 
                 positions = []
+                _first_fetch = not self._logged_position_keys
+                if raw_positions and _first_fetch:
+                    sample = raw_positions[0] if raw_positions else {}
+                    print(f"[T212] Position data keys: {list(sample.keys()) if isinstance(sample, dict) else type(sample)}", flush=True)
+                    self._logged_position_keys = True
                 for pos in raw_positions:
                     ticker = pos.get('ticker', '')
+                    if not ticker:
+                        ticker = (pos.get('instrumentCode', '') or pos.get('shortName', '') or '').strip()
+                    if not ticker:
+                        _fallback_name = (pos.get('name', '') or '').strip()
+                        if _fallback_name and ' ' not in _fallback_name:
+                            ticker = _fallback_name
                     symbol = self._reverse_translate(ticker)
+                    if not symbol and ticker:
+                        symbol = ticker.upper().strip()
                     quantity = float(pos.get('quantity', 0))
                     avg_price = float(pos.get('averagePrice', 0))
                     current_price = float(pos.get('currentPrice', 0))
@@ -216,6 +230,9 @@ class Trading212Broker(BrokerInterface):
                         'broker': 'TRADING212',
                     })
 
+                if _first_fetch and positions:
+                    _sample_syms = [(p['symbol'], p['ticker']) for p in positions[:5]]
+                    print(f"[T212] Position symbol mapping (first 5): {_sample_syms}", flush=True)
                 self._positions_cache = positions
                 self._positions_cache_ts = now
                 return positions
