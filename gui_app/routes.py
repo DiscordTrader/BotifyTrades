@@ -3249,6 +3249,7 @@ def register_routes(app):
             report = uph.get_shadow_report()
             report['active'] = uph.is_active()
             report['polling'] = uph._poll_running
+            report['subscribed_hubs'] = list(uph._subscribed_hubs.keys()) if hasattr(uph, '_subscribed_hubs') else []
             return jsonify(report)
         except Exception as e:
             return jsonify({'error': str(e), 'active': False})

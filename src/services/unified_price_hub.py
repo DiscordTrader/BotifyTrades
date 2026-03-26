@@ -121,9 +121,13 @@ class UnifiedPriceHub:
         self._poll_interval = 2.0
         self._poll_state_lock = threading.Lock()
 
+        self._subscribed_hubs: Dict[str, Callable] = {}
+        self._subscribe_lock = threading.Lock()
+
         self._stats = {
             'hits': 0, 'misses': 0, 'cross_hub_fills': 0,
             'stale_detections': 0, 'total_updates': 0,
+            'streaming_ticks': 0,
         }
         self._stats_lock = threading.Lock()
 
@@ -168,6 +172,75 @@ class UnifiedPriceHub:
             self._hub_cache = hubs
             self._hub_cache_ts = now
         return dict(hubs)
+
+    def _subscribe_to_hubs(self):
+        hubs = self._get_hubs()
+        newly_subscribed = []
+        with self._subscribe_lock:
+            for hub_key, hub in hubs.items():
+                if hub_key in self._subscribed_hubs:
+                    continue
+                if not hasattr(hub, 'on'):
+                    continue
+                callback = self._make_hub_callback(hub_key, hub)
+                try:
+                    hub.on('quote_updated', callback)
+                    self._subscribed_hubs[hub_key] = callback
+                    newly_subscribed.append(hub_key)
+                except Exception as e:
+                    print(f"[UPH] ⚠️ Failed to subscribe to {hub_key}: {e}", flush=True)
+        if newly_subscribed:
+            print(f"[UPH] ✓ Subscribed to real-time events: {newly_subscribed}", flush=True)
+
+    def _make_hub_callback(self, hub_key: str, hub) -> Callable:
+        def _on_quote_updated(event_data):
+            try:
+                if not isinstance(event_data, dict):
+                    return
+                symbol = event_data.get('symbol')
+                if not symbol:
+                    return
+
+                quote_obj = event_data.get('quote')
+                if quote_obj is not None:
+                    data = {}
+                    for attr in ('bid', 'ask', 'last', 'volume', 'high', 'low',
+                                 'delta', 'gamma', 'theta', 'vega'):
+                        val = getattr(quote_obj, attr, None)
+                        if val is not None:
+                            data[attr] = val
+                    price = getattr(quote_obj, 'last', None) or getattr(quote_obj, 'price', None)
+                    if price and price > 0:
+                        data['last'] = price
+                    ts = getattr(quote_obj, 'timestamp', None)
+                    if ts:
+                        data['timestamp'] = ts
+                    if data.get('last', 0) > 0 or data.get('bid', 0) > 0:
+                        self._update_cache(symbol, data, hub_key)
+                        with self._stats_lock:
+                            self._stats['streaming_ticks'] += 1
+                else:
+                    try:
+                        if hasattr(hub, 'get_quote'):
+                            q = hub.get_quote(symbol)
+                            if q:
+                                data = {}
+                                for attr in ('bid', 'ask', 'last', 'volume', 'high', 'low'):
+                                    val = getattr(q, attr, None)
+                                    if val is not None:
+                                        data[attr] = val
+                                ts = getattr(q, 'timestamp', None)
+                                if ts:
+                                    data['timestamp'] = ts
+                                if data.get('last', 0) > 0 or data.get('bid', 0) > 0:
+                                    self._update_cache(symbol, data, hub_key)
+                                    with self._stats_lock:
+                                        self._stats['streaming_ticks'] += 1
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        return _on_quote_updated
 
     def _classify_freshness(self, quote: UnifiedQuote) -> str:
         age = quote.price_age_seconds
@@ -417,11 +490,12 @@ class UnifiedPriceHub:
         with self._poll_state_lock:
             if self._poll_running:
                 return
-            self._poll_interval = interval
+            self._poll_interval = max(interval, 2.0)
             self._poll_running = True
             self._poll_thread = threading.Thread(target=self._poll_loop, daemon=True, name="UPH-Poller")
             self._poll_thread.start()
-        print(f"[UPH] Background polling started (interval={interval}s)", flush=True)
+        self._subscribe_to_hubs()
+        print(f"[UPH] Background polling started (fallback interval={self._poll_interval}s, event-driven=primary)", flush=True)
 
     def stop_polling(self):
         with self._poll_state_lock:
@@ -433,9 +507,11 @@ class UnifiedPriceHub:
         print("[UPH] Background polling stopped", flush=True)
 
     def _poll_loop(self):
-        print(f"[UPH] Poll loop thread started", flush=True)
+        print(f"[UPH] Poll loop thread started (event-driven primary, poll fallback)", flush=True)
         while self._poll_running:
             try:
+                self._subscribe_to_hubs()
+
                 updated = self.poll_all_hubs()
 
                 stale = self.get_stale_symbols()
@@ -448,7 +524,12 @@ class UnifiedPriceHub:
                     self._shadow_last_log = now
                     hubs = self._get_hubs()
                     hub_info = {k: hasattr(v, 'is_streaming') and v.is_streaming() for k, v in hubs.items()}
-                    print(f"[UPH] Hubs: {hub_info} | Last poll updated: {updated}", flush=True)
+                    with self._subscribe_lock:
+                        sub_count = len(self._subscribed_hubs)
+                        sub_keys = list(self._subscribed_hubs.keys())
+                    with self._stats_lock:
+                        streaming_ticks = self._stats.get('streaming_ticks', 0)
+                    print(f"[UPH] Hubs: {hub_info} | Subscribed: {sub_keys} | StreamTicks: {streaming_ticks} | PollUpdated: {updated}", flush=True)
                     report = self.get_shadow_report()
                     shadow_checks = report['stats'].get('shadow_checks', 0)
                     shadow_matches = report['stats'].get('shadow_matches', 0)
