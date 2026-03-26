@@ -12374,62 +12374,67 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # Check for HENGY ALERTS embed signals first (multi-ticker breakout watchlists)
                     if hengy_signals and channel_info and channel_info.get('conditional_order_enabled'):
-                        try:
-                            from src.services.conditional_orders.router import conditional_order_router
-                            if conditional_order_router.is_enabled():
-                                cond_channel_id = str(message.channel.id)
-                                cond_brokers = self._get_channel_brokers(channel_info)
-                                if cond_brokers:
-                                    for h_sig in hengy_signals:
-                                        h_sig['message_id'] = str(message.id)
-                                        h_sig['author_id'] = str(message.author.id)
-                                        h_sig['author_name'] = str(message.author)
-                                        for cond_broker in cond_brokers:
-                                            order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
-                                            if order_id:
-                                                print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}]")
-                                                try:
-                                                    from src.services.signal_conversation_state import get_conversation_state_manager
-                                                    state_mgr = get_conversation_state_manager()
-                                                    state_mgr.register_signal(
-                                                        message_id=int(message.id),
-                                                        channel_id=int(message.channel.id),
-                                                        author_id=int(message.author.id),
-                                                        timestamp=message.created_at,
-                                                        symbol=h_sig['symbol'],
-                                                        order_id=order_id
-                                                    )
-                                                except Exception as ctx_err:
-                                                    print(f"[HENGY] ⚠️ Conversation state error: {ctx_err}")
-                                                try:
-                                                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
-                                                    cond_signal = {
-                                                        'action': 'BTO',
-                                                        'symbol': h_sig['symbol'],
-                                                        'qty': 1,
-                                                        'price': h_sig.get('trigger_price', 0),
-                                                        'asset': 'stock',
-                                                        '_conditional_order_id': order_id
-                                                    }
-                                                    self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
-                                                except Exception as save_err:
-                                                    print(f"[HENGY] ⚠️ DB save error: {save_err}")
-                                            else:
-                                                print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
-                                else:
-                                    print(f"[HENGY] ❌ No broker configured for channel {cond_channel_id}")
-                                return
-                        except Exception as hengy_route_err:
-                            import traceback
-                            print(f"[HENGY] ⚠️ Routing error: {hengy_route_err}")
-                            traceback.print_exc()
+                        if not execute_enabled:
+                            print(f"[HENGY] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                        else:
+                            try:
+                                from src.services.conditional_orders.router import conditional_order_router
+                                if conditional_order_router.is_enabled():
+                                    cond_channel_id = str(message.channel.id)
+                                    cond_brokers = self._get_channel_brokers(channel_info)
+                                    if cond_brokers:
+                                        for h_sig in hengy_signals:
+                                            h_sig['message_id'] = str(message.id)
+                                            h_sig['author_id'] = str(message.author.id)
+                                            h_sig['author_name'] = str(message.author)
+                                            for cond_broker in cond_brokers:
+                                                order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
+                                                if order_id:
+                                                    print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}]")
+                                                    try:
+                                                        from src.services.signal_conversation_state import get_conversation_state_manager
+                                                        state_mgr = get_conversation_state_manager()
+                                                        state_mgr.register_signal(
+                                                            message_id=int(message.id),
+                                                            channel_id=int(message.channel.id),
+                                                            author_id=int(message.author.id),
+                                                            timestamp=message.created_at,
+                                                            symbol=h_sig['symbol'],
+                                                            order_id=order_id
+                                                        )
+                                                    except Exception as ctx_err:
+                                                        print(f"[HENGY] ⚠️ Conversation state error: {ctx_err}")
+                                                    try:
+                                                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                        cond_signal = {
+                                                            'action': 'BTO',
+                                                            'symbol': h_sig['symbol'],
+                                                            'qty': 1,
+                                                            'price': h_sig.get('trigger_price', 0),
+                                                            'asset': 'stock',
+                                                            '_conditional_order_id': order_id
+                                                        }
+                                                        self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                    except Exception as save_err:
+                                                        print(f"[HENGY] ⚠️ DB save error: {save_err}")
+                                                else:
+                                                    print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
+                                    else:
+                                        print(f"[HENGY] ❌ No broker configured for channel {cond_channel_id}")
+                                    return
+                            except Exception as hengy_route_err:
+                                import traceback
+                                print(f"[HENGY] ⚠️ Routing error: {hengy_route_err}")
+                                traceback.print_exc()
                     
                     # Check for CONDITIONAL ORDER signals (e.g., "AAPL over 150 SL 5%")
                     try:
                         from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
                         from src.services.conditional_orders.router import conditional_order_router
                         
-                        if is_conditional_order_signal(combined_content, require_sl_pt=False) and conditional_order_router.is_enabled():
+                        if not execute_enabled:
+                            pass
+                        elif is_conditional_order_signal(combined_content, require_sl_pt=False) and conditional_order_router.is_enabled():
                             cond_channel_id = str(message.channel.id)
                             print(f"[COND ORDER] ✓ Detected conditional order signal in channel {cond_channel_id}")
                             parsed_cond = parse_conditional_order_signal(combined_content)
@@ -12784,20 +12789,120 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if channel_info and channel_info.get('conditional_order_enabled') and not message.content.strip().startswith('!'):
                 # HENGY ALERTS: Route embed-based breakout signals to conditional orders
                 if hengy_signals:
+                    if not execute_enabled:
+                        print(f"[HENGY] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                    else:
+                        try:
+                            from src.services.conditional_orders.router import conditional_order_router
+                            if conditional_order_router.is_enabled():
+                                cond_channel_id = str(message.channel.id)
+                                cond_brokers = self._get_channel_brokers(channel_info)
+                                if cond_brokers:
+                                    for h_sig in hengy_signals:
+                                        h_sig['message_id'] = str(message.id)
+                                        h_sig['author_id'] = str(message.author.id)
+                                        h_sig['author_name'] = str(message.author)
+                                        for cond_broker in cond_brokers:
+                                            order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
+                                            if order_id:
+                                                print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}]")
+                                                try:
+                                                    from src.services.signal_conversation_state import get_conversation_state_manager
+                                                    state_mgr = get_conversation_state_manager()
+                                                    state_mgr.register_signal(
+                                                        message_id=int(message.id),
+                                                        channel_id=int(message.channel.id),
+                                                        author_id=int(message.author.id),
+                                                        timestamp=message.created_at,
+                                                        symbol=h_sig['symbol'],
+                                                        order_id=order_id
+                                                    )
+                                                except Exception:
+                                                    pass
+                                                try:
+                                                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                    cond_signal = {
+                                                        'action': 'BTO',
+                                                        'symbol': h_sig['symbol'],
+                                                        'qty': 1,
+                                                        'price': h_sig.get('trigger_price', 0),
+                                                        'asset': 'stock',
+                                                        '_conditional_order_id': order_id
+                                                    }
+                                                    self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                except Exception:
+                                                    pass
+                                            else:
+                                                print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
+                                else:
+                                    print(f"[HENGY] ❌ No broker configured for channel {cond_channel_id}")
+                                return
+                        except Exception as hengy_route_err:
+                            import traceback
+                            print(f"[HENGY] ⚠️ Routing error: {hengy_route_err}")
+                            traceback.print_exc()
+                
+                if execute_enabled:
                     try:
+                        from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
                         from src.services.conditional_orders.router import conditional_order_router
-                        if conditional_order_router.is_enabled():
+                        
+                        if is_conditional_order_signal(combined_content, require_sl_pt=False) and conditional_order_router.is_enabled():
                             cond_channel_id = str(message.channel.id)
-                            cond_brokers = self._get_channel_brokers(channel_info)
-                            if cond_brokers:
-                                for h_sig in hengy_signals:
-                                    h_sig['message_id'] = str(message.id)
-                                    h_sig['author_id'] = str(message.author.id)
-                                    h_sig['author_name'] = str(message.author)
-                                    for cond_broker in cond_brokers:
-                                        order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
-                                        if order_id:
-                                            print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}]")
+                            print(f"[COND ORDER] ✓ Detected conditional order signal in non-mapped channel {cond_channel_id}")
+                            parsed_cond = parse_conditional_order_signal(combined_content)
+                            if parsed_cond:
+                                parsed_cond['message_id'] = str(message.id)
+                                parsed_cond['author_id'] = str(message.author.id)
+                                parsed_cond['author_name'] = str(message.author)
+                                
+                                cond_brokers = []
+                                if channel_info:
+                                    if channel_info.get('enabled_brokers'):
+                                        try:
+                                            import json
+                                            enabled = channel_info.get('enabled_brokers')
+                                            if isinstance(enabled, str):
+                                                enabled = json.loads(enabled)
+                                            if enabled and len(enabled) > 0:
+                                                broker_map = {
+                                                    'WEBULL': 'Webull',
+                                                    'ALPACA': 'ALPACA_PAPER',
+                                                    'ALPACA_PAPER': 'ALPACA_PAPER',
+                                                    'TASTYTRADE': 'TASTYTRADE',
+                                                    'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
+                                                    'IBKR': 'IBKR',
+                                                    'IBKR_PAPER': 'IBKR_PAPER',
+                                                    'SCHWAB': 'SCHWAB',
+                                                    'ROBINHOOD': 'ROBINHOOD',
+                                                    'UPSTOX': 'UPSTOX',
+                                                    'ZERODHA': 'ZERODHA',
+                                                    'DHANQ': 'DHANQ',
+                                                    'QUESTRADE': 'QUESTRADE',
+                                                    'TRADING212': 'TRADING212',
+                                                    'TRADING212_PAPER': 'TRADING212_PAPER'
+                                                }
+                                                for b in enabled:
+                                                    cond_brokers.append(broker_map.get(b.upper(), b.upper()))
+                                                print(f"[COND ORDER] Using channel enabled_brokers: {enabled} -> {cond_brokers}")
+                                        except Exception as e:
+                                            print(f"[COND ORDER] Error parsing enabled_brokers: {e}")
+                                    elif channel_info.get('broker_override'):
+                                        cond_brokers = [channel_info.get('broker_override')]
+                                        print(f"[COND ORDER] Using channel broker_override: {cond_brokers[0]}")
+
+                                if not cond_brokers:
+                                    print(f"[COND ORDER] ❌ REJECTED: No broker configured for channel {cond_channel_id}")
+                                    return
+
+                                first_order_id = None
+                                for cond_broker in cond_brokers:
+                                    order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
+                                    if order_id:
+                                        trigger_type = parsed_cond.get('trigger_type', 'over')
+                                        print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']} [{cond_broker}]")
+                                        if first_order_id is None:
+                                            first_order_id = order_id
                                             try:
                                                 from src.services.signal_conversation_state import get_conversation_state_manager
                                                 state_mgr = get_conversation_state_manager()
@@ -12806,135 +12911,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     channel_id=int(message.channel.id),
                                                     author_id=int(message.author.id),
                                                     timestamp=message.created_at,
-                                                    symbol=h_sig['symbol'],
+                                                    symbol=parsed_cond['symbol'],
                                                     order_id=order_id
                                                 )
-                                            except Exception:
-                                                pass
+                                                print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
+                                            except Exception as ctx_err:
+                                                print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
                                             try:
                                                 author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
                                                 cond_signal = {
                                                     'action': 'BTO',
-                                                    'symbol': h_sig['symbol'],
-                                                    'qty': 1,
-                                                    'price': h_sig.get('trigger_price', 0),
-                                                    'asset': 'stock',
-                                                    '_conditional_order_id': order_id
+                                                    'symbol': parsed_cond['symbol'],
+                                                    'qty': parsed_cond.get('calculated_qty', 1),
+                                                    'asset': parsed_cond.get('asset_type', 'stock'),
+                                                    'channel_id': cond_channel_id,
+                                                    'author': author_name,
+                                                    'message_content': message.content[:200],
+                                                    'is_conditional': True,
+                                                    'trigger_price': parsed_cond['trigger_price'],
+                                                    'trigger_type': trigger_type,
                                                 }
-                                                self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                from gui_app import database as db
+                                                db.add_signal(cond_signal)
                                             except Exception:
                                                 pass
-                                        else:
-                                            print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
-                            else:
-                                print(f"[HENGY] ❌ No broker configured for channel {cond_channel_id}")
-                            return
-                    except Exception as hengy_route_err:
-                        import traceback
-                        print(f"[HENGY] ⚠️ Routing error: {hengy_route_err}")
-                        traceback.print_exc()
-                
-                try:
-                    from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
-                    from src.services.conditional_orders.router import conditional_order_router
-                    
-                    if is_conditional_order_signal(combined_content, require_sl_pt=False) and conditional_order_router.is_enabled():
-                        cond_channel_id = str(message.channel.id)
-                        print(f"[COND ORDER] ✓ Detected conditional order signal in non-mapped channel {cond_channel_id}")
-                        parsed_cond = parse_conditional_order_signal(combined_content)
-                        if parsed_cond:
-                            parsed_cond['message_id'] = str(message.id)
-                            parsed_cond['author_id'] = str(message.author.id)
-                            parsed_cond['author_name'] = str(message.author)
-                            
-                            cond_brokers = []
-                            if channel_info:
-                                if channel_info.get('enabled_brokers'):
-                                    try:
-                                        import json
-                                        enabled = channel_info.get('enabled_brokers')
-                                        if isinstance(enabled, str):
-                                            enabled = json.loads(enabled)
-                                        if enabled and len(enabled) > 0:
-                                            broker_map = {
-                                                'WEBULL': 'Webull',
-                                                'ALPACA': 'ALPACA_PAPER',
-                                                'ALPACA_PAPER': 'ALPACA_PAPER',
-                                                'TASTYTRADE': 'TASTYTRADE',
-                                                'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
-                                                'IBKR': 'IBKR',
-                                                'IBKR_PAPER': 'IBKR_PAPER',
-                                                'SCHWAB': 'SCHWAB',
-                                                'ROBINHOOD': 'ROBINHOOD',
-                                                'UPSTOX': 'UPSTOX',
-                                                'ZERODHA': 'ZERODHA',
-                                                'DHANQ': 'DHANQ',
-                                                'QUESTRADE': 'QUESTRADE',
-                                                'TRADING212': 'TRADING212',
-                                                'TRADING212_PAPER': 'TRADING212_PAPER'
-                                            }
-                                            for b in enabled:
-                                                cond_brokers.append(broker_map.get(b.upper(), b.upper()))
-                                            print(f"[COND ORDER] Using channel enabled_brokers: {enabled} -> {cond_brokers}")
-                                    except Exception as e:
-                                        print(f"[COND ORDER] Error parsing enabled_brokers: {e}")
-                                elif channel_info.get('broker_override'):
-                                    cond_brokers = [channel_info.get('broker_override')]
-                                    print(f"[COND ORDER] Using channel broker_override: {cond_brokers[0]}")
+                                    else:
+                                        print(f"[COND ORDER] ⚠️ Failed to create conditional order for {cond_broker}")
 
-                            if not cond_brokers:
-                                print(f"[COND ORDER] ❌ REJECTED: No broker configured for channel {cond_channel_id}")
                                 return
-
-                            # Create one conditional order per configured broker
-                            first_order_id = None
-                            for cond_broker in cond_brokers:
-                                order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
-                                if order_id:
-                                    trigger_type = parsed_cond.get('trigger_type', 'over')
-                                    print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']} [{cond_broker}]")
-                                    if first_order_id is None:
-                                        first_order_id = order_id
-                                        try:
-                                            from src.services.signal_conversation_state import get_conversation_state_manager
-                                            state_mgr = get_conversation_state_manager()
-                                            state_mgr.register_signal(
-                                                message_id=int(message.id),
-                                                channel_id=int(message.channel.id),
-                                                author_id=int(message.author.id),
-                                                timestamp=message.created_at,
-                                                symbol=parsed_cond['symbol'],
-                                                order_id=order_id
-                                            )
-                                            print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
-                                        except Exception as ctx_err:
-                                            print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
-                                        try:
-                                            author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
-                                            cond_signal = {
-                                                'action': 'BTO',
-                                                'symbol': parsed_cond['symbol'],
-                                                'qty': parsed_cond.get('calculated_qty', 1),
-                                                'asset': parsed_cond.get('asset_type', 'stock'),
-                                                'channel_id': cond_channel_id,
-                                                'author': author_name,
-                                                'message_content': message.content[:200],
-                                                'is_conditional': True,
-                                                'trigger_price': parsed_cond['trigger_price'],
-                                                'trigger_type': trigger_type,
-                                            }
-                                            from gui_app import database as db
-                                            db.add_signal(cond_signal)
-                                        except Exception:
-                                            pass
-                                else:
-                                    print(f"[COND ORDER] ⚠️ Failed to create conditional order for {cond_broker}")
-
-                            return
-                except Exception as e:
-                    print(f"[COND ORDER] Error checking conditional order: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    except Exception as e:
+                        print(f"[COND ORDER] Error checking conditional order: {e}")
+                        import traceback
+                        traceback.print_exc()
         
         # Handle AI commands (only in designated AI channel)
         if ENABLE_AI_COMMANDS and AI_CHANNEL_ID and message.channel.id == AI_CHANNEL_ID:
@@ -13264,6 +13272,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Route Indian CONDITIONAL orders (with ABOVE/BELOW) to conditional order router
         if opt and opt.get('_conditional_order') and opt.get('market') == 'INDIA':
             print(f"[INDIA CONDITIONAL] ✓ Detected conditional order: {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt.get('trigger_type')} ₹{opt.get('trigger_price')}")
+            if not execute_enabled:
+                print(f"[INDIA CONDITIONAL] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                return
             
             try:
                 from src.services.conditional_orders.router import conditional_order_router
@@ -13386,6 +13397,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if registry_result and registry_result.get('_conditional_order'):
                 fmt_name = registry_result.get('format', 'REGISTRY')
                 print(f"[{fmt_name}] ✓ Detected conditional stock signal: {registry_result.get('symbol')} trigger={registry_result.get('trigger_type')} @ ${registry_result.get('trigger_price')}")
+                if not execute_enabled:
+                    print(f"[{fmt_name}] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                    return
                 if registry_result.get('stop_loss_value'):
                     print(f"[{fmt_name}]   SL: ${registry_result['stop_loss_value']}")
                 if registry_result.get('profit_targets'):
@@ -13610,8 +13624,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Check for conditional order signal FIRST (before regular BTO/STC parsing)
         # This routes price-triggered orders to the conditional order service
         if is_conditional_order_signal(normalized_content, require_sl_pt=False):
-            conditional_signal = parse_conditional_order_signal(normalized_content)
-            if conditional_signal:
+            if not execute_enabled:
+                print(f"[CONDITIONAL] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+            else:
+              conditional_signal = parse_conditional_order_signal(normalized_content)
+              if conditional_signal:
                 conditional_signal['author_name'] = str(message.author)
                 conditional_signal['author_id'] = str(message.author.id)
                 conditional_signal['message_id'] = str(message.id)
@@ -14540,62 +14557,61 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[DEBUG] CONDITIONAL CHECK: enabled={conditional_order_enabled}, trigger_price={trigger_price}, trigger_condition={trigger_condition}, trigger_symbol={trigger_symbol}")
                 
                 if (conditional_order_enabled or opt.get('_entry_confirmation')) and trigger_price and trigger_condition:
-                    print(f"[CONDITIONAL] ✓ Detected trigger: {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
-                    print(f"[CONDITIONAL] Channel has conditional orders ENABLED - routing to conditional order service")
-                    
-                    try:
-                        from src.services.conditional_orders import conditional_order_router
+                    if not execute_enabled:
+                        print(f"[CONDITIONAL] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                    else:
+                        print(f"[CONDITIONAL] ✓ Detected trigger: {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
+                        print(f"[CONDITIONAL] Channel has conditional orders ENABLED - routing to conditional order service")
                         
-                        if not conditional_order_router.is_enabled():
-                            print(f"[CONDITIONAL] ⚠️ Conditional order service DISABLED - executing immediately")
-                        else:
-                            # Build parsed_signal dict for the router
-                            # Map 'above'/'below' to 'over'/'under' for consistency with UI and backend
-                            mapped_trigger_type = 'over' if trigger_condition.lower() == 'above' else 'under'
-                            parsed_signal = {
-                                'symbol': opt.get('symbol'),
-                                'action': opt.get('action', 'BTO'),
-                                'qty': opt.get('qty', 1),
-                                'asset': opt.get('asset', 'option'),
-                                'trigger_type': mapped_trigger_type,
-                                'trigger_price': float(trigger_price),
-                                'trigger_symbol': opt.get('trigger_symbol') or opt.get('symbol'),
-                                'channel_record_id': opt.get('channel_record_id'),
-                                'message_id': str(message.id),
-                                'author_name': str(message.author),
-                                'author_id': str(message.author.id),
-                                'market': 'US',
-                                '_entry_confirmation': opt.get('_entry_confirmation', False),
-                            }
+                        try:
+                            from src.services.conditional_orders import conditional_order_router
                             
-                            # Add option details if present
-                            if opt.get('strike'):
-                                parsed_signal['strike'] = opt.get('strike')
-                                parsed_signal['opt_type'] = opt.get('opt_type')
-                                parsed_signal['expiry'] = opt.get('expiry')
-                            
-                            # Get first enabled broker for the order
-                            enabled_brokers = opt.get('_enabled_brokers', [])
-                            broker = enabled_brokers[0] if enabled_brokers else 'ALPACA_PAPER'
-                            
-                            order_id = conditional_order_router.create_order(
-                                channel_id=str(message.channel.id),
-                                parsed_signal=parsed_signal,
-                                broker=broker
-                            )
-                            
-                            if order_id:
-                                print(f"[CONDITIONAL] ✓ Created conditional order #{order_id}")
-                                print(f"[CONDITIONAL]   {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
-                                print(f"[CONDITIONAL]   Monitoring for trigger... (will execute when price condition met)")
-                                return  # Don't queue for immediate execution
+                            if not conditional_order_router.is_enabled():
+                                print(f"[CONDITIONAL] ⚠️ Conditional order service DISABLED - executing immediately")
                             else:
-                                print(f"[CONDITIONAL] ❌ Failed to create conditional order - falling back to immediate execution")
-                    except Exception as cond_err:
-                        print(f"[CONDITIONAL] ❌ Error routing to conditional service: {cond_err}")
-                        import traceback
-                        traceback.print_exc()
-                        print(f"[CONDITIONAL] Falling back to immediate execution")
+                                mapped_trigger_type = 'over' if trigger_condition.lower() == 'above' else 'under'
+                                parsed_signal = {
+                                    'symbol': opt.get('symbol'),
+                                    'action': opt.get('action', 'BTO'),
+                                    'qty': opt.get('qty', 1),
+                                    'asset': opt.get('asset', 'option'),
+                                    'trigger_type': mapped_trigger_type,
+                                    'trigger_price': float(trigger_price),
+                                    'trigger_symbol': opt.get('trigger_symbol') or opt.get('symbol'),
+                                    'channel_record_id': opt.get('channel_record_id'),
+                                    'message_id': str(message.id),
+                                    'author_name': str(message.author),
+                                    'author_id': str(message.author.id),
+                                    'market': 'US',
+                                    '_entry_confirmation': opt.get('_entry_confirmation', False),
+                                }
+                                
+                                if opt.get('strike'):
+                                    parsed_signal['strike'] = opt.get('strike')
+                                    parsed_signal['opt_type'] = opt.get('opt_type')
+                                    parsed_signal['expiry'] = opt.get('expiry')
+                                
+                                enabled_brokers = opt.get('_enabled_brokers', [])
+                                broker = enabled_brokers[0] if enabled_brokers else 'ALPACA_PAPER'
+                                
+                                order_id = conditional_order_router.create_order(
+                                    channel_id=str(message.channel.id),
+                                    parsed_signal=parsed_signal,
+                                    broker=broker
+                                )
+                                
+                                if order_id:
+                                    print(f"[CONDITIONAL] ✓ Created conditional order #{order_id}")
+                                    print(f"[CONDITIONAL]   {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
+                                    print(f"[CONDITIONAL]   Monitoring for trigger... (will execute when price condition met)")
+                                    return
+                                else:
+                                    print(f"[CONDITIONAL] ❌ Failed to create conditional order - falling back to immediate execution")
+                        except Exception as cond_err:
+                            print(f"[CONDITIONAL] ❌ Error routing to conditional service: {cond_err}")
+                            import traceback
+                            traceback.print_exc()
+                            print(f"[CONDITIONAL] Falling back to immediate execution")
                 
                 if opt.get('_ndx_rejected'):
                     print(f"[QUEUE] ⛔ Signal SKIPPED - already rejected (see Dashboard)")
@@ -15144,8 +15160,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
                 stk_entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
                 if stk_entry_confirmation_pct > 0 and stk.get('action', '').upper() == 'BTO':
-                    stk_watching_price = stk.get('trigger_price') or stk.get('price')
-                    if stk_watching_price and float(stk_watching_price) > 0:
+                    if not execute_enabled:
+                        print(f"[ENTRY CONFIRM] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                    else:
+                      stk_watching_price = stk.get('trigger_price') or stk.get('price')
+                      if stk_watching_price and float(stk_watching_price) > 0:
                         stk_confirmation_trigger = round(float(stk_watching_price) * (1 + stk_entry_confirmation_pct / 100), 4)
                         print(f"[ENTRY CONFIRM] ✓ Stock BTO requires +{stk_entry_confirmation_pct}% above ${stk_watching_price} → trigger ${stk_confirmation_trigger}")
                         
