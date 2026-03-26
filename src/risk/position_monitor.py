@@ -4886,6 +4886,7 @@ class RiskManager:
         webull_updated = 0
         schwab_updated = 0
         stale_skipped = 0
+        _hub_updated_ids = set()
         
         try:
             from src.services.webull_data_hub import get_webull_data_hub
@@ -4920,9 +4921,11 @@ class RiskManager:
                                 pos.current_price = price
                                 del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 webull_updated += 1
+                                _hub_updated_ids.add(id(pos))
                         else:
                             pos.current_price = price
                             webull_updated += 1
+                            _hub_updated_ids.add(id(pos))
         except ImportError:
             pass
         except Exception as e:
@@ -4959,9 +4962,11 @@ class RiskManager:
                                 pos.current_price = price
                                 del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 schwab_updated += 1
+                                _hub_updated_ids.add(id(pos))
                         else:
                             pos.current_price = price
                             schwab_updated += 1
+                            _hub_updated_ids.add(id(pos))
         except ImportError:
             pass
         except Exception as e:
@@ -4999,9 +5004,11 @@ class RiskManager:
                                 pos.current_price = price
                                 del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
                                 ibkr_updated += 1
+                                _hub_updated_ids.add(id(pos))
                         else:
                             pos.current_price = price
                             ibkr_updated += 1
+                            _hub_updated_ids.add(id(pos))
         except ImportError:
             pass
         except Exception as e:
@@ -5026,49 +5033,90 @@ class RiskManager:
                             continue
                         pos.current_price = price
                         t212_updated += 1
+                        _hub_updated_ids.add(id(pos))
         except ImportError:
             pass
         except Exception as e:
             print(f"[RISK] ⚠️ Trading212 hub price update error: {e}")
 
         cross_updated = 0
-        _streaming_prefixes = ('WEBULL', 'SCHWAB', 'IBKR')
         for pos in positions:
-            if pos.broker.upper().startswith(_streaming_prefixes):
+            if id(pos) in _hub_updated_ids:
                 continue
             if pos.asset == 'option':
                 continue
-            price = None
-            _cross_ts = None
-            try:
-                from src.services.webull_data_hub import get_webull_data_hub
-                wb_hub = get_webull_data_hub()
-                if wb_hub.is_streaming():
-                    price = self._get_fresh_hub_price(wb_hub, pos.symbol)
-                    if price:
-                        _cross_ts = self._get_hub_quote_ts(wb_hub, pos.symbol)
-            except Exception:
-                pass
-            if not price:
+            _broker_upper = pos.broker.upper()
+            _cross_candidates = []
+            if 'WEBULL' not in _broker_upper:
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    wb_hub = get_webull_data_hub()
+                    if wb_hub.is_streaming():
+                        _p = self._get_fresh_hub_price(wb_hub, pos.symbol)
+                        if _p and _p > 0:
+                            _cross_candidates.append((_p, self._get_hub_quote_ts(wb_hub, pos.symbol), 'Webull'))
+                except Exception:
+                    pass
+            if 'SCHWAB' not in _broker_upper:
                 try:
                     from src.services.schwab_data_hub import get_schwab_data_hub
                     sc_hub = get_schwab_data_hub()
                     if sc_hub.is_streaming():
-                        price = self._get_fresh_hub_price(sc_hub, pos.symbol)
-                        if price:
-                            _cross_ts = self._get_hub_quote_ts(sc_hub, pos.symbol)
+                        _p = self._get_fresh_hub_price(sc_hub, pos.symbol)
+                        if _p and _p > 0:
+                            _cross_candidates.append((_p, self._get_hub_quote_ts(sc_hub, pos.symbol), 'Schwab'))
                 except Exception:
                     pass
-            if price and price > 0:
-                if self._is_rest_repair_active(pos, hub_quote_ts=_cross_ts):
-                    repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
-                    if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
-                        pos.current_price = price
-                        del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+            if 'IBKR' not in _broker_upper:
+                try:
+                    from src.services.ibkr_data_hub import get_ibkr_data_hub
+                    ib_hub = get_ibkr_data_hub()
+                    if ib_hub.is_streaming():
+                        _p = self._get_fresh_hub_price(ib_hub, pos.symbol)
+                        if _p and _p > 0:
+                            _cross_candidates.append((_p, self._get_hub_quote_ts(ib_hub, pos.symbol), 'IBKR'))
+                except Exception:
+                    pass
+            if 'TRADING212' not in _broker_upper:
+                try:
+                    import time as _cx_time
+                    from src.services.trading212_data_hub import get_trading212_data_hub
+                    t212_hub = get_trading212_data_hub()
+                    if t212_hub and not t212_hub.is_stale:
+                        _cx_now = _cx_time.time()
+                        t212_price = t212_hub.get_quote_price(pos.symbol)
+                        t212_ts = t212_hub.get_quote_timestamp(pos.symbol)
+                        if t212_price and t212_price > 0 and t212_ts and (_cx_now - t212_ts) < self._HUB_PRICE_MAX_AGE:
+                            _cross_candidates.append((t212_price, t212_ts, 'T212'))
+                except Exception:
+                    pass
+            _cross_applied = False
+            _repair_key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
+            for _cp, _ct, _cs in _cross_candidates:
+                if self._is_rest_repair_active(pos, hub_quote_ts=_ct):
+                    repair = self._rest_repaired_prices.get(_repair_key)
+                    if repair and abs(_cp - repair['price']) > max(0.02, repair['price'] * 0.005):
+                        pos.current_price = _cp
+                        del self._rest_repaired_prices[_repair_key]
                         cross_updated += 1
+                        _hub_updated_ids.add(id(pos))
+                        _cross_applied = True
+                        _cross_source = _cs
+                        break
                 else:
-                    pos.current_price = price
+                    pos.current_price = _cp
                     cross_updated += 1
+                    _hub_updated_ids.add(id(pos))
+                    _cross_applied = True
+                    _cross_source = _cs
+                    break
+            if _cross_applied:
+                if not hasattr(self, '_cross_hub_logged'):
+                    self._cross_hub_logged = set()
+                _cross_log_key = f"{pos.broker}_{pos.symbol}"
+                if _cross_log_key not in self._cross_hub_logged:
+                    self._cross_hub_logged.add(_cross_log_key)
+                    print(f"[RISK] 🔄 CROSS-HUB: {pos.broker} {pos.symbol} price sourced from {_cross_source} streaming hub → ${pos.current_price:.4f}")
 
         if stale_skipped > 0:
             if not hasattr(self, '_stale_skip_count'):
