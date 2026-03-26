@@ -3616,9 +3616,15 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
                t.channel_id, t.message_id, t.source, t.risk_trigger, t.origin_trade_id,
                t.stop_loss_price, t.profit_target_price,
                COALESCE(c.name, 'Unknown') as channel_name, 
-               COALESCE(c.category, '') as channel_category
+               COALESCE(c.category, '') as channel_category,
+               fo.filled_price as broker_fill_price
         FROM trades t 
         LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+        LEFT JOIN filled_orders fo ON t.order_id IS NOT NULL AND t.order_id != ''
+            AND fo.broker_order_id = t.order_id
+            AND UPPER(fo.broker) = UPPER(t.broker)
+            AND ((t.direction = 'STC' AND fo.side IN ('STC', 'SELL', 'sell'))
+              OR (t.direction = 'BTO' AND fo.side IN ('BTO', 'BUY', 'buy')))
         WHERE t.channel_id IS NOT NULL AND t.channel_id != ''
           AND (t.hide_in_ui IS NULL OR t.hide_in_ui = 0)
     '''
@@ -3654,7 +3660,8 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
     positions = {}
     
     for tid, bto in bto_trades.items():
-        entry_price = float(bto.get('executed_price') or bto.get('intended_price') or 0)
+        bto_broker_fill = bto.get('broker_fill_price')
+        entry_price = float(bto_broker_fill) if bto_broker_fill and float(bto_broker_fill) > 0 else float(bto.get('executed_price') or bto.get('intended_price') or 0)
         current_price = float(bto.get('current_price') or 0) or entry_price
         bto_qty = int(bto.get('quantity') or 0)
         
@@ -3725,7 +3732,8 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
         
         if matched_bto_id:
             pos = positions[matched_bto_id]
-            exit_price = float(stc.get('executed_price') or stc.get('intended_price') or 0)
+            broker_fill = stc.get('broker_fill_price')
+            exit_price = float(broker_fill) if broker_fill and float(broker_fill) > 0 else float(stc.get('executed_price') or stc.get('intended_price') or 0)
             stc_qty = int(stc.get('quantity') or 0)
             entry_price = pos['entry_price']
             
@@ -4938,57 +4946,83 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
             print(f"[FILL-RECONCILE] ✓ STC trade #{stc_id} {symbol}: ${old_price:.4f} → ${fill_price:.4f} (broker fill)")
         
         origin_id = stc_trade['origin_trade_id']
+        bto_trade = None
         if origin_id:
             cursor.execute('''
                 SELECT id, executed_price, quantity, asset_type
                 FROM trades WHERE id = ? AND direction = 'BTO'
             ''', (origin_id,))
             bto_trade = cursor.fetchone()
-            
+        
+        if not bto_trade:
+            bto_fallback_query = '''
+                SELECT id, executed_price, quantity, asset_type
+                FROM trades
+                WHERE direction = 'BTO' AND UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                  AND status IN ('OPEN', 'PARTIAL', 'CLOSED')
+            '''
+            bto_fallback_params = [symbol, broker]
+            if asset_type == 'option' and strike is not None:
+                bto_fallback_query += ' AND strike = ?'
+                bto_fallback_params.append(strike)
+            if expiry:
+                bto_fallback_query += ' AND expiry = ?'
+                bto_fallback_params.append(expiry)
+            if call_put:
+                bto_fallback_query += ' AND call_put = ?'
+                bto_fallback_params.append(call_put)
+            bto_fallback_query += ' ORDER BY id DESC LIMIT 1'
+            cursor.execute(bto_fallback_query, bto_fallback_params)
+            bto_trade = cursor.fetchone()
             if bto_trade:
-                entry_price = float(bto_trade['executed_price'] or 0)
-                if entry_price > 0:
-                    cursor.execute('''
-                        SELECT id, quantity, executed_price FROM trades
-                        WHERE origin_trade_id = ? AND direction = 'STC'
-                          AND status IN ('CLOSED', 'OPEN', 'FILLED')
-                    ''', (origin_id,))
-                    all_stcs = cursor.fetchall()
-                    
-                    bto_qty = int(bto_trade['quantity'] or 0)
-                    multiplier = 100 if (bto_trade['asset_type'] or '').lower() == 'option' else 1
-                    total_pnl = 0
-                    total_closed_qty = 0
-                    
-                    for stc in all_stcs:
-                        sq = int(stc['quantity'] or 0)
-                        sp = float(stc['executed_price'] or 0)
-                        total_pnl += (sp - entry_price) * sq * multiplier
-                        total_closed_qty += sq
-                    
-                    if total_closed_qty > 0:
-                        weighted_exit = sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in all_stcs) / total_closed_qty
-                        pnl_percent = ((weighted_exit - entry_price) / entry_price * 100) if entry_price > 0 else 0
-                    else:
-                        pnl_percent = 0
-                    
-                    total_pnl = round(total_pnl, 2)
-                    pnl_percent = round(pnl_percent, 4)
-                    
-                    update_bto = 'UPDATE trades SET pnl = ?, pnl_percent = ?'
-                    update_params = [total_pnl, pnl_percent]
-                    
-                    if total_closed_qty >= bto_qty:
-                        update_bto += ', current_price = ?'
-                        update_params.append(fill_price)
-                    
-                    update_bto += ' WHERE id = ?'
-                    update_params.append(origin_id)
-                    cursor.execute(update_bto, update_params)
-                    
-                    if cursor.rowcount > 0:
-                        pnl_sign = '+' if total_pnl >= 0 else ''
-                        print(f"[FILL-RECONCILE] ✓ BTO trade #{origin_id} PNL recalculated: {pnl_sign}${total_pnl:.2f} ({pnl_percent:.2f}%)")
+                origin_id = bto_trade['id']
+                cursor.execute('UPDATE trades SET origin_trade_id = ? WHERE id = ?', (origin_id, stc_id))
+                print(f"[FILL-RECONCILE] ✓ Linked STC #{stc_id} → BTO #{origin_id} (fallback match)")
+        
+        if bto_trade:
+            entry_price = float(bto_trade['executed_price'] or 0)
+            if entry_price > 0:
+                cursor.execute('''
+                    SELECT id, quantity, executed_price FROM trades
+                    WHERE origin_trade_id = ? AND direction = 'STC'
+                      AND status IN ('CLOSED', 'OPEN', 'FILLED')
+                ''', (origin_id,))
+                all_stcs = cursor.fetchall()
+                
+                bto_qty = int(bto_trade['quantity'] or 0)
+                multiplier = 100 if (bto_trade['asset_type'] or '').lower() == 'option' else 1
+                total_pnl = 0
+                total_closed_qty = 0
+                
+                for stc in all_stcs:
+                    sq = int(stc['quantity'] or 0)
+                    sp = float(stc['executed_price'] or 0)
+                    total_pnl += (sp - entry_price) * sq * multiplier
+                    total_closed_qty += sq
+                
+                if total_closed_qty > 0:
+                    weighted_exit = sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in all_stcs) / total_closed_qty
+                    pnl_percent = ((weighted_exit - entry_price) / entry_price * 100) if entry_price > 0 else 0
+                else:
+                    pnl_percent = 0
+                
+                total_pnl = round(total_pnl, 2)
+                pnl_percent = round(pnl_percent, 4)
+                
+                update_bto = 'UPDATE trades SET pnl = ?, pnl_percent = ?'
+                update_params = [total_pnl, pnl_percent]
+                
+                if total_closed_qty >= bto_qty:
+                    update_bto += ', current_price = ?'
+                    update_params.append(fill_price)
+                
+                update_bto += ' WHERE id = ?'
+                update_params.append(origin_id)
+                cursor.execute(update_bto, update_params)
+                
+                if cursor.rowcount > 0:
+                    pnl_sign = '+' if total_pnl >= 0 else ''
+                    print(f"[FILL-RECONCILE] ✓ BTO trade #{origin_id} PNL recalculated: {pnl_sign}${total_pnl:.2f} ({pnl_percent:.2f}%)")
         
         conn.commit()
         return True
@@ -5073,32 +5107,55 @@ def backfill_trade_fill_prices():
                 results['stc_updated'] += 1
                 
                 origin_id = stc.get('origin_trade_id')
+                bto = None
                 if origin_id:
                     cursor.execute('''
                         SELECT id, executed_price, quantity, asset_type FROM trades
                         WHERE id = ? AND direction = 'BTO'
                     ''', (origin_id,))
                     bto = cursor.fetchone()
+                if not bto:
+                    bto_fb_q = '''
+                        SELECT id, executed_price, quantity, asset_type FROM trades
+                        WHERE direction = 'BTO' AND UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                          AND status IN ('OPEN', 'PARTIAL', 'CLOSED')
+                    '''
+                    bto_fb_p = [stc['symbol'], stc['broker']]
+                    if stc.get('asset_type') == 'option' and stc.get('strike'):
+                        bto_fb_q += ' AND strike = ?'
+                        bto_fb_p.append(stc['strike'])
+                    if stc.get('expiry'):
+                        bto_fb_q += ' AND expiry = ?'
+                        bto_fb_p.append(stc['expiry'])
+                    if stc.get('call_put'):
+                        bto_fb_q += ' AND call_put = ?'
+                        bto_fb_p.append(stc['call_put'])
+                    bto_fb_q += ' ORDER BY id DESC LIMIT 1'
+                    cursor.execute(bto_fb_q, bto_fb_p)
+                    bto = cursor.fetchone()
                     if bto:
-                        ep = float(bto['executed_price'] or 0)
-                        if ep > 0:
-                            cursor.execute('''
-                                SELECT quantity, executed_price FROM trades
-                                WHERE origin_trade_id = ? AND direction = 'STC'
-                                  AND status IN ('CLOSED', 'OPEN', 'FILLED')
-                            ''', (origin_id,))
-                            all_stcs = cursor.fetchall()
-                            mult = 100 if (bto['asset_type'] or '').lower() == 'option' else 1
-                            total_pnl = sum((float(s['executed_price'] or 0) - ep) * int(s['quantity'] or 0) * mult for s in all_stcs)
-                            total_qty = sum(int(s['quantity'] or 0) for s in all_stcs)
-                            if total_qty > 0:
-                                wavg = sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in all_stcs) / total_qty
-                                pnl_pct = ((wavg - ep) / ep * 100) if ep > 0 else 0
-                            else:
-                                pnl_pct = 0
-                            cursor.execute('UPDATE trades SET pnl = ?, pnl_percent = ? WHERE id = ?',
-                                         (round(total_pnl, 2), round(pnl_pct, 4), origin_id))
-                            results['bto_pnl_updated'] += 1
+                        origin_id = bto['id']
+                        cursor.execute('UPDATE trades SET origin_trade_id = ? WHERE id = ?', (origin_id, stc['id']))
+                if bto:
+                    ep = float(bto['executed_price'] or 0)
+                    if ep > 0:
+                        cursor.execute('''
+                            SELECT quantity, executed_price FROM trades
+                            WHERE origin_trade_id = ? AND direction = 'STC'
+                              AND status IN ('CLOSED', 'OPEN', 'FILLED')
+                        ''', (origin_id,))
+                        all_stcs = cursor.fetchall()
+                        mult = 100 if (bto['asset_type'] or '').lower() == 'option' else 1
+                        total_pnl = sum((float(s['executed_price'] or 0) - ep) * int(s['quantity'] or 0) * mult for s in all_stcs)
+                        total_qty = sum(int(s['quantity'] or 0) for s in all_stcs)
+                        if total_qty > 0:
+                            wavg = sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in all_stcs) / total_qty
+                            pnl_pct = ((wavg - ep) / ep * 100) if ep > 0 else 0
+                        else:
+                            pnl_pct = 0
+                        cursor.execute('UPDATE trades SET pnl = ?, pnl_percent = ? WHERE id = ?',
+                                     (round(total_pnl, 2), round(pnl_pct, 4), origin_id))
+                        results['bto_pnl_updated'] += 1
                 
             except Exception as e:
                 results['errors'].append(f"Trade #{stc['id']}: {e}")
