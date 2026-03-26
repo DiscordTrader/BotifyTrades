@@ -637,6 +637,9 @@ class BrokerPriceMonitor(PriceMonitor):
         self.using_cross_hub_fallback = False
         self._rest_fail_count = 0
         self._rest_fail_logged = False
+        self._hub_stale_count = 0
+        self._last_rest_refresh = 0
+        self._REST_REFRESH_INTERVAL = 10
     
     HUB_FAST_INTERVAL = 0.5
 
@@ -827,35 +830,57 @@ class BrokerPriceMonitor(PriceMonitor):
                 continue
         return None
 
-    async def _fetch_price(self) -> Optional[float]:
-        hub_price = self._try_any_streaming_hub()
-        if hub_price:
-            self._hub_available = True
-            self._rest_fail_count = 0
-            return hub_price
-        self._hub_available = False
-
-        if self._rest_fail_count >= 10:
-            if not self._rest_fail_logged:
-                sys.stderr.write(f"[{self.broker_name.upper()}] REST quote for {self.symbol} failed {self._rest_fail_count}x, backing off to 30s intervals\n")
-                sys.stderr.flush()
-                self._rest_fail_logged = True
-            await asyncio.sleep(27)
-            self._rest_fail_count += 1
-            return self.last_price
-
+    def _force_rest_quote_sync(self) -> Optional[Any]:
+        import inspect
         if not self.broker_instance:
             return None
-        
+        bi = self.broker_instance
+        saved_hub = getattr(bi, '_data_hub', None)
+        saved_hub2 = getattr(bi, '_webull_data_hub', None)
+        try:
+            if saved_hub is not None:
+                bi._data_hub = None
+            if saved_hub2 is not None:
+                bi._webull_data_hub = None
+            result = self._call_broker_quote_sync()
+            if saved_hub and result:
+                price_val = None
+                if isinstance(result, (int, float)) and result > 0:
+                    price_val = float(result)
+                elif isinstance(result, dict):
+                    for key in ('close', 'last', 'lastTradePrice', 'price'):
+                        v = result.get(key)
+                        if v and float(v) > 0:
+                            price_val = float(v)
+                            break
+                if price_val and price_val > 0:
+                    try:
+                        saved_hub.update_quote(self.symbol.upper(), {
+                            'last': price_val,
+                            'bid': float(result.get('bid', 0)) if isinstance(result, dict) else 0,
+                            'ask': float(result.get('ask', 0)) if isinstance(result, dict) else 0,
+                        }, source="rest")
+                    except Exception:
+                        pass
+            return result
+        finally:
+            if saved_hub is not None:
+                bi._data_hub = saved_hub
+            if saved_hub2 is not None:
+                bi._webull_data_hub = saved_hub2
+
+    async def _do_rest_quote(self) -> Optional[float]:
+        if not self.broker_instance:
+            return None
         try:
             loop = asyncio.get_event_loop()
             broker_lower = self.broker_name.lower()
             broker_normalized = broker_lower.replace('_paper', '').replace('_live', '')
-            
+
             if broker_normalized == 'alpaca':
                 from alpaca.data import StockHistoricalDataClient
                 from alpaca.data.requests import StockLatestQuoteRequest
-                
+
                 api_key = None
                 api_secret = None
                 if hasattr(self.broker_instance, 'config'):
@@ -864,7 +889,7 @@ class BrokerPriceMonitor(PriceMonitor):
                 elif hasattr(self.broker_instance, 'api_key') and hasattr(self.broker_instance, 'secret_key'):
                     api_key = self.broker_instance.api_key
                     api_secret = self.broker_instance.secret_key
-                
+
                 if api_key and api_secret:
                     client = StockHistoricalDataClient(api_key, api_secret)
                     request = StockLatestQuoteRequest(symbol_or_symbols=self.symbol)
@@ -881,15 +906,7 @@ class BrokerPriceMonitor(PriceMonitor):
                             return bid
 
             elif broker_normalized == 'trading212':
-                try:
-                    from src.services.trading212_data_hub import get_trading212_data_hub
-                    hub = get_trading212_data_hub()
-                    hub_price = hub.get_quote_price(self.symbol)
-                    if hub_price and hub_price > 0:
-                        return float(hub_price)
-                except Exception:
-                    pass
-                result = await loop.run_in_executor(None, self._call_broker_quote_sync)
+                result = await loop.run_in_executor(None, self._force_rest_quote_sync)
                 if isinstance(result, (int, float)) and result > 0:
                     return float(result)
                 if self.alt_broker_instances:
@@ -898,23 +915,52 @@ class BrokerPriceMonitor(PriceMonitor):
                         return alt_price
 
             else:
-                result = await loop.run_in_executor(None, self._call_broker_quote_sync)
+                result = await loop.run_in_executor(None, self._force_rest_quote_sync)
                 if isinstance(result, (int, float)) and result > 0:
-                    self._rest_fail_count = 0
-                    self._rest_fail_logged = False
                     return float(result)
                 elif isinstance(result, dict):
                     for key in ('close', 'last', 'lastTradePrice', 'price', 'last_trade_price', 'last_extended_hours_trade_price'):
                         val = result.get(key)
                         if val and float(val) > 0:
-                            self._rest_fail_count = 0
-                            self._rest_fail_logged = False
                             return float(val)
-
         except Exception as e:
-            sys.stderr.write(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}\n")
+            sys.stderr.write(f"[{self.broker_name.upper()}] REST quote error for {self.symbol}: {e}\n")
             sys.stderr.flush()
-        
+        return None
+
+    async def _fetch_price(self) -> Optional[float]:
+        now = time.time()
+        need_rest_refresh = (now - self._last_rest_refresh) >= self._REST_REFRESH_INTERVAL
+
+        hub_price = self._try_any_streaming_hub()
+        if hub_price:
+            self._hub_available = True
+            self._rest_fail_count = 0
+            if not need_rest_refresh:
+                return hub_price
+            rest_price = await self._do_rest_quote()
+            if rest_price and rest_price > 0:
+                self._last_rest_refresh = now
+                return rest_price
+            return hub_price
+        self._hub_available = False
+
+        if self._rest_fail_count >= 10:
+            if not self._rest_fail_logged:
+                sys.stderr.write(f"[{self.broker_name.upper()}] REST quote for {self.symbol} failed {self._rest_fail_count}x, backing off to 30s intervals\n")
+                sys.stderr.flush()
+                self._rest_fail_logged = True
+            await asyncio.sleep(27)
+            self._rest_fail_count += 1
+            return self.last_price
+
+        rest_price = await self._do_rest_quote()
+        if rest_price and rest_price > 0:
+            self._rest_fail_count = 0
+            self._rest_fail_logged = False
+            self._last_rest_refresh = now
+            return rest_price
+
         self._rest_fail_count += 1
         return None
 
