@@ -5269,6 +5269,16 @@ class RiskManager:
             print(f"[RISK] ✓ Streaming hub: updated {total} position prices [{', '.join(parts)}]")
             self._hub_update_logged = True
 
+        try:
+            from src.services.unified_price_hub import get_unified_price_hub
+            uph = get_unified_price_hub()
+            if uph._shadow_mode and uph._poll_running:
+                for pos in positions:
+                    if pos.current_price and pos.current_price > 0:
+                        uph.shadow_compare(pos.symbol, pos.current_price, f"{pos.broker}_risk")
+        except Exception:
+            pass
+
 
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:
         """Convert raw position dict to PositionSnapshot."""

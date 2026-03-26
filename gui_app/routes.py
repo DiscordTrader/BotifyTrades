@@ -3241,6 +3241,18 @@ def register_routes(app):
             'bot_user': bot_user
         })
     
+    @app.route('/api/uph/status', methods=['GET'])
+    def api_uph_status():
+        try:
+            from src.services.unified_price_hub import get_unified_price_hub
+            uph = get_unified_price_hub()
+            report = uph.get_shadow_report()
+            report['active'] = uph.is_active()
+            report['polling'] = uph._poll_running
+            return jsonify(report)
+        except Exception as e:
+            return jsonify({'error': str(e), 'active': False})
+
     # Webull account balance
     @app.route('/api/webull/balance', methods=['GET'])
     def api_webull_balance() -> Any:

@@ -550,14 +550,23 @@ class StreamingPriceMonitor(PriceMonitor):
             StreamingPriceMonitor._cross_hub_cache_ts = now
 
         sym_upper = self.symbol.upper().strip()
+        _IDX_VARIANTS = {
+            'SPX': ['SPX', 'SPXW'], 'SPXW': ['SPXW', 'SPX'],
+            'NDX': ['NDX', 'NDXP'], 'NDXP': ['NDXP', 'NDX'],
+            'VIX': ['VIX', 'VIXW'], 'VIXW': ['VIXW', 'VIX'],
+            'RUT': ['RUT', 'RUTW'], 'RUTW': ['RUTW', 'RUT'],
+            'DJX': ['DJX', 'DJXW'], 'DJXW': ['DJXW', 'DJX'],
+        }
+        syms_to_try = _IDX_VARIANTS.get(sym_upper, [sym_upper])
         order_key = self.order_broker.lower().replace('_paper', '').replace('_live', '') if self.order_broker else ''
         primary_key = order_key or (self.broker_name.lower().replace('_paper', '').replace('_live', '') if self.broker_name else '')
 
         if primary_key and primary_key in StreamingPriceMonitor._cross_hub_cache:
             try:
-                price = StreamingPriceMonitor._cross_hub_cache[primary_key].get_quote_price(sym_upper)
-                if price and price > 0:
-                    return float(price)
+                for _s in syms_to_try:
+                    price = StreamingPriceMonitor._cross_hub_cache[primary_key].get_quote_price(_s)
+                    if price and price > 0:
+                        return float(price)
             except Exception:
                 pass
 
@@ -565,9 +574,10 @@ class StreamingPriceMonitor(PriceMonitor):
             if hub_key == primary_key:
                 continue
             try:
-                price = hub.get_quote_price(sym_upper)
-                if price and price > 0:
-                    return float(price)
+                for _s in syms_to_try:
+                    price = hub.get_quote_price(_s)
+                    if price and price > 0:
+                        return float(price)
             except Exception:
                 pass
         return None
@@ -719,13 +729,22 @@ class BrokerPriceMonitor(PriceMonitor):
             StreamingPriceMonitor._cross_hub_cache_ts = now
 
         sym_upper = self.symbol.upper().strip()
+        _IDX_VARIANTS = {
+            'SPX': ['SPX', 'SPXW'], 'SPXW': ['SPXW', 'SPX'],
+            'NDX': ['NDX', 'NDXP'], 'NDXP': ['NDXP', 'NDX'],
+            'VIX': ['VIX', 'VIXW'], 'VIXW': ['VIXW', 'VIX'],
+            'RUT': ['RUT', 'RUTW'], 'RUTW': ['RUTW', 'RUT'],
+            'DJX': ['DJX', 'DJXW'], 'DJXW': ['DJXW', 'DJX'],
+        }
+        syms_to_try = _IDX_VARIANTS.get(sym_upper, [sym_upper])
         primary_key = self.broker_name.lower().replace('_paper', '').replace('_live', '') if self.broker_name else ''
 
         if primary_key and primary_key in StreamingPriceMonitor._cross_hub_cache:
             try:
-                price = StreamingPriceMonitor._cross_hub_cache[primary_key].get_quote_price(sym_upper)
-                if price and price > 0:
-                    return float(price)
+                for _s in syms_to_try:
+                    price = StreamingPriceMonitor._cross_hub_cache[primary_key].get_quote_price(_s)
+                    if price and price > 0:
+                        return float(price)
             except Exception:
                 pass
 
@@ -733,9 +752,10 @@ class BrokerPriceMonitor(PriceMonitor):
             if hub_key == primary_key:
                 continue
             try:
-                price = hub.get_quote_price(sym_upper)
-                if price and price > 0:
-                    return float(price)
+                for _s in syms_to_try:
+                    price = hub.get_quote_price(_s)
+                    if price and price > 0:
+                        return float(price)
             except Exception:
                 pass
         return None

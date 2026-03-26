@@ -19804,6 +19804,13 @@ def _run_bot_startup_inner(progress_callback=None):
     except Exception as e:
         _original_print(f"[GUI] ⚠️  Failed to start web GUI: {e}")
         _original_print("[GUI] Bot will continue without web interface")
+
+    try:
+        from src.services.unified_price_hub import init_unified_price_hub
+        init_unified_price_hub(start_polling=True, poll_interval=2.0)
+        _original_print("[UPH] ✓ Unified Price Hub started (shadow mode)")
+    except Exception as uph_err:
+        _original_print(f"[UPH] ⚠️  Failed to start Unified Price Hub: {uph_err}")
     
     report_progress(2, "Loading configuration...")
     

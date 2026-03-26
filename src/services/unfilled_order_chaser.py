@@ -959,35 +959,47 @@ class UnfilledOrderChaser:
             pass
         return None
 
+    _INDEX_VARIANTS = {
+        'SPX': ['SPX', 'SPXW'], 'SPXW': ['SPXW', 'SPX'],
+        'NDX': ['NDX', 'NDXP'], 'NDXP': ['NDXP', 'NDX'],
+        'VIX': ['VIX', 'VIXW'], 'VIXW': ['VIXW', 'VIX'],
+        'RUT': ['RUT', 'RUTW'], 'RUTW': ['RUTW', 'RUT'],
+        'DJX': ['DJX', 'DJXW'], 'DJXW': ['DJXW', 'DJX'],
+    }
+
     def _check_streaming_hubs_stock(self, symbol: str) -> Optional[dict]:
+        syms = self._INDEX_VARIANTS.get(symbol.upper(), [symbol])
         try:
             from src.services.webull_data_hub import get_webull_data_hub
             hub = get_webull_data_hub()
             if hub.is_streaming():
-                data = hub.get_quote_detailed(symbol)
-                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
-                    print(f"[ORDER_CHASER] ⚡ Got stock quote from Webull hub")
-                    return data
+                for _s in syms:
+                    data = hub.get_quote_detailed(_s)
+                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                        print(f"[ORDER_CHASER] ⚡ Got stock quote from Webull hub")
+                        return data
         except Exception:
             pass
         try:
             from src.services.schwab_data_hub import get_schwab_data_hub
             hub = get_schwab_data_hub()
             if hub.is_streaming():
-                data = hub.get_quote_detailed(symbol)
-                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
-                    print(f"[ORDER_CHASER] ⚡ Got stock quote from Schwab hub")
-                    return data
+                for _s in syms:
+                    data = hub.get_quote_detailed(_s)
+                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                        print(f"[ORDER_CHASER] ⚡ Got stock quote from Schwab hub")
+                        return data
         except Exception:
             pass
         try:
             from src.services.ibkr_data_hub import get_ibkr_data_hub
             hub = get_ibkr_data_hub()
             if hub.is_streaming():
-                data = hub.get_quote_detailed(symbol)
-                if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
-                    print(f"[ORDER_CHASER] ⚡ Got stock quote from IBKR hub")
-                    return data
+                for _s in syms:
+                    data = hub.get_quote_detailed(_s)
+                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                        print(f"[ORDER_CHASER] ⚡ Got stock quote from IBKR hub")
+                        return data
         except Exception:
             pass
         return None
