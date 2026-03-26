@@ -4576,9 +4576,7 @@ class RiskManager:
 
         stuck_candidates = []
         for pos in positions:
-            if pos.asset == 'option':
-                continue
-            key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
+            key = self._pos_tracking_key(pos)
             tracker = self._stuck_price_tracker.get(key)
             if tracker is None:
                 self._stuck_price_tracker[key] = {
@@ -4653,7 +4651,7 @@ class RiskManager:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
                     print(f"[RISK] ⚠️ Stuck price fix error: {e}")
-        active_keys = {f"{p.broker}_{p.symbol}_{p.asset}" for p in positions}
+        active_keys = {self._pos_tracking_key(p) for p in positions}
         stale_keys = [k for k in self._stuck_price_tracker if k not in active_keys]
         for k in stale_keys:
             del self._stuck_price_tracker[k]
@@ -4676,8 +4674,96 @@ class RiskManager:
             for k in stale_sbl:
                 del self._staleness_block_logged[k]
 
+    @staticmethod
+    def _pos_tracking_key(pos):
+        if pos.asset == 'option' and (pos.strike or pos.expiry or pos.direction):
+            return f"{pos.broker}_{pos.symbol}_{pos.asset}_{pos.strike}_{pos.expiry}_{pos.direction}"
+        return f"{pos.broker}_{pos.symbol}_{pos.asset}"
+
+    @staticmethod
+    def _normalize_expiry_yyyymmdd(expiry):
+        if not expiry:
+            return ''
+        e = str(expiry).strip()
+        clean = e.replace('-', '')
+        if len(clean) == 8 and clean.isdigit():
+            return clean
+        if '/' in e:
+            parts = e.split('/')
+            if len(parts) == 3:
+                m, d, y = parts
+                if len(y) == 2:
+                    y = '20' + y
+                return f"{y}{m.zfill(2)}{d.zfill(2)}"
+            elif len(parts) == 2:
+                import datetime
+                m, d = parts
+                today = datetime.date.today()
+                candidate = datetime.date(today.year, int(m), int(d))
+                if candidate < today:
+                    candidate = datetime.date(today.year + 1, int(m), int(d))
+                return candidate.strftime('%Y%m%d')
+        return clean
+
+    _INDEX_TO_CANONICAL = {
+        'SPX': 'SPX', 'SPXW': 'SPX',
+        'NDX': 'NDX', 'NDXP': 'NDX',
+        'VIX': 'VIX', 'VIXW': 'VIX',
+        'RUT': 'RUT', 'RUTW': 'RUT',
+        'DJX': 'DJX', 'DJXW': 'DJX',
+    }
+    _HUB_INDEX_SYMBOLS = {
+        'Webull': {'SPX': 'SPX', 'NDX': 'NDX', 'VIX': 'VIX', 'RUT': 'RUT', 'DJX': 'DJX'},
+        'Schwab': {'SPX': 'SPXW', 'NDX': 'NDXP', 'VIX': 'VIXW', 'RUT': 'RUTW', 'DJX': 'DJXW'},
+        'IBKR': {'SPX': 'SPX', 'NDX': 'NDX', 'VIX': 'VIX', 'RUT': 'RUT', 'DJX': 'DJX'},
+        'T212': {'SPX': 'SPX', 'NDX': 'NDX', 'VIX': 'VIX', 'RUT': 'RUT', 'DJX': 'DJX'},
+    }
+
+    def _normalize_symbol_for_hub(self, symbol, target_hub_name):
+        upper = (symbol or '').upper()
+        canonical = self._INDEX_TO_CANONICAL.get(upper)
+        if canonical:
+            hub_map = self._HUB_INDEX_SYMBOLS.get(target_hub_name, {})
+            return hub_map.get(canonical, upper)
+        return upper
+
+    def _get_option_hub_keys(self, pos, target_hub_name):
+        keys = []
+        if not pos.strike or not pos.expiry or not pos.direction:
+            if pos.raw_symbol:
+                keys.append(pos.raw_symbol)
+            return keys
+        underlying = self._normalize_symbol_for_hub(pos.symbol, target_hub_name)
+        expiry_norm = self._normalize_expiry_yyyymmdd(pos.expiry)
+        if not expiry_norm or len(expiry_norm) != 8:
+            if pos.raw_symbol:
+                keys.append(pos.raw_symbol)
+            return keys
+        if target_hub_name == 'Schwab':
+            try:
+                expiry_str = expiry_norm
+                expiry_short = expiry_str[2:] if len(expiry_str) == 8 else expiry_str
+                right = 'C' if pos.direction.upper() in ('C', 'CALL') else 'P'
+                strike_int = int(float(pos.strike) * 1000)
+                occ = f"{underlying:<6}{expiry_short}{right}{strike_int:08d}"
+                keys.append(occ)
+            except Exception:
+                pass
+        elif target_hub_name == 'IBKR':
+            try:
+                right = 'C' if pos.direction.upper() in ('C', 'CALL') else 'P'
+                strike_val = float(pos.strike)
+                ibkr_key = f"{underlying}_{expiry_norm}_{strike_val}_{right}"
+                keys.append(ibkr_key)
+            except Exception:
+                pass
+        if pos.raw_symbol and pos.raw_symbol not in keys:
+            keys.append(pos.raw_symbol)
+        return keys
+
     def _try_cross_hub_price(self, pos, now):
         broker_upper = (pos.broker or '').upper()
+        is_option = pos.asset == 'option'
         alt_hubs = []
         if 'WEBULL' not in broker_upper:
             try:
@@ -4704,17 +4790,26 @@ class RiskManager:
             except Exception:
                 pass
         for hub_name, hub in alt_hubs:
-            price = self._get_fresh_hub_price(hub, pos.symbol, max_age=2)
-            if price and price > 0:
-                return price
-        if 'TRADING212' not in broker_upper:
+            if is_option:
+                opt_keys = self._get_option_hub_keys(pos, hub_name)
+                for ok in opt_keys:
+                    price = self._get_fresh_hub_price(hub, ok, max_age=2)
+                    if price and price > 0:
+                        return price
+            else:
+                norm_sym = self._normalize_symbol_for_hub(pos.symbol, hub_name)
+                price = self._get_fresh_hub_price(hub, norm_sym, max_age=2)
+                if price and price > 0:
+                    return price
+        if not is_option and 'TRADING212' not in broker_upper:
             try:
                 from src.services.trading212_data_hub import get_trading212_data_hub
                 t212_hub = get_trading212_data_hub()
                 if t212_hub:
                     import time as _t
-                    t212_price = t212_hub.get_quote_price(pos.symbol)
-                    t212_ts = t212_hub.get_quote_timestamp(pos.symbol)
+                    norm_sym = self._normalize_symbol_for_hub(pos.symbol, 'T212')
+                    t212_price = t212_hub.get_quote_price(norm_sym)
+                    t212_ts = t212_hub.get_quote_timestamp(norm_sym)
                     if t212_price and t212_price > 0 and t212_ts and (_t.time() - t212_ts) < 2:
                         return t212_price
             except Exception:
@@ -4725,39 +4820,42 @@ class RiskManager:
         current = pos.current_price
         broker_upper = (pos.broker or '').upper()
         self._last_rest_source = None
+        is_option = pos.asset == 'option'
 
-        if 'WEBULL' in broker_upper:
-            price = await self._try_schwab_rest_quote(pos.symbol)
-            if price and price > 0 and abs(price - current) > 0.0001:
-                self._last_rest_source = 'Schwab'
-                return price
-            price = await self._try_webull_rest_quote(pos.symbol)
-            if price and price > 0 and abs(price - current) > 0.0001:
-                self._last_rest_source = 'Webull'
-                return price
-        elif 'SCHWAB' in broker_upper:
-            price = await self._try_webull_rest_quote(pos.symbol)
-            if price and price > 0 and abs(price - current) > 0.0001:
-                self._last_rest_source = 'Webull'
-                return price
-            price = await self._try_schwab_rest_quote(pos.symbol)
-            if price and price > 0 and abs(price - current) > 0.0001:
-                self._last_rest_source = 'Schwab'
-                return price
-        else:
-            price = await self._try_schwab_rest_quote(pos.symbol)
-            if price and price > 0 and abs(price - current) > 0.0001:
-                self._last_rest_source = 'Schwab'
-                return price
-            price = await self._try_webull_rest_quote(pos.symbol)
-            if price and price > 0 and abs(price - current) > 0.0001:
-                self._last_rest_source = 'Webull'
-                return price
+        if not is_option:
+            if 'WEBULL' in broker_upper:
+                price = await self._try_schwab_rest_quote(pos.symbol)
+                if price and price > 0 and abs(price - current) > 0.0001:
+                    self._last_rest_source = 'Schwab'
+                    return price
+                price = await self._try_webull_rest_quote(pos.symbol)
+                if price and price > 0 and abs(price - current) > 0.0001:
+                    self._last_rest_source = 'Webull'
+                    return price
+            elif 'SCHWAB' in broker_upper:
+                price = await self._try_webull_rest_quote(pos.symbol)
+                if price and price > 0 and abs(price - current) > 0.0001:
+                    self._last_rest_source = 'Webull'
+                    return price
+                price = await self._try_schwab_rest_quote(pos.symbol)
+                if price and price > 0 and abs(price - current) > 0.0001:
+                    self._last_rest_source = 'Schwab'
+                    return price
+            else:
+                price = await self._try_schwab_rest_quote(pos.symbol)
+                if price and price > 0 and abs(price - current) > 0.0001:
+                    self._last_rest_source = 'Schwab'
+                    return price
+                price = await self._try_webull_rest_quote(pos.symbol)
+                if price and price > 0 and abs(price - current) > 0.0001:
+                    self._last_rest_source = 'Webull'
+                    return price
 
-        price = await self._try_broker_get_quote(pos)
-        if price and price > 0 and abs(price - current) > 0.0001:
-            self._last_rest_source = pos.broker
-            return price
+        if not is_option:
+            price = await self._try_broker_get_quote(pos)
+            if price and price > 0 and abs(price - current) > 0.0001:
+                self._last_rest_source = pos.broker
+                return price
         return None
 
     async def _try_webull_rest_quote(self, symbol):
@@ -4854,7 +4952,7 @@ class RiskManager:
         not that the market data changed.
         """
         import time as _rt
-        key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
+        key = self._pos_tracking_key(pos)
         repair = self._rest_repaired_prices.get(key)
         if not repair:
             return False
@@ -4915,11 +5013,12 @@ class RiskManager:
                             continue
                     if price and price > 0:
                         _hub_ts = self._get_hub_quote_ts(hub, pos.symbol)
+                        _rk = self._pos_tracking_key(pos)
                         if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
-                            repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                            repair = self._rest_repaired_prices[_rk]
                             if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
                                 pos.current_price = price
-                                del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                                del self._rest_repaired_prices[_rk]
                                 webull_updated += 1
                                 _hub_updated_ids.add(id(pos))
                         else:
@@ -4956,11 +5055,12 @@ class RiskManager:
                     if price and price > 0:
                         _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
                         _hub_ts = self._get_hub_quote_ts(schwab_hub, _lookup)
+                        _rk = self._pos_tracking_key(pos)
                         if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
-                            repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                            repair = self._rest_repaired_prices[_rk]
                             if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
                                 pos.current_price = price
-                                del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                                del self._rest_repaired_prices[_rk]
                                 schwab_updated += 1
                                 _hub_updated_ids.add(id(pos))
                         else:
@@ -4998,11 +5098,12 @@ class RiskManager:
                     if price and price > 0:
                         _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
                         _hub_ts = self._get_hub_quote_ts(ibkr_hub, _lookup)
+                        _rk = self._pos_tracking_key(pos)
                         if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
-                            repair = self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                            repair = self._rest_repaired_prices[_rk]
                             if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
                                 pos.current_price = price
-                                del self._rest_repaired_prices[f"{pos.broker}_{pos.symbol}_{pos.asset}"]
+                                del self._rest_repaired_prices[_rk]
                                 ibkr_updated += 1
                                 _hub_updated_ids.add(id(pos))
                         else:
@@ -5043,18 +5144,25 @@ class RiskManager:
         for pos in positions:
             if id(pos) in _hub_updated_ids:
                 continue
-            if pos.asset == 'option':
-                continue
             _broker_upper = pos.broker.upper()
+            _is_opt = pos.asset == 'option'
             _cross_candidates = []
             if 'WEBULL' not in _broker_upper:
                 try:
                     from src.services.webull_data_hub import get_webull_data_hub
                     wb_hub = get_webull_data_hub()
                     if wb_hub.is_streaming():
-                        _p = self._get_fresh_hub_price(wb_hub, pos.symbol)
-                        if _p and _p > 0:
-                            _cross_candidates.append((_p, self._get_hub_quote_ts(wb_hub, pos.symbol), 'Webull'))
+                        if _is_opt:
+                            for _ok in self._get_option_hub_keys(pos, 'Webull'):
+                                _p = self._get_fresh_hub_price(wb_hub, _ok)
+                                if _p and _p > 0:
+                                    _cross_candidates.append((_p, self._get_hub_quote_ts(wb_hub, _ok), 'Webull'))
+                                    break
+                        else:
+                            _lk = self._normalize_symbol_for_hub(pos.symbol, 'Webull')
+                            _p = self._get_fresh_hub_price(wb_hub, _lk)
+                            if _p and _p > 0:
+                                _cross_candidates.append((_p, self._get_hub_quote_ts(wb_hub, _lk), 'Webull'))
                 except Exception:
                     pass
             if 'SCHWAB' not in _broker_upper:
@@ -5062,9 +5170,17 @@ class RiskManager:
                     from src.services.schwab_data_hub import get_schwab_data_hub
                     sc_hub = get_schwab_data_hub()
                     if sc_hub.is_streaming():
-                        _p = self._get_fresh_hub_price(sc_hub, pos.symbol)
-                        if _p and _p > 0:
-                            _cross_candidates.append((_p, self._get_hub_quote_ts(sc_hub, pos.symbol), 'Schwab'))
+                        if _is_opt:
+                            for _ok in self._get_option_hub_keys(pos, 'Schwab'):
+                                _p = self._get_fresh_hub_price(sc_hub, _ok)
+                                if _p and _p > 0:
+                                    _cross_candidates.append((_p, self._get_hub_quote_ts(sc_hub, _ok), 'Schwab'))
+                                    break
+                        else:
+                            _lk = self._normalize_symbol_for_hub(pos.symbol, 'Schwab')
+                            _p = self._get_fresh_hub_price(sc_hub, _lk)
+                            if _p and _p > 0:
+                                _cross_candidates.append((_p, self._get_hub_quote_ts(sc_hub, _lk), 'Schwab'))
                 except Exception:
                     pass
             if 'IBKR' not in _broker_upper:
@@ -5072,26 +5188,35 @@ class RiskManager:
                     from src.services.ibkr_data_hub import get_ibkr_data_hub
                     ib_hub = get_ibkr_data_hub()
                     if ib_hub.is_streaming():
-                        _p = self._get_fresh_hub_price(ib_hub, pos.symbol)
-                        if _p and _p > 0:
-                            _cross_candidates.append((_p, self._get_hub_quote_ts(ib_hub, pos.symbol), 'IBKR'))
+                        if _is_opt:
+                            for _ok in self._get_option_hub_keys(pos, 'IBKR'):
+                                _p = self._get_fresh_hub_price(ib_hub, _ok)
+                                if _p and _p > 0:
+                                    _cross_candidates.append((_p, self._get_hub_quote_ts(ib_hub, _ok), 'IBKR'))
+                                    break
+                        else:
+                            _lk = self._normalize_symbol_for_hub(pos.symbol, 'IBKR')
+                            _p = self._get_fresh_hub_price(ib_hub, _lk)
+                            if _p and _p > 0:
+                                _cross_candidates.append((_p, self._get_hub_quote_ts(ib_hub, _lk), 'IBKR'))
                 except Exception:
                     pass
-            if 'TRADING212' not in _broker_upper:
+            if not _is_opt and 'TRADING212' not in _broker_upper:
                 try:
                     import time as _cx_time
                     from src.services.trading212_data_hub import get_trading212_data_hub
                     t212_hub = get_trading212_data_hub()
                     if t212_hub and not t212_hub.is_stale:
                         _cx_now = _cx_time.time()
-                        t212_price = t212_hub.get_quote_price(pos.symbol)
-                        t212_ts = t212_hub.get_quote_timestamp(pos.symbol)
+                        _lk = self._normalize_symbol_for_hub(pos.symbol, 'T212')
+                        t212_price = t212_hub.get_quote_price(_lk)
+                        t212_ts = t212_hub.get_quote_timestamp(_lk)
                         if t212_price and t212_price > 0 and t212_ts and (_cx_now - t212_ts) < self._HUB_PRICE_MAX_AGE:
                             _cross_candidates.append((t212_price, t212_ts, 'T212'))
                 except Exception:
                     pass
             _cross_applied = False
-            _repair_key = f"{pos.broker}_{pos.symbol}_{pos.asset}"
+            _repair_key = self._pos_tracking_key(pos)
             for _cp, _ct, _cs in _cross_candidates:
                 if self._is_rest_repair_active(pos, hub_quote_ts=_ct):
                     repair = self._rest_repaired_prices.get(_repair_key)
