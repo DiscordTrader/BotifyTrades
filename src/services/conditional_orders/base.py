@@ -2165,6 +2165,15 @@ class BaseConditionalOrderService(ABC):
             order['_last_logged_price'] = price
             self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {adjusted_trigger})")
         
+        try:
+            from src.services.unified_price_hub import UnifiedPriceHub
+            uph = UnifiedPriceHub.instance()
+            if uph and uph._running:
+                broker = order.get('broker', 'unknown')
+                uph.shadow_compare(symbol, price, f"{broker}_conditional_#{order_id}")
+        except Exception:
+            pass
+        
         # ── Breakout-reset guard ──────────────────────────────────────────────────
         # If the price was already past the trigger when the order was created,
         # require it to pull back to the opposite side before we allow firing.
