@@ -87,6 +87,10 @@ class UnifiedPriceHub:
                 cls._instance._initialized = False
             return cls._instance
 
+    @classmethod
+    def instance(cls) -> Optional['UnifiedPriceHub']:
+        return cls._instance
+
     def __init__(self):
         if self._initialized:
             return
@@ -366,6 +370,13 @@ class UnifiedPriceHub:
         diff = abs(quote.last - consumer_price)
         pct = (diff / consumer_price) * 100 if consumer_price > 0 else 0
 
+        with self._stats_lock:
+            self._stats.setdefault('shadow_checks', 0)
+            self._stats['shadow_checks'] += 1
+            if pct <= 1.0:
+                self._stats.setdefault('shadow_matches', 0)
+                self._stats['shadow_matches'] += 1
+
         if pct > 1.0:
             result = {
                 'symbol': symbol,
@@ -381,6 +392,7 @@ class UnifiedPriceHub:
                 self._shadow_discrepancies.append(result)
                 if len(self._shadow_discrepancies) > 500:
                     self._shadow_discrepancies = self._shadow_discrepancies[-250:]
+            print(f"[UPH] ⚠️ Shadow discrepancy: {symbol} | {consumer_source}=${consumer_price:.4f} vs UPH=${quote.last:.4f} ({quote.source_hub}/{quote.freshness}) | diff={pct:.2f}%", flush=True)
             return result
         return None
 
@@ -409,7 +421,7 @@ class UnifiedPriceHub:
             self._poll_running = True
             self._poll_thread = threading.Thread(target=self._poll_loop, daemon=True, name="UPH-Poller")
             self._poll_thread.start()
-        print(f"[UPH] Background polling started (interval={interval}s)")
+        print(f"[UPH] Background polling started (interval={interval}s)", flush=True)
 
     def stop_polling(self):
         with self._poll_state_lock:
@@ -418,12 +430,13 @@ class UnifiedPriceHub:
             self._poll_thread = None
         if t:
             t.join(timeout=5)
-        print("[UPH] Background polling stopped")
+        print("[UPH] Background polling stopped", flush=True)
 
     def _poll_loop(self):
+        print(f"[UPH] Poll loop thread started", flush=True)
         while self._poll_running:
             try:
-                self.poll_all_hubs()
+                updated = self.poll_all_hubs()
 
                 stale = self.get_stale_symbols()
                 if stale:
@@ -433,17 +446,23 @@ class UnifiedPriceHub:
                 now = time.time()
                 if now - self._shadow_last_log > self._shadow_log_interval:
                     self._shadow_last_log = now
+                    hubs = self._get_hubs()
+                    hub_info = {k: hasattr(v, 'is_streaming') and v.is_streaming() for k, v in hubs.items()}
+                    print(f"[UPH] Hubs: {hub_info} | Last poll updated: {updated}", flush=True)
                     report = self.get_shadow_report()
-                    if report['cache_size'] > 0:
-                        print(f"[UPH] Cache: {report['cache_size']} symbols, "
-                              f"{report['stale_symbols']} stale | "
-                              f"Hits: {report['stats']['hits']}, "
-                              f"Misses: {report['stats']['misses']}, "
-                              f"CrossHub: {report['stats']['cross_hub_fills']}, "
-                              f"Updates: {report['stats']['total_updates']}")
-                        if report['recent_discrepancies']:
-                            disc_strs = [str(d['symbol']) + ":" + str(d['diff_pct']) + "%" for d in report['recent_discrepancies'][-5:]]
-                            print(f"[UPH] Shadow discrepancies (last {len(report['recent_discrepancies'])}): {disc_strs}")
+                    shadow_checks = report['stats'].get('shadow_checks', 0)
+                    shadow_matches = report['stats'].get('shadow_matches', 0)
+                    shadow_disc = len(report['recent_discrepancies'])
+                    print(f"[UPH] Cache: {report['cache_size']} symbols, "
+                          f"{report['stale_symbols']} stale | "
+                          f"Hits: {report['stats']['hits']}, "
+                          f"Misses: {report['stats']['misses']}, "
+                          f"CrossHub: {report['stats']['cross_hub_fills']}, "
+                          f"Updates: {report['stats']['total_updates']} | "
+                          f"Shadow: {shadow_checks} checks, {shadow_matches} match, {shadow_disc} discrepancies", flush=True)
+                    if report['recent_discrepancies']:
+                        disc_strs = [str(d['symbol']) + ":" + str(d['diff_pct']) + "%" for d in report['recent_discrepancies'][-5:]]
+                        print(f"[UPH] Shadow discrepancies (last {len(report['recent_discrepancies'])}): {disc_strs}", flush=True)
 
             except Exception as e:
                 print(f"[UPH] Poll error: {e}", file=sys.stderr)

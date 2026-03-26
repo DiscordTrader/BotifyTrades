@@ -2168,7 +2168,7 @@ class BaseConditionalOrderService(ABC):
         try:
             from src.services.unified_price_hub import UnifiedPriceHub
             uph = UnifiedPriceHub.instance()
-            if uph and uph._running:
+            if uph and uph._poll_running:
                 broker = order.get('broker', 'unknown')
                 uph.shadow_compare(symbol, price, f"{broker}_conditional_#{order_id}")
         except Exception:

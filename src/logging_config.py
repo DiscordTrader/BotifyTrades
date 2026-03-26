@@ -107,6 +107,8 @@ class CleanConsoleFormatter(logging.Formatter):
         '[SOD]',
         # EMA Candlestick Risk Engine
         '[EMA]',
+        # Unified Price Hub
+        '[UPH]',
         # Debug (when enabled)
         '[DEBUG]', '[API]', '[ROUTE]'
     ]
