@@ -15620,6 +15620,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if account_info:
                         buying_power = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
                         options_buying_power = float(options_buying_power or 0)
+                        settled_cash = float(account_info.get('settled_cash') or 0)
+                        has_settled = 'settled_cash' in account_info and account_info.get('settled_cash') is not None
                         is_option_trade = signal['asset'] == 'option'
                         if is_option_trade and options_buying_power > 0:
                             sizing_base = options_buying_power
@@ -15627,7 +15629,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             sizing_base = buying_power
                             sizing_label = "Buying Power (SOD)" if sod_used else "Buying Power"
-                        _original_print(f"[{broker_name}] [POSITION SIZE] {sizing_label}: ${sizing_base:,.2f} (Stock BP: ${buying_power:,.2f}, Options BP: ${options_buying_power:,.2f}), Size: {position_size_pct}%, Qty: {original_qty}")
+                        if has_settled and settled_cash < sizing_base:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Settled cash ${settled_cash:,.2f} < {sizing_label} ${sizing_base:,.2f} — using settled cash to avoid unsettled fund usage")
+                            sizing_base = settled_cash
+                            sizing_label = "Settled Cash (SOD)" if sod_used else "Settled Cash"
+                            buying_power = min(buying_power, settled_cash)
+                            options_buying_power = min(options_buying_power, settled_cash)
+                        _original_print(f"[{broker_name}] [POSITION SIZE] {sizing_label}: ${sizing_base:,.2f} (Stock BP: ${buying_power:,.2f}, Options BP: ${options_buying_power:,.2f}, Settled: ${settled_cash:,.2f}), Size: {position_size_pct}%, Qty: {original_qty}")
                         if sizing_base <= 0:
                             _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {sizing_label} is $0 - cannot calculate position size! Rejecting order.")
                             return {'success': False, 'error': f'{broker_name} has $0 {sizing_label.lower()} - cannot calculate position size'}
@@ -15850,14 +15858,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         is_option = signal['asset'] == 'option'
                         stock_bp = float(account_info.get('buying_power', 0))
                         options_bp = float(account_info.get('options_buying_power', 0))
+                        settled_cash_funds = float(account_info.get('settled_cash') or 0)
+                        has_settled_funds = 'settled_cash' in account_info and account_info.get('settled_cash') is not None
                         if is_option:
                             buying_power = options_bp if options_bp > 0 else stock_bp
                         else:
                             buying_power = stock_bp if stock_bp > 0 else options_bp
+                        if has_settled_funds and settled_cash_funds < buying_power:
+                            _original_print(f"[{broker_name}] [FUNDS] ⚠️ Capping to settled cash: ${settled_cash_funds:.2f} (BP was ${buying_power:.2f}) to prevent unsettled fund usage")
+                            buying_power = settled_cash_funds
                         bp_label = f"Options BP" if is_option else f"Stock BP"
                         if sod_used:
                             bp_label += " (SOD)"
-                        _original_print(f"[{broker_name}] [FUNDS] {bp_label}: ${buying_power:.2f} (Stock BP: ${stock_bp:.2f}, Options BP: ${options_bp:.2f})")
+                        _original_print(f"[{broker_name}] [FUNDS] {bp_label}: ${buying_power:.2f} (Stock BP: ${stock_bp:.2f}, Options BP: ${options_bp:.2f}, Settled: ${settled_cash_funds:.2f})")
                         price = signal.get('price') or 0
                         qty = signal['qty']
                         
@@ -16029,9 +16042,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[{broker_name}] ⚠️ STC rejected: No matching position for {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}")
                             return {'success': False, 'msg': f'No matching position for {sig_symbol} ${sig_strike}{sig_opt} on {broker_name}', 'broker': broker_name}
                         
-                        if signal['qty'] > matched_qty:
-                            _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
-                            signal['qty'] = matched_qty
+                        if matched_qty > 0:
+                            trim_pct = signal.get('trim_percentage')
+                            is_trim = signal.get('_phoenix_trim') or signal.get('is_trim')
+                            is_full = signal.get('_phoenix_exit') or signal.get('is_full_exit')
+                            
+                            if is_full:
+                                if signal['qty'] != matched_qty:
+                                    _original_print(f"[{broker_name}] [TRIM FIX] ✓ Full exit: DB had qty={signal['qty']}, broker has {matched_qty} → closing ALL {matched_qty}")
+                                    signal['qty'] = matched_qty
+                            elif is_trim and trim_pct:
+                                import math
+                                recalc_qty = max(1, math.ceil(matched_qty * float(trim_pct) / 100))
+                                recalc_qty = min(recalc_qty, matched_qty)
+                                if recalc_qty != signal['qty']:
+                                    _original_print(f"[{broker_name}] [TRIM FIX] ✓ Recalculated trim from broker position: {signal['qty']} → {recalc_qty} ({trim_pct}% of {matched_qty} contracts)")
+                                    signal['qty'] = recalc_qty
+                            elif signal['qty'] > matched_qty:
+                                _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
+                                signal['qty'] = matched_qty
                     except Exception as e:
                         _original_print(f"[{broker_name}] Position check for STC failed (proceeding): {e}")
                 
@@ -16347,9 +16376,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[{broker_name}] ⚠️ STC rejected: No stock position for {sig_symbol} on {broker_name}")
                                 return {'success': False, 'msg': f'No stock position for {sig_symbol} on {broker_name}', 'broker': broker_name}
                         
-                        if matched_qty > 0 and signal['qty'] > matched_qty:
-                            _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
-                            signal['qty'] = matched_qty
+                        if matched_qty > 0:
+                            trim_pct = signal.get('trim_percentage')
+                            is_trim = signal.get('_phoenix_trim') or signal.get('is_trim')
+                            is_full = signal.get('_phoenix_exit') or signal.get('is_full_exit')
+                            
+                            if is_full:
+                                if signal['qty'] != matched_qty:
+                                    _original_print(f"[{broker_name}] [TRIM FIX] ✓ Full exit: DB had qty={signal['qty']}, broker has {matched_qty} → selling ALL {matched_qty}")
+                                    signal['qty'] = matched_qty
+                            elif is_trim and trim_pct:
+                                import math
+                                recalc_qty = max(1, math.ceil(matched_qty * float(trim_pct) / 100))
+                                recalc_qty = min(recalc_qty, matched_qty)
+                                if recalc_qty != signal['qty']:
+                                    _original_print(f"[{broker_name}] [TRIM FIX] ✓ Recalculated trim from broker position: {signal['qty']} → {recalc_qty} ({trim_pct}% of {matched_qty} shares)")
+                                    signal['qty'] = recalc_qty
+                            elif signal['qty'] > matched_qty:
+                                _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
+                                signal['qty'] = matched_qty
                     except Exception as e:
                         _original_print(f"[{broker_name}] Stock position check for STC failed (proceeding): {e}")
 

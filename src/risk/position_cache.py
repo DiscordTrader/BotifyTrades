@@ -835,10 +835,16 @@ class PositionCache:
         
         trade_id = self.get_trade_id(position_key)
         if trade_id:
-            with self._persist_lock:  # Thread-safe DB write
+            with self._persist_lock:
                 try:
                     from gui_app.database import save_risk_state
-                    save_risk_state(trade_id, **kwargs)
+                    db_kwargs = {}
+                    for k, v in kwargs.items():
+                        if k.startswith('tier') and k.endswith('_hit'):
+                            db_kwargs[k.replace('tier', 'pt')] = v
+                        else:
+                            db_kwargs[k] = v
+                    save_risk_state(trade_id, **db_kwargs)
                 except Exception as e:
                     print(f"[RISK] Warning: Could not persist enhanced risk state: {e}")
     

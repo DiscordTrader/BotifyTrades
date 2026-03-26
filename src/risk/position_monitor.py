@@ -3212,13 +3212,25 @@ class RiskManager:
         old_max_pnl = cache.max_pnl_seen
         old_dsl = cache.dynamic_sl_price
         old_giveback = cache.giveback_guard_active
+        old_tier_hits = (cache.tier1_hit, cache.tier2_hit, cache.tier3_hit, cache.tier4_hit)
         
         cache.max_pnl_seen = updated_state.max_pnl_seen
         cache.dynamic_sl_price = updated_state.dynamic_sl_price
         cache.giveback_guard_active = updated_state.giveback_guard_active
         cache.last_evaluated_price = updated_state.last_evaluated_price
+        cache.tier1_hit = updated_state.pt1_hit
+        cache.tier2_hit = updated_state.pt2_hit
+        cache.tier3_hit = updated_state.pt3_hit
+        cache.tier4_hit = updated_state.pt4_hit
+        cache.ema_no_trend_count = updated_state.ema_no_trend_count
         if updated_state.highest_price > cache.highest_price:
             cache.highest_price = updated_state.highest_price
+        
+        new_tier_hits = (cache.tier1_hit, cache.tier2_hit, cache.tier3_hit, cache.tier4_hit)
+        if new_tier_hits != old_tier_hits:
+            for i, (old_h, new_h) in enumerate(zip(old_tier_hits, new_tier_hits), 1):
+                if new_h and not old_h:
+                    print(f"[RISK] PT{i} HIT for {position.position_key} (pnl={position.pct_change:.1f}%)")
         
         persist_updates = {}
         if updated_state.max_pnl_seen > old_max_pnl:
@@ -3227,6 +3239,10 @@ class RiskManager:
             persist_updates['dynamic_sl_price'] = updated_state.dynamic_sl_price
         if updated_state.giveback_guard_active and not old_giveback:
             persist_updates['giveback_guard_active'] = True
+        if new_tier_hits != old_tier_hits:
+            for i, (old_h, new_h) in enumerate(zip(old_tier_hits, new_tier_hits), 1):
+                if new_h and not old_h:
+                    persist_updates[f'tier{i}_hit'] = True
         if persist_updates:
             self.cache.update_enhanced_risk_state(position.position_key, **persist_updates)
         
