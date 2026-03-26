@@ -5238,10 +5238,13 @@ class RiskManager:
             if _cross_applied:
                 if not hasattr(self, '_cross_hub_logged'):
                     self._cross_hub_logged = set()
-                _cross_log_key = f"{pos.broker}_{pos.symbol}"
+                _cross_log_key = self._pos_tracking_key(pos)
                 if _cross_log_key not in self._cross_hub_logged:
                     self._cross_hub_logged.add(_cross_log_key)
-                    print(f"[RISK] 🔄 CROSS-HUB: {pos.broker} {pos.symbol} price sourced from {_cross_source} streaming hub → ${pos.current_price:.4f}")
+                    _desc = pos.symbol
+                    if _is_opt:
+                        _desc = f"{pos.symbol} {pos.strike}{pos.direction} {pos.expiry}"
+                    print(f"[RISK] 🔄 CROSS-HUB: {pos.broker} {_desc} price sourced from {_cross_source} streaming hub → ${pos.current_price:.4f}")
 
         if stale_skipped > 0:
             if not hasattr(self, '_stale_skip_count'):
