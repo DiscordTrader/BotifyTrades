@@ -237,13 +237,28 @@ class TastytradeBroker(BrokerInterface):
             derivative_bp = float(getattr(balances, 'derivative_buying_power', 0) or 0)
             equity_bp = float(getattr(balances, 'equity_buying_power', 0) or 0)
             
-            return {
+            result = {
                 'buying_power': equity_bp,
                 'options_buying_power': derivative_bp,
                 'cash': cash,
                 'portfolio_value': nlv,
-                'account_number': self.account.account_number
+                'account_number': self.account.account_number,
+                'account_type': getattr(self.account, 'account_type_name', ''),
+                'margin_or_cash': getattr(self.account, 'margin_or_cash', ''),
             }
+            
+            if hasattr(self, '_all_accounts') and isinstance(self._all_accounts, list) and len(self._all_accounts) > 1:
+                result['all_accounts'] = []
+                for a in self._all_accounts:
+                    result['all_accounts'].append({
+                        'account_number': a.account_number,
+                        'account_type': getattr(a, 'account_type_name', 'Unknown'),
+                        'margin_or_cash': getattr(a, 'margin_or_cash', ''),
+                        'nickname': getattr(a, 'nickname', ''),
+                        'is_active': a.account_number == self.account.account_number,
+                    })
+            
+            return result
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
             import traceback

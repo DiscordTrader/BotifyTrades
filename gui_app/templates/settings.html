@@ -4148,22 +4148,34 @@ async function loadTastytradeCredentials() {
                 data.live_status.connected ? 'Connected' : 'Not connected',
                 data.live_status.account_info);
             
-            // Show account info if connected
+            // Show account info and populate account selector if connected
             if (data.live_status.connected && data.live_status.account_info) {
+                const acct = data.live_status.account_info;
                 const infoDiv = document.getElementById('tastytrade-live-account-info');
                 if (infoDiv) {
                     infoDiv.style.display = 'block';
-                    const acct = data.live_status.account_info;
-                    infoDiv.innerHTML = `<strong>Account:</strong> ${acct.account_number || 'N/A'} | <strong>Portfolio:</strong> $${(acct.portfolio_value || 0).toLocaleString()} | <strong>Buying Power:</strong> $${(acct.buying_power || 0).toLocaleString()}`;
+                    let acctLabel = acct.account_number || 'N/A';
+                    if (acct.margin_or_cash) acctLabel += ` (${acct.margin_or_cash})`;
+                    if (acct.account_type) acctLabel += ` - ${acct.account_type}`;
+                    infoDiv.innerHTML = `<strong>Account:</strong> ${acctLabel} | <strong>Portfolio:</strong> $${(acct.portfolio_value || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Buying Power:</strong> $${(acct.buying_power || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                }
+                if (acct.all_accounts && acct.all_accounts.length > 1) {
+                    populateTastytradeAccountSelector('live', acct.all_accounts, acct.account_number);
                 }
             }
             
             if (data.paper_status.connected && data.paper_status.account_info) {
+                const acct = data.paper_status.account_info;
                 const infoDiv = document.getElementById('tastytrade-paper-account-info');
                 if (infoDiv) {
                     infoDiv.style.display = 'block';
-                    const acct = data.paper_status.account_info;
-                    infoDiv.innerHTML = `<strong>Account:</strong> ${acct.account_number || 'N/A'} | <strong>Portfolio:</strong> $${(acct.portfolio_value || 0).toLocaleString()} | <strong>Buying Power:</strong> $${(acct.buying_power || 0).toLocaleString()}`;
+                    let acctLabel = acct.account_number || 'N/A';
+                    if (acct.margin_or_cash) acctLabel += ` (${acct.margin_or_cash})`;
+                    if (acct.account_type) acctLabel += ` - ${acct.account_type}`;
+                    infoDiv.innerHTML = `<strong>Account:</strong> ${acctLabel} | <strong>Portfolio:</strong> $${(acct.portfolio_value || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Buying Power:</strong> $${(acct.buying_power || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                }
+                if (acct.all_accounts && acct.all_accounts.length > 1) {
+                    populateTastytradeAccountSelector('paper', acct.all_accounts, acct.account_number);
                 }
             }
         }
