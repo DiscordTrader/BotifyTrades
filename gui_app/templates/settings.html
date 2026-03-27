@@ -1404,11 +1404,11 @@ input:checked + .slider:before {
         <div class="form-group">
             <div class="toggle-row">
                 <label class="toggle-label">
-                    <input type="checkbox" id="notifications-enabled" checked>
+                    <input type="checkbox" id="trade-notifications-enabled" checked>
                     <span class="toggle-slider"></span>
                 </label>
                 <span>Enable Discord Notifications</span>
-                <span id="notifications-status" class="toggle-status">ON</span>
+                <span id="trade-notifications-status" class="toggle-status">ON</span>
             </div>
             <p class="help-text">When enabled, trade confirmations are posted to Discord</p>
         </div>
@@ -1650,7 +1650,7 @@ input:checked + .slider:before {
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div class="form-group" style="margin-bottom: 8px;">
                         <label>Max Open Positions</label>
-                        <input type="number" id="global-max-positions" value="10" min="0" max="100" step="1" placeholder="0 = Unlimited">
+                        <input type="number" id="global-max-positions" value="0" min="0" max="100" step="1" placeholder="0 = Unlimited">
                         <p class="help-text">Block new entries when this many positions are open. 0 = no limit.</p>
                     </div>
                     <div class="form-group" style="margin-bottom: 8px;">
@@ -3296,8 +3296,8 @@ document.getElementById('save-trading').addEventListener('click', async () => {
 // ========== TRADE NOTIFICATION SETTINGS ==========
 
 function updateNotificationsToggleStatus() {
-    const checkbox = document.getElementById('notifications-enabled');
-    const status = document.getElementById('notifications-status');
+    const checkbox = document.getElementById('trade-notifications-enabled');
+    const status = document.getElementById('trade-notifications-status');
     if (checkbox && status) {
         status.textContent = checkbox.checked ? 'ON' : 'OFF';
         status.style.color = checkbox.checked ? '#00ff88' : '#6c757d';
@@ -3311,7 +3311,7 @@ async function loadNotificationSettings() {
         
         if (settings.success) {
             document.getElementById('notification-channel-id').value = settings.notification_channel_id || '';
-            document.getElementById('notifications-enabled').checked = settings.notifications_enabled !== false;
+            document.getElementById('trade-notifications-enabled').checked = settings.notifications_enabled !== false;
             updateNotificationsToggleStatus();
         }
     } catch (error) {
@@ -3319,12 +3319,12 @@ async function loadNotificationSettings() {
     }
 }
 
-document.getElementById('notifications-enabled').addEventListener('change', updateNotificationsToggleStatus);
+document.getElementById('trade-notifications-enabled').addEventListener('change', updateNotificationsToggleStatus);
 
 document.getElementById('save-notification-settings').addEventListener('click', async () => {
     const data = {
         notification_channel_id: document.getElementById('notification-channel-id').value.trim(),
-        notifications_enabled: document.getElementById('notifications-enabled').checked
+        notifications_enabled: document.getElementById('trade-notifications-enabled').checked
     };
     
     const inlineStatus = document.getElementById('notification-save-status');
