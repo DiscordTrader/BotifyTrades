@@ -94,6 +94,10 @@ class IBKRDataHub:
         self._risk_eval_requested = threading.Event()
         self._reconcile_task = None
 
+        self._delayed_mode_enabled = False
+        self._mktdata_denied_symbols: Set[str] = set()
+        self._mktdata_denied_lock = threading.Lock()
+
         print("[IBKR_HUB] ✓ IBKRDataHub initialized (singleton)")
 
     def on(self, event: str, handler: Callable):
@@ -136,6 +140,7 @@ class IBKRDataHub:
                 old_ib.pendingTickersEvent -= self._on_pending_tickers
                 old_ib.positionEvent -= self._on_position_event
                 old_ib.orderStatusEvent -= self._on_order_status
+                old_ib.errorEvent -= self._on_error_event
             except Exception:
                 pass
         self._ib = None
@@ -151,7 +156,40 @@ class IBKRDataHub:
         self._ib.pendingTickersEvent += self._on_pending_tickers
         self._ib.positionEvent += self._on_position_event
         self._ib.orderStatusEvent += self._on_order_status
-        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders)")
+        self._ib.errorEvent += self._on_error_event
+        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors)")
+
+    def _on_error_event(self, reqId, errorCode, errorString, contract):
+        if errorCode in (10089, 10168):
+            symbol = ''
+            if contract:
+                symbol = getattr(contract, 'symbol', '') or ''
+            if symbol:
+                with self._mktdata_denied_lock:
+                    already_denied = symbol in self._mktdata_denied_symbols
+                    self._mktdata_denied_symbols.add(symbol)
+                self._subscribe_fail_cache[symbol] = time.time() + 3600
+                if not already_denied:
+                    logger.warning(f"[IBKR_HUB] ⚠️ Market data denied for {symbol} (error {errorCode}) — will use delayed data")
+
+            if self._ib:
+                if not self._delayed_mode_enabled:
+                    try:
+                        self._ib.reqMarketDataType(3)
+                        self._delayed_mode_enabled = True
+                        logger.info("[IBKR_HUB] ✓ Enabled delayed market data (type 3) as fallback")
+                    except Exception as e:
+                        logger.warning(f"[IBKR_HUB] Could not enable delayed data: {e}")
+
+                if self._delayed_mode_enabled and symbol:
+                    with self._contract_lock:
+                        existing_contract = self._symbol_to_contract.get(symbol)
+                    if existing_contract:
+                        try:
+                            self._ib.reqMktData(existing_contract, '', False, False)
+                            logger.info(f"[IBKR_HUB] ✓ Re-requested {symbol} with delayed data mode")
+                        except Exception:
+                            pass
 
     def _on_pending_tickers(self, tickers):
         now = time.time()
@@ -393,6 +431,9 @@ class IBKRDataHub:
 
     async def _qualify_and_subscribe(self, symbol: str):
         import time as _time
+        with self._mktdata_denied_lock:
+            if symbol in self._mktdata_denied_symbols:
+                return
         fail_ts = self._subscribe_fail_cache.get(symbol, 0)
         if fail_ts and _time.time() - fail_ts < self._SUBSCRIBE_FAIL_BACKOFF:
             return

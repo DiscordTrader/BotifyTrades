@@ -161,6 +161,30 @@ class Trading212DataHub:
                 pass
         return None
 
+    async def _try_broker_rest_quote(self, symbol: str) -> Optional[float]:
+        try:
+            from src.services.conditional_orders.router import conditional_order_router
+            router = conditional_order_router
+            if router and hasattr(router, 'us_service'):
+                us_svc = router.us_service
+                if us_svc and hasattr(us_svc, 'broker_instances'):
+                    for bname, binst in us_svc.broker_instances.items():
+                        bkey = bname.lower().replace('_paper', '').replace('_live', '')
+                        if bkey == 'trading212':
+                            continue
+                        if binst and hasattr(binst, 'get_quote'):
+                            try:
+                                result = binst.get_quote(symbol)
+                                if asyncio.iscoroutine(result):
+                                    result = await result
+                                if result and float(result) > 0:
+                                    return float(result)
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+        return None
+
     async def _fetch_conditional_quotes(self):
         uncovered = self._get_uncovered_conditional_symbols()
         if not uncovered:
@@ -177,8 +201,16 @@ class Trading212DataHub:
                 with self._quotes_lock:
                     self._quotes[sym] = {'price': cross_price, 'ts': time.time()}
                 print(f"[T212-HUB] Cross-hub quote for {sym}: ${cross_price:.4f}")
-            else:
-                print(f"[T212-HUB] No cross-hub quote for conditional symbol {sym} — need Webull/Schwab/IBKR connected")
+                continue
+
+            rest_price = await self._try_broker_rest_quote(sym)
+            if rest_price:
+                with self._quotes_lock:
+                    self._quotes[sym] = {'price': rest_price, 'ts': time.time()}
+                print(f"[T212-HUB] REST broker quote for conditional {sym}: ${rest_price:.4f}")
+                continue
+
+            print(f"[T212-HUB] No quote source for conditional symbol {sym} — cross-hub and REST both failed")
 
     async def poll_once(self):
         if not self._broker or not self._broker.connected:
