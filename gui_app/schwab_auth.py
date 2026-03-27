@@ -1006,17 +1006,30 @@ def schwab_refresh():
 def schwab_disconnect():
     """Disconnect from Schwab (remove tokens)"""
     try:
-        # Stop auto-refresh thread
         token_manager = get_token_manager()
         token_manager.stop_auto_refresh()
         
         if os.path.exists(SCHWAB_TOKEN_FILE):
             os.remove(SCHWAB_TOKEN_FILE)
         
-        # Clear token manager's cached data
         token_manager._token_data = None
         
         db.update_broker_connection_status('SCHWAB', False)
+        
+        from gui_app.routes import _bot_instance
+        if _bot_instance:
+            schwab_broker = getattr(_bot_instance, 'schwab_broker', None)
+            if schwab_broker:
+                schwab_broker.connected = False
+                if hasattr(schwab_broker, 'streaming_client'):
+                    try:
+                        schwab_broker.streaming_client = None
+                    except Exception:
+                        pass
+        
+        from gui_app.broker_credentials_service import set_broker_status
+        set_broker_status('schwab', False, 'disconnected')
+        
         return jsonify({'success': True, 'message': 'Disconnected from Schwab'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
