@@ -701,6 +701,13 @@ input:checked + .slider:before {
                 </div>
             </div>
         </details>
+        <div id="tastytrade-paper-account-selector" class="form-group" style="display: none;">
+            <label>Account</label>
+            <select id="tastytrade-paper-account-select" style="width: 100%; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+                <option value="">Auto (first account)</option>
+            </select>
+            <p class="help-text">Select which account to trade with (Cash, Margin, IRA, etc.)</p>
+        </div>
         <div class="btn-group">
             <button id="save-tastytrade-paper" class="btn btn-success">💾 Save</button>
             <button id="connect-tastytrade-paper" class="btn btn-connect">🔌 Connect</button>
@@ -743,6 +750,13 @@ input:checked + .slider:before {
                 </div>
             </div>
         </details>
+        <div id="tastytrade-live-account-selector" class="form-group" style="display: none;">
+            <label>Account</label>
+            <select id="tastytrade-live-account-select" style="width: 100%; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+                <option value="">Auto (first account)</option>
+            </select>
+            <p class="help-text">Select which account to trade with (Cash, Margin, IRA, etc.)</p>
+        </div>
         <div class="btn-group">
             <button id="save-tastytrade-live" class="btn btn-success">💾 Save</button>
             <button id="connect-tastytrade-live" class="btn btn-connect">🔌 Connect</button>
@@ -3963,12 +3977,42 @@ document.getElementById('save-tastytrade-paper').addEventListener('click', async
     }
 });
 
+// Helper: populate Tastytrade account selector dropdown
+function populateTastytradeAccountSelector(mode, accounts, activeAccountNumber) {
+    const selectorDiv = document.getElementById(`tastytrade-${mode}-account-selector`);
+    const selectEl = document.getElementById(`tastytrade-${mode}-account-select`);
+    if (!selectorDiv || !selectEl) return;
+    
+    if (accounts && accounts.length > 0) {
+        selectEl.innerHTML = '<option value="">Auto (first account)</option>';
+        accounts.forEach(acct => {
+            const opt = document.createElement('option');
+            opt.value = acct.account_number;
+            let label = acct.account_number;
+            if (acct.margin_or_cash) label += ` (${acct.margin_or_cash})`;
+            if (acct.account_type) label += ` - ${acct.account_type}`;
+            if (acct.nickname) label += ` "${acct.nickname}"`;
+            opt.textContent = label;
+            if (acct.is_active) opt.selected = true;
+            selectEl.appendChild(opt);
+        });
+        selectorDiv.style.display = 'block';
+    } else if (activeAccountNumber) {
+        selectorDiv.style.display = 'none';
+    }
+}
+
 // Tastytrade Paper connect
 document.getElementById('connect-tastytrade-paper').addEventListener('click', async () => {
     updateConnectionStatus('tastytrade-paper-connection-status', 'connecting', 'Connecting...');
     
     try {
-        const response = await fetch('/api/brokers/connect/tastytrade_paper', { method: 'POST' });
+        const selectedAccount = document.getElementById('tastytrade-paper-account-select')?.value || '';
+        const response = await fetch('/api/brokers/connect/tastytrade_paper', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_number: selectedAccount })
+        });
         const result = await response.json();
         
         if (result.success) {
@@ -3979,7 +4023,14 @@ document.getElementById('connect-tastytrade-paper').addEventListener('click', as
             if (result.account) {
                 const infoDiv = document.getElementById('tastytrade-paper-account-info');
                 infoDiv.style.display = 'block';
-                infoDiv.innerHTML = `<strong>Account:</strong> ${result.account.account_number} | <strong>Portfolio:</strong> $${result.account.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Cash:</strong> $${result.account.cash.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                let acctLabel = result.account.account_number;
+                if (result.account.margin_or_cash) acctLabel += ` (${result.account.margin_or_cash})`;
+                if (result.account.account_type) acctLabel += ` - ${result.account.account_type}`;
+                infoDiv.innerHTML = `<strong>Account:</strong> ${acctLabel} | <strong>Portfolio:</strong> $${(result.account.portfolio_value || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Buying Power:</strong> $${(result.account.buying_power || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                
+                if (result.account.all_accounts && result.account.all_accounts.length > 1) {
+                    populateTastytradeAccountSelector('paper', result.account.all_accounts, result.account.account_number);
+                }
             }
         } else {
             updateConnectionStatus('tastytrade-paper-connection-status', 'error', result.error);
@@ -4035,7 +4086,12 @@ document.getElementById('connect-tastytrade-live').addEventListener('click', asy
     updateConnectionStatus('tastytrade-live-connection-status', 'connecting', 'Connecting...');
     
     try {
-        const response = await fetch('/api/brokers/connect/tastytrade_live', { method: 'POST' });
+        const selectedAccount = document.getElementById('tastytrade-live-account-select')?.value || '';
+        const response = await fetch('/api/brokers/connect/tastytrade_live', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_number: selectedAccount })
+        });
         const result = await response.json();
         
         if (result.success) {
@@ -4046,7 +4102,14 @@ document.getElementById('connect-tastytrade-live').addEventListener('click', asy
             if (result.account) {
                 const infoDiv = document.getElementById('tastytrade-live-account-info');
                 infoDiv.style.display = 'block';
-                infoDiv.innerHTML = `<strong>Account:</strong> ${result.account.account_number} | <strong>Portfolio:</strong> $${result.account.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Cash:</strong> $${result.account.cash.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                let acctLabel = result.account.account_number;
+                if (result.account.margin_or_cash) acctLabel += ` (${result.account.margin_or_cash})`;
+                if (result.account.account_type) acctLabel += ` - ${result.account.account_type}`;
+                infoDiv.innerHTML = `<strong>Account:</strong> ${acctLabel} | <strong>Portfolio:</strong> $${(result.account.portfolio_value || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Buying Power:</strong> $${(result.account.buying_power || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                
+                if (result.account.all_accounts && result.account.all_accounts.length > 1) {
+                    populateTastytradeAccountSelector('live', result.account.all_accounts, result.account.account_number);
+                }
             }
         } else {
             updateConnectionStatus('tastytrade-live-connection-status', 'error', result.error);
@@ -4056,6 +4119,14 @@ document.getElementById('connect-tastytrade-live').addEventListener('click', asy
         updateConnectionStatus('tastytrade-live-connection-status', 'error', error.message);
         showMessage('error', error.message);
     }
+});
+
+// Tastytrade account selector change handlers - auto-reconnect with selected account
+document.getElementById('tastytrade-paper-account-select')?.addEventListener('change', function() {
+    document.getElementById('connect-tastytrade-paper').click();
+});
+document.getElementById('tastytrade-live-account-select')?.addEventListener('change', function() {
+    document.getElementById('connect-tastytrade-live').click();
 });
 
 // Load Tastytrade credentials on page load

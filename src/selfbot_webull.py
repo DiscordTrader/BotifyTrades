@@ -7744,11 +7744,14 @@ class SelfClient(discord.Client):
                     mode_str = "PAPER" if paper_mode else "LIVE"
                     _original_print(f"[TASTYTRADE] Creating TastytradeBroker instance ({auth_type}, {mode_str})...", flush=True)
                     
+                    acct_key = 'account_number_paper' if paper_mode else 'account_number_live'
+                    saved_acct = tt_creds.get(acct_key, '') or tt_creds.get('account_number', '')
                     self.tastytrade_broker = TastytradeBroker({
                         'username': tt_creds.get('username'),
                         'password': tt_creds.get('password'),
                         'client_secret': tt_creds.get('client_secret'),
                         'refresh_token': tt_creds.get('refresh_token'),
+                        'account_number': saved_acct,
                         'paper_trade': paper_mode
                     })
                     

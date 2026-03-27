@@ -223,24 +223,43 @@ def save_tastytrade_credentials(
     paper_mode: bool = True
 ):
     """Save Tastytrade broker credentials (OAuth2 or legacy)"""
+    existing = load_config('tastytrade_credentials') or {}
     save_config('tastytrade_credentials', {
         'username': username,
         'password': password,
         'client_secret': client_secret,
         'refresh_token': refresh_token,
-        'paper_mode': paper_mode
+        'paper_mode': paper_mode,
+        'account_number_live': existing.get('account_number_live', ''),
+        'account_number_paper': existing.get('account_number_paper', ''),
     })
+
+
+def save_tastytrade_account_number(account_number: str, is_paper: bool = False):
+    """Save selected Tastytrade account number for a specific mode"""
+    existing = load_config('tastytrade_credentials') or {}
+    key = 'account_number_paper' if is_paper else 'account_number_live'
+    existing[key] = account_number
+    save_config('tastytrade_credentials', existing)
 
 
 def get_tastytrade_credentials() -> Dict[str, Any]:
     """Get Tastytrade credentials"""
-    return load_config('tastytrade_credentials') or {
+    creds = load_config('tastytrade_credentials') or {}
+    defaults = {
         'username': '',
         'password': '',
         'client_secret': '',
         'refresh_token': '',
-        'paper_mode': True
+        'paper_mode': True,
+        'account_number_live': '',
+        'account_number_paper': '',
     }
+    if 'account_number' in creds and 'account_number_live' not in creds:
+        creds['account_number_live'] = creds.pop('account_number', '')
+    for k, v in defaults.items():
+        creds.setdefault(k, v)
+    return creds
 
 
 def clear_tastytrade_credentials():
@@ -250,7 +269,9 @@ def clear_tastytrade_credentials():
         'password': '',
         'client_secret': '',
         'refresh_token': '',
-        'paper_mode': True
+        'paper_mode': True,
+        'account_number_live': '',
+        'account_number_paper': '',
     })
     set_broker_status('tastytrade_live', False, 'disconnected')
     set_broker_status('tastytrade_paper', False, 'disconnected')

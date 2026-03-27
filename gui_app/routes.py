@@ -3550,9 +3550,11 @@ def register_routes(app):
                 })
                 return result
             
+            acct_key = 'account_number_paper' if paper_mode else 'account_number_live'
             config = {
                 'client_secret': creds.get('client_secret'),
                 'refresh_token': creds.get('refresh_token'),
+                'account_number': creds.get(acct_key, '') or creds.get('account_number', ''),
                 'paper_trade': paper_mode
             }
             
@@ -14827,33 +14829,28 @@ def register_routes(app):
                     return jsonify({'success': False, 'error': f'IBKR connection failed: {error_msg}'}), 400
             
             elif broker_id.startswith('tastytrade'):
-                from .broker_credentials_service import get_tastytrade_credentials
+                from .broker_credentials_service import get_tastytrade_credentials, save_tastytrade_account_number
                 is_paper = broker_id == 'tastytrade_paper'
                 
                 creds = get_tastytrade_credentials()
-                username = creds.get('username', '')
-                password = creds.get('password', '')
                 client_secret = creds.get('client_secret', '')
                 refresh_token = creds.get('refresh_token', '')
+                acct_key = 'account_number_paper' if is_paper else 'account_number_live'
+                saved_account_number = creds.get(acct_key, '') or creds.get('account_number', '')
                 
-                has_oauth = client_secret and refresh_token
-                has_legacy = username and password
+                data = request.json or {}
+                selected_account = data.get('account_number', '').strip()
                 
-                if not has_oauth and not has_legacy:
-                    set_broker_status(broker_id, False, 'error', 'No Tastytrade credentials configured')
+                if not (client_secret and refresh_token):
+                    set_broker_status(broker_id, False, 'error', 'No Tastytrade OAuth2 credentials configured')
                     mode_name = "Paper" if is_paper else "Live"
-                    return jsonify({'success': False, 'error': f'No Tastytrade {mode_name} credentials configured. Please save OAuth2 or legacy credentials first.'}), 400
+                    return jsonify({'success': False, 'error': f'No Tastytrade {mode_name} OAuth2 credentials configured. SDK v11+ requires client_secret + refresh_token.'}), 400
                 
                 try:
                     from tastytrade import Session, Account
                     
-                    if has_oauth:
-                        print(f"[API] Tastytrade: Using OAuth2 authentication (is_test={is_paper})")
-                        print(f"[API] Tastytrade: client_secret length={len(client_secret)}, refresh_token length={len(refresh_token)}")
-                        session = Session(client_secret, refresh_token, is_test=is_paper)
-                    else:
-                        print(f"[API] Tastytrade: Using legacy username/password (is_test={is_paper})")
-                        session = Session(username, password, is_test=is_paper)
+                    print(f"[API] Tastytrade: Using OAuth2 authentication (is_test={is_paper})")
+                    session = Session(client_secret, refresh_token, is_test=is_paper)
                     
                     accounts = Account.get(session)
                     
@@ -14861,25 +14858,59 @@ def register_routes(app):
                         set_broker_status(broker_id, False, 'error', 'No accounts found')
                         return jsonify({'success': False, 'error': 'No Tastytrade accounts found'}), 400
                     
+                    target_account_num = selected_account or saved_account_number
                     account = accounts[0]
+                    if target_account_num and isinstance(accounts, list):
+                        matched = [a for a in accounts if a.account_number == target_account_num]
+                        if matched:
+                            account = matched[0]
+                    
                     balances = account.get_balances(session)
                     
                     nlv = float(getattr(balances, 'net_liquidating_value', 0) or 0)
                     cash = float(getattr(balances, 'cash_balance', 0) or 0)
+                    buying_power = float(getattr(balances, 'equity_buying_power', 0) or 0)
+                    
+                    all_accounts_list = []
+                    if isinstance(accounts, list) and len(accounts) > 1:
+                        for a in accounts:
+                            acct_type = getattr(a, 'account_type_name', 'Unknown')
+                            margin_cash = getattr(a, 'margin_or_cash', '')
+                            is_active = a.account_number == account.account_number
+                            all_accounts_list.append({
+                                'account_number': a.account_number,
+                                'account_type': acct_type,
+                                'margin_or_cash': margin_cash,
+                                'nickname': getattr(a, 'nickname', ''),
+                                'is_active': is_active,
+                            })
+                    
+                    valid_account_numbers = [a.account_number for a in accounts] if isinstance(accounts, list) else [account.account_number]
+                    if selected_account and selected_account in valid_account_numbers:
+                        save_tastytrade_account_number(selected_account, is_paper=is_paper)
+                    elif not saved_account_number or saved_account_number not in valid_account_numbers:
+                        save_tastytrade_account_number(account.account_number, is_paper=is_paper)
                     
                     account_info = {
                         'account_number': account.account_number,
+                        'account_type': getattr(account, 'account_type_name', ''),
+                        'margin_or_cash': getattr(account, 'margin_or_cash', ''),
                         'portfolio_value': nlv,
+                        'buying_power': buying_power,
                         'cash': cash,
-                        'status': 'active'
+                        'status': 'active',
+                        'all_accounts': all_accounts_list,
                     }
                     
                     set_broker_status(broker_id, True, 'connected', account_info=account_info)
-                    auth_method = 'OAuth2' if has_oauth else 'legacy'
+                    
+                    acct_label = f"{account.account_number}"
+                    if getattr(account, 'margin_or_cash', ''):
+                        acct_label += f" ({account.margin_or_cash})"
                     
                     return jsonify({
                         'success': True,
-                        'message': f'Tastytrade {"Sandbox" if is_paper else "Live"} connected successfully via {auth_method}!',
+                        'message': f'Tastytrade {"Sandbox" if is_paper else "Live"} connected via OAuth2! Account: {acct_label}',
                         'status': 'connected',
                         'account': account_info
                     })
@@ -17016,7 +17047,13 @@ def register_routes(app):
                     pass
             
             tastytrade_creds = db.get_tastytrade_settings() if hasattr(db, 'get_tastytrade_settings') else None
-            tastytrade_configured = bool(tastytrade_creds and tastytrade_creds.get('username') and tastytrade_creds.get('password'))
+            if not tastytrade_creds:
+                try:
+                    from .broker_credentials_service import get_tastytrade_credentials
+                    tastytrade_creds = get_tastytrade_credentials()
+                except Exception:
+                    pass
+            tastytrade_configured = bool(tastytrade_creds and tastytrade_creds.get('client_secret') and tastytrade_creds.get('refresh_token'))
             
             broker_status['tastytrade'] = {
                 'connected': tastytrade_connected,
