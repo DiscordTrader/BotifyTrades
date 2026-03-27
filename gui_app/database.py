@@ -11568,21 +11568,28 @@ def log_risk_event(
 
 def is_circuit_breaker_tripped() -> Dict:
     """
-    Check if circuit breaker is tripped (trading should be halted).
+    Check if trading should be blocked based on global risk limits.
+    
+    Three independent checks (each works regardless of the others):
+    1. Circuit Breaker: Emergency halt on errors/manual trigger
+    2. Global Daily Loss Limit: Blocks BTO when realized losses exceed threshold
+    3. Max Open Positions: Blocks BTO when position count is at limit
     
     Returns dict with:
-    - tripped: bool - whether trading is halted
-    - reason: str - why it was tripped (if applicable)
+    - tripped: bool - whether trading is blocked
+    - reason: str - why it was blocked (if applicable)
     - daily_loss: float - current day's realized loss
     - limit: float - configured daily loss limit
     """
     settings = get_global_risk_settings()
     
-    if not settings.get('enable_circuit_breaker'):
-        return {'tripped': False, 'reason': None, 'daily_loss': 0, 'limit': 0}
-    
+    circuit_breaker_on = settings.get('enable_circuit_breaker', False)
     daily_loss_limit = settings.get('global_daily_loss_limit', 0)
-    max_positions = settings.get('global_max_positions', 10)
+    max_positions = settings.get('global_max_positions', 0)
+    
+    has_any_check = circuit_breaker_on or daily_loss_limit > 0 or max_positions > 0
+    if not has_any_check:
+        return {'tripped': False, 'reason': None, 'daily_loss': 0, 'limit': 0}
     
     conn = get_connection()
     cursor = conn.cursor()
@@ -11603,7 +11610,8 @@ def is_circuit_breaker_tripped() -> Dict:
         open_positions = cursor.fetchone()[0] or 0
         
         if daily_loss_limit > 0 and daily_loss >= daily_loss_limit:
-            log_risk_event('CIRCUIT_BREAKER_TRIPPED', source='daily_loss_limit',
+            source = 'circuit_breaker' if circuit_breaker_on else 'daily_loss_limit'
+            log_risk_event('CIRCUIT_BREAKER_TRIPPED', source=source,
                           details={'daily_loss': daily_loss, 'limit': daily_loss_limit})
             return {
                 'tripped': True,
@@ -11627,7 +11635,7 @@ def is_circuit_breaker_tripped() -> Dict:
             'open_positions': open_positions, 'max_positions': max_positions
         }
     except Exception as e:
-        print(f"[CIRCUIT BREAKER] Error checking status: {e}")
+        print(f"[RISK GUARD] Error checking status: {e}")
         return {'tripped': False, 'reason': None, 'error': str(e)}
 
 
