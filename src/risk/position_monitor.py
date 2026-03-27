@@ -5227,6 +5227,52 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] ⚠️ IBKR hub price update error: {e}")
 
+        tastytrade_updated = 0
+        try:
+            import time as _tt_time
+            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+            tt_hub = get_tastytrade_data_hub()
+            if tt_hub.is_streaming():
+                _now = _tt_time.time()
+                for pos in positions:
+                    if 'TASTYTRADE' not in pos.broker.upper():
+                        continue
+                    if pos.asset == 'option':
+                        lookup_sym = pos.raw_symbol if pos.raw_symbol else None
+                        if not lookup_sym:
+                            continue
+                        price = self._get_fresh_hub_price(tt_hub, lookup_sym)
+                        if not price:
+                            if tt_hub.get_quote_price(lookup_sym):
+                                stale_skipped += 1
+                            continue
+                    else:
+                        price = self._get_fresh_hub_price(tt_hub, pos.symbol)
+                        if not price:
+                            if tt_hub.get_quote_price(pos.symbol):
+                                stale_skipped += 1
+                            continue
+                    if price and price > 0:
+                        _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
+                        _tt_quote = tt_hub.get_quote(_lookup)
+                        _hub_ts = _tt_quote.timestamp if _tt_quote else None
+                        _rk = self._pos_tracking_key(pos)
+                        if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
+                            repair = self._rest_repaired_prices[_rk]
+                            if abs(price - repair['price']) > max(0.02, repair['price'] * 0.005):
+                                pos.current_price = price
+                                del self._rest_repaired_prices[_rk]
+                                tastytrade_updated += 1
+                                _hub_updated_ids.add(id(pos))
+                        else:
+                            pos.current_price = price
+                            tastytrade_updated += 1
+                            _hub_updated_ids.add(id(pos))
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ Tastytrade hub price update error: {e}")
+
         t212_updated = 0
         try:
             import time as _t212_time
@@ -5313,6 +5359,27 @@ class RiskManager:
                                 _cross_candidates.append((_p, self._get_hub_quote_ts(ib_hub, _lk), 'IBKR'))
                 except Exception:
                     pass
+            if 'TASTYTRADE' not in _broker_upper:
+                try:
+                    from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                    tt_cx_hub = get_tastytrade_data_hub()
+                    if tt_cx_hub.is_streaming():
+                        if _is_opt:
+                            for _ok in self._get_option_hub_keys(pos, 'Tastytrade'):
+                                _p = self._get_fresh_hub_price(tt_cx_hub, _ok)
+                                if _p and _p > 0:
+                                    _tt_q = tt_cx_hub.get_quote(_ok)
+                                    _tt_ts = _tt_q.timestamp if _tt_q else None
+                                    _cross_candidates.append((_p, _tt_ts, 'Tastytrade'))
+                                    break
+                        else:
+                            _p = self._get_fresh_hub_price(tt_cx_hub, pos.symbol)
+                            if _p and _p > 0:
+                                _tt_q = tt_cx_hub.get_quote(pos.symbol)
+                                _tt_ts = _tt_q.timestamp if _tt_q else None
+                                _cross_candidates.append((_p, _tt_ts, 'Tastytrade'))
+                except Exception:
+                    pass
             if not _is_opt and 'TRADING212' not in _broker_upper:
                 try:
                     import time as _cx_time
@@ -5365,7 +5432,7 @@ class RiskManager:
             if self._stale_skip_count <= 3 or self._stale_skip_count % 60 == 0:
                 print(f"[RISK] ⚠️ Skipped {stale_skipped} stale streaming quote(s) (>{self._HUB_PRICE_MAX_AGE}s old) — using REST price instead")
 
-        total = webull_updated + schwab_updated + ibkr_updated + t212_updated + cross_updated
+        total = webull_updated + schwab_updated + ibkr_updated + tastytrade_updated + t212_updated + cross_updated
         if total > 0 and not hasattr(self, '_hub_update_logged'):
             parts = []
             if webull_updated > 0:
@@ -5374,6 +5441,8 @@ class RiskManager:
                 parts.append(f"Schwab({schwab_updated})")
             if ibkr_updated > 0:
                 parts.append(f"IBKR({ibkr_updated})")
+            if tastytrade_updated > 0:
+                parts.append(f"Tastytrade({tastytrade_updated})")
             if t212_updated > 0:
                 parts.append(f"T212({t212_updated})")
             if cross_updated > 0:

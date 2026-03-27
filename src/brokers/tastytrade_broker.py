@@ -1101,9 +1101,13 @@ class TastytradeBroker(BrokerInterface):
             
             if NESTED_CHAIN_AVAILABLE:
                 try:
-                    nested_chain = NestedOptionChain.get(self.session, symbol)
+                    nested_result = NestedOptionChain.get(self.session, symbol)
+                    if isinstance(nested_result, list):
+                        nested_chain = nested_result[0] if nested_result else None
+                    else:
+                        nested_chain = nested_result
                     
-                    if not nested_chain or not nested_chain.expirations:
+                    if not nested_chain or not getattr(nested_chain, 'expirations', None):
                         print(f"[{self.name}] No option chain returned for {symbol}")
                         return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (no data)'}
                     

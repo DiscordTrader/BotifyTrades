@@ -10227,7 +10227,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 async def execute_conditional_order(order, triggered_price):
                     """Execute a triggered conditional order using sync signal queue."""
                     import sys
-                    from gui_app.database import get_channel_by_discord_id
+                    from gui_app.database import get_channel_by_discord_id, get_channel_by_telegram_id
                     global _telegram_signal_queue
                     try:
                         sys.stderr.write(f"[CONDITIONAL EXEC] Starting execution for order: {order.get('id')}\n")
@@ -10259,6 +10259,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         try:
                             if channel_id:
                                 ch_info = get_channel_by_discord_id(str(channel_id))
+                                if not ch_info:
+                                    ch_info = get_channel_by_telegram_id(str(channel_id))
                                 if ch_info:
                                     channel_entry_mode = ch_info.get('entry_order_mode', 'limit') or 'limit'
                         except Exception:
@@ -10401,6 +10403,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         try:
                             if channel_id:
                                 _ch_for_sizing = get_channel_by_discord_id(str(channel_id))
+                                if not _ch_for_sizing:
+                                    _ch_for_sizing = get_channel_by_telegram_id(str(channel_id))
                                 if _ch_for_sizing:
                                     cond_sizing_mode = _ch_for_sizing.get('sizing_mode', 'live') or 'live'
                                     if cond_sizing_mode in ('start_of_day', 'pre_market'):
@@ -10431,6 +10435,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     if channel_id:
                                         try:
                                             cond_ch = get_channel_by_discord_id(str(channel_id))
+                                            if not cond_ch:
+                                                cond_ch = get_channel_by_telegram_id(str(channel_id))
                                         except Exception:
                                             pass
                                     if cond_ch:
@@ -10487,7 +10493,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         channel_settings = None
                         if channel_id:
                             channel_settings = get_channel_by_discord_id(str(channel_id))
-                            # CRITICAL: Add channel_record_id for trade database saving
+                            if not channel_settings:
+                                channel_settings = get_channel_by_telegram_id(str(channel_id))
                             if channel_settings and channel_settings.get('id'):
                                 signal['channel_record_id'] = channel_settings['id']
                                 signal['_channel_name'] = channel_settings.get('name', '')
