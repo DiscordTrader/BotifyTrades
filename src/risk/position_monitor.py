@@ -1924,32 +1924,73 @@ class RiskManager:
 
             flickered_removed = set()
             flickered_new = set()
+            _flicker_canonical_map = {}
             if new_keys and removed_keys:
+                if not hasattr(self, '_known_brokers'):
+                    self._known_brokers = set()
+                for p in positions:
+                    self._known_brokers.add(p.broker)
+
                 def _parse_key(k):
-                    parts = k.split('_')
-                    if len(parts) >= 4:
-                        return parts[0], parts[1], parts[2], parts[3], parts[4] if len(parts) > 4 else ''
+                    if k.endswith('_stock'):
+                        broker_sym = k[:-len('_stock')]
+                        for bk in sorted(self._known_brokers, key=len, reverse=True):
+                            if broker_sym.startswith(bk + '_'):
+                                return bk, broker_sym[len(bk)+1:], 'stock', '', ''
+                        last_us = broker_sym.rfind('_')
+                        if last_us > 0:
+                            return broker_sym[:last_us], broker_sym[last_us+1:], 'stock', '', ''
+                        return None, None, None, None, None
+                    for bk in sorted(self._known_brokers, key=len, reverse=True):
+                        prefix = bk + '_'
+                        if k.startswith(prefix):
+                            rest = k[len(prefix):]
+                            rp = rest.split('_')
+                            if len(rp) >= 4:
+                                return bk, rp[0], rp[1], rp[2], rp[3]
+                            elif len(rp) == 3:
+                                return bk, rp[0], rp[1], rp[2], ''
+                            elif len(rp) == 2:
+                                return bk, rp[0], rp[1], '', ''
+                            break
+                    segs = k.split('_')
+                    if len(segs) == 5:
+                        return segs[0], segs[1], segs[2], segs[3], segs[4]
+                    if len(segs) == 4:
+                        return segs[0], segs[1], segs[2], segs[3], ''
                     return None, None, None, None, None
+
+                def _is_degraded(strike_val, exp_val, dir_val):
+                    if strike_val == 'stock':
+                        return True
+                    return strike_val in ('0.0', '0', 'None', '') or not dir_val or exp_val in ('', 'None')
 
                 for nk in list(new_keys):
                     nb, ns, nstrike, nexp, ndir = _parse_key(nk)
                     if nb is None:
                         continue
-                    is_nk_degraded = nstrike in ('0.0', '0', 'None', '') or not ndir
+                    is_nk_degraded = _is_degraded(nstrike, nexp, ndir)
                     for rk in list(removed_keys):
                         if rk in flickered_removed:
                             continue
                         rb, rs, rstrike, rexp, rdir = _parse_key(rk)
-                        if rb is None or rb != nb or rs != ns or rexp != nexp:
+                        if rb is None or rb != nb or rs != ns:
                             continue
-                        is_rk_degraded = rstrike in ('0.0', '0', 'None', '') or not rdir
-                        if is_nk_degraded != is_rk_degraded:
+                        is_rk_degraded = _is_degraded(rstrike, rexp, rdir)
+                        is_stock_option_flip = (nstrike == 'stock') != (rstrike == 'stock')
+                        is_expiry_flicker = (not is_stock_option_flip and nstrike == rstrike and ndir == rdir and nexp != rexp)
+                        if is_nk_degraded != is_rk_degraded or is_stock_option_flip or is_expiry_flicker:
                             flickered_removed.add(rk)
                             flickered_new.add(nk)
-                            canonical = rk if is_nk_degraded else nk
-                            degraded = nk if is_nk_degraded else rk
+                            if is_expiry_flicker and not is_nk_degraded and not is_rk_degraded:
+                                canonical = rk if (rexp and not nexp) else (nk if (nexp and not rexp) else rk)
+                                degraded = nk if canonical == rk else rk
+                            else:
+                                canonical = rk if is_nk_degraded else nk
+                                degraded = nk if is_nk_degraded else rk
+                            _flicker_canonical_map[degraded] = canonical
                             print(f"[RISK] ⚠️ Position key flicker detected: {degraded} ↔ {canonical} "
-                                  f"(Webull strike/direction data inconsistency, keeping canonical key)")
+                                  f"(Webull metadata inconsistency, keeping canonical key)")
                             break
 
             real_new_keys = new_keys - flickered_new
@@ -1957,17 +1998,26 @@ class RiskManager:
 
             canonical_keys = set(current_keys)
             for nk in flickered_new:
-                nb, ns, nstrike, nexp, ndir = _parse_key(nk)
-                if nb is None:
-                    continue
-                is_nk_degraded = nstrike in ('0.0', '0', 'None', '') or not ndir
-                if is_nk_degraded:
-                    for rk in flickered_removed:
-                        rb, rs, rstrike, rexp, rdir = _parse_key(rk)
-                        if rb == nb and rs == ns and rexp == nexp:
-                            canonical_keys.discard(nk)
-                            canonical_keys.add(rk)
-                            break
+                canonical = _flicker_canonical_map.get(nk)
+                if canonical and canonical != nk:
+                    canonical_keys.discard(nk)
+                    canonical_keys.add(canonical)
+                    cb, cs, cstrike, cexp, cdir = _parse_key(canonical)
+                    if cb and cstrike != 'stock' and cexp:
+                        for p in positions:
+                            if p.position_key == nk and p.broker == cb and p.symbol == cs:
+                                if p.asset != 'option':
+                                    p.asset = 'option'
+                                if cstrike and cstrike not in ('0.0', '0', ''):
+                                    try:
+                                        p.strike = float(cstrike)
+                                    except (ValueError, TypeError):
+                                        pass
+                                if cexp:
+                                    p.expiry = cexp
+                                if cdir:
+                                    p.direction = cdir
+                                break
 
             if real_new_keys:
                 for nk in real_new_keys:
@@ -2113,6 +2163,27 @@ class RiskManager:
                     asset_type = pos.get('assetType', 'unknown')
                     is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos or asset_type in ('option', 'OPTION', 'OPT'))
                     
+                    if not is_option and hasattr(self, '_webull_enrichment_cache'):
+                        _tid_check = pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
+                        _oid_check = pos.get('optionId', 0)
+                        for _ck in [f"oid_{_oid_check}" if _oid_check else None, f"tid_{_tid_check}" if _tid_check else None]:
+                            if _ck and _ck in self._webull_enrichment_cache:
+                                is_option = True
+                                print(f"[RISK] ✓ Reclassified {symbol} as option via enrichment cache (key={_ck})")
+                                break
+                        if not is_option and hasattr(self, '_stable_option_symbols'):
+                            _bs_key = f"Webull_{symbol}"
+                            _stable_meta = self._stable_option_symbols.get(_bs_key)
+                            if _stable_meta:
+                                _has_real_stock = any(
+                                    p.broker == 'Webull' and p.symbol == symbol and p.asset == 'stock'
+                                    for p in getattr(self, '_last_webull_positions', []) or []
+                                    if hasattr(p, 'asset')
+                                )
+                                if not _has_real_stock:
+                                    is_option = True
+                                    print(f"[RISK] ✓ Reclassified {symbol} as option via stable symbol cache")
+
                     if is_option:
                         ticker_id = pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
                         strike = float(pos.get('strikePrice', 0))
@@ -2146,6 +2217,9 @@ class RiskManager:
                         if strike and strike > 0.0 and direction:
                             for ek in enrich_keys:
                                 self._webull_enrichment_cache[ek] = enrichment_data
+                            if not hasattr(self, '_stable_option_symbols'):
+                                self._stable_option_symbols = {}
+                            self._stable_option_symbols[f"Webull_{symbol}"] = enrichment_data
 
                         if (not strike or strike == 0.0) and (option_id or ticker_id):
                             try:
@@ -2165,7 +2239,7 @@ class RiskManager:
                             except Exception:
                                 pass
 
-                        if not strike or strike == 0.0 or not direction:
+                        if not strike or strike == 0.0 or not direction or not raw_exp:
                             for ek in enrich_keys:
                                 cached = self._webull_enrichment_cache.get(ek)
                                 if cached:
@@ -2273,6 +2347,10 @@ class RiskManager:
                             continue
                         symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
                         is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos)
+                        if not is_option and hasattr(self, '_stable_option_symbols'):
+                            _bs_key = f"Webull_{symbol}"
+                            if _bs_key in self._stable_option_symbols:
+                                is_option = True
                         if not is_option:
                             quantity = position_qty
                             current_price = self._resolve_webull_stock_price(pos, quantity)
@@ -2285,6 +2363,23 @@ class RiskManager:
                             }
                             fetched.append(self._to_snapshot(snap_data))
                         else:
+                            _rest_strike = float(pos.get('strikePrice', 0))
+                            _rest_expiry = pos.get('expireDate', '')
+                            _rest_dir = (pos.get('direction', '') or '').upper()[:1]
+                            if (not _rest_strike or not _rest_expiry or not _rest_dir) and hasattr(self, '_webull_enrichment_cache'):
+                                _rest_oid = pos.get('optionId', 0)
+                                _rest_tid = pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
+                                for _rck in [f"oid_{_rest_oid}" if _rest_oid else None, f"tid_{_rest_tid}" if _rest_tid else None]:
+                                    if _rck:
+                                        _rc = self._webull_enrichment_cache.get(_rck)
+                                        if _rc:
+                                            if not _rest_strike or _rest_strike == 0.0:
+                                                _rest_strike = _rc.get('strike', _rest_strike)
+                                            if not _rest_dir:
+                                                _rest_dir = _rc.get('direction', _rest_dir)
+                                            if not _rest_expiry:
+                                                _rest_expiry = _rc.get('expiry', _rest_expiry)
+                                            break
                             opt_current_price = self._resolve_webull_option_price(pos, position_qty, symbol)
                             snap_data = {
                                 'broker': 'Webull', 'asset': 'option', 'symbol': symbol,
@@ -2292,9 +2387,8 @@ class RiskManager:
                                 'current_price': opt_current_price,
                                 'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
                                 'option_id': pos.get('optionId', 0),
-                                'strike': float(pos.get('strikePrice', 0)),
-                                'expiry': pos.get('expireDate', ''),
-                                'direction': (pos.get('direction', '') or '').upper()[:1],
+                                'strike': _rest_strike, 'expiry': _rest_expiry,
+                                'direction': _rest_dir,
                                 'ticker_id': pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
                             }
                             fetched.append(self._to_snapshot(snap_data))
@@ -5342,7 +5436,7 @@ class RiskManager:
         """
         needs_enrichment = (
             position.asset == 'option' and 
-            (not position.strike or position.strike == 0.0 or not position.direction)
+            (not position.strike or position.strike == 0.0 or not position.direction or not position.expiry)
         )
         if not needs_enrichment or not self.db_adapter or not self.db_adapter._db:
             return None
