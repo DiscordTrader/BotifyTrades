@@ -3518,13 +3518,11 @@ def register_routes(app):
     
     @app.route('/api/tastytrade/balance', methods=['GET'])
     def api_tastytrade_balance() -> Any:
-        """Get Tastytrade account balance for Dashboard"""
+        """Get Tastytrade account balance for Dashboard — uses bot's live broker instance"""
         import asyncio
         
-        # Determine paper/live mode from request or default to live
         paper_mode = request.args.get('paper', 'false').lower() == 'true'
         
-        # Check cache first (5 second TTL) - separate cache for paper vs live
         cache_key = f'tastytrade_balance_{"paper" if paper_mode else "live"}'
         if cache_key in _api_cache:
             cached_value, timestamp = _api_cache[cache_key]
@@ -3532,66 +3530,45 @@ def register_routes(app):
                 return cached_value
         
         try:
-            from .broker_credentials_service import get_tastytrade_credentials
-            from src.brokers.tastytrade_broker import TastytradeBroker
+            broker = None
+            if _bot_instance:
+                broker = getattr(_bot_instance, 'tastytrade_broker', None)
             
-            creds = get_tastytrade_credentials()
-            
-            # Check if we have OAuth2 credentials
-            if not creds.get('client_secret') or not creds.get('refresh_token'):
-                result = jsonify({
-                    'buying_power': 0,
-                    'cash_balance': 0,
-                    'net_liquidation': 0,
-                    'equity': 0,
-                    'unrealized_pnl': 0,
-                    'status': 'not_configured',
-                    'error': 'Tastytrade credentials not configured'
-                })
-                return result
-            
-            acct_key = 'account_number_paper' if paper_mode else 'account_number_live'
-            config = {
-                'client_secret': creds.get('client_secret'),
-                'refresh_token': creds.get('refresh_token'),
-                'account_number': creds.get(acct_key, '') or creds.get('account_number', ''),
-                'paper_trade': paper_mode
-            }
-            
-            broker = TastytradeBroker(config)
-            
-            # Connect and get account info
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                connected = loop.run_until_complete(broker.connect())
-                if not connected:
+            if broker and getattr(broker, 'connected', False):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    account_info = loop.run_until_complete(broker.get_account_info())
                     result = jsonify({
-                        'buying_power': 0,
-                        'cash_balance': 0,
-                        'net_liquidation': 0,
-                        'equity': 0,
+                        'buying_power': account_info.get('buying_power', 0),
+                        'cash_balance': account_info.get('cash', 0),
+                        'net_liquidation': account_info.get('portfolio_value', 0),
+                        'equity': account_info.get('portfolio_value', 0),
                         'unrealized_pnl': 0,
-                        'status': 'connection_failed',
-                        'error': 'Failed to connect to Tastytrade'
+                        'options_buying_power': account_info.get('options_buying_power', 0),
+                        'account_number': account_info.get('account_number', ''),
+                        'status': 'ok'
                     })
+                    _api_cache[cache_key] = (result, time.time())
                     return result
-                
-                account_info = loop.run_until_complete(broker.get_account_info())
-                
+                finally:
+                    loop.close()
+            else:
+                from .broker_credentials_service import get_broker_status
+                broker_id = 'tastytrade_paper' if paper_mode else 'tastytrade_live'
+                status = get_broker_status(broker_id)
+                acct_info = status.get('account_info') or {}
                 result = jsonify({
-                    'buying_power': account_info.get('buying_power', 0),
-                    'cash_balance': account_info.get('cash', 0),
-                    'net_liquidation': account_info.get('portfolio_value', 0),
-                    'equity': account_info.get('portfolio_value', 0),
+                    'buying_power': acct_info.get('buying_power', 0),
+                    'cash_balance': acct_info.get('cash', 0),
+                    'net_liquidation': acct_info.get('portfolio_value', 0),
+                    'equity': acct_info.get('portfolio_value', 0),
                     'unrealized_pnl': 0,
-                    'options_buying_power': account_info.get('options_buying_power', 0),
-                    'status': 'ok'
+                    'options_buying_power': acct_info.get('options_buying_power', 0),
+                    'account_number': acct_info.get('account_number', ''),
+                    'status': 'ok' if status.get('connected') else 'disconnected',
                 })
-                _api_cache[cache_key] = (result, time.time())
                 return result
-            finally:
-                loop.close()
                 
         except Exception as e:
             print(f"[API] Exception in Tastytrade balance endpoint: {e}")
