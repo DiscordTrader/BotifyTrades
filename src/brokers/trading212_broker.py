@@ -53,7 +53,11 @@ class Trading212Broker(BrokerInterface):
             account_data = result.get('data', {})
             print(f"[T212] Connected to {self._environment.upper()} account")
             if isinstance(account_data, dict):
-                free = account_data.get('free', 0)
+                cash_data = account_data.get('cash', {})
+                if isinstance(cash_data, dict) and 'availableToTrade' in cash_data:
+                    free = cash_data.get('availableToTrade', 0)
+                else:
+                    free = account_data.get('free', 0)
                 print(f"[T212] Available cash: ${free:,.2f}")
 
             await self._load_instruments()
@@ -169,13 +173,22 @@ class Trading212Broker(BrokerInterface):
             result = await self._client.get_account_summary()
             if result.get('success') and result.get('data'):
                 data = result['data']
+                cash_data = data.get('cash', {}) if isinstance(data, dict) else {}
+                investments = data.get('investments', {}) if isinstance(data, dict) else {}
+                available = float(cash_data.get('availableToTrade', 0)) if isinstance(cash_data, dict) else 0
+                total_val = float(data.get('totalValue', 0))
+                current_val = float(investments.get('currentValue', 0)) if isinstance(investments, dict) else 0
+                unrealized = float(investments.get('unrealizedProfitLoss', 0)) if isinstance(investments, dict) else 0
+                if not available and not total_val:
+                    available = float(data.get('free', 0))
+                    total_val = float(data.get('total', 0))
                 info = {
-                    'buying_power': float(data.get('free', 0)),
-                    'cash': float(data.get('free', 0)),
-                    'portfolio_value': float(data.get('total', 0)),
-                    'invested': float(data.get('invested', 0)),
-                    'ppl': float(data.get('ppiResult', 0)),
-                    'result': float(data.get('result', 0)),
+                    'buying_power': available,
+                    'cash': available,
+                    'portfolio_value': total_val if total_val else available + current_val,
+                    'invested': float(investments.get('totalCost', 0)) if isinstance(investments, dict) else float(data.get('invested', 0)),
+                    'ppl': unrealized if unrealized else float(data.get('ppiResult', 0)),
+                    'result': float(investments.get('realizedProfitLoss', 0)) if isinstance(investments, dict) else float(data.get('result', 0)),
                 }
                 self._account_cache = info
                 self._account_cache_ts = now
@@ -212,10 +225,13 @@ class Trading212Broker(BrokerInterface):
                     print(f"[T212] Sample raw position: {safe_sample}", flush=True)
                     self._logged_position_keys = True
                 for pos in raw_positions:
-                    ticker = pos.get('ticker', '')
+                    instrument = pos.get('instrument', {}) or {}
+                    ticker = instrument.get('ticker', '') if isinstance(instrument, dict) else ''
+                    if not ticker:
+                        ticker = pos.get('ticker', '')
                     if not ticker:
                         for fallback_key in ('humanReadableId', 'instrumentCode', 'shortName', 'name', 'id'):
-                            val = pos.get(fallback_key)
+                            val = pos.get(fallback_key) or (instrument.get(fallback_key) if isinstance(instrument, dict) else '')
                             if val and isinstance(val, str):
                                 val = val.strip()
                                 if val and ' ' not in val:
@@ -226,9 +242,10 @@ class Trading212Broker(BrokerInterface):
                         base = ticker.split('_')[0] if '_' in ticker else ticker
                         symbol = base.upper().strip() if base else ticker.upper().strip()
                     quantity = float(pos.get('quantity', 0))
-                    avg_price = float(pos.get('averagePrice', 0))
+                    avg_price = float(pos.get('averagePricePaid', 0) or pos.get('averagePrice', 0))
                     current_price = float(pos.get('currentPrice', 0))
-                    ppl = float(pos.get('ppl', 0))
+                    wallet_impact = pos.get('walletImpact', {}) or {}
+                    ppl = float(wallet_impact.get('unrealizedProfitLoss', 0) if isinstance(wallet_impact, dict) else pos.get('ppl', 0))
 
                     positions.append({
                         'symbol': symbol,
@@ -513,7 +530,8 @@ class Trading212Broker(BrokerInterface):
                 for order in orders:
                     status = order.get('status', '')
                     if status in ('NEW', 'CONFIRMED', 'UNCONFIRMED', 'PARTIALLY_FILLED', 'LOCAL'):
-                        ticker = order.get('ticker', '')
+                        order_instrument = order.get('instrument', {}) or {}
+                        ticker = (order_instrument.get('ticker', '') if isinstance(order_instrument, dict) else '') or order.get('ticker', '')
                         pending.append({
                             'order_id': str(order.get('id', '')),
                             'symbol': self._reverse_translate(ticker),
@@ -543,8 +561,11 @@ class Trading212Broker(BrokerInterface):
                 data = result['data']
                 items = data.get('items', []) if isinstance(data, dict) else data if isinstance(data, list) else []
                 history = []
-                for order in items:
-                    ticker = order.get('ticker', '')
+                for item in items:
+                    order = item.get('order', item) if isinstance(item, dict) else item
+                    fill_data = item.get('fill', {}) or {} if isinstance(item, dict) else {}
+                    hist_instrument = order.get('instrument', {}) or {} if isinstance(order, dict) else {}
+                    ticker = (hist_instrument.get('ticker', '') if isinstance(hist_instrument, dict) else '') or order.get('ticker', '')
                     history.append({
                         'order_id': str(order.get('id', '')),
                         'symbol': self._reverse_translate(ticker),
@@ -552,10 +573,10 @@ class Trading212Broker(BrokerInterface):
                         'side': order.get('side', ''),
                         'quantity': abs(float(order.get('quantity', 0))),
                         'filled_quantity': float(order.get('filledQuantity', 0)),
-                        'fill_price': order.get('fillPrice'),
+                        'fill_price': fill_data.get('price') if isinstance(fill_data, dict) else order.get('fillPrice'),
                         'status': order.get('status', ''),
                         'type': order.get('type', ''),
-                        'created_at': order.get('dateCreated', ''),
+                        'created_at': order.get('createdAt', '') or order.get('dateCreated', ''),
                         'broker': 'TRADING212',
                     })
                 return history
@@ -574,12 +595,18 @@ class Trading212Broker(BrokerInterface):
                 result = await client.get_account_summary()
                 if result.get('success') and result.get('data'):
                     data = result['data']
+                    cash_data = data.get('cash', {}) if isinstance(data, dict) else {}
+                    if isinstance(cash_data, dict) and 'availableToTrade' in cash_data:
+                        cash_val = cash_data.get('availableToTrade', 0)
+                    else:
+                        cash_val = data.get('free', 0)
+                    total_val = data.get('totalValue', 0) or data.get('total', 0)
                     return {
                         'success': True,
                         'message': f"Connected to Trading 212 ({environment.upper()})",
                         'account_info': {
-                            'cash': data.get('free', 0),
-                            'total': data.get('total', 0),
+                            'cash': cash_val,
+                            'total': total_val,
                             'environment': environment,
                         }
                     }

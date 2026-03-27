@@ -191,7 +191,7 @@ class Trading212Client:
         return self._throttle_detector.is_throttled
 
     async def get_account_summary(self) -> Dict[str, Any]:
-        return await self.get('/equity/account/cash')
+        return await self.get('/equity/account/summary')
 
     async def get_portfolio(self) -> Dict[str, Any]:
         return await self.get('/equity/positions')
