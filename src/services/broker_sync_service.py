@@ -1656,22 +1656,42 @@ class BrokerSyncService:
                     
                     if exit_price_source == 'last_sync':
                         try:
-                            _fo_query = '''
-                                SELECT filled_price, filled_at FROM filled_orders
-                                WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
-                                  AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
-                            '''
-                            _fo_params = [symbol, broker_name]
-                            if asset_type == 'option' and trade.get('strike'):
-                                _fo_query += ' AND strike = ?'
-                                _fo_params.append(trade['strike'])
-                            _fo_query += ' ORDER BY filled_at DESC LIMIT 1'
-                            _cur.execute(_fo_query, _fo_params)
-                            _fo_row = _cur.fetchone()
-                            if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
-                                exit_price = float(_fo_row['filled_price'])
-                                exit_price_source = 'filled_orders'
-                                print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders: ${exit_price:.4f}")
+                            _stc_order_id = trade.get('order_id', '')
+                            if _stc_order_id:
+                                _cur.execute('''
+                                    SELECT filled_price, filled_at FROM filled_orders
+                                    WHERE broker_order_id = ? AND UPPER(broker) = UPPER(?)
+                                      AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
+                                    LIMIT 1
+                                ''', (_stc_order_id, broker_name))
+                                _fo_row = _cur.fetchone()
+                                if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
+                                    exit_price = float(_fo_row['filled_price'])
+                                    exit_price_source = 'filled_orders_oid'
+                                    print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders by order_id: ${exit_price:.4f}")
+                        except Exception:
+                            pass
+                    if exit_price_source == 'last_sync':
+                        try:
+                            _trade_opened_at = trade.get('executed_at') or trade.get('created_at') or ''
+                            if _trade_opened_at:
+                                _fo_query = '''
+                                    SELECT filled_price, filled_at FROM filled_orders
+                                    WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                                      AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
+                                      AND filled_at >= ?
+                                '''
+                                _fo_params = [symbol, broker_name, _trade_opened_at]
+                                if asset_type == 'option' and trade.get('strike'):
+                                    _fo_query += ' AND strike = ?'
+                                    _fo_params.append(trade['strike'])
+                                _fo_query += ' ORDER BY filled_at DESC LIMIT 1'
+                                _cur.execute(_fo_query, _fo_params)
+                                _fo_row = _cur.fetchone()
+                                if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
+                                    exit_price = float(_fo_row['filled_price'])
+                                    exit_price_source = 'filled_orders'
+                                    print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders: ${exit_price:.4f}")
                         except Exception as fo_err:
                             print(f"[SYNC] ⚠️ Filled orders lookup: {fo_err}")
                     
@@ -2870,8 +2890,8 @@ class BrokerSyncService:
                         if target_lot_id:
                             cursor.execute('''
                                 SELECT id, closed_qty, close_price FROM lot_closures 
-                                WHERE lot_id = ? AND exit_fill_price IS NULL
-                                ORDER BY ABS(closed_qty - ?) ASC, ABS(close_price - ?) ASC, closed_at DESC 
+                                WHERE lot_id = ? AND (exit_fill_price IS NULL OR exit_fill_order_id IS NULL)
+                                ORDER BY (exit_fill_price IS NULL) DESC, ABS(closed_qty - ?) ASC, ABS(close_price - ?) ASC, closed_at DESC 
                                 LIMIT 1
                             ''', (target_lot_id, quantity, fill_price))
                             closure_row = cursor.fetchone()

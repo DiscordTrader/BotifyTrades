@@ -4902,9 +4902,15 @@ def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, or
     if not row:
         return False
     
-    if row['exit_fill_price'] is not None:
-        print(f"[DATABASE] ℹ Closure #{closure_id} already has exit fill ${row['exit_fill_price']:.2f} — skipping {broker} fill ${fill_price:.2f} (first-write-wins)")
-        return False
+    existing_fill = row['exit_fill_price']
+    if existing_fill is not None:
+        cursor.execute('SELECT exit_fill_order_id FROM lot_closures WHERE id = ?', (closure_id,))
+        oid_row = cursor.fetchone()
+        existing_order_id = oid_row['exit_fill_order_id'] if oid_row else None
+        if existing_order_id or not order_id:
+            print(f"[DATABASE] ℹ Closure #{closure_id} already has exit fill ${existing_fill:.2f} — skipping {broker} fill ${fill_price:.2f} (first-write-wins)")
+            return False
+        print(f"[DATABASE] ⚡ Closure #{closure_id} overwriting heuristic exit fill ${existing_fill:.2f} with deterministic fill ${fill_price:.2f} (order_id={order_id})")
     
     entry_price = row['entry_fill_price'] if row['entry_fill_price'] is not None else row['open_price']
     multiplier = 100 if row['asset_type'] == 'option' else 1
@@ -4921,7 +4927,10 @@ def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, or
         params.append(exit_source)
     
     params.append(closure_id)
-    cursor.execute(f'UPDATE lot_closures SET {update_fields} WHERE id = ? AND exit_fill_price IS NULL', params)
+    if existing_fill is not None:
+        cursor.execute(f'UPDATE lot_closures SET {update_fields} WHERE id = ? AND exit_fill_order_id IS NULL', params)
+    else:
+        cursor.execute(f'UPDATE lot_closures SET {update_fields} WHERE id = ? AND exit_fill_price IS NULL', params)
     
     if cursor.rowcount > 0:
         conn.commit()
