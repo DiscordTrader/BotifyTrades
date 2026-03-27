@@ -903,8 +903,14 @@ class AlpacaBroker(BrokerInterface):
             
             if symbol in quotes:
                 quote = quotes[symbol]
-                # Return mid-price (average of bid and ask)
-                return float((quote.ask_price + quote.bid_price) / 2)
+                bid = float(quote.bid_price or 0)
+                ask = float(quote.ask_price or 0)
+                if bid > 0 and ask > 0:
+                    return (bid + ask) / 2
+                elif ask > 0:
+                    return ask
+                elif bid > 0:
+                    return bid
             return None
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
