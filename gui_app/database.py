@@ -1969,6 +1969,14 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_filled_orders_filled_at ON filled_orders(filled_at)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_filled_orders_channel ON filled_orders(channel_id)')
     
+    try:
+        cursor.execute('SELECT processed FROM filled_orders LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE filled_orders ADD COLUMN processed INTEGER DEFAULT 0')
+        cursor.execute('UPDATE filled_orders SET processed = 1')
+        conn.commit()
+        print("[DATABASE] ✓ Added processed column to filled_orders (existing rows marked as processed)")
+    
     # Broker sync state - Track last sync timestamps per broker
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS broker_sync_state (
@@ -4772,7 +4780,7 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
         
         actual_close_qty = min(close_qty, lot['remaining_qty'])
         
-        entry_price = lot['open_price']
+        entry_price = lot['entry_fill_price'] if lot['entry_fill_price'] is not None else lot['open_price']
         cost_basis = entry_price * actual_close_qty
         if lot['asset_type'] == 'option':
             cost_basis *= 100
@@ -13421,8 +13429,8 @@ def insert_filled_order(broker: str, broker_order_id: str, symbol: str, side: st
             INSERT OR IGNORE INTO filled_orders (
                 broker, broker_order_id, symbol, asset_type, side, quantity,
                 filled_price, total_cost, fees, filled_at, strike, expiry,
-                option_type, channel_id, signal_id, trade_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                option_type, channel_id, signal_id, trade_id, processed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         ''', (broker, broker_order_id, symbol, asset_type, side, quantity,
               filled_price, total_cost, fees, filled_at, strike, expiry,
               option_type, channel_id, signal_id, trade_id))

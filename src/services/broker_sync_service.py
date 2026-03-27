@@ -1703,8 +1703,9 @@ class BrokerSyncService:
                                 SELECT lc.id, lc.exit_fill_price
                                 FROM lot_closures lc
                                 JOIN signal_lots sl ON lc.lot_id = sl.id
+                                JOIN trades t ON sl.trade_id = t.id
                                 WHERE UPPER(sl.symbol) = UPPER(?) AND lc.exit_fill_price IS NULL
-                                  AND (sl.entry_fill_broker IS NULL OR UPPER(sl.entry_fill_broker) = UPPER(?))
+                                  AND UPPER(t.broker) = UPPER(?)
                                 ORDER BY lc.closed_at DESC
                                 LIMIT 10
                             ''', (symbol, broker_name))
@@ -2367,10 +2368,25 @@ class BrokerSyncService:
                     option_type=order.get('direction')
                 )
                 
+                should_process = False
                 if result:
                     new_count += 1
-                    
-                    # Also record in execution_lots for Execution P&L tracking
+                    should_process = True
+                else:
+                    try:
+                        from gui_app.database import get_connection as _gconn
+                        _conn = _gconn()
+                        _cur = _conn.cursor()
+                        _cur.execute('''SELECT id, processed FROM filled_orders 
+                            WHERE broker = ? AND broker_order_id = ?''',
+                            (broker_name, str(order.get('order_id', ''))))
+                        _existing = _cur.fetchone()
+                        if _existing and not _existing['processed']:
+                            should_process = True
+                    except Exception:
+                        pass
+                
+                if should_process:
                     if side == 'BTO':
                         await self._record_execution_lot(
                             broker=broker_name,
@@ -2709,16 +2725,26 @@ class BrokerSyncService:
                     sizing_details=sizing_details
                 )
             
-            result = await asyncio.to_thread(_insert_lot)
+            _resolved_signal_lot_id = [signal_lot_id]
+            _original_insert_lot = _insert_lot
+            def _insert_lot_with_capture():
+                from gui_app.database import get_pending_order_metadata
+                meta = get_pending_order_metadata(broker=broker, broker_order_id=broker_order_id)
+                resolved_lot_id = signal_lot_id or (meta['signal_lot_id'] if meta else None)
+                _resolved_signal_lot_id[0] = resolved_lot_id
+                return _original_insert_lot()
+            
+            result = await asyncio.to_thread(_insert_lot_with_capture)
             if result:
                 print(f"[EXEC] ✓ Recorded execution lot: {symbol} {quantity}x @${fill_price:.2f}")
             
-            if final_signal_lot_id:
+            resolved_lot = _resolved_signal_lot_id[0]
+            if resolved_lot:
                 try:
                     def _update_signal_lot_fill():
                         from gui_app.database import update_lot_entry_fill
                         update_lot_entry_fill(
-                            lot_id=final_signal_lot_id,
+                            lot_id=resolved_lot,
                             fill_price=fill_price,
                             broker=broker,
                             order_id=broker_order_id,
@@ -2727,6 +2753,38 @@ class BrokerSyncService:
                     await asyncio.to_thread(_update_signal_lot_fill)
                 except Exception as fill_err:
                     print(f"[EXEC] ⚠️ Could not update signal lot fill: {fill_err}")
+            else:
+                try:
+                    def _fallback_lot_fill():
+                        from gui_app.database import get_connection
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            SELECT sl.id FROM signal_lots sl
+                            JOIN trades t ON sl.trade_id = t.id
+                            WHERE UPPER(sl.symbol) = UPPER(?) AND UPPER(t.broker) = UPPER(?)
+                              AND sl.entry_fill_price IS NULL AND sl.status != 'CLOSED'
+                            ORDER BY sl.id DESC LIMIT 1
+                        ''', (symbol, broker))
+                        row = cursor.fetchone()
+                        if row:
+                            from gui_app.database import update_lot_entry_fill
+                            update_lot_entry_fill(row['id'], fill_price, broker, broker_order_id, filled_at)
+                            print(f"[EXEC] ✓ Fallback entry fill: lot #{row['id']} {symbol} @${fill_price:.2f} via {broker}")
+                    await asyncio.to_thread(_fallback_lot_fill)
+                except Exception as fb_err:
+                    print(f"[EXEC] ⚠️ Fallback entry fill failed: {fb_err}")
+            
+            if result:
+                try:
+                    def _mark_processed():
+                        from gui_app.database import get_connection
+                        conn = get_connection()
+                        conn.cursor().execute('UPDATE filled_orders SET processed = 1 WHERE broker = ? AND broker_order_id = ?', (broker, broker_order_id))
+                        conn.commit()
+                    await asyncio.to_thread(_mark_processed)
+                except Exception:
+                    pass
             
             return result
             
@@ -2779,7 +2837,7 @@ class BrokerSyncService:
             if result:
                 try:
                     def _update_lot_closure_fill():
-                        from gui_app.database import get_connection
+                        from gui_app.database import get_connection, update_closure_exit_fill
                         conn = get_connection()
                         cursor = conn.cursor()
                         cursor.execute('''
@@ -2788,17 +2846,30 @@ class BrokerSyncService:
                             WHERE ec.id = ?
                         ''', (result,))
                         row = cursor.fetchone()
-                        if row and row['signal_lot_id']:
-                            signal_lot_id = row['signal_lot_id']
+                        target_lot_id = row['signal_lot_id'] if row and row['signal_lot_id'] else None
+                        
+                        if not target_lot_id:
+                            cursor.execute('''
+                                SELECT sl.id FROM signal_lots sl
+                                JOIN trades t ON sl.trade_id = t.id
+                                WHERE UPPER(sl.symbol) = UPPER(?) AND UPPER(t.broker) = UPPER(?)
+                                  AND sl.remaining_qty <= 0 AND sl.status = 'CLOSED'
+                                ORDER BY sl.id DESC LIMIT 1
+                            ''', (symbol, broker))
+                            fb_row = cursor.fetchone()
+                            if fb_row:
+                                target_lot_id = fb_row['id']
+                                print(f"[EXEC] ✓ Fallback exit fill: matched lot #{target_lot_id} for {symbol} via {broker}")
+                        
+                        if target_lot_id:
                             cursor.execute('''
                                 SELECT id, closed_qty, close_price FROM lot_closures 
                                 WHERE lot_id = ? AND exit_fill_price IS NULL
                                 ORDER BY ABS(closed_qty - ?) ASC, ABS(close_price - ?) ASC, closed_at DESC 
                                 LIMIT 1
-                            ''', (signal_lot_id, quantity, fill_price))
+                            ''', (target_lot_id, quantity, fill_price))
                             closure_row = cursor.fetchone()
                             if closure_row:
-                                from gui_app.database import update_closure_exit_fill
                                 update_closure_exit_fill(
                                     closure_id=closure_row['id'],
                                     fill_price=fill_price,
@@ -2829,6 +2900,16 @@ class BrokerSyncService:
                     await asyncio.to_thread(_reconcile_trade_fill)
                 except Exception as reconcile_err:
                     print(f"[EXEC] ⚠️ Could not reconcile trade fill price: {reconcile_err}")
+                
+                try:
+                    def _mark_stc_processed():
+                        from gui_app.database import get_connection
+                        conn = get_connection()
+                        conn.cursor().execute('UPDATE filled_orders SET processed = 1 WHERE broker = ? AND broker_order_id = ?', (broker, broker_order_id))
+                        conn.commit()
+                    await asyncio.to_thread(_mark_stc_processed)
+                except Exception:
+                    pass
             
             return result
             

@@ -7428,7 +7428,9 @@ class SelfClient(discord.Client):
             
             price_str = f"${signal['price']}" if signal.get('price') is not None else "MARKET"
             if signal['action'] == 'BTO':
-                print(f"[PNL_TRACKER] ✓ Created lot for {signal['symbol']} BTO {signal['qty']} @ {price_str}")
+                if result and isinstance(result, list) and result[0]:
+                    signal['lot_id'] = result[0]
+                print(f"[PNL_TRACKER] ✓ Created lot for {signal['symbol']} BTO {signal['qty']} @ {price_str} (lot_id={signal.get('lot_id')})")
             elif signal['action'] == 'STC' and result:
                 print(f"[PNL_TRACKER] ✓ Closed {len(result)} lot(s) for {signal['symbol']} STC {signal['qty']} @ {price_str}")
                 
