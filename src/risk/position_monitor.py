@@ -1245,8 +1245,6 @@ class RiskManager:
             print(f"[RISK] ✓ Webull broker reference acquired ({type(self._webull_broker).__name__})")
         
         self._stuck_price_tracker = {}
-        self._STUCK_PRICE_THRESHOLD_REGULAR = 3
-        self._STUCK_PRICE_THRESHOLD_EXTENDED = 15
         self._STUCK_PRICE_THRESHOLD = 3
         self._rest_repaired_prices = {}
         self._rest_repair_cycle_keys = {}
@@ -4688,8 +4686,6 @@ class RiskManager:
         _MAX_REST_REPAIRS_PER_CYCLE = 3
         rest_repairs_this_cycle = 0
 
-        effective_threshold = self._STUCK_PRICE_THRESHOLD_EXTENDED if session == 'extended' else self._STUCK_PRICE_THRESHOLD_REGULAR
-
         stuck_candidates = []
         for pos in positions:
             key = self._pos_tracking_key(pos)
@@ -4722,7 +4718,7 @@ class RiskManager:
                             stuck_candidates.append((stuck_seconds, pos, key, tracker))
                             continue
 
-            if stuck_seconds < effective_threshold:
+            if stuck_seconds < self._STUCK_PRICE_THRESHOLD:
                 continue
             if (now - tracker.get('rest_refreshed', 0)) < rest_cooldown:
                 continue
@@ -4746,19 +4742,6 @@ class RiskManager:
                             source = f'REST/{rest_via}' if rest_via else 'REST'
                             rest_repairs_this_cycle += 1
                 if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
-                    if session == 'extended' and _rest_checked:
-                        cache_entry = self.cache.get(key) or self.cache.get(f"{pos.broker}_{pos.symbol}")
-                        if cache_entry and cache_entry.entry_price > 0:
-                            entry = cache_entry.entry_price
-                            rest_dev = abs(fresh_price - entry) / entry
-                            stream_dev = abs(pos.current_price - entry) / entry
-                            if rest_dev > 0.20 and fresh_price < entry and stream_dev < 0.15:
-                                print(f"[RISK] 🛡️ PREV-CLOSE REJECT: {pos.symbol} REST returned ${fresh_price:.2f} "
-                                      f"({rest_dev*100:.0f}% from entry ${entry:.2f}) but streaming has "
-                                      f"${pos.current_price:.2f} ({stream_dev*100:.1f}%) — REST price is likely "
-                                      f"previous close, not premarket. Keeping streaming price.")
-                                tracker['rest_refreshed'] = now
-                                continue
                     print(f"[RISK] 🔄 STUCK PRICE FIX ({source}): {pos.broker} {pos.symbol} "
                           f"was ${pos.current_price:.4f} (frozen {stuck_seconds:.0f}s) → ${fresh_price:.4f}")
                     pos.current_price = fresh_price
@@ -5001,15 +4984,15 @@ class RiskManager:
                 ask = float(raw_quote.get('askPrice', 0) or 0)
                 bid = float(raw_quote.get('bidPrice', 0) or 0)
                 last = float(raw_quote.get('last', 0) or 0)
-                pre_mkt = float(raw_quote.get('preMarketPrice', 0) or raw_quote.get('pPrice', 0) or 0)
+                premarket_price = float(raw_quote.get('pPrice', 0) or 0)
                 close = float(raw_quote.get('close', 0) or 0)
                 if bid > 0 and ask > 0:
                     return (bid + ask) / 2
-                if pre_mkt > 0:
-                    return pre_mkt
-                if last > 0:
+                elif premarket_price > 0:
+                    return premarket_price
+                elif last > 0:
                     return last
-                if close > 0:
+                elif close > 0:
                     return close
         except asyncio.TimeoutError:
             return None
