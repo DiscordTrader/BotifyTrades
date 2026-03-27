@@ -132,20 +132,34 @@ class TastytradeAdapter(BaseBrokerAdapter):
     
     def parse_fill(self, raw_order: Dict) -> Optional[BrokerFillData]:
         try:
-            filled_at = self.normalize_timestamp(raw_order.get('received-at') or raw_order.get('updated-at'))
+            filled_at = self.normalize_timestamp(
+                raw_order.get('filled_time') or raw_order.get('terminal_at') or
+                raw_order.get('received_at') or raw_order.get('received-at') or
+                raw_order.get('updated-at')
+            )
             if not filled_at:
                 filled_at = datetime.now()
             
+            symbol = raw_order.get('symbol', '') or raw_order.get('underlying_symbol', '') or raw_order.get('underlying-symbol', '')
+            asset_type = raw_order.get('asset_type', 'stock')
+            if asset_type == 'stock' and raw_order.get('order-type') == 'Option':
+                asset_type = 'option'
+            
+            side = raw_order.get('action', 'BUY')
+            
             return BrokerFillData(
                 broker=self.BROKER_NAME,
-                order_id=str(raw_order.get('id', '')),
-                symbol=raw_order.get('underlying-symbol', ''),
-                asset_type='option' if raw_order.get('order-type') == 'Option' else 'stock',
-                side=raw_order.get('action', 'BUY'),
-                quantity=int(raw_order.get('quantity', 0)),
-                fill_price=float(raw_order.get('price', 0)),
+                order_id=str(raw_order.get('order_id', '') or raw_order.get('id', '')),
+                symbol=symbol,
+                asset_type=asset_type,
+                side=side,
+                quantity=int(float(raw_order.get('quantity', 0) or 0)),
+                fill_price=float(raw_order.get('filled_price', 0) or raw_order.get('fill_price', 0) or raw_order.get('price', 0) or 0),
                 filled_at=filled_at,
-                raw_data=raw_order
+                raw_data=raw_order,
+                strike=raw_order.get('strike'),
+                expiry=raw_order.get('expiry'),
+                call_put=raw_order.get('direction')
             )
         except Exception as e:
             print(f"[ADAPTER] Tastytrade parse error: {e}")

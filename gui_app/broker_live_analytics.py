@@ -290,7 +290,7 @@ class BrokerLiveAnalytics:
             }
             
             broker = TastytradeBroker(broker_config)
-            await asyncio.to_thread(broker.connect)
+            await broker.connect()
             self._clients[broker_id] = broker
             return broker
             
@@ -453,11 +453,11 @@ class BrokerLiveAnalytics:
                     }
                     
             elif broker_type == 'tastytrade':
-                account = await asyncio.to_thread(client.get_account_info)
+                account = await client.get_account_info()
                 if account:
-                    portfolio_value = float(account.get('net_liquidation', 0) or 0)
-                    buying_power = float(account.get('buying_power', 0) or 0)
-                    cash = float(account.get('cash_balance', 0) or 0)
+                    portfolio_value = float(account.get('portfolio_value', 0) or 0)
+                    buying_power = float(account.get('buying_power', 0) or account.get('options_buying_power', 0) or 0)
+                    cash = float(account.get('cash', 0) or 0)
                     day_pnl = float(account.get('day_profit_loss', 0) or 0)
                     
                     return {

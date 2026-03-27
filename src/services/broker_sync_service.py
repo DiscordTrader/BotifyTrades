@@ -667,11 +667,21 @@ class BrokerSyncService:
                         print(f"[SYNC] IBKR fetch error: {e}")
             
             elif broker_name.startswith('TASTYTRADE'):
-                # Tastytrade - uses async session with OAuth2
                 if hasattr(broker_instance, 'session') and broker_instance.session:
                     try:
+                        tt_hub = None
+                        try:
+                            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                            tt_hub = get_tastytrade_data_hub()
+                            if tt_hub and not tt_hub._broker:
+                                tt_hub.set_broker(broker_instance)
+                        except Exception:
+                            pass
+
                         if hasattr(broker_instance, 'get_all_positions'):
                             positions = await asyncio.to_thread(broker_instance.get_all_positions) or []
+                            if tt_hub:
+                                tt_hub.update_positions(positions, source='sync')
                             for pos in positions:
                                 result['positions'].append({
                                     'symbol': pos.get('symbol'),
@@ -688,6 +698,8 @@ class BrokerSyncService:
                         
                         if hasattr(broker_instance, 'get_pending_orders'):
                             orders = await asyncio.to_thread(broker_instance.get_pending_orders) or []
+                            if tt_hub:
+                                tt_hub.update_pending_orders(orders)
                             for order in orders:
                                 result['pending_orders'].append({
                                     'broker_order_id': order.get('order_id'),
@@ -1016,11 +1028,18 @@ class BrokerSyncService:
                     raw = await broker_instance.get_account_balances()
                     if raw:
                         account_info = {
-                            'portfolio_value': float(raw.get('net-liquidating-value', 0) or 0),
-                            'buying_power': float(raw.get('buying-power', 0) or raw.get('derivative-buying-power', 0) or 0),
-                            'option_buying_power': float(raw.get('derivative-buying-power', 0) or 0),
-                            'cash_balance': float(raw.get('cash-balance', 0) or 0)
+                            'portfolio_value': float(raw.get('portfolio_value', 0) or 0),
+                            'buying_power': float(raw.get('buying_power', 0) or raw.get('equity_buying_power', 0) or 0),
+                            'option_buying_power': float(raw.get('options_buying_power', 0) or raw.get('derivative_buying_power', 0) or 0),
+                            'cash_balance': float(raw.get('cash', 0) or raw.get('cash_balance', 0) or 0)
                         }
+                        try:
+                            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                            tt_hub = get_tastytrade_data_hub()
+                            if tt_hub:
+                                tt_hub.update_account_info(account_info)
+                        except Exception:
+                            pass
             
             elif broker_name == 'ZERODHA':
                 if hasattr(broker_instance, 'margins'):
@@ -2355,6 +2374,9 @@ class BrokerSyncService:
                             'filled_time': order.get('created_at', ''),
                             'asset_type': 'stock',
                         })
+            elif broker_name.startswith('TASTYTRADE'):
+                if hasattr(broker_instance, 'get_filled_orders'):
+                    filled_orders = await asyncio.to_thread(broker_instance.get_filled_orders, 50)
             
             if not filled_orders:
                 print(f"[SYNC] No filled orders from {broker_name}")

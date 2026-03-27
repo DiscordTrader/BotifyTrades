@@ -200,6 +200,15 @@ class QuoteAggregator:
                     return price
         except Exception:
             pass
+        try:
+            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+            hub = get_tastytrade_data_hub()
+            if hub.is_streaming():
+                price = hub.get_quote_price(symbol)
+                if price and price > 0:
+                    return price
+        except Exception:
+            pass
         return None
 
     def _check_streaming_hubs_detailed(self, symbol: str) -> Optional[dict]:
@@ -224,6 +233,15 @@ class QuoteAggregator:
         try:
             from src.services.ibkr_data_hub import get_ibkr_data_hub
             hub = get_ibkr_data_hub()
+            if hub.is_streaming():
+                data = hub.get_quote_detailed(symbol)
+                if data and (data.get('last', 0) > 0 or data.get('bid', 0) > 0):
+                    return data
+        except Exception:
+            pass
+        try:
+            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+            hub = get_tastytrade_data_hub()
             if hub.is_streaming():
                 data = hub.get_quote_detailed(symbol)
                 if data and (data.get('last', 0) > 0 or data.get('bid', 0) > 0):

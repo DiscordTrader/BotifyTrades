@@ -1,13 +1,14 @@
 """
 Tastytrade Broker Implementation
-Options-focused trading platform with official API
+Options-focused trading platform with official API (SDK v11+, OAuth2 only)
 """
 
 import sys
 import os
+import re
 import asyncio
-from typing import Optional, Dict, Any
-from datetime import datetime
+from typing import Optional, Dict, Any, List
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,8 +20,8 @@ from broker_interface import BrokerInterface, OrderResult, BrokerFactory
 
 try:
     from tastytrade import Session, Account
-    from tastytrade.instruments import Equity, Option, get_option_chain, NestedOptionChain
-    from tastytrade.order import NewOrder, OrderAction, OrderTimeInForce, OrderType
+    from tastytrade.instruments import Equity, Option, get_option_chain, NestedOptionChain, InstrumentType
+    from tastytrade.order import NewOrder, OrderAction, OrderTimeInForce, OrderType, OrderStatus as TT_OrderStatus
     TASTYTRADE_AVAILABLE = True
     NESTED_CHAIN_AVAILABLE = True
 except ImportError as e:
@@ -35,6 +36,29 @@ try:
 except ImportError as e:
     print(f"[TASTYTRADE] Warning: DXLink streaming not available: {e}")
     DXLINK_AVAILABLE = False
+
+
+def _parse_occ_symbol(occ_symbol: str) -> Optional[Dict]:
+    """Parse OCC option symbol: AAPL  251219C00230000 or AAPL251219C00230000"""
+    pattern = r'^([A-Z]{1,6})\s*(\d{6})([CP])(\d{8})$'
+    m = re.match(pattern, occ_symbol.strip())
+    if not m:
+        return None
+    underlying, date_str, cp, strike_str = m.groups()
+    try:
+        year = int('20' + date_str[:2])
+        month = int(date_str[2:4])
+        day = int(date_str[4:6])
+        expiry = f"{year}-{month:02d}-{day:02d}"
+        strike = int(strike_str) / 1000.0
+        return {
+            'underlying': underlying,
+            'expiry': expiry,
+            'call_put': cp,
+            'strike': strike
+        }
+    except (ValueError, IndexError):
+        return None
 
 
 class TastytradeBroker(BrokerInterface):
@@ -71,78 +95,73 @@ class TastytradeBroker(BrokerInterface):
             return False
     
     async def connect(self) -> bool:
-        """Connect to Tastytrade using OAuth2 (preferred) or legacy username/password"""
+        """Connect to Tastytrade using OAuth2 (SDK v11+ requires client_secret + refresh_token)"""
         try:
             try:
                 self._event_loop = asyncio.get_running_loop()
             except RuntimeError:
                 self._event_loop = None
             if not TASTYTRADE_AVAILABLE:
-                print(f"[{self.name}] ❌ tastytrade package not installed")
+                print(f"[{self.name}] tastytrade package not installed")
                 return False
             
             client_secret = self.config.get('client_secret')
             refresh_token = self.config.get('refresh_token')
-            username = self.config.get('username')
-            password = self.config.get('password')
+            
+            if not client_secret or not refresh_token:
+                username = self.config.get('username')
+                password = self.config.get('password')
+                if username or password:
+                    print(f"[{self.name}] Username/password login is no longer supported (SDK v11+)")
+                    print(f"[{self.name}]    You must use OAuth2: client_secret + refresh_token")
+                print(f"[{self.name}] Missing OAuth2 credentials (client_secret + refresh_token)")
+                print(f"[{self.name}]    1. Go to my.tastytrade.com -> OAuth Applications")
+                print(f"[{self.name}]    2. Create new app -> Save Client Secret")
+                print(f"[{self.name}]    3. Manage -> Create Grant -> Save Refresh Token")
+                print(f"[{self.name}]    4. Enter both in the Tastytrade broker settings")
+                return False
             
             mode = "SANDBOX" if self.paper_trade else "LIVE"
-            print(f"[{self.name}] Connecting to {mode} account...")
+            print(f"[{self.name}] Connecting to {mode} account via OAuth2...")
             
-            if client_secret and refresh_token:
-                print(f"[{self.name}] Using OAuth2 authentication...")
-                print(f"[{self.name}]    Environment: {'Sandbox' if self.paper_trade else 'Production'}")
-                try:
-                    self.session = await asyncio.to_thread(
-                        Session,
-                        client_secret,
-                        refresh_token,
-                        is_test=self.paper_trade
-                    )
-                except TypeError:
-                    self.session = Session(
-                        client_secret,
-                        refresh_token,
-                        is_test=self.paper_trade
-                    )
-            elif username and password:
-                print(f"[{self.name}] Using legacy username/password authentication...")
-                print(f"[{self.name}] ⚠️  NOTE: Session-token login is being deprecated Dec 2025")
-                print(f"[{self.name}]    Consider switching to OAuth2 for better reliability")
-                try:
-                    self.session = await asyncio.to_thread(
-                        Session,
-                        username,
-                        password,
-                        is_test=self.paper_trade
-                    )
-                except Exception as legacy_err:
-                    error_str = str(legacy_err).lower()
-                    if 'invalid_grant' in error_str or 'jwt' in error_str:
-                        print(f"[{self.name}] ❌ Legacy login failed - OAuth2 required!")
-                        print(f"[{self.name}] ")
-                        print(f"[{self.name}] 📋 TO FIX THIS:")
-                        print(f"[{self.name}]    1. Go to my.tastytrade.com")
-                        print(f"[{self.name}]    2. Navigate to OAuth Applications")
-                        print(f"[{self.name}]    3. Create new app → Save Client Secret")
-                        print(f"[{self.name}]    4. Manage → Create Grant → Save Refresh Token")
-                        print(f"[{self.name}]    5. Enter Client Secret + Refresh Token in bot settings")
-                        print(f"[{self.name}] ")
-                        return False
-                    raise
-            else:
-                print(f"[{self.name}] ❌ Missing credentials")
-                print(f"[{self.name}]    Option 1 (Recommended): client_secret + refresh_token")
-                print(f"[{self.name}]    Option 2 (Deprecated): username + password")
-                return False
+            self.session = await asyncio.to_thread(
+                Session,
+                client_secret,
+                refresh_token,
+                is_test=self.paper_trade
+            )
             
             accounts = await asyncio.to_thread(Account.get, self.session)
             
             if not accounts:
-                print(f"[{self.name}] ❌ No accounts found")
+                print(f"[{self.name}] No accounts found")
                 return False
             
-            self.account = accounts[0]
+            if isinstance(accounts, list):
+                self._all_accounts = accounts
+                selected_acct_num = self.config.get('account_number')
+                if selected_acct_num:
+                    matched = [a for a in accounts if a.account_number == selected_acct_num]
+                    if matched:
+                        self.account = matched[0]
+                        print(f"[{self.name}] Using selected account: {selected_acct_num}")
+                    else:
+                        self.account = accounts[0]
+                        print(f"[{self.name}] Selected account {selected_acct_num} not found, using {self.account.account_number}")
+                else:
+                    self.account = accounts[0]
+                
+                if len(accounts) > 1:
+                    print(f"[{self.name}] Available accounts ({len(accounts)}):")
+                    for a in accounts:
+                        marker = " <-- ACTIVE" if a.account_number == self.account.account_number else ""
+                        acct_type = getattr(a, 'account_type_name', 'Unknown')
+                        margin_cash = getattr(a, 'margin_or_cash', '')
+                        print(f"[{self.name}]   {a.account_number} ({acct_type}, {margin_cash}){marker}")
+            else:
+                self.account = accounts
+                self._all_accounts = [accounts]
+            
             self.connected = True
             
             balances = await asyncio.to_thread(self.account.get_balances, self.session)
@@ -187,25 +206,12 @@ class TastytradeBroker(BrokerInterface):
         except Exception as e:
             import traceback
             error_msg = str(e)
-            print(f"[{self.name}] ❌ Connection error: {error_msg}")
+            print(f"[{self.name}] Connection error: {error_msg}")
             
-            if 'invalid_grant' in error_msg.lower() or 'jwt' in error_msg.lower():
-                print(f"[{self.name}] ")
-                print(f"[{self.name}] ⚠️  TASTYTRADE NOW REQUIRES OAUTH2 AUTHENTICATION")
-                print(f"[{self.name}] ")
-                print(f"[{self.name}] 📋 How to set up OAuth2:")
-                print(f"[{self.name}]    1. Go to my.tastytrade.com")
-                print(f"[{self.name}]    2. Navigate to OAuth Applications")
-                print(f"[{self.name}]    3. Create new application")
-                print(f"[{self.name}]    4. Save your Client Secret")
-                print(f"[{self.name}]    5. Go to Manage → Create Grant")
-                print(f"[{self.name}]    6. Save your Refresh Token")
-                print(f"[{self.name}]    7. Enter both in the Tastytrade broker settings")
-                print(f"[{self.name}] ")
-            elif 'invalid' in error_msg.lower() or '401' in error_msg or 'unauthorized' in error_msg.lower():
-                print(f"[{self.name}] ⚠️  AUTHENTICATION FAILED - Check that:")
-                print(f"[{self.name}]    1. Credentials are correct")
-                print(f"[{self.name}]    2. Account has API access enabled")
+            if 'invalid_grant' in error_msg.lower() or 'jwt' in error_msg.lower() or 'unauthorized' in error_msg.lower():
+                print(f"[{self.name}] Authentication failed. Check your OAuth2 credentials:")
+                print(f"[{self.name}]    1. Go to my.tastytrade.com -> OAuth Applications")
+                print(f"[{self.name}]    2. Verify Client Secret and Refresh Token are correct")
                 print(f"[{self.name}]    3. For sandbox, use sandbox credentials")
             
             traceback.print_exc()
@@ -262,32 +268,313 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Error getting positions: {e}")
             return {}
     
+    def _convert_position_to_dict(self, pos) -> Dict[str, Any]:
+        """Convert a Pydantic CurrentPosition object to a standard dict."""
+        symbol = getattr(pos, 'symbol', '')
+        underlying = getattr(pos, 'underlying_symbol', symbol)
+        instrument_type = getattr(pos, 'instrument_type', None)
+        quantity = float(getattr(pos, 'quantity', 0))
+        quantity_direction = getattr(pos, 'quantity_direction', 'Long')
+        avg_open = float(getattr(pos, 'average_open_price', 0) or 0)
+        mark = getattr(pos, 'mark_price', None) or getattr(pos, 'mark', None) or getattr(pos, 'close_price', None)
+        current_price = float(mark) if mark else 0.0
+        multiplier = int(getattr(pos, 'multiplier', 1) or 1)
+
+        is_option = False
+        if instrument_type is not None:
+            try:
+                is_option = instrument_type.value == 'Equity Option' or instrument_type.value == 'Future Option'
+            except (AttributeError, TypeError):
+                is_option = str(instrument_type).upper() in ('EQUITY_OPTION', 'EQUITY OPTION', 'FUTURE_OPTION')
+        
+        asset_type = 'option' if is_option else 'stock'
+
+        strike = None
+        expiry = None
+        call_put = None
+
+        if is_option:
+            parsed = _parse_occ_symbol(symbol)
+            if parsed:
+                strike = parsed['strike']
+                expiry = parsed['expiry']
+                call_put = parsed['call_put']
+                underlying = parsed['underlying']
+            else:
+                exp_at = getattr(pos, 'expires_at', None)
+                if exp_at:
+                    try:
+                        expiry = exp_at.strftime('%Y-%m-%d')
+                    except (AttributeError, TypeError):
+                        pass
+
+        if quantity_direction == 'Short':
+            quantity = -abs(quantity)
+
+        if quantity < 0:
+            unrealized_pnl = (avg_open - current_price) * abs(quantity) * multiplier
+        else:
+            unrealized_pnl = (current_price - avg_open) * abs(quantity) * multiplier
+        market_value = current_price * abs(quantity) * multiplier
+
+        return {
+            'symbol': symbol,
+            'underlying_symbol': underlying,
+            'quantity': abs(quantity),
+            'signed_quantity': quantity,
+            'avg_price': avg_open,
+            'current_price': current_price,
+            'unrealized_pnl': round(unrealized_pnl, 2),
+            'market_value': round(market_value, 2),
+            'asset_type': asset_type,
+            'strike': strike,
+            'expiry': expiry,
+            'call_put': call_put,
+            'multiplier': multiplier,
+            'position_id': symbol,
+            'direction': call_put,
+            'quantity_direction': quantity_direction,
+        }
+
     def get_all_positions(self) -> list:
-        """Get all positions as raw objects for sync service (synchronous)"""
+        """Get all positions as dicts for sync service (synchronous)"""
         try:
             if not self.account or not self.session:
                 print(f"[{self.name}] Not connected")
                 return []
-            positions = self.account.get_positions(self.session)
-            print(f"[{self.name}] get_all_positions returned {len(positions)} positions")
-            return positions
+            if not self._ensure_session_valid():
+                return []
+            raw_positions = self.account.get_positions(self.session)
+            result = []
+            for pos in raw_positions:
+                try:
+                    result.append(self._convert_position_to_dict(pos))
+                except Exception as conv_err:
+                    print(f"[{self.name}] Position conversion error for {getattr(pos, 'symbol', '?')}: {conv_err}")
+            print(f"[{self.name}] get_all_positions returned {len(result)} positions")
+            return result
         except Exception as e:
             print(f"[{self.name}] Error getting all positions: {e}")
             import traceback
             traceback.print_exc()
             return []
     
+    def _convert_order_to_dict(self, order) -> Dict[str, Any]:
+        """Convert a Pydantic PlacedOrder object to a standard dict."""
+        order_id = str(getattr(order, 'id', ''))
+        status_val = getattr(order, 'status', None)
+        status_str = status_val.value if hasattr(status_val, 'value') else str(status_val or '')
+        underlying = getattr(order, 'underlying_symbol', '')
+        price = float(getattr(order, 'price', 0) or 0)
+        order_type_val = getattr(order, 'order_type', None)
+        order_type_str = order_type_val.value if hasattr(order_type_val, 'value') else str(order_type_val or '')
+
+        legs_data = []
+        total_qty = 0
+        action_str = ''
+        symbol = underlying
+        asset_type = 'stock'
+
+        legs = getattr(order, 'legs', []) or []
+        for leg in legs:
+            leg_symbol = getattr(leg, 'symbol', '')
+            leg_action = getattr(leg, 'action', None)
+            leg_action_str = leg_action.value if hasattr(leg_action, 'value') else str(leg_action or '')
+            leg_qty = int(float(getattr(leg, 'quantity', 0) or 0))
+            remaining = int(float(getattr(leg, 'remaining_quantity', 0) or 0))
+            leg_inst = getattr(leg, 'instrument_type', None)
+            leg_asset = 'option' if (leg_inst and hasattr(leg_inst, 'value') and leg_inst.value in ('Equity Option', 'Future Option')) else 'stock'
+
+            fill_data = []
+            for fill in (getattr(leg, 'fills', None) or []):
+                fill_data.append({
+                    'fill_id': getattr(fill, 'fill_id', ''),
+                    'quantity': int(float(getattr(fill, 'quantity', 0))),
+                    'fill_price': float(getattr(fill, 'fill_price', 0)),
+                    'filled_at': getattr(fill, 'filled_at', None),
+                })
+
+            legs_data.append({
+                'symbol': leg_symbol,
+                'action': leg_action_str,
+                'quantity': leg_qty,
+                'remaining_quantity': remaining,
+                'instrument_type': leg_asset,
+                'fills': fill_data,
+            })
+
+            if not action_str:
+                action_str = leg_action_str
+            total_qty += leg_qty
+            if leg_symbol:
+                symbol = leg_symbol
+            if leg_asset == 'option':
+                asset_type = 'option'
+
+        return {
+            'order_id': order_id,
+            'broker_order_id': order_id,
+            'symbol': symbol,
+            'underlying_symbol': underlying,
+            'quantity': total_qty,
+            'action': action_str,
+            'status': status_str,
+            'order_type': order_type_str,
+            'limit_price': abs(price) if price else None,
+            'asset_type': asset_type,
+            'legs': legs_data,
+            'received_at': getattr(order, 'received_at', None),
+            'live_at': getattr(order, 'live_at', None),
+            'terminal_at': getattr(order, 'terminal_at', None),
+            'cancelled_at': getattr(order, 'cancelled_at', None),
+            'reject_reason': getattr(order, 'reject_reason', None),
+        }
+
     def get_orders(self, status: str = 'open') -> list:
         """Get orders by status for sync service (synchronous)"""
         try:
             if not self.account or not self.session:
                 print(f"[{self.name}] Not connected")
                 return []
+            if not self._ensure_session_valid():
+                return []
             
-            orders = self.account.get_live_orders(self.session)
-            return orders
+            raw_orders = self.account.get_live_orders(self.session)
+            return [self._convert_order_to_dict(o) for o in raw_orders]
         except Exception as e:
             print(f"[{self.name}] Error getting orders: {e}")
+            return []
+
+    def get_pending_orders(self) -> list:
+        """Get pending/live orders as dicts for sync service (synchronous)"""
+        return self.get_orders(status='open')
+
+    def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """Get status of a specific order by ID (synchronous)"""
+        try:
+            if not self.account or not self.session:
+                return None
+            if not self._ensure_session_valid():
+                return None
+            order = self.account.get_order(self.session, int(order_id))
+            if order:
+                d = self._convert_order_to_dict(order)
+                filled_qty = 0
+                for leg in (getattr(order, 'legs', []) or []):
+                    for fill in (getattr(leg, 'fills', None) or []):
+                        filled_qty += int(float(getattr(fill, 'quantity', 0)))
+                d['filled_qty'] = filled_qty
+                return d
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting order status for {order_id}: {e}")
+            return None
+
+    async def get_account_balances(self) -> Dict[str, Any]:
+        """Get account balances in standard format for broker_sync_service"""
+        try:
+            if not self.account or not self.session:
+                return {}
+            if not self._ensure_session_valid():
+                return {}
+            
+            balances = await asyncio.to_thread(self.account.get_balances, self.session)
+            
+            return {
+                'net_liquidating_value': float(getattr(balances, 'net_liquidating_value', 0) or 0),
+                'net-liquidating-value': float(getattr(balances, 'net_liquidating_value', 0) or 0),
+                'cash_balance': float(getattr(balances, 'cash_balance', 0) or 0),
+                'cash-balance': float(getattr(balances, 'cash_balance', 0) or 0),
+                'equity_buying_power': float(getattr(balances, 'equity_buying_power', 0) or 0),
+                'buying_power': float(getattr(balances, 'equity_buying_power', 0) or 0),
+                'buying-power': float(getattr(balances, 'equity_buying_power', 0) or 0),
+                'derivative_buying_power': float(getattr(balances, 'derivative_buying_power', 0) or 0),
+                'derivative-buying-power': float(getattr(balances, 'derivative_buying_power', 0) or 0),
+                'options_buying_power': float(getattr(balances, 'derivative_buying_power', 0) or 0),
+                'portfolio_value': float(getattr(balances, 'net_liquidating_value', 0) or 0),
+                'cash': float(getattr(balances, 'cash_balance', 0) or 0),
+                'day_trading_buying_power': float(getattr(balances, 'day_trading_buying_power', 0) or 0),
+                'maintenance_requirement': float(getattr(balances, 'maintenance_requirement', 0) or 0),
+            }
+        except Exception as e:
+            print(f"[{self.name}] Error getting account balances: {e}")
+            return {}
+
+    def get_filled_orders(self, limit: int = 50) -> list:
+        """Get filled orders from order history for fill reconciliation (synchronous)"""
+        try:
+            if not self.account or not self.session:
+                return []
+            if not self._ensure_session_valid():
+                return []
+            
+            filled_orders = self.account.get_order_history(
+                self.session,
+                per_page=limit,
+                statuses=[TT_OrderStatus.FILLED]
+            )
+            
+            result = []
+            for order in filled_orders:
+                d = self._convert_order_to_dict(order)
+                
+                fill_price = 0.0
+                fill_qty = 0
+                latest_fill_time = None
+                
+                for leg in (getattr(order, 'legs', []) or []):
+                    for fill in (getattr(leg, 'fills', None) or []):
+                        fq = int(float(getattr(fill, 'quantity', 0)))
+                        fp = float(getattr(fill, 'fill_price', 0))
+                        ft = getattr(fill, 'filled_at', None)
+                        fill_qty += fq
+                        fill_price += fq * fp
+                        if ft and (latest_fill_time is None or ft > latest_fill_time):
+                            latest_fill_time = ft
+                
+                if fill_qty > 0:
+                    fill_price = fill_price / fill_qty
+                
+                action_str = d.get('action', '')
+                side = 'BTO'
+                if 'Sell to Close' in action_str or action_str == 'STC':
+                    side = 'STC'
+                elif 'Sell to Open' in action_str or action_str == 'STO':
+                    side = 'STO'
+                elif 'Buy to Close' in action_str or action_str == 'BTC':
+                    side = 'BTC'
+                elif 'Buy to Open' in action_str or action_str == 'BTO':
+                    side = 'BTO'
+                elif 'Buy' in action_str:
+                    side = 'BTO'
+                elif 'Sell' in action_str:
+                    side = 'STC'
+                
+                parsed = None
+                symbol = d.get('symbol', '')
+                asset_type = d.get('asset_type', 'stock')
+                if asset_type == 'option':
+                    parsed = _parse_occ_symbol(symbol)
+                
+                result.append({
+                    'order_id': d['order_id'],
+                    'symbol': parsed['underlying'] if parsed else d.get('underlying_symbol', symbol),
+                    'quantity': fill_qty or d.get('quantity', 0),
+                    'filled_price': round(fill_price, 4),
+                    'action': side,
+                    'filled_time': latest_fill_time.isoformat() if latest_fill_time else (d.get('terminal_at').isoformat() if d.get('terminal_at') else ''),
+                    'asset_type': asset_type,
+                    'strike': parsed['strike'] if parsed else None,
+                    'expiry': parsed['expiry'] if parsed else None,
+                    'direction': parsed['call_put'] if parsed else None,
+                    'occ_symbol': symbol if asset_type == 'option' else None,
+                })
+            
+            return result
+        except Exception as e:
+            print(f"[{self.name}] Error getting filled orders: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
@@ -543,11 +830,41 @@ class TastytradeBroker(BrokerInterface):
             )
     
     async def get_quote(self, symbol: str) -> Optional[float]:
-        """Get current price for a symbol"""
+        """Get current price for a symbol using DXLink one-shot quote"""
         try:
             if not self.session:
                 return None
             
+            if not DXLINK_AVAILABLE:
+                return None
+            
+            def _lookup_streamer_symbol():
+                try:
+                    equity = Equity.get(self.session, symbol)
+                    if equity and hasattr(equity, 'streamer_symbol'):
+                        return equity.streamer_symbol
+                except Exception:
+                    pass
+                return symbol
+            
+            streamer_sym = await asyncio.to_thread(_lookup_streamer_symbol)
+            
+            async with DXLinkStreamer(self.session) as streamer:
+                await streamer.subscribe(Quote, [streamer_sym])
+                quote_event = await asyncio.wait_for(streamer.get_event(Quote), timeout=5.0)
+                if quote_event:
+                    bid = float(getattr(quote_event, 'bid_price', 0) or 0)
+                    ask = float(getattr(quote_event, 'ask_price', 0) or 0)
+                    if bid > 0 and ask > 0:
+                        return round((bid + ask) / 2, 4)
+                    elif bid > 0:
+                        return bid
+                    elif ask > 0:
+                        return ask
+            
+            return None
+        except asyncio.TimeoutError:
+            print(f"[{self.name}] Quote timeout for {symbol}")
             return None
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")

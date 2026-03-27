@@ -1839,6 +1839,13 @@ class BaseConditionalOrderService(ABC):
                         hub_map['ibkr'] = ibkr_hub
                 except Exception:
                     pass
+                try:
+                    from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                    tt_hub = get_tastytrade_data_hub()
+                    if tt_hub:
+                        hub_map['tastytrade'] = tt_hub
+                except Exception:
+                    pass
                 for hname, hub in hub_map.items():
                     if hub and hname not in self.data_hubs:
                         self.data_hubs[hname] = hub

@@ -1509,6 +1509,17 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] ⚠️ IBKR hub subscription error: {e}")
 
+        try:
+            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+            tt_hub = get_tastytrade_data_hub()
+            tt_hub.on('quote_updated', _on_quote_update)
+            _any_subscribed = True
+            print("[RISK] ✓ Subscribed to Tastytrade streaming prices (event-driven risk)")
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[RISK] ⚠️ Tastytrade hub subscription error: {e}")
+
         self._hub_subscribed = _any_subscribed
 
     def _update_monitored_symbols(self, positions):
@@ -1520,7 +1531,14 @@ class RiskManager:
             if hasattr(p, 'raw_symbol') and p.raw_symbol:
                 symbols.add(p.raw_symbol.upper())
             broker_upper = (p.broker or '').upper()
-            if 'WEBULL' not in broker_upper and broker_upper != 'SCHWAB' and 'IBKR' not in broker_upper:
+            has_streaming = 'WEBULL' in broker_upper or broker_upper == 'SCHWAB' or 'IBKR' in broker_upper
+            if not has_streaming and 'TASTYTRADE' in broker_upper:
+                try:
+                    from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                    has_streaming = get_tastytrade_data_hub().is_streaming()
+                except Exception:
+                    pass
+            if not has_streaming:
                 if p.asset != 'option':
                     non_streaming_symbols.add(sym)
         with self._monitored_symbols_lock:
