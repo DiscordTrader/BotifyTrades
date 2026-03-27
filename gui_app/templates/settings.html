@@ -703,7 +703,7 @@ input:checked + .slider:before {
         </details>
         <div id="tastytrade-paper-account-selector" class="form-group" style="display: none;">
             <label>Account</label>
-            <select id="tastytrade-paper-account-select" style="width: 100%; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+            <select id="tastytrade-paper-account-select" style="width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid var(--border-color); border-radius: 6px; color: #e0e0e0; font-size: 13px; -webkit-appearance: none; -moz-appearance: none; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22%3E%3Cpath fill=%22%23999%22 d=%22M6 8L1 3h10z%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 10px center;">
                 <option value="">Auto (first account)</option>
             </select>
             <p class="help-text">Select which account to trade with (Cash, Margin, IRA, etc.)</p>
@@ -752,7 +752,7 @@ input:checked + .slider:before {
         </details>
         <div id="tastytrade-live-account-selector" class="form-group" style="display: none;">
             <label>Account</label>
-            <select id="tastytrade-live-account-select" style="width: 100%; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+            <select id="tastytrade-live-account-select" style="width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid var(--border-color); border-radius: 6px; color: #e0e0e0; font-size: 13px; -webkit-appearance: none; -moz-appearance: none; appearance: none; background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22%3E%3Cpath fill=%22%23999%22 d=%22M6 8L1 3h10z%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 10px center;">
                 <option value="">Auto (first account)</option>
             </select>
             <p class="help-text">Select which account to trade with (Cash, Margin, IRA, etc.)</p>
@@ -3984,10 +3984,12 @@ function populateTastytradeAccountSelector(mode, accounts, activeAccountNumber) 
     if (!selectorDiv || !selectEl) return;
     
     if (accounts && accounts.length > 0) {
-        selectEl.innerHTML = '<option value="">Auto (first account)</option>';
+        selectEl.innerHTML = '<option value="" style="background:#1a1a2e;color:#e0e0e0;">Auto (first account)</option>';
         accounts.forEach(acct => {
             const opt = document.createElement('option');
             opt.value = acct.account_number;
+            opt.style.background = '#1a1a2e';
+            opt.style.color = '#e0e0e0';
             let label = acct.account_number;
             if (acct.margin_or_cash) label += ` (${acct.margin_or_cash})`;
             if (acct.account_type) label += ` - ${acct.account_type}`;
