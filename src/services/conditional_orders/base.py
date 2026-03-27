@@ -465,7 +465,7 @@ class StreamingPriceMonitor(PriceMonitor):
 
         for bname, binst in self.alt_broker_instances.items():
             bname_norm = bname.lower().replace('_paper', '').replace('_live', '')
-            if bname_norm == primary_lower or bname_norm == 'trading212':
+            if bname_norm == primary_lower:
                 continue
             if not binst or not hasattr(binst, 'get_quote'):
                 continue
@@ -816,7 +816,7 @@ class BrokerPriceMonitor(PriceMonitor):
 
         for bname, binst in self.alt_broker_instances.items():
             bname_norm = bname.lower().replace('_paper', '').replace('_live', '')
-            if bname_norm == primary_lower or bname_norm == 'trading212':
+            if bname_norm == primary_lower:
                 continue
             if not binst or not hasattr(binst, 'get_quote'):
                 continue

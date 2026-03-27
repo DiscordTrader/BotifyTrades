@@ -94,7 +94,6 @@ class IBKRDataHub:
         self._risk_eval_requested = threading.Event()
         self._reconcile_task = None
 
-        self._delayed_mode_enabled = False
         self._mktdata_denied_symbols: Set[str] = set()
         self._mktdata_denied_lock = threading.Lock()
 
@@ -169,27 +168,13 @@ class IBKRDataHub:
                     already_denied = symbol in self._mktdata_denied_symbols
                     self._mktdata_denied_symbols.add(symbol)
                 self._subscribe_fail_cache[symbol] = time.time() + 3600
+                self._subscribed_symbols.discard(symbol)
                 if not already_denied:
-                    logger.warning(f"[IBKR_HUB] ⚠️ Market data denied for {symbol} (error {errorCode}) — will use delayed data")
+                    logger.warning(f"[IBKR_HUB] ⚠️ Market data denied for {symbol} (error {errorCode}) — will fall back to other brokers")
 
-            if self._ib:
-                if not self._delayed_mode_enabled:
-                    try:
-                        self._ib.reqMarketDataType(3)
-                        self._delayed_mode_enabled = True
-                        logger.info("[IBKR_HUB] ✓ Enabled delayed market data (type 3) as fallback")
-                    except Exception as e:
-                        logger.warning(f"[IBKR_HUB] Could not enable delayed data: {e}")
-
-                if self._delayed_mode_enabled and symbol:
-                    with self._contract_lock:
-                        existing_contract = self._symbol_to_contract.get(symbol)
-                    if existing_contract:
-                        try:
-                            self._ib.reqMktData(existing_contract, '', False, False)
-                            logger.info(f"[IBKR_HUB] ✓ Re-requested {symbol} with delayed data mode")
-                        except Exception:
-                            pass
+    def is_symbol_denied(self, symbol: str) -> bool:
+        with self._mktdata_denied_lock:
+            return symbol.upper() in self._mktdata_denied_symbols
 
     def _on_pending_tickers(self, tickers):
         now = time.time()
