@@ -8,6 +8,7 @@ Quote data is populated via DXLink streaming (zero REST API calls for quotes).
 Position/order snapshots use periodic REST calls via the broker's existing methods.
 """
 
+import asyncio
 import time
 import threading
 from typing import Dict, Optional, List, Any, Callable, Set
@@ -67,8 +68,15 @@ class TastytradeDataHub:
         self._streaming_active = False
         self._last_quote_ts: float = 0
         self._subscribed_symbols: Set[str] = set()
+        self._pending_subscribe: Set[str] = set()
+        self._subscribe_event: Optional[asyncio.Event] = None
 
         self._broker = None
+        self._streamer = None
+        self._stream_task: Optional[asyncio.Task] = None
+        self._stream_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._streamer_symbol_cache: Dict[str, str] = {}
+        self._reconnect_count = 0
 
         self.POSITION_CACHE_TTL = 15
         self.ORDER_CACHE_TTL = 15
@@ -238,6 +246,177 @@ class TastytradeDataHub:
 
     def request_risk_eval(self):
         self._emit('risk_eval_requested', None)
+
+    def subscribe_symbol(self, symbol: str):
+        if symbol in self._subscribed_symbols:
+            return
+        self._pending_subscribe.add(symbol)
+        if self._subscribe_event:
+            self._subscribe_event.set()
+
+    def _resolve_streamer_symbol(self, symbol: str) -> str:
+        cached = self._streamer_symbol_cache.get(symbol)
+        if cached:
+            return cached
+        if not self._broker or not hasattr(self._broker, 'session') or not self._broker.session:
+            return symbol
+        try:
+            from tastytrade import Equity
+            equity = Equity.get(self._broker.session, symbol)
+            if equity and hasattr(equity, 'streamer_symbol'):
+                self._streamer_symbol_cache[symbol] = equity.streamer_symbol
+                return equity.streamer_symbol
+        except Exception:
+            pass
+        return symbol
+
+    async def start_streaming(self, loop: asyncio.AbstractEventLoop = None):
+        if self._stream_task and not self._stream_task.done():
+            return
+        if not self._broker or not hasattr(self._broker, 'session') or not self._broker.session:
+            print("[TASTYTRADE_HUB] Cannot start streaming — no broker session")
+            return
+        self._stream_loop = loop or asyncio.get_event_loop()
+        self._subscribe_event = asyncio.Event()
+        self._stream_task = asyncio.create_task(self._streaming_loop())
+        print("[TASTYTRADE_HUB] ✓ Persistent DXLink streaming task started")
+
+    async def stop_streaming(self):
+        if self._stream_task and not self._stream_task.done():
+            self._stream_task.cancel()
+            try:
+                await self._stream_task
+            except asyncio.CancelledError:
+                pass
+        self._stream_task = None
+        self._streaming_active = False
+        self._streamer = None
+        print("[TASTYTRADE_HUB] Streaming stopped")
+
+    async def _streaming_loop(self):
+        try:
+            from tastytrade import DXLinkStreamer
+            from tastytrade.dxfeed import Quote
+        except ImportError:
+            print("[TASTYTRADE_HUB] DXLink not available — streaming disabled")
+            return
+
+        while True:
+            try:
+                session = self._broker.session if self._broker else None
+                if not session:
+                    print("[TASTYTRADE_HUB] No session — waiting 10s before retry")
+                    await asyncio.sleep(10)
+                    continue
+
+                print(f"[TASTYTRADE_HUB] Opening persistent DXLink connection (attempt #{self._reconnect_count + 1})...")
+                async with DXLinkStreamer(session) as streamer:
+                    self._streamer = streamer
+                    self._streaming_active = True
+                    self._reconnect_count += 1
+                    self._emit('streaming_status', True)
+
+                    if self._subscribed_symbols:
+                        streamer_syms = []
+                        for sym in self._subscribed_symbols:
+                            s = await asyncio.to_thread(self._resolve_streamer_symbol, sym)
+                            streamer_syms.append(s)
+                        await streamer.subscribe(Quote, streamer_syms)
+                        print(f"[TASTYTRADE_HUB] Re-subscribed {len(streamer_syms)} symbol(s) after reconnect")
+
+                    if self._pending_subscribe:
+                        new_syms = list(self._pending_subscribe)
+                        self._pending_subscribe.clear()
+                        streamer_syms = []
+                        for sym in new_syms:
+                            s = await asyncio.to_thread(self._resolve_streamer_symbol, sym)
+                            streamer_syms.append(s)
+                            self._subscribed_symbols.add(sym)
+                        await streamer.subscribe(Quote, streamer_syms)
+                        print(f"[TASTYTRADE_HUB] Subscribed to {len(streamer_syms)} initial symbol(s): {new_syms}")
+
+                    print(f"[TASTYTRADE_HUB] ✓ DXLink stream active — listening for quotes")
+
+                    while True:
+                        subscribe_wait = asyncio.create_task(self._subscribe_event.wait())
+                        quote_wait = asyncio.create_task(self._get_next_quote(streamer, Quote))
+
+                        done, pending = await asyncio.wait(
+                            {subscribe_wait, quote_wait},
+                            return_when=asyncio.FIRST_COMPLETED
+                        )
+
+                        for task in pending:
+                            task.cancel()
+                            try:
+                                await task
+                            except (asyncio.CancelledError, Exception):
+                                pass
+
+                        if subscribe_wait in done:
+                            self._subscribe_event.clear()
+                            if self._pending_subscribe:
+                                new_syms = list(self._pending_subscribe)
+                                self._pending_subscribe.clear()
+                                streamer_syms = []
+                                for sym in new_syms:
+                                    s = await asyncio.to_thread(self._resolve_streamer_symbol, sym)
+                                    streamer_syms.append(s)
+                                    self._subscribed_symbols.add(sym)
+                                await streamer.subscribe(Quote, streamer_syms)
+                                print(f"[TASTYTRADE_HUB] ✓ Dynamically subscribed: {new_syms}")
+
+                        if quote_wait in done:
+                            try:
+                                quote_event = quote_wait.result()
+                                if quote_event:
+                                    self._process_quote_event(quote_event)
+                            except Exception:
+                                pass
+
+            except asyncio.CancelledError:
+                print("[TASTYTRADE_HUB] Streaming task cancelled")
+                self._streaming_active = False
+                self._streamer = None
+                return
+            except Exception as e:
+                self._streaming_active = False
+                self._streamer = None
+                err_str = str(e)
+                if 'GeneratorExit' not in err_str:
+                    print(f"[TASTYTRADE_HUB] Stream error: {e} — reconnecting in 5s")
+                await asyncio.sleep(5)
+
+    async def _get_next_quote(self, streamer, quote_cls):
+        try:
+            return await asyncio.wait_for(streamer.get_event(quote_cls), timeout=30.0)
+        except asyncio.TimeoutError:
+            return None
+
+    def _process_quote_event(self, quote_event):
+        symbol = getattr(quote_event, 'event_symbol', None)
+        if not symbol:
+            return
+
+        display_symbol = symbol
+        for orig, streamer_sym in self._streamer_symbol_cache.items():
+            if streamer_sym == symbol:
+                display_symbol = orig
+                break
+
+        bid = float(getattr(quote_event, 'bid_price', 0) or 0)
+        ask = float(getattr(quote_event, 'ask_price', 0) or 0)
+
+        quote_data = {}
+        if bid > 0:
+            quote_data['bid'] = bid
+        if ask > 0:
+            quote_data['ask'] = ask
+        if bid > 0 and ask > 0:
+            quote_data['last'] = round((bid + ask) / 2, 4)
+
+        if quote_data:
+            self.update_quote(display_symbol, quote_data, source="dxlink_stream")
 
 
 _hub_instance = None

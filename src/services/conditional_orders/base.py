@@ -206,6 +206,17 @@ class StreamingPriceMonitor(PriceMonitor):
                     sys.stderr.flush()
                 return False
 
+            if hasattr(self.data_hub, 'subscribe_symbol') and hasattr(self.data_hub, '_streamer'):
+                try:
+                    self.data_hub.subscribe_symbol(self.symbol)
+                    sys.stderr.write(f"[STREAM_MON] ✓ Tastytrade: subscribing {self.symbol} via DXLink hub\n")
+                    sys.stderr.flush()
+                    return True
+                except Exception as e:
+                    sys.stderr.write(f"[STREAM_MON] Tastytrade subscribe error for {self.symbol}: {e}\n")
+                    sys.stderr.flush()
+                return False
+
             has_broker = self.broker_instance is not None
             has_client = has_broker and hasattr(self.broker_instance, '_streaming_client') and self.broker_instance._streaming_client is not None
             
@@ -444,6 +455,7 @@ class StreamingPriceMonitor(PriceMonitor):
             ('src.services.webull_data_hub', 'get_webull_data_hub'),
             ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
             ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+            ('src.services.tastytrade_data_hub', 'get_tastytrade_data_hub'),
         ]
         primary_lower = self.broker_name.lower().replace('_paper', '').replace('_live', '')
         for mod_path, func_name in hub_modules:
@@ -795,6 +807,7 @@ class BrokerPriceMonitor(PriceMonitor):
             ('src.services.webull_data_hub', 'get_webull_data_hub'),
             ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
             ('src.services.trading212_data_hub', 'get_trading212_data_hub'),
+            ('src.services.tastytrade_data_hub', 'get_tastytrade_data_hub'),
         ]
         primary_lower = self.broker_name.lower().replace('_paper', '').replace('_live', '')
         for mod_path, func_name in hub_modules:

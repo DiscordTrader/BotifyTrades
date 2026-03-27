@@ -8651,6 +8651,17 @@ class SelfClient(discord.Client):
                     _cond_print(f"[CONDITIONAL] ✓ IBKR data hub registered (TWS streaming)", flush=True)
             except Exception:
                 pass
+            try:
+                from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                tt_hub = get_tastytrade_data_hub()
+                if tt_hub:
+                    if self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False):
+                        tt_hub.set_broker(self.tastytrade_broker)
+                        asyncio.create_task(tt_hub.start_streaming(asyncio.get_event_loop()))
+                    conditional_order_router.set_data_hub('tastytrade', tt_hub)
+                    _cond_print(f"[CONDITIONAL] ✓ Tastytrade data hub registered (DXLink streaming)", flush=True)
+            except Exception:
+                pass
         except Exception as e:
             print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
             import traceback

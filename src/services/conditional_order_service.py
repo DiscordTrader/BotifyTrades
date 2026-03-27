@@ -159,6 +159,7 @@ class BrokerPriceMonitor(PriceMonitor):
             ('webull', 'src.services.webull_data_hub', 'get_webull_data_hub'),
             ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
             ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+            ('tastytrade', 'src.services.tastytrade_data_hub', 'get_tastytrade_data_hub'),
         ]
 
         broker_key = self.broker_name.lower().replace('_paper', '').replace('_live', '') if self.broker_name else ''
