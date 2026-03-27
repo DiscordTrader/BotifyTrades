@@ -790,17 +790,23 @@ def _fetch_trading212(bot) -> List[Dict]:
 
 def _convert_t212_raw(raw: list) -> List[Dict]:
     positions = []
-    for pos in raw:
+    for idx, pos in enumerate(raw):
         if isinstance(pos, dict):
+            sym = str(pos.get('symbol', '') or '').strip()
+            if not sym:
+                ticker = str(pos.get('ticker', '') or '').strip()
+                if ticker:
+                    sym = ticker.split('_')[0] if '_' in ticker else ticker
             qty = float(pos.get('quantity', 0))
             avg_cost = float(pos.get('avg_cost', 0))
             cur_price = float(pos.get('current_price', 0))
             unrealized = float(pos.get('unrealized_pnl', 0))
             pnl_pct = ((cur_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0.0
+            pos_id = f"T212_{sym}" if sym else f"T212_pos{idx}"
 
             positions.append(_make_position(
-                pos_id=f"T212_{pos.get('symbol', '')}",
-                symbol=pos.get('symbol', ''),
+                pos_id=pos_id,
+                symbol=sym,
                 asset_type='stock',
                 strike=None,
                 expiry=None,

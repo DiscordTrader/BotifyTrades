@@ -117,7 +117,11 @@ class Trading212Broker(BrokerInterface):
                     self._instruments_ready = True
                     print(f"[T212] Loaded {len(self._instruments)} instruments")
                 else:
-                    print(f"[T212] Unexpected instruments format")
+                    print(f"[T212] Unexpected instruments format: {type(instruments)}")
+            else:
+                err = result.get('error', 'unknown')
+                status = result.get('status', '?')
+                print(f"[T212] ⚠️ Instruments endpoint failed: {err} (status={status})")
         except Exception as e:
             print(f"[T212] Failed to load instruments: {e}")
 
@@ -201,18 +205,26 @@ class Trading212Broker(BrokerInterface):
                 if raw_positions and _first_fetch:
                     sample = raw_positions[0] if raw_positions else {}
                     print(f"[T212] Position data keys: {list(sample.keys()) if isinstance(sample, dict) else type(sample)}", flush=True)
+                    safe_sample = {}
+                    if isinstance(sample, dict):
+                        for k, v in list(sample.items())[:12]:
+                            safe_sample[k] = v
+                    print(f"[T212] Sample raw position: {safe_sample}", flush=True)
                     self._logged_position_keys = True
                 for pos in raw_positions:
                     ticker = pos.get('ticker', '')
                     if not ticker:
-                        ticker = (pos.get('instrumentCode', '') or pos.get('shortName', '') or '').strip()
-                    if not ticker:
-                        _fallback_name = (pos.get('name', '') or '').strip()
-                        if _fallback_name and ' ' not in _fallback_name:
-                            ticker = _fallback_name
+                        for fallback_key in ('humanReadableId', 'instrumentCode', 'shortName', 'name', 'id'):
+                            val = pos.get(fallback_key)
+                            if val and isinstance(val, str):
+                                val = val.strip()
+                                if val and ' ' not in val:
+                                    ticker = val
+                                    break
                     symbol = self._reverse_translate(ticker)
                     if not symbol and ticker:
-                        symbol = ticker.upper().strip()
+                        base = ticker.split('_')[0] if '_' in ticker else ticker
+                        symbol = base.upper().strip() if base else ticker.upper().strip()
                     quantity = float(pos.get('quantity', 0))
                     avg_price = float(pos.get('averagePrice', 0))
                     current_price = float(pos.get('currentPrice', 0))
@@ -233,6 +245,9 @@ class Trading212Broker(BrokerInterface):
                 if _first_fetch and positions:
                     _sample_syms = [(p['symbol'], p['ticker']) for p in positions[:5]]
                     print(f"[T212] Position symbol mapping (first 5): {_sample_syms}", flush=True)
+                    empty_count = sum(1 for p in positions if not p.get('symbol'))
+                    if empty_count > 0:
+                        print(f"[T212] ⚠️ {empty_count}/{len(positions)} positions have EMPTY symbols — check API response format", flush=True)
                 self._positions_cache = positions
                 self._positions_cache_ts = now
                 return positions
