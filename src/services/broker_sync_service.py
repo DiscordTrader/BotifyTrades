@@ -1704,9 +1704,10 @@ class BrokerSyncService:
                                 FROM lot_closures lc
                                 JOIN signal_lots sl ON lc.lot_id = sl.id
                                 WHERE UPPER(sl.symbol) = UPPER(?) AND lc.exit_fill_price IS NULL
+                                  AND (sl.entry_fill_broker IS NULL OR UPPER(sl.entry_fill_broker) = UPPER(?))
                                 ORDER BY lc.closed_at DESC
                                 LIMIT 10
-                            ''', (symbol,))
+                            ''', (symbol, broker_name))
                             _unfilled_closures = _fill_cur.fetchall()
                             for _uc in _unfilled_closures:
                                 update_closure_exit_fill(_uc['id'], exit_price, broker_name, filled_at=datetime.now().isoformat(), exit_source='broker_sync')
