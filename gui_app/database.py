@@ -12086,10 +12086,16 @@ def get_conditional_order_settings() -> Dict[str, Any]:
                 settings[key] = True
             elif value == 'false':
                 settings[key] = False
-            elif value.isdigit():
-                settings[key] = int(value)
             else:
-                settings[key] = value
+                try:
+                    import math
+                    num = float(value)
+                    if not math.isfinite(num):
+                        settings[key] = value
+                    else:
+                        settings[key] = int(num) if num == int(num) else num
+                except (ValueError, TypeError, OverflowError):
+                    settings[key] = value
         
         return settings
     except Exception as e:
@@ -13941,10 +13947,16 @@ def get_order_chase_settings() -> Dict[str, Any]:
                 settings[key] = True
             elif value == 'false':
                 settings[key] = False
-            elif value.isdigit():
-                settings[key] = int(value)
             else:
-                settings[key] = value
+                try:
+                    import math
+                    num = float(value)
+                    if not math.isfinite(num):
+                        settings[key] = value
+                    else:
+                        settings[key] = int(num) if num == int(num) else num
+                except (ValueError, TypeError, OverflowError):
+                    settings[key] = value
         
         return settings
     except Exception as e:
