@@ -14938,7 +14938,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stc_sym = stk.get('symbol')
                     if not stc_sym:
                         cursor.execute('''
-                            SELECT id, symbol, quantity, original_qty, broker
+                            SELECT id, symbol, quantity, broker
                             FROM trades 
                             WHERE channel_id = ? 
                             AND direction = 'BTO' 
@@ -14948,7 +14948,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         ''', (str(message.channel.id),))
                     else:
                         cursor.execute('''
-                            SELECT id, symbol, quantity, original_qty, broker
+                            SELECT id, symbol, quantity, broker
                             FROM trades 
                             WHERE symbol = ?
                             AND channel_id = ? 
@@ -14980,7 +14980,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     else:
                         print(f"[PHOENIX STC] ⚠️ No open position found for {stc_sym or 'channel'} - cannot calculate exit qty")
                 except Exception as trim_err:
-                    print(f"[PHOENIX STC] ⚠️ Error calculating trim qty: {trim_err}")
+                    print(f"[PHOENIX STC] ❌ CRITICAL: Error calculating trim qty — qty stays at {stk.get('qty', 1)}, signal may under-sell! Error: {trim_err}", flush=True)
+                    import traceback
+                    traceback.print_exc()
             
             print(f"[SIGNAL PARSED] ✓ Stock Signal: {stk['action']} {stk['qty']} {stk['symbol']} @ ${stk['price']}")
             if stk.get('stop_loss_price') or stk.get('profit_target_price'):
