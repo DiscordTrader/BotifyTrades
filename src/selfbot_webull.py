@@ -13482,6 +13482,45 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as e:
                     print(f"[PROTRADER] ❌ Cancel error: {e}")
                 return
+            elif registry_result and registry_result.get('_protrader_exit'):
+                exit_sym = registry_result.get('symbol')
+                sell_pct = registry_result.get('sell_pct', 100)
+                print(f"[PROTRADER EXIT] ✓ Exit signal for {exit_sym} ({sell_pct}%)")
+                channel_id_str = str(message.channel.id)
+                try:
+                    conn = db.get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('''SELECT id, symbol, broker, qty, executed_price
+                                     FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?)
+                                     AND status IN ('OPEN','PARTIAL') AND direction = 'BTO'
+                                     ORDER BY id DESC LIMIT 1''', (channel_id_str, exit_sym))
+                    trade = cursor.fetchone()
+                    if trade:
+                        trade_id, t_sym, t_broker, t_qty, t_price = trade
+                        exit_qty = max(1, int(float(t_qty) * sell_pct / 100)) if sell_pct < 100 else int(t_qty)
+                        print(f"[PROTRADER EXIT] Found trade #{trade_id} {t_sym} qty={t_qty} on {t_broker}, selling {exit_qty} ({sell_pct}%)")
+                        if execute_enabled:
+                            stc_signal = {
+                                'action': 'STC',
+                                'symbol': t_sym,
+                                'asset': 'stock',
+                                'asset_type': 'stock',
+                                'qty': exit_qty,
+                                'is_market_order': True,
+                                '_broker_override': t_broker,
+                                'channel_id': channel_id_str,
+                                '_protrader_exit': True,
+                                '_trade_id': trade_id,
+                            }
+                            await self._signal_queue.put(stc_signal)
+                            print(f"[PROTRADER EXIT] ✓ Queued STC for {t_sym} qty={exit_qty} on {t_broker}")
+                        else:
+                            print(f"[PROTRADER EXIT] ⚠️ Execute OFF — tracking only for {t_sym}")
+                    else:
+                        print(f"[PROTRADER EXIT] No open position found for {exit_sym}")
+                except Exception as e:
+                    print(f"[PROTRADER EXIT] ❌ Error: {e}")
+                return
             elif registry_result and registry_result.get('action') == 'SL_UPDATE':
                 sl_symbol = registry_result.get('symbol')
                 channel_id_str = str(message.channel.id)

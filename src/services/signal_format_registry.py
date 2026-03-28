@@ -1098,11 +1098,35 @@ class SignalFormatRegistry:
 
         self.register(
             name="protrader_cancel",
-            description="ProTrader cancel alert",
+            description="ProTrader cancel alert (all variations)",
             priority=72,
-            pattern=r'[Cc]ancel\s+the\s+\$?([A-Z]{1,5})\s+alert',
-            parser=self._parse_protrader_cancel,
-            examples=["Cancel the AZI alert"]
+            pattern=r'(?:(?:^|\n)\s*\$?([A-Z]{1,5})\s*[-–—.\s]+.*?(?:[Pp]lease\s+)?[Cc]ancel(?:ling)?\s+(?:the\s+|this\s+)?(?:alert|this)|[Cc]ancel(?:ling)?\s+(?:the\s+|this\s+)?\$?([A-Z]{1,5})\s+(?:alert|swing\s+alert))',
+            parser=self._parse_protrader_cancel_v2,
+            flags=0,
+            examples=[
+                "Cancel the AZI alert",
+                "RMSG - Ran up from 0.6327 .. cancel this alert please",
+                "DRMA - Please cancel the alert",
+                "LIMN- cancelling this alert",
+                "LWLG - cancel this alert please",
+                "JDZG - please cancel this",
+                "NAMM - Cancel this swing alert.",
+            ]
+        )
+
+        self.register(
+            name="protrader_exit",
+            description="ProTrader exit/sell signals: sold all, scale out, take profits, do secure",
+            priority=57,
+            pattern=r'(?:^|\n)\s*\$?([A-Z]{1,5})\s*[-–—.\s]+.*?(?:[Ss]old\s+[Aa]ll|(?:[Ss]tart\s+[Tt]o\s+)?[Ss]cale\s+[Oo]ut|(?:[Dd]o\s+)?(?:[Tt]ake|[Ss]ecure)\s+(?:[Pp]rofits|[Gg]ains)|[Dd]o\s+[Ss]ecure|[Ww]e\s+[Aa]re\s+[Oo]ut)',
+            parser=self._parse_protrader_exit,
+            flags=0,
+            examples=[
+                "UCAR sold all from our low 0.70s entry",
+                "ELPW - start to scale out and take profits",
+                "RRGB - Went BOOM - hit 4.60- do take profits",
+                "ACXP hit 5.54 from 3.84 break.. do secure",
+            ]
         )
 
         # Load learned patterns from database
@@ -2773,6 +2797,88 @@ class SignalFormatRegistry:
             '_protrader': True,
             '_protrader_cancel': True,
             'confidence': 1.0,
+        }
+
+    _COMMON_WORDS = frozenset({
+        'THE', 'THIS', 'THAT', 'AND', 'FOR', 'BUT', 'NOT', 'ALL', 'ARE', 'WAS',
+        'HAS', 'HAD', 'HIT', 'RAN', 'GOT', 'CAN', 'MAY', 'OUT', 'OUR', 'ITS',
+        'HIS', 'HER', 'WHO', 'HOW', 'NOW', 'NEW', 'OLD', 'BIG', 'LOW', 'HIGH',
+        'RUN', 'SET', 'GET', 'LET', 'PUT', 'SAY', 'SEE', 'TRY', 'USE', 'WAY',
+        'DAY', 'MAN', 'ONE', 'TWO', 'FEW', 'ANY', 'TEAM', 'HOLD', 'SOLD',
+        'WENT', 'BOOM', 'BANG', 'NICE', 'TAKE', 'GIVE', 'TOLD', 'GUYS',
+        'FROM', 'WITH', 'JUST', 'ALSO', 'BEEN', 'HAVE', 'WILL', 'SOME',
+        'THEM', 'THEN', 'THAN', 'WHAT', 'WHEN', 'YOUR', 'MORE', 'MUCH',
+        'VERY', 'ONLY', 'OVER', 'SUCH', 'MAKE', 'LIKE', 'LONG', 'LOOK',
+        'MANY', 'COME', 'COULD', 'WOULD', 'SHOULD', 'ABOUT',
+    })
+
+    def _is_valid_ticker(self, sym: str) -> bool:
+        """Check if a string looks like a valid stock ticker, not a common word."""
+        if not sym or not sym.isalpha():
+            return False
+        return sym.upper() not in self._COMMON_WORDS
+
+    def _parse_protrader_cancel_v2(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse all protrader cancel variations."""
+        symbol = None
+        for g in match.groups():
+            if g and self._is_valid_ticker(g):
+                symbol = g.upper()
+                break
+        if not symbol:
+            sym_match = re.search(r'(?:^|\n)\s*\$?([A-Z]{1,5})', text)
+            if sym_match and self._is_valid_ticker(sym_match.group(1)):
+                symbol = sym_match.group(1).upper()
+        if not symbol:
+            return None
+        return {
+            'format': 'PROTRADER',
+            'asset': 'stock',
+            'asset_type': 'stock',
+            'action': 'CANCEL',
+            'symbol': symbol,
+            'ticker': symbol,
+            '_protrader': True,
+            '_protrader_cancel': True,
+            'confidence': 1.0,
+        }
+
+    _EXIT_REJECT_KEYWORDS = re.compile(r'\b(?:[Bb]uying\b|[Bb]uy\s+(?:at|near|around|above|below)|[Bb]reak\s+of|[Bb]reakout|[Aa]lert\s+at|[Ee]ntering)\b')
+
+    def _parse_protrader_exit(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse protrader exit signals: sold all, scale out, take profits."""
+        symbol = match.group(1).upper()
+        if not self._is_valid_ticker(symbol):
+            return None
+        if self._EXIT_REJECT_KEYWORDS.search(text):
+            return None
+        text_lower = text.lower()
+        if 'sold all' in text_lower:
+            exit_action = 'STC'
+            exit_pct = 100
+        elif 'scale out' in text_lower:
+            exit_action = 'STC'
+            exit_pct = 50
+        elif 'take profits' in text_lower or 'secure profits' in text_lower or 'secure gains' in text_lower or 'do secure' in text_lower:
+            exit_action = 'STC'
+            exit_pct = 50
+        elif 'we are out' in text_lower:
+            exit_action = 'STC'
+            exit_pct = 100
+        else:
+            return None
+        return {
+            'format': 'PROTRADER',
+            'asset': 'stock',
+            'asset_type': 'stock',
+            'action': exit_action,
+            'symbol': symbol,
+            'ticker': symbol,
+            'sell_pct': exit_pct,
+            '_protrader': True,
+            '_protrader_exit': True,
+            'is_market_order': True,
+            'confidence': 0.9,
         }
 
     def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
