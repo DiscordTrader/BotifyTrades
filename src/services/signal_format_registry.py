@@ -621,7 +621,7 @@ class SignalFormatRegistry:
             name="phoenix_trim_simple",
             description="Phoenix partial exit - selling X% SYMBOL (simple format)",
             priority=65,
-            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b|EARLY\b|LATE\b|IF\b|AND\b|BUT\b|THEN\b|ALSO\b|JUST\b|WHEN\b|THIS\b|THAT\b|THEM\b|BEEN\b|WILL\b|FROM\b)[A-Z]{1,5})(?:\s|$)',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b|EARLY\b|LATE\b|IF\b|AND\b|BUT\b|THEN\b|ALSO\b|JUST\b|WHEN\b|THIS\b|THAT\b|THEM\b|BEEN\b|WILL\b|FROM\b|WOW\b|AS\b|LET\b|SO\b|YET\b|TOO\b|NOT\b|ITS\b)[A-Z]{1,5})(?:\s|$)',
             parser=self._parse_phoenix_trim,
             examples=["selling 80% XHLD", "selling 10% GITS", "sold 50% ENVB"],
             flags=re.IGNORECASE
@@ -999,7 +999,7 @@ class SignalFormatRegistry:
             name="jacob_sold_pct_sym_direct",
             description="Jacob trim - sold/selling X% SYMBOL (before 'at' catches it)",
             priority=53,
-            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b|EARLY\b|LATE\b|IF\b|AND\b|BUT\b|THEN\b|ALSO\b|JUST\b|WHEN\b|THIS\b|THAT\b|THEM\b|BEEN\b|WILL\b|FROM\b)[A-Z]{2,5})(?:\s|$|[.,!])',
+            pattern=r'(?:selling|sold)\s+(\d+)%\s+\$?((?!HERE\b|MORE\b|NOW\b|ON\b|THE\b|MY\b|OF\b|ALL\b|REST\b|AT\b|FIRST\b|IN\b|TO\b|FOR\b|WITH\b|PROFIT\b|SOME\b|EARLY\b|LATE\b|IF\b|AND\b|BUT\b|THEN\b|ALSO\b|JUST\b|WHEN\b|THIS\b|THAT\b|THEM\b|BEEN\b|WILL\b|FROM\b|WOW\b|AS\b|LET\b|SO\b|YET\b|TOO\b|NOT\b|ITS\b)[A-Z]{2,5})(?:\s|$|[.,!])',
             parser=self._parse_phoenix_trim,
             examples=["Selling 90% HCWC", "Selling 90% POLA at first target also"],
             flags=re.IGNORECASE
