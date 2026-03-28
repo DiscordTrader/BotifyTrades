@@ -1481,6 +1481,17 @@ class BaseConditionalOrderService(ABC):
             self._log("Service disabled")
             return None
         
+        try:
+            from gui_app.database import get_channel_by_discord_id, get_channel_by_telegram_id
+            ch_exec = get_channel_by_discord_id(str(channel_id))
+            if not ch_exec:
+                ch_exec = get_channel_by_telegram_id(str(channel_id))
+            if ch_exec and not ch_exec.get('execute_enabled', 0):
+                self._log(f"⛔ BLOCKED create_order for channel {channel_id}: execute is OFF")
+                return None
+        except Exception as exec_check_err:
+            self._log(f"Execute-enabled check error in create_order (proceeding): {exec_check_err}")
+        
         channel_settings = get_channel_conditional_settings(channel_id)
         self._log(f"Channel settings for {channel_id}: "
                   f"timeout={channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes') or channel_settings.get('conditional_order_expiry')}, "
@@ -2268,6 +2279,34 @@ class BaseConditionalOrderService(ABC):
         """Execute triggered order with safety checks."""
         symbol = order.get('symbol', 'UNKNOWN')
         channel_id = order.get('channel_id')
+        
+        if channel_id:
+            try:
+                from gui_app.database import get_channel_by_discord_id, get_channel_by_telegram_id
+                ch = get_channel_by_discord_id(str(channel_id))
+                if not ch:
+                    ch = get_channel_by_telegram_id(str(channel_id))
+                if ch and not ch.get('execute_enabled', 0):
+                    self._log(f"⛔ BLOCKED #{order_id} {symbol}: Channel execute is OFF — cancelling triggered order")
+                    update_conditional_order_status(
+                        order_id, 'CANCELLED',
+                        event='EXECUTE_DISABLED_BLOCK',
+                        details=f'Channel execute was disabled before trigger fired'
+                    )
+                    await self._cleanup_order(order_id)
+                    self._executing_orders.discard(order_id)
+                    self._execution_locks.pop(order_id, None)
+                    try:
+                        notify_conditional_cancelled(
+                            symbol=symbol,
+                            broker=order.get('broker_primary', ''),
+                            order_id=order_id
+                        )
+                    except Exception:
+                        pass
+                    return
+            except Exception as exec_check_err:
+                self._log(f"Execute-enabled check error (proceeding): {exec_check_err}")
         
         db_status_check = get_conditional_order_by_id(order_id)
         if db_status_check:

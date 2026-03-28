@@ -2893,6 +2893,33 @@ def update_channel(channel_id: int, **kwargs):
         query = f"UPDATE channels SET {', '.join(fields)}, updated_at = ? WHERE id = ?"
         cursor.execute(query, values)
         conn.commit()
+        
+        execute_now_off = (kwargs.get('execute_enabled') in (0, False, '0'))
+        if not execute_now_off and kwargs.get('category') == 'TRACK' and 'execute_enabled' not in kwargs:
+            execute_now_off = True
+        if execute_now_off:
+            try:
+                cursor.execute('SELECT discord_channel_id, telegram_chat_id FROM channels WHERE id = ?', (channel_id,))
+                ch_row = cursor.fetchone()
+                if ch_row:
+                    discord_cid = ch_row[0] or ''
+                    telegram_cid = ch_row[1] or ''
+                    active_statuses = ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING', 'PENDING_MONITOR')
+                    cancelled_count = 0
+                    for cid in [discord_cid, telegram_cid]:
+                        if cid:
+                            placeholders = ','.join(['?' for _ in active_statuses])
+                            cursor.execute(
+                                f"UPDATE conditional_orders SET status = 'CANCELLED', updated_at = ? WHERE channel_id = ? AND status IN ({placeholders})",
+                                [datetime.now().strftime('%Y-%m-%d %H:%M:%S'), str(cid)] + list(active_statuses)
+                            )
+                            cancelled_count += cursor.rowcount
+                    if cancelled_count > 0:
+                        conn.commit()
+                        print(f"[EXECUTE OFF] Auto-cancelled {cancelled_count} pending conditional orders for channel {channel_id}", flush=True)
+            except Exception as cancel_err:
+                print(f"[EXECUTE OFF] Error cancelling conditional orders: {cancel_err}", flush=True)
+        
         return True
     return False
 
