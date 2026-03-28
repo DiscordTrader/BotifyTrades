@@ -19294,7 +19294,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     t.get('direction') == signal['action'] and
                                                     (not is_option or (
                                                         t.get('strike') == sig_strike and
-                                                        t.get('call_put') == sig_opt_type
+                                                        t.get('call_put') == sig_opt_type and
+                                                        (not sig_expiry or t.get('expiry') == sig_expiry)
                                                     ))
                                                     for t in existing_trades
                                                 )

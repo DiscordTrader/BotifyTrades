@@ -355,6 +355,63 @@ class UnfilledOrderChaser:
                 _print(f"[ORDER_CHASER] ✓ Restored {restored_count} pending entry orders from database", flush=True)
             else:
                 _print("[ORDER_CHASER] No pending entry orders to restore", flush=True)
+            
+            exit_cursor = conn.cursor()
+            exit_cursor.execute('''
+                SELECT 
+                    id, order_id, broker, symbol, asset_type, direction,
+                    quantity, intended_price, channel_id, strike, expiry, call_put
+                FROM trades 
+                WHERE status = 'PENDING' 
+                AND upper(direction) IN ('STC', 'SELL')
+                AND order_id IS NOT NULL
+            ''')
+            
+            exit_rows = exit_cursor.fetchall()
+            exit_restored = 0
+            
+            for erow in exit_rows:
+                e_order_id = erow['order_id']
+                if not e_order_id or e_order_id in self._tracked_orders:
+                    continue
+                
+                e_asset_type = erow['asset_type'] or 'option'
+                e_price = float(erow['intended_price'] or 0) if erow['intended_price'] else 0
+                e_symbol = erow['symbol'] or ''
+                e_broker = erow['broker'] or 'UNKNOWN'
+                
+                pos_key_parts = [e_symbol, e_broker]
+                if e_asset_type == 'option':
+                    if erow['strike']:
+                        pos_key_parts.append(str(erow['strike']))
+                    if erow['expiry']:
+                        pos_key_parts.append(str(erow['expiry']))
+                    if erow['call_put']:
+                        pos_key_parts.append(str(erow['call_put']))
+                e_pos_key = '_'.join(pos_key_parts)
+                
+                order = TrackedExitOrder(
+                    order_id=e_order_id,
+                    broker_id=e_broker,
+                    symbol=e_symbol,
+                    asset_type=e_asset_type,
+                    quantity=float(erow['quantity'] or 1),
+                    original_price=e_price,
+                    action='STC',
+                    placed_at=datetime.now(),
+                    position_key=e_pos_key,
+                    strike=float(erow['strike']) if erow['strike'] else None,
+                    expiry=erow['expiry'],
+                    call_put=erow['call_put'],
+                    is_risk_order=True
+                )
+                
+                self._tracked_orders[e_order_id] = order
+                exit_restored += 1
+                _print(f"[ORDER_CHASER] Restored exit: {e_order_id} | {e_symbol} STC @ ${e_price:.2f}", flush=True)
+            
+            if exit_restored > 0:
+                _print(f"[ORDER_CHASER] ✓ Restored {exit_restored} pending exit orders from database", flush=True)
                 
         except Exception as e:
             _print(f"[ORDER_CHASER] ⚠️ Failed to restore pending orders: {e}", flush=True)

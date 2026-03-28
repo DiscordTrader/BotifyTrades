@@ -3803,7 +3803,7 @@ class RiskManager:
             # Apply SL limit offset for limit orders on SL-type exits
             # This sets the limit price lower than trigger price to improve fill probability
             if is_sl_type_exit and channel_settings and channel_settings.sl_order_mode == 'limit' and not use_market:
-                sl_offset = channel_settings.sl_limit_offset or 0.03
+                sl_offset = channel_settings.sl_limit_offset if channel_settings.sl_limit_offset is not None else 0.03
                 if sl_offset > 0:
                     original_price = stc_signal['price']
                     offset_price = round(original_price * (1 - sl_offset), 2)
@@ -3987,12 +3987,16 @@ class RiskManager:
                 except Exception:
                     pass
             else:
-                print(f"[RISK] [DIRECT-EXIT] ⚠️ {pos_key} result: {result}")
+                print(f"[RISK] [DIRECT-EXIT] ⚠️ {pos_key} no order_id — resetting closing state for retry")
+                is_sl = stc_signal.get('risk_trigger', '') in ('stop_loss', 'trailing_stop', 'early_trailing', 'giveback_guard')
+                self.cache.record_exit_failure(pos_key, reason="direct_exit_no_order_id", is_stop_loss=is_sl)
             self.release_exit_marker(pos_key)
         except Exception as e:
             print(f"[RISK] [DIRECT-EXIT] ✗ {pos_key} execution failed: {e}")
             import traceback
             traceback.print_exc()
+            is_sl = stc_signal.get('risk_trigger', '') in ('stop_loss', 'trailing_stop', 'early_trailing', 'giveback_guard')
+            self.cache.record_exit_failure(pos_key, reason=f"direct_exit_exception: {e}", is_stop_loss=is_sl)
             self.release_exit_marker(pos_key)
 
     def _get_streaming_bid_ask(self, position: PositionSnapshot) -> Dict[str, float]:

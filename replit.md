@@ -47,6 +47,10 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Schwab Stock Exit Order Strategy**: Uses true MARKET orders during regular market hours for stock STC exits to avoid price-band rejection, and aggressive LIMIT orders during extended hours.
 - **Schwab OrderSessionPolicy**: Auto-detects premarket/after-hours and uses `GOOD_TILL_CANCEL` duration when session is `SEAMLESS`. Stock BTO entries in SEAMLESS use `DAY` duration (not GTC) to avoid `PENDING_ACTIVATION` until regular hours.
 - **Schwab Option BTO Ask-Price Fix**: When Schwab auto-prices a BTO option order (no explicit price from signal), it now uses the **ask** price for faster fills. Previously used mid-price which caused slower fills. STC exits still correctly use bid price.
+- **Direct-Exit Failure Recovery**: `_direct_execute_exit()` backup thread now calls `cache.record_exit_failure()` when the exit order fails or returns no order_id, resetting the closing state so the risk engine retries on the next cycle instead of blocking for 180s (the closing timeout).
+- **Order Chaser Exit Restore**: On restart, the order chaser now restores pending STC/SELL orders from the database (previously only restored BTO/BUY entries), preventing orphaned exit orders from going unchased after a restart.
+- **Option Trade Duplicate Guard Expiry Fix**: The duplicate-prevention check for option trades now includes expiry date comparison, preventing legitimate same-strike different-expiry trades from being incorrectly dropped.
+- **SL Limit Offset Zero Fix**: `sl_limit_offset=0` is now respected as "no offset" instead of being treated as falsy and defaulting to 3%.
 - **Position Cache Flip-Flop Guard**: Detects and prevents entry price oscillation when broker data alternates between two values for the same position key.
 - **Broker Health Monitor**: Tracks broker states and notifications, providing GUI compatibility for displaying connection status.
 - **IBKR Dashboard Wiring**: Ensures IBKR and all brokers show on the dashboard even when disconnected, with credentials-based fallback for disconnected states.
