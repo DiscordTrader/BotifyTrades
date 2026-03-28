@@ -151,7 +151,7 @@ class UnfilledOrderChaser:
     - Entry orders: Replaced with ask price for aggressive fills
     """
     
-    DEFAULT_CHASE_TIMEOUT_SECONDS = 4
+    DEFAULT_CHASE_TIMEOUT_SECONDS = 2
     DEFAULT_MAX_CHASE_ATTEMPTS = 3
     DEFAULT_POLL_INTERVAL_SECONDS = 1
     DEFAULT_CANCEL_ON_MAX_ATTEMPTS = True
