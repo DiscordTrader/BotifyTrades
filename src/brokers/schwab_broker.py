@@ -1131,7 +1131,7 @@ class SchwabBroker(BrokerInterface):
                 else:
                     duration = "GOOD_TILL_CANCEL"
             elif session == "SEAMLESS":
-                duration = "GOOD_TILL_CANCEL"
+                duration = "DAY"
             else:
                 duration = "DAY"
             
@@ -1341,6 +1341,7 @@ class SchwabBroker(BrokerInterface):
                     if quote and quote.get('bid') and quote.get('ask'):
                         mid_price = round((quote['bid'] + quote['ask']) / 2, 2)
                         bid_price = quote['bid']
+                        ask_price = quote['ask']
                         
                         if _fallback_price and _fallback_price > 0 and mid_price > _fallback_price * 5:
                             print(f"[{self.name}] ⚠️ SANITY CHECK FAILED: mid-price ${mid_price:.2f} is >5x fallback ${_fallback_price:.4f} — stale hub data?")
@@ -1378,8 +1379,13 @@ class SchwabBroker(BrokerInterface):
                                         price = max(0.01, round(fresh_quote['bid'], 2))
                                         print(f"[{self.name}] ✓ STC at fresh bid: ${price:.2f}")
                                 else:
-                                    price = round((fresh_quote['bid'] + fresh_quote['ask']) / 2, 2)
-                                    print(f"[{self.name}] ✓ Using fresh mid-price ${price:.2f}")
+                                    fresh_ask = fresh_quote['ask']
+                                    if fresh_ask > 0:
+                                        price = round(fresh_ask, 2)
+                                        print(f"[{self.name}] ✓ BTO at fresh ask: ${price:.2f} (bid: ${fresh_quote['bid']:.2f}, mid: ${(fresh_quote['bid'] + fresh_ask) / 2:.2f})")
+                                    else:
+                                        price = round(fresh_quote['bid'] * 1.03, 2)
+                                        print(f"[{self.name}] ✓ BTO fallback (ask=0): bid+3% ${price:.2f} (bid: ${fresh_quote['bid']:.2f})")
                             elif _fallback_price:
                                 if is_stc:
                                     price = max(0.01, round(_fallback_price * 0.80, 2))
@@ -1395,8 +1401,8 @@ class SchwabBroker(BrokerInterface):
                                 price = max(0.01, round(bid_price, 2))
                                 print(f"[{self.name}] ✓ STC at bid: ${price:.2f} (mid was ${mid_price:.2f})")
                         else:
-                            price = mid_price
-                            print(f"[{self.name}] ✓ Using mid-price ${mid_price:.2f} (bid: ${quote['bid']:.2f}, ask: ${quote['ask']:.2f})")
+                            price = round(ask_price, 2)
+                            print(f"[{self.name}] ✓ BTO at ask: ${price:.2f} (bid: ${bid_price:.2f}, mid: ${mid_price:.2f})")
                     elif quote and quote.get('last'):
                         price = quote['last']
                         print(f"[{self.name}] ✓ Using last price ${price:.2f}")
@@ -2807,7 +2813,7 @@ class SchwabBroker(BrokerInterface):
 
             session = self._get_session_type()
             entry_order_type = "LIMIT" if entry_price else "MARKET"
-            entry_duration = "GOOD_TILL_CANCEL" if session == "SEAMLESS" else "DAY"
+            entry_duration = "DAY"
 
             entry_payload = {
                 "orderStrategyType": "TRIGGER" if (stop_loss_price or profit_target_price) else "SINGLE",
