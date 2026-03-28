@@ -4636,10 +4636,18 @@ class RiskManager:
         age = _t.time() - quote.timestamp
         if age > max_age:
             return None
-        price = quote.last if hasattr(quote, 'last') else None
-        if not price or price <= 0:
-            return None
-        return price
+        if hasattr(quote, 'last') and quote.last and quote.last > 0:
+            return quote.last
+        if hasattr(quote, 'bid') and hasattr(quote, 'ask'):
+            bid = quote.bid or 0
+            ask = quote.ask or 0
+            if bid > 0 and ask > 0:
+                return (bid + ask) / 2
+            if bid > 0:
+                return bid
+            if ask > 0:
+                return ask
+        return None
 
     def _get_hub_quote_age(self, hub, symbol):
         import time as _t
@@ -4992,8 +5000,6 @@ class RiskManager:
                     return premarket_price
                 elif last > 0:
                     return last
-                elif close > 0:
-                    return close
         except asyncio.TimeoutError:
             return None
         except Exception:

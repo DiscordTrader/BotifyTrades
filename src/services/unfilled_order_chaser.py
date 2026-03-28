@@ -126,7 +126,7 @@ def _to_price(value) -> Optional[float]:
     if value is None:
         return None
     if isinstance(value, dict):
-        for key in ('price', 'bid', 'last', 'mid', 'close', 'latestPrice'):
+        for key in ('price', 'bid', 'last', 'mid', 'latestPrice'):
             v = value.get(key)
             if v is not None and not isinstance(v, dict):
                 try:
@@ -1040,13 +1040,10 @@ class UnfilledOrderChaser:
                 hub_data = self._check_streaming_hubs_stock(order.symbol)
                 if hub_data:
                     bid = _to_price(hub_data.get('bid')) or 0
-                    close = _to_price(hub_data.get('close')) or 0
                     last = _to_price(hub_data.get('last')) or 0
                     if bid > 0:
                         print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} — fills instantly")
                         return bid
-                    elif close > 0:
-                        return close
                     elif last > 0:
                         return last
 
@@ -1061,9 +1058,6 @@ class UnfilledOrderChaser:
                         bid = _to_price(quote.get('bid'))
                         if bid and bid > 0:
                             return bid
-                        close = _to_price(quote.get('close'))
-                        if close and close > 0:
-                            return close
                         return _to_price(quote.get('last')) or _to_price(quote.get('mid'))
                 
                 if hasattr(broker, 'get_quote'):
@@ -1077,9 +1071,6 @@ class UnfilledOrderChaser:
                         bid_val = _to_price(price.get('bid'))
                         if bid_val and bid_val > 0:
                             return bid_val
-                        close_val = _to_price(price.get('close'))
-                        if close_val and close_val > 0:
-                            return close_val
                         price = (price.get('last') or
                                  price.get('price') or price.get('latestPrice'))
                     return _to_price(price)
