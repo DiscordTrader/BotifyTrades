@@ -210,8 +210,7 @@ class IBKRDataHub:
                     q.last = round((q.bid + q.ask) / 2, 4)
                     has_real_data = True
                 elif ticker.close is not None and ticker.close > 0:
-                    if is_new and q.last <= 0:
-                        q.last = float(ticker.close)
+                    q.close_price = float(ticker.close)
                 if ticker.volume is not None:
                     q.volume = int(ticker.volume)
                 if ticker.high is not None and ticker.high > 0:

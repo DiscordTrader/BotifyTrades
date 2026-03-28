@@ -210,7 +210,15 @@ class BrokerPriceMonitor(PriceMonitor):
                     request = StockLatestQuoteRequest(symbol_or_symbols=self.symbol)
                     quotes = await loop.run_in_executor(None, lambda: client.get_stock_latest_quote(request))
                     if self.symbol in quotes:
-                        return float(quotes[self.symbol].ask_price)
+                        q = quotes[self.symbol]
+                        bid = float(q.bid_price or 0)
+                        ask = float(q.ask_price or 0)
+                        if bid > 0 and ask > 0:
+                            return (bid + ask) / 2
+                        elif ask > 0:
+                            return ask
+                        elif bid > 0:
+                            return bid
             
             elif self.broker_name.lower() == 'webull':
                 if hasattr(self.broker_instance, 'get_quote'):
@@ -246,26 +254,36 @@ class BrokerPriceMonitor(PriceMonitor):
             
             elif self.broker_name.lower() == 'ibkr':
                 if hasattr(self.broker_instance, 'get_quote'):
-                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    import asyncio as _aio
+                    result = self.broker_instance.get_quote(self.symbol)
+                    if _aio.iscoroutine(result):
+                        quote = await result
+                    else:
+                        quote = await loop.run_in_executor(None, lambda: result)
                     if quote:
-                        if hasattr(quote, 'last') and quote.last:
+                        if isinstance(quote, (int, float)) and quote > 0:
+                            return float(quote)
+                        elif hasattr(quote, 'last') and quote.last:
                             return float(quote.last)
                         elif isinstance(quote, dict) and 'last' in quote:
                             return float(quote['last'])
-                        elif isinstance(quote, dict) and 'close' in quote:
-                            return float(quote['close'])
             
             elif self.broker_name.lower() == 'robinhood':
                 if hasattr(self.broker_instance, 'get_quote'):
-                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
-                    if quote and 'last_trade_price' in quote:
-                        return float(quote['last_trade_price'])
+                    quote = await self.broker_instance.get_quote(self.symbol)
+                    if quote:
+                        if isinstance(quote, (int, float)) and quote > 0:
+                            return float(quote)
+                        elif isinstance(quote, dict) and 'last_trade_price' in quote:
+                            return float(quote['last_trade_price'])
             
             elif self.broker_name.lower() == 'tastytrade':
                 if hasattr(self.broker_instance, 'get_quote'):
-                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    quote = await self.broker_instance.get_quote(self.symbol)
                     if quote:
-                        if isinstance(quote, dict) and 'last' in quote:
+                        if isinstance(quote, (int, float)) and quote > 0:
+                            return float(quote)
+                        elif isinstance(quote, dict) and 'last' in quote:
                             return float(quote['last'])
                         elif hasattr(quote, 'last'):
                             return float(quote.last)

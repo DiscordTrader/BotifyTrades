@@ -499,8 +499,10 @@ class IBKRBroker(BrokerInterface):
             price = float(ticker.last)
         elif ticker.bid and ticker.bid > 0 and ticker.ask and ticker.ask > 0:
             price = round((float(ticker.bid) + float(ticker.ask)) / 2, 4)
-        elif ticker.close and ticker.close > 0:
-            price = float(ticker.close)
+        elif ticker.bid and ticker.bid > 0:
+            price = float(ticker.bid)
+        elif ticker.ask and ticker.ask > 0:
+            price = float(ticker.ask)
         else:
             price = None
         
