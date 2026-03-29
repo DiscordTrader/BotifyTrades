@@ -486,14 +486,14 @@ class SignalRoutingEngine:
         Returns:
             Tuple of (exit_reason, current_pnl_pct) or (None, pnl_pct) if no exit triggered
         
-        Exit Priority (first match wins):
+        Exit Priority (first match wins — matches System 1 ordering):
         1. Stop Loss (hard SL threshold)
         2. Dynamic SL (escalated price-based SL)
         3. EMA Risk (trend reversal exit)
         4. Giveback Guard (max profit drawdown)
         5. Early Trailing Stop (breakeven + step locks)
-        6. Legacy Trailing Stop (if active and triggered)
-        7. Profit Targets PT1-PT4 (escalation_only: mark tier without exit)
+        6. Profit Targets PT1-PT4 (escalation_only: mark tier without exit)
+        7. Legacy Trailing Stop (if active and triggered)
         """
         if position.remaining_qty <= 0:
             return None, 0.0
@@ -532,16 +532,10 @@ class SignalRoutingEngine:
                 if pnl_pct <= giveback_threshold:
                     return ExitReason.GIVEBACK_GUARD, pnl_pct
         
-        if config.enable_early_trailing and not config.trailing_stop_pct > 0:
+        if config.enable_early_trailing and config.early_trailing_activation_pct > 0:
             early_exit = self._evaluate_early_trailing(position, config, pnl_pct, cost_basis)
             if early_exit is not None:
                 return early_exit, pnl_pct
-        
-        if not config.enable_early_trailing and position.trailing_stop_active and config.trailing_stop_pct > 0:
-            max_pnl = position.max_pnl_seen
-            trailing_threshold = max_pnl - config.trailing_stop_pct
-            if pnl_pct <= trailing_threshold and max_pnl > 0:
-                return ExitReason.TRAILING_STOP, pnl_pct
         
         pt_targets = [
             (ExitReason.PT4, config.pt4_pct, "pt4"),
@@ -562,6 +556,12 @@ class SignalRoutingEngine:
             for exit_reason, target_pct, level_key in pt_targets:
                 if target_pct > 0 and level_key not in pt_levels_hit and pnl_pct >= target_pct:
                     return exit_reason, pnl_pct
+        
+        if not config.enable_early_trailing and position.trailing_stop_active and config.trailing_stop_pct > 0:
+            max_pnl = position.max_pnl_seen
+            trailing_threshold = max_pnl - config.trailing_stop_pct
+            if pnl_pct <= trailing_threshold and max_pnl > 0:
+                return ExitReason.TRAILING_STOP, pnl_pct
         
         if position.id is not None:
             self._update_enhanced_risk_state(position, config, pnl_pct, pt_levels_hit, cost_basis)
@@ -595,12 +595,13 @@ class SignalRoutingEngine:
         if position.early_stop_price is not None and current_price <= position.early_stop_price:
             return ExitReason.EARLY_TRAILING
         
-        steps = position.early_steps_locked or 0
-        next_step_threshold = activation_pct + (step_pct * (steps + 1))
-        if pnl_pct >= next_step_threshold:
-            new_steps = int((pnl_pct - activation_pct) / step_pct)
-            locked_profit_pct = activation_pct + (step_pct * (new_steps - 1))
-            new_stop_price = cost_basis * (1 + locked_profit_pct / 100)
+        expected_steps = int((pnl_pct - activation_pct) / step_pct)
+        expected_steps = max(0, expected_steps)
+        
+        if expected_steps > (position.early_steps_locked or 0):
+            new_steps = expected_steps
+            new_stop_pct = new_steps * step_pct
+            new_stop_price = cost_basis * (1 + new_stop_pct / 100)
             if position.early_stop_price is None or new_stop_price > position.early_stop_price:
                 old_stop = position.early_stop_price
                 self.ledger.update_early_trailing_state(
@@ -661,12 +662,12 @@ class SignalRoutingEngine:
             elif ema_state.last_candle and hasattr(ema_state.last_candle, 'ts'):
                 last_candle_ts = ema_state.last_candle.ts
             
-            pos_key = position.option_key
-            last_eval_ts = self._ema_last_candle_ts.get(pos_key)
+            ema_key = position.id
+            last_eval_ts = self._ema_last_candle_ts.get(ema_key)
             is_new_candle = last_candle_ts is not None and last_candle_ts != last_eval_ts
             
             if is_new_candle:
-                self._ema_last_candle_ts[pos_key] = last_candle_ts
+                self._ema_last_candle_ts[ema_key] = last_candle_ts
                 
                 if cross_state in ('flat', 'no_trend', None):
                     new_count = (position.ema_no_trend_count or 0) + 1
@@ -737,12 +738,18 @@ class SignalRoutingEngine:
                     print(f"[ROUTING_ENGINE] 📈 Dynamic SL escalated to ${new_dynamic_sl:.2f} after PT hit")
         
         if config.max_profit_giveback_enabled:
+            if config.trailing_stop_pct > 0 and config.trailing_activation_pct > 0:
+                giveback_activation_threshold = config.trailing_activation_pct
+            elif config.enable_early_trailing and config.early_trailing_activation_pct > 0:
+                giveback_activation_threshold = config.early_trailing_activation_pct
+            else:
+                giveback_activation_threshold = 30
             pt2_activated = "pt2" in pt_levels_hit
-            activation_threshold = config.pt1_pct
+            max_pnl = max(position.max_pnl_seen, pnl_pct)
             
-            if not position.giveback_guard_active and (pt2_activated or pnl_pct >= activation_threshold):
-                self.ledger.update_giveback_guard(position.id, True, pnl_pct)
-                print(f"[ROUTING_ENGINE] 🛡️ Giveback guard activated at {pnl_pct:.1f}%")
+            if not position.giveback_guard_active and (pt2_activated or max_pnl >= giveback_activation_threshold):
+                self.ledger.update_giveback_guard(position.id, True, max_pnl)
+                print(f"[ROUTING_ENGINE] 🛡️ Giveback guard activated (max_pnl={max_pnl:.1f}%)")
             elif position.giveback_guard_active and pnl_pct > position.max_pnl_seen:
                 self.ledger.update_giveback_guard(position.id, True, pnl_pct)
         
@@ -826,6 +833,8 @@ class SignalRoutingEngine:
                 if exit_reason in (ExitReason.PT1, ExitReason.PT2, ExitReason.PT3, ExitReason.PT4):
                     self._mark_pt_level_hit(position, exit_reason)
                 
+                if exit_qty >= position.remaining_qty:
+                    self._cleanup_position_state(position.id)
                 print(f"[ROUTING_ENGINE] ✓ Risk exit: {exit_reason.value.upper()} for {position.option_key}")
             
             return success
@@ -836,6 +845,9 @@ class SignalRoutingEngine:
         finally:
             if acquired and lock.locked():
                 lock.release()
+    
+    def _cleanup_position_state(self, position_id: int):
+        self._ema_last_candle_ts.pop(position_id, None)
     
     def _mark_pt_level_hit(self, position: LedgerPosition, exit_reason: ExitReason):
         """Mark a profit target level as hit in the position."""
@@ -928,6 +940,7 @@ class SignalRoutingEngine:
                                         dedupe_key=dedupe
                                     )
                                     if result:
+                                        self._cleanup_position_state(position.id)
                                         sys.stderr.write(f"[ROUTING_ENGINE] ✅ Auto-closed expired position {position.symbol} {position.strike}{position.option_type} in ledger (P&L: ${result.exit_pnl_dollar:.2f})\n")
                                         sys.stderr.flush()
                                         config = self.get_routing_config(position.routing_mapping_id)
@@ -1257,6 +1270,8 @@ class SignalRoutingEngine:
             )
             
             if success:
+                if actual_exit_qty >= position.remaining_qty:
+                    self._cleanup_position_state(position.id)
                 if is_percent_trim:
                     print(f"[ROUTING_ENGINE] ✓ Signal STC forwarded: {symbol} @ {trim_percent}%")
                 else:
