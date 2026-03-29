@@ -41,6 +41,8 @@ class ExitReason(Enum):
     STOP_LOSS = "stop_loss"
     TRAILING_STOP = "trailing_stop"
     GIVEBACK_GUARD = "giveback_guard"
+    EARLY_TRAILING = "early_trailing"
+    EMA_EXIT = "ema_exit"
     MANUAL = "manual"
     EXPIRED = "expired"
 
@@ -104,6 +106,11 @@ class LedgerPosition:
     
     dynamic_sl_price: Optional[float] = None
     giveback_guard_active: bool = False
+    
+    early_trailing_active: bool = False
+    early_stop_price: Optional[float] = None
+    early_steps_locked: int = 0
+    ema_no_trend_count: int = 0
     
     partial_exits: List[PartialExit] = field(default_factory=list)
     
@@ -378,6 +385,10 @@ class PositionLedger:
                 ("initial_mark_price", "ALTER TABLE position_ledger ADD COLUMN initial_mark_price REAL DEFAULT 0"),
                 ("dynamic_sl_price", "ALTER TABLE position_ledger ADD COLUMN dynamic_sl_price REAL"),
                 ("giveback_guard_active", "ALTER TABLE position_ledger ADD COLUMN giveback_guard_active INTEGER DEFAULT 0"),
+                ("early_trailing_active", "ALTER TABLE position_ledger ADD COLUMN early_trailing_active INTEGER DEFAULT 0"),
+                ("early_stop_price", "ALTER TABLE position_ledger ADD COLUMN early_stop_price REAL"),
+                ("early_steps_locked", "ALTER TABLE position_ledger ADD COLUMN early_steps_locked INTEGER DEFAULT 0"),
+                ("ema_no_trend_count", "ALTER TABLE position_ledger ADD COLUMN ema_no_trend_count INTEGER DEFAULT 0"),
             ]
             
             for col_name, sql in migrations:
@@ -558,7 +569,11 @@ class PositionLedger:
             max_pnl_seen=row['max_pnl_seen'] or 0.0,
             trailing_stop_active=bool(row['trailing_stop_active']),
             dynamic_sl_price=row['dynamic_sl_price'] if 'dynamic_sl_price' in row.keys() else None,
-            giveback_guard_active=bool(row['giveback_guard_active']) if 'giveback_guard_active' in row.keys() else False
+            giveback_guard_active=bool(row['giveback_guard_active']) if 'giveback_guard_active' in row.keys() else False,
+            early_trailing_active=bool(row['early_trailing_active']) if 'early_trailing_active' in row.keys() else False,
+            early_stop_price=row['early_stop_price'] if 'early_stop_price' in row.keys() else None,
+            early_steps_locked=row['early_steps_locked'] if 'early_steps_locked' in row.keys() else 0,
+            ema_no_trend_count=row['ema_no_trend_count'] if 'ema_no_trend_count' in row.keys() else 0
         )
         
         exit_rows = conn.execute(
@@ -680,6 +695,45 @@ class PositionLedger:
                     max_pnl_seen = MAX(max_pnl_seen, ?)
                 WHERE id = ?
             """, (1 if active else 0, max_pnl_seen, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def update_early_trailing_state(
+        self, position_id: int, active: bool, 
+        stop_price: Optional[float] = None, steps_locked: int = 0
+    ):
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET
+                    early_trailing_active = ?,
+                    early_stop_price = ?,
+                    early_steps_locked = ?
+                WHERE id = ?
+            """, (1 if active else 0, stop_price, steps_locked, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def update_max_pnl(self, position_id: int, max_pnl: float):
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET max_pnl_seen = MAX(max_pnl_seen, ?)
+                WHERE id = ?
+            """, (max_pnl, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def update_ema_no_trend_count(self, position_id: int, count: int):
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET ema_no_trend_count = ?
+                WHERE id = ?
+            """, (count, position_id))
             conn.commit()
         finally:
             conn.close()

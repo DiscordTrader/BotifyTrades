@@ -178,6 +178,7 @@ class SignalRoutingEngine:
         self._stale_price_threshold_sec = 30
         self._running = False
         self._monitor_task: Optional[asyncio.Task] = None
+        self._ema_last_candle_ts: Dict[str, Any] = {}
         
         self._initialized = True
         print("[ROUTING_ENGINE] ✓ SignalRoutingEngine initialized (using shared ExitArbiter)")
@@ -409,7 +410,7 @@ class SignalRoutingEngine:
         
         max_exit_qty = max(0, remaining - runner_size)
         
-        if exit_reason in (ExitReason.STOP_LOSS, ExitReason.TRAILING_STOP, ExitReason.GIVEBACK_GUARD):
+        if exit_reason in (ExitReason.STOP_LOSS, ExitReason.TRAILING_STOP, ExitReason.GIVEBACK_GUARD, ExitReason.EARLY_TRAILING, ExitReason.EMA_EXIT):
             return remaining
         
         if exit_reason == ExitReason.SIGNAL and trim_percent:
@@ -486,14 +487,17 @@ class SignalRoutingEngine:
             Tuple of (exit_reason, current_pnl_pct) or (None, pnl_pct) if no exit triggered
         
         Exit Priority (first match wins):
-        1. Stop Loss (price below SL threshold)
-        2. Trailing Stop (if active and triggered)
-        3. Profit Targets (PT1 → PT4, checking which levels already hit)
+        1. Stop Loss (hard SL threshold)
+        2. Dynamic SL (escalated price-based SL)
+        3. EMA Risk (trend reversal exit)
+        4. Giveback Guard (max profit drawdown)
+        5. Early Trailing Stop (breakeven + step locks)
+        6. Legacy Trailing Stop (if active and triggered)
+        7. Profit Targets PT1-PT4 (escalation_only: mark tier without exit)
         """
         if position.remaining_qty <= 0:
             return None, 0.0
         
-        # Use entry_price (signal's entry alert price) as cost basis for PT/SL calculations
         cost_basis = position.entry_price
         if cost_basis <= 0:
             return None, 0.0
@@ -510,12 +514,17 @@ class SignalRoutingEngine:
         except (json.JSONDecodeError, TypeError):
             pass
         
-        if pnl_pct <= -config.stop_loss_pct:
+        if config.stop_loss_pct > 0 and pnl_pct <= -config.stop_loss_pct:
             return ExitReason.STOP_LOSS, pnl_pct
         
         if config.dynamic_sl_escalation_enabled and position.dynamic_sl_price is not None:
             if current_price <= position.dynamic_sl_price:
                 return ExitReason.STOP_LOSS, pnl_pct
+        
+        if config.ema_risk_enabled:
+            ema_exit = self._evaluate_ema_risk(position, config, pnl_pct)
+            if ema_exit is not None:
+                return ema_exit, pnl_pct
         
         if config.max_profit_giveback_enabled and position.giveback_guard_active:
             if position.max_pnl_seen > 0:
@@ -523,7 +532,12 @@ class SignalRoutingEngine:
                 if pnl_pct <= giveback_threshold:
                     return ExitReason.GIVEBACK_GUARD, pnl_pct
         
-        if position.trailing_stop_active and config.trailing_stop_pct > 0:
+        if config.enable_early_trailing and not config.trailing_stop_pct > 0:
+            early_exit = self._evaluate_early_trailing(position, config, pnl_pct, cost_basis)
+            if early_exit is not None:
+                return early_exit, pnl_pct
+        
+        if not config.enable_early_trailing and position.trailing_stop_active and config.trailing_stop_pct > 0:
             max_pnl = position.max_pnl_seen
             trailing_threshold = max_pnl - config.trailing_stop_pct
             if pnl_pct <= trailing_threshold and max_pnl > 0:
@@ -536,14 +550,141 @@ class SignalRoutingEngine:
             (ExitReason.PT1, config.pt1_pct, "pt1"),
         ]
         
-        for exit_reason, target_pct, level_key in pt_targets:
-            if level_key not in pt_levels_hit and pnl_pct >= target_pct:
-                return exit_reason, pnl_pct
+        if config.escalation_only_mode:
+            for exit_reason, target_pct, level_key in pt_targets:
+                if target_pct > 0 and level_key not in pt_levels_hit and pnl_pct >= target_pct:
+                    pt_levels_hit.add(level_key)
+                    if position.id is not None:
+                        self.ledger.update_pt_levels(position.id, list(pt_levels_hit))
+                        tier_num = level_key.replace("pt", "")
+                        print(f"[ROUTING_ENGINE] ESCALATION ONLY: PT{tier_num} hit ({pnl_pct:.1f}% >= {target_pct}%) — tier marked, NO exit")
+        else:
+            for exit_reason, target_pct, level_key in pt_targets:
+                if target_pct > 0 and level_key not in pt_levels_hit and pnl_pct >= target_pct:
+                    return exit_reason, pnl_pct
         
         if position.id is not None:
             self._update_enhanced_risk_state(position, config, pnl_pct, pt_levels_hit, cost_basis)
         
         return None, pnl_pct
+    
+    def _evaluate_early_trailing(
+        self,
+        position: LedgerPosition,
+        config: RoutingMappingConfig,
+        pnl_pct: float,
+        cost_basis: float
+    ) -> Optional[ExitReason]:
+        """Evaluate early trailing stop: breakeven at activation, then step-locked profit."""
+        activation_pct = config.early_trailing_activation_pct
+        step_pct = config.early_trailing_step_pct if config.early_trailing_step_pct > 0 else 3.0
+        
+        if not position.early_trailing_active:
+            if pnl_pct >= activation_pct:
+                stop_price = cost_basis
+                self.ledger.update_early_trailing_state(
+                    position.id, active=True, stop_price=stop_price, steps_locked=0
+                )
+                position.early_trailing_active = True
+                position.early_stop_price = stop_price
+                position.early_steps_locked = 0
+                print(f"[ROUTING_ENGINE] ✓ Early Trailing ACTIVATED at {pnl_pct:.1f}% — breakeven locked at ${stop_price:.2f}")
+            return None
+        
+        current_price = position.current_price
+        if position.early_stop_price is not None and current_price <= position.early_stop_price:
+            return ExitReason.EARLY_TRAILING
+        
+        steps = position.early_steps_locked or 0
+        next_step_threshold = activation_pct + (step_pct * (steps + 1))
+        if pnl_pct >= next_step_threshold:
+            new_steps = int((pnl_pct - activation_pct) / step_pct)
+            locked_profit_pct = activation_pct + (step_pct * (new_steps - 1))
+            new_stop_price = cost_basis * (1 + locked_profit_pct / 100)
+            if position.early_stop_price is None or new_stop_price > position.early_stop_price:
+                old_stop = position.early_stop_price
+                self.ledger.update_early_trailing_state(
+                    position.id, active=True, stop_price=new_stop_price, steps_locked=new_steps
+                )
+                position.early_stop_price = new_stop_price
+                position.early_steps_locked = new_steps
+                old_display = f"${old_stop:.2f}" if old_stop else "entry"
+                print(f"[ROUTING_ENGINE] 📈 Early Trail PROFIT LOCKED: {old_display} → ${new_stop_price:.2f} (step {new_steps})")
+        
+        return None
+    
+    def _evaluate_ema_risk(
+        self,
+        position: LedgerPosition,
+        config: RoutingMappingConfig,
+        pnl_pct: float
+    ) -> Optional[ExitReason]:
+        """Evaluate EMA trend risk using CandlePreWarmService."""
+        try:
+            from src.risk.ema_engine import get_candle_service
+            candle_svc = get_candle_service()
+            if not candle_svc or not candle_svc.is_global_enabled():
+                return None
+            
+            ema_symbol = position.symbol
+            tf = config.ema_timeframe_minutes
+            pd_val = config.ema_period
+            
+            is_option = position.option_type in ('C', 'Call', 'call', 'P', 'Put', 'put')
+            yf_only = is_option and config.ema_use_underlying
+            candle_svc.subscribe_symbol(ema_symbol, timeframe=tf, period=pd_val, yfinance_only=yf_only, extended_hours=config.ema_extended_hours)
+            
+            ema_state = candle_svc.get_ema_state(ema_symbol, timeframe=tf, period=pd_val)
+            if ema_state is None or ema_state.value is None:
+                return None
+            
+            cross_state = ema_state.cross_state
+            buffer_pct = config.ema_buffer_pct
+            
+            if config.ema_exit_enabled and cross_state == 'below':
+                if ema_state.value > 0:
+                    distance_pct = ((position.current_price - ema_state.value) / ema_state.value) * 100
+                    if distance_pct <= -buffer_pct:
+                        print(f"[ROUTING_ENGINE] 📊 EMA EXIT: {ema_symbol} price ${position.current_price:.2f} crossed below EMA ${ema_state.value:.2f}")
+                        return ExitReason.EMA_EXIT
+            
+            if config.ema_escalation_enabled and cross_state == 'below':
+                if config.dynamic_sl_escalation_enabled and position.dynamic_sl_price is not None:
+                    new_sl = position.current_price * 0.99
+                    if new_sl > position.dynamic_sl_price:
+                        self.ledger.update_dynamic_sl(position.id, new_sl)
+                        print(f"[ROUTING_ENGINE] 📊 EMA SL ESCALATION: SL tightened to ${new_sl:.2f} on EMA cross")
+            
+            last_candle_ts = None
+            if ema_state.last_candle and hasattr(ema_state.last_candle, 'timestamp'):
+                last_candle_ts = ema_state.last_candle.timestamp
+            elif ema_state.last_candle and hasattr(ema_state.last_candle, 'ts'):
+                last_candle_ts = ema_state.last_candle.ts
+            
+            pos_key = position.option_key
+            last_eval_ts = self._ema_last_candle_ts.get(pos_key)
+            is_new_candle = last_candle_ts is not None and last_candle_ts != last_eval_ts
+            
+            if is_new_candle:
+                self._ema_last_candle_ts[pos_key] = last_candle_ts
+                
+                if cross_state in ('flat', 'no_trend', None):
+                    new_count = (position.ema_no_trend_count or 0) + 1
+                    if new_count >= config.ema_no_trend_candles:
+                        print(f"[ROUTING_ENGINE] 📊 EMA NO-TREND EXIT: {new_count} candles with no clear trend")
+                        return ExitReason.EMA_EXIT
+                    if position.id is not None:
+                        self.ledger.update_ema_no_trend_count(position.id, new_count)
+                        position.ema_no_trend_count = new_count
+                else:
+                    if position.ema_no_trend_count > 0 and position.id is not None:
+                        self.ledger.update_ema_no_trend_count(position.id, 0)
+                        position.ema_no_trend_count = 0
+            
+        except Exception as e:
+            print(f"[ROUTING_ENGINE] EMA evaluation error for {position.symbol}: {e}")
+        
+        return None
     
     def _calculate_dynamic_sl_price(
         self,
@@ -605,18 +746,21 @@ class SignalRoutingEngine:
             elif position.giveback_guard_active and pnl_pct > position.max_pnl_seen:
                 self.ledger.update_giveback_guard(position.id, True, pnl_pct)
         
-        if pnl_pct >= config.trailing_activation_pct and not position.trailing_stop_active:
-            self.ledger.update_trailing_state(
-                position.id,
-                trailing_active=True,
-                max_pnl_seen=pnl_pct
-            )
-        elif position.trailing_stop_active and pnl_pct > position.max_pnl_seen:
-            self.ledger.update_trailing_state(
-                position.id,
-                trailing_active=True,
-                max_pnl_seen=pnl_pct
-            )
+        if not config.enable_early_trailing and config.trailing_stop_pct > 0:
+            if pnl_pct >= config.trailing_activation_pct and not position.trailing_stop_active:
+                self.ledger.update_trailing_state(
+                    position.id,
+                    trailing_active=True,
+                    max_pnl_seen=pnl_pct
+                )
+            elif position.trailing_stop_active and pnl_pct > position.max_pnl_seen:
+                self.ledger.update_trailing_state(
+                    position.id,
+                    trailing_active=True,
+                    max_pnl_seen=pnl_pct
+                )
+        elif pnl_pct > position.max_pnl_seen:
+            self.ledger.update_max_pnl(position.id, pnl_pct)
     
     async def _handle_risk_exit(
         self,

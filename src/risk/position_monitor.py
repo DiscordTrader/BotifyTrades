@@ -25,7 +25,6 @@ from .position_cache import PositionCache
 from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluate_channel_stop_loss, get_trim_order_price
 from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
-from .early_trailing import evaluate_early_trailing, EarlyTrailingState
 from .risk_engine import (
     evaluate_exit_actions, 
     TradeState, 
@@ -3238,26 +3237,10 @@ class RiskManager:
                     decision.reason = format_tier_reason(decision, channel_settings.channel_name)
                     return decision
         
-        if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled):
+        if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled or channel_settings.enable_early_trailing):
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
             if engine_decision and engine_decision.should_exit:
                 return engine_decision
-        
-        if channel_settings and channel_settings.enable_early_trailing:
-            early_result, updated_cache = evaluate_early_trailing(
-                position, cache, channel_settings, verbose=True
-            )
-            if early_result.should_update_stop:
-                self.cache.persist_early_trailing_state(position.position_key)
-            if early_result.should_exit:
-                channel_name = channel_settings.channel_name
-                return ExitDecision(
-                    should_exit=True,
-                    reason=f"EARLY TRAIL [{channel_name}] {early_result.reason}",
-                    exit_qty=int(position.quantity),
-                    is_partial=False,
-                    risk_trigger='early_trailing'
-                )
         
         trailing_pct, activation_pct, stop_pct = get_effective_trailing_settings(
             channel_settings, risk_settings, self.trailing_activation_pct
@@ -3370,6 +3353,9 @@ class RiskManager:
         cache.tier3_hit = updated_state.pt3_hit
         cache.tier4_hit = updated_state.pt4_hit
         cache.ema_no_trend_count = updated_state.ema_no_trend_count
+        cache.early_trailing_active = updated_state.early_trailing_active
+        cache.early_stop_price = updated_state.early_stop_price
+        cache.early_steps_locked = updated_state.early_steps_locked
         if updated_state.highest_price > cache.highest_price:
             cache.highest_price = updated_state.highest_price
         
