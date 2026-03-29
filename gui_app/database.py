@@ -1747,6 +1747,19 @@ def init_db():
         ('early_trailing_step_pct', 'REAL DEFAULT 3.0'),
         ('order_chase_enabled', 'INTEGER DEFAULT NULL'),
         ('escalation_only_mode', 'INTEGER DEFAULT 0'),
+        ('ema_risk_enabled', 'INTEGER DEFAULT 0'),
+        ('ema_period', 'INTEGER DEFAULT 5'),
+        ('ema_timeframe_minutes', 'INTEGER DEFAULT 5'),
+        ('ema_buffer_pct', 'REAL DEFAULT 0.1'),
+        ('ema_exit_enabled', 'INTEGER DEFAULT 1'),
+        ('ema_escalation_enabled', 'INTEGER DEFAULT 1'),
+        ('ema_extended_hours', 'INTEGER DEFAULT 0'),
+        ('ema_use_underlying', 'INTEGER DEFAULT 1'),
+        ('ema_no_trend_candles', 'INTEGER DEFAULT 3'),
+        ('trim_limit_offset', 'REAL DEFAULT 0.01'),
+        ('trim_limit_offset_mode', "TEXT DEFAULT 'dollar'"),
+        ('trim_limit_offset_pct', 'REAL DEFAULT 2.0'),
+        ('sl_limit_offset', 'REAL DEFAULT 0.03'),
     ]
     for col_name, col_type in migration_columns:
         try:
@@ -2958,14 +2971,26 @@ def get_signal_routing_mapping(mapping_id: int) -> Optional[Dict]:
     return dict(row) if row else None
 
 
-def get_signal_routing_by_source(source_channel_id: str) -> Optional[Dict]:
-    """Get signal routing mapping by source channel ID"""
+def get_signal_routing_by_source(source_channel_id: str, require_enabled: bool = True) -> Optional[Dict]:
+    """Get signal routing mapping by source channel ID.
+    
+    Args:
+        source_channel_id: The source channel ID to look up
+        require_enabled: If True, only return enabled mappings (default, for runtime routing).
+                        If False, return any mapping (for admin settings editing).
+    """
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        'SELECT * FROM signal_routing_mappings WHERE source_channel_id = ? AND enabled = 1',
-        (source_channel_id,)
-    )
+    if require_enabled:
+        cursor.execute(
+            'SELECT * FROM signal_routing_mappings WHERE source_channel_id = ? AND enabled = 1',
+            (source_channel_id,)
+        )
+    else:
+        cursor.execute(
+            'SELECT * FROM signal_routing_mappings WHERE source_channel_id = ?',
+            (source_channel_id,)
+        )
     row = cursor.fetchone()
     return dict(row) if row else None
 
@@ -3069,7 +3094,8 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'order_chase_enabled', 'entry_chase_enabled',
         'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
         'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
-        'escalation_only_mode'
+        'escalation_only_mode',
+        'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct', 'sl_limit_offset'
     ]
     
     updates = []

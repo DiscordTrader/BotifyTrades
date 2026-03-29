@@ -773,6 +773,109 @@
                 <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 8px;">Example: With 30% giveback, if profit reaches +50% then drops to +35%, position auto-exits.</p>
             </div>
             
+            <h4 style="margin: 25px 0 15px; color: #e879f9; font-size: 0.95rem;">📐 Early Trailing Stop</h4>
+            <div style="padding: 15px; background: rgba(232, 121, 249, 0.08); border-radius: 8px; border-left: 3px solid #e879f9;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <input type="checkbox" id="risk-early-trailing" onchange="handleTrailingToggle('early')">
+                    <label for="risk-early-trailing" style="font-weight: 600;">Enable Early Trailing Stop</label>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 12px;">Moves stop to breakeven at activation %, then locks profit in step increments. Mutually exclusive with Legacy Trailing above.</p>
+                <div id="early-trailing-params" style="display: none;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.85rem;">Activation:</span>
+                            <input type="number" id="risk-early-activation" class="form-input" style="width: 70px;" step="0.5" min="1" max="50" value="5">
+                            <span style="font-size: 0.8rem;">% gain</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.85rem;">Step Size:</span>
+                            <input type="number" id="risk-early-step" class="form-input" style="width: 70px;" step="0.5" min="1" max="25" value="3">
+                            <span style="font-size: 0.8rem;">% increments</span>
+                        </div>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 8px;">Example: At 5% activation, SL moves to breakeven. At 8% (+3% step), SL locks +5%. At 11%, SL locks +8%.</p>
+                </div>
+            </div>
+            
+            <h4 style="margin: 25px 0 15px; color: #38bdf8; font-size: 0.95rem;">📊 EMA Trend Risk Engine</h4>
+            <div style="padding: 15px; background: rgba(56, 189, 248, 0.08); border-radius: 8px; border-left: 3px solid #38bdf8;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <input type="checkbox" id="risk-ema-enabled">
+                    <label for="risk-ema-enabled" style="font-weight: 600;">Enable EMA Risk Management</label>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 12px;">Uses EMA crossover analysis on candlestick data to detect trend reversals. Can trigger exits or escalate stops when price crosses below EMA.</p>
+                <div id="ema-params" style="display: none;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-size: 0.8rem;">Period:</span>
+                            <input type="number" id="risk-ema-period" class="form-input" style="width: 60px;" step="1" min="2" max="50" value="5">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-size: 0.8rem;">Timeframe:</span>
+                            <select id="risk-ema-timeframe" class="form-input" style="width: 100px;">
+                                <option value="1">1 min</option>
+                                <option value="5" selected>5 min</option>
+                                <option value="15">15 min</option>
+                                <option value="30">30 min</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-size: 0.8rem;">Buffer:</span>
+                            <input type="number" id="risk-ema-buffer" class="form-input" style="width: 65px;" step="0.05" min="0" max="5" value="0.1">
+                            <span style="font-size: 0.8rem;">%</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="risk-ema-exit" checked>
+                            <span>Exit on Cross</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="risk-ema-escalation" checked>
+                            <span>SL Escalation</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="risk-ema-extended">
+                            <span>Extended Hours</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="risk-ema-underlying" checked>
+                            <span>Use Underlying</span>
+                        </label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.8rem;">No-Trend Exit After:</span>
+                        <input type="number" id="risk-ema-no-trend" class="form-input" style="width: 60px;" step="1" min="1" max="20" value="3">
+                        <span style="font-size: 0.8rem;">candles with no clear trend</span>
+                    </div>
+                </div>
+            </div>
+            
+            <h4 style="margin: 25px 0 15px; color: #fb923c; font-size: 0.95rem;">💲 Limit Order Offsets</h4>
+            <div style="padding: 15px; background: rgba(251, 146, 60, 0.08); border-radius: 8px; border-left: 3px solid #fb923c;">
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 12px;">When using limit orders for trims/SL, set the offset from the trigger price.</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="font-size: 0.85rem; display: block; margin-bottom: 6px;">Trim Limit Offset</label>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <select id="risk-trim-offset-mode" class="form-input" style="width: 70px;" onchange="toggleTrimOffsetMode()">
+                                <option value="dollar">$</option>
+                                <option value="percent">%</option>
+                            </select>
+                            <input type="number" id="risk-trim-offset-dollar" class="form-input" style="width: 70px;" step="0.01" min="0" max="5" value="0.01">
+                            <input type="number" id="risk-trim-offset-pct" class="form-input" style="width: 70px; display: none;" step="0.5" min="0" max="20" value="2.0">
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="font-size: 0.85rem; display: block; margin-bottom: 6px;">SL Limit Offset</label>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <input type="number" id="risk-sl-offset" class="form-input" style="width: 70px;" step="0.5" min="0" max="20" value="3">
+                            <span style="font-size: 0.8rem;">% below SL trigger</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <h4 style="margin: 25px 0 15px; color: var(--violet); font-size: 0.95rem;">🔄 Unfilled Order Chaser</h4>
             <div style="padding: 15px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; border-left: 3px solid var(--violet);">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -1137,8 +1240,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-sl-profile').value = s.sl_escalation_profile || 'standard';
                 document.getElementById('risk-giveback').checked = !!s.max_profit_giveback_enabled;
                 document.getElementById('risk-giveback-pct').value = s.max_profit_giveback_pct || 30;
-                document.getElementById('risk-order-chase').checked = s.order_chase_enabled !== 0;
+                document.getElementById('risk-order-chase').checked = !!s.order_chase_enabled;
                 document.getElementById('risk-escalation-only').checked = !!s.escalation_only_mode;
+                
+                document.getElementById('risk-early-trailing').checked = !!s.enable_early_trailing;
+                document.getElementById('risk-early-activation').value = s.early_trailing_activation_pct || 5;
+                document.getElementById('risk-early-step').value = s.early_trailing_step_pct || 3;
+                document.getElementById('early-trailing-params').style.display = s.enable_early_trailing ? 'block' : 'none';
+                
+                document.getElementById('risk-ema-enabled').checked = !!s.ema_risk_enabled;
+                document.getElementById('risk-ema-period').value = s.ema_period || 5;
+                document.getElementById('risk-ema-timeframe').value = s.ema_timeframe_minutes || 5;
+                document.getElementById('risk-ema-buffer').value = s.ema_buffer_pct != null ? s.ema_buffer_pct : 0.1;
+                document.getElementById('risk-ema-exit').checked = s.ema_exit_enabled !== 0;
+                document.getElementById('risk-ema-escalation').checked = s.ema_escalation_enabled !== 0;
+                document.getElementById('risk-ema-extended').checked = !!s.ema_extended_hours;
+                document.getElementById('risk-ema-underlying').checked = s.ema_use_underlying !== 0;
+                document.getElementById('risk-ema-no-trend').value = s.ema_no_trend_candles || 3;
+                document.getElementById('ema-params').style.display = s.ema_risk_enabled ? 'block' : 'none';
+                
+                const trimMode = s.trim_limit_offset_mode || 'dollar';
+                document.getElementById('risk-trim-offset-mode').value = trimMode;
+                document.getElementById('risk-trim-offset-dollar').value = s.trim_limit_offset != null ? s.trim_limit_offset : 0.01;
+                document.getElementById('risk-trim-offset-pct').value = s.trim_limit_offset_pct != null ? s.trim_limit_offset_pct : 2.0;
+                document.getElementById('risk-trim-offset-dollar').style.display = trimMode === 'dollar' ? 'block' : 'none';
+                document.getElementById('risk-trim-offset-pct').style.display = trimMode === 'percent' ? 'block' : 'none';
+                document.getElementById('risk-sl-offset').value = s.sl_limit_offset != null ? (s.sl_limit_offset * 100) : 3;
+                
                 const exitMode = s.exit_strategy_mode || 'risk';
                 document.querySelector(`input[name="exit-strategy-mode"][value="${exitMode}"]`).checked = true;
                 document.querySelectorAll('.exit-mode-option').forEach(opt => {
@@ -1182,7 +1310,23 @@ document.addEventListener('DOMContentLoaded', function() {
             max_profit_giveback_pct: parseFloat(document.getElementById('risk-giveback-pct').value) || 30,
             exit_strategy_mode: document.querySelector('input[name="exit-strategy-mode"]:checked').value,
             order_chase_enabled: document.getElementById('risk-order-chase').checked ? 1 : 0,
-            escalation_only_mode: document.getElementById('risk-escalation-only').checked ? 1 : 0
+            escalation_only_mode: document.getElementById('risk-escalation-only').checked ? 1 : 0,
+            enable_early_trailing: document.getElementById('risk-early-trailing').checked ? 1 : 0,
+            early_trailing_activation_pct: parseFloat(document.getElementById('risk-early-activation').value) || 5.0,
+            early_trailing_step_pct: parseFloat(document.getElementById('risk-early-step').value) || 3.0,
+            ema_risk_enabled: document.getElementById('risk-ema-enabled').checked ? 1 : 0,
+            ema_period: parseInt(document.getElementById('risk-ema-period').value) || 5,
+            ema_timeframe_minutes: parseInt(document.getElementById('risk-ema-timeframe').value) || 5,
+            ema_buffer_pct: (() => { const v = parseFloat(document.getElementById('risk-ema-buffer').value); return Number.isFinite(v) ? v : 0.1; })(),
+            ema_exit_enabled: document.getElementById('risk-ema-exit').checked ? 1 : 0,
+            ema_escalation_enabled: document.getElementById('risk-ema-escalation').checked ? 1 : 0,
+            ema_extended_hours: document.getElementById('risk-ema-extended').checked ? 1 : 0,
+            ema_use_underlying: document.getElementById('risk-ema-underlying').checked ? 1 : 0,
+            ema_no_trend_candles: parseInt(document.getElementById('risk-ema-no-trend').value) || 3,
+            trim_limit_offset: (() => { const v = parseFloat(document.getElementById('risk-trim-offset-dollar').value); return Number.isFinite(v) ? v : 0.01; })(),
+            trim_limit_offset_mode: document.getElementById('risk-trim-offset-mode').value || 'dollar',
+            trim_limit_offset_pct: (() => { const v = parseFloat(document.getElementById('risk-trim-offset-pct').value); return Number.isFinite(v) ? v : 2.0; })(),
+            sl_limit_offset: (() => { const v = parseFloat(document.getElementById('risk-sl-offset').value); return Number.isFinite(v) ? v / 100 : 0.03; })()
         };
         
         try {
@@ -1204,6 +1348,34 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Error saving risk settings: ' + err.message);
         }
     };
+
+    window.handleTrailingToggle = function(type) {
+        if (type === 'early') {
+            const earlyOn = document.getElementById('risk-early-trailing').checked;
+            document.getElementById('early-trailing-params').style.display = earlyOn ? 'block' : 'none';
+            if (earlyOn) {
+                document.getElementById('risk-trailing-stop').value = 0;
+                document.getElementById('risk-trailing-activation').value = 0;
+            }
+        }
+    };
+    
+    document.getElementById('risk-trailing-stop').addEventListener('input', function() {
+        if (parseFloat(this.value) > 0) {
+            document.getElementById('risk-early-trailing').checked = false;
+            document.getElementById('early-trailing-params').style.display = 'none';
+        }
+    });
+    
+    window.toggleTrimOffsetMode = function() {
+        const mode = document.getElementById('risk-trim-offset-mode').value;
+        document.getElementById('risk-trim-offset-dollar').style.display = mode === 'dollar' ? 'block' : 'none';
+        document.getElementById('risk-trim-offset-pct').style.display = mode === 'percent' ? 'block' : 'none';
+    };
+    
+    document.getElementById('risk-ema-enabled').addEventListener('change', function() {
+        document.getElementById('ema-params').style.display = this.checked ? 'block' : 'none';
+    });
 
     document.getElementById('riskSettingsModal').addEventListener('click', function(e) {
         if (e.target === this) closeRiskModal();

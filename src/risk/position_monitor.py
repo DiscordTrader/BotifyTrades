@@ -214,9 +214,14 @@ class RiskDBAdapter:
                        max_profit_giveback_enabled, max_profit_giveback_pct,
                        exit_strategy_mode, price_monitor_enabled,
                        enable_early_trailing, early_trailing_activation_pct, early_trailing_step_pct,
-                       sl_order_type, escalation_only_mode
+                       sl_order_type, escalation_only_mode,
+                       ema_risk_enabled, ema_period, ema_timeframe_minutes, ema_buffer_pct,
+                       ema_exit_enabled, ema_escalation_enabled, ema_extended_hours,
+                       ema_use_underlying, ema_no_trend_candles,
+                       trim_limit_offset, trim_limit_offset_mode, trim_limit_offset_pct,
+                       sl_limit_offset
                 FROM signal_routing_mappings
-                WHERE id = ? AND enabled = 1
+                WHERE id = ?
                 LIMIT 1
             ''', (routing_mapping_id,))
             
@@ -249,7 +254,25 @@ class RiskDBAdapter:
             sl_order_type = row[26] if len(row) > 26 and row[26] else 'limit'
             escalation_only = bool(row[27]) if len(row) > 27 and row[27] else False
             
-            has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0 or enable_early_trailing)
+            ema_risk_enabled = bool(row[28]) if len(row) > 28 and row[28] else False
+            ema_period = row[29] if len(row) > 29 and row[29] is not None else 5
+            ema_timeframe_minutes = row[30] if len(row) > 30 and row[30] is not None else 5
+            ema_buffer_pct = row[31] if len(row) > 31 and row[31] is not None else 0.1
+            ema_exit_enabled = bool(row[32]) if len(row) > 32 and row[32] is not None else True
+            ema_escalation_enabled = bool(row[33]) if len(row) > 33 and row[33] is not None else True
+            ema_extended_hours = bool(row[34]) if len(row) > 34 and row[34] else False
+            ema_use_underlying = bool(row[35]) if len(row) > 35 and row[35] is not None else True
+            ema_no_trend_candles = row[36] if len(row) > 36 and row[36] is not None else 3
+            r_trim_limit_offset = row[37] if len(row) > 37 and row[37] is not None else 0.01
+            r_trim_limit_offset_mode = row[38] if len(row) > 38 and row[38] else 'dollar'
+            r_trim_limit_offset_pct = row[39] if len(row) > 39 and row[39] is not None else 2.0
+            r_sl_limit_offset = row[40] if len(row) > 40 and row[40] is not None else 0.03
+            
+            has_any_risk_config = (
+                sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or 
+                trail > 0 or enable_early_trailing or dynamic_sl_enabled or 
+                giveback_enabled or ema_risk_enabled or escalation_only
+            )
             
             if not has_any_risk_config:
                 return None
@@ -272,7 +295,10 @@ class RiskDBAdapter:
                 leave_runner_pct=leave_runner_pct,
                 trim_order_mode=trim_order_type,
                 sl_order_mode=sl_order_type,
-                trim_limit_offset=0.01,
+                trim_limit_offset=r_trim_limit_offset,
+                trim_limit_offset_mode=r_trim_limit_offset_mode,
+                trim_limit_offset_pct=r_trim_limit_offset_pct,
+                sl_limit_offset=r_sl_limit_offset,
                 exit_strategy_mode=exit_mode,
                 enable_dynamic_sl=dynamic_sl_enabled,
                 dynamic_sl_profile=sl_profile,
@@ -281,7 +307,16 @@ class RiskDBAdapter:
                 enable_early_trailing=enable_early_trailing,
                 early_trailing_activation_pct=early_trailing_activation_pct,
                 early_trailing_step_pct=early_trailing_step_pct,
-                escalation_only_mode=escalation_only
+                escalation_only_mode=escalation_only,
+                ema_risk_enabled=ema_risk_enabled,
+                ema_period=ema_period,
+                ema_timeframe_minutes=ema_timeframe_minutes,
+                ema_buffer_pct=ema_buffer_pct,
+                ema_exit_enabled=ema_exit_enabled,
+                ema_escalation_enabled=ema_escalation_enabled,
+                ema_extended_hours=ema_extended_hours,
+                ema_use_underlying=ema_use_underlying,
+                ema_no_trend_candles=ema_no_trend_candles,
             )
         except Exception as e:
             print(f"[RISK] Warning: Could not fetch signal routing risk settings: {e}")

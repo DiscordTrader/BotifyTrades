@@ -104,6 +104,28 @@ class RoutingMappingConfig:
     sl_escalation_profile: str = "standard"
     max_profit_giveback_enabled: bool = False
     max_profit_giveback_pct: float = 30.0
+    
+    enable_early_trailing: bool = False
+    early_trailing_activation_pct: float = 5.0
+    early_trailing_step_pct: float = 3.0
+    escalation_only_mode: bool = False
+    
+    ema_risk_enabled: bool = False
+    ema_period: int = 5
+    ema_timeframe_minutes: int = 5
+    ema_buffer_pct: float = 0.1
+    ema_exit_enabled: bool = True
+    ema_escalation_enabled: bool = True
+    ema_extended_hours: bool = False
+    ema_use_underlying: bool = True
+    ema_no_trend_candles: int = 3
+    
+    trim_order_type: str = 'market'
+    sl_order_type: str = 'limit'
+    trim_limit_offset: float = 0.01
+    trim_limit_offset_mode: str = 'dollar'
+    trim_limit_offset_pct: float = 2.0
+    sl_limit_offset: float = 0.03
 
 
 @dataclass
@@ -254,10 +276,71 @@ class SignalRoutingEngine:
             sl_escalation_profile=mapping.get('sl_escalation_profile', 'standard') or 'standard',
             max_profit_giveback_enabled=bool(mapping.get('max_profit_giveback_enabled', 0)),
             max_profit_giveback_pct=mapping.get('max_profit_giveback_pct', 30.0) or 30.0,
+            enable_early_trailing=bool(mapping.get('enable_early_trailing', 0)),
+            early_trailing_activation_pct=mapping.get('early_trailing_activation_pct', 5.0) or 5.0,
+            early_trailing_step_pct=mapping.get('early_trailing_step_pct', 3.0) or 3.0,
+            escalation_only_mode=bool(mapping.get('escalation_only_mode', 0)),
+            ema_risk_enabled=bool(mapping.get('ema_risk_enabled', 0)),
+            ema_period=mapping.get('ema_period', 5) or 5,
+            ema_timeframe_minutes=mapping.get('ema_timeframe_minutes', 5) or 5,
+            ema_buffer_pct=mapping.get('ema_buffer_pct', 0.1) if mapping.get('ema_buffer_pct') is not None else 0.1,
+            ema_exit_enabled=bool(mapping.get('ema_exit_enabled', 1)) if mapping.get('ema_exit_enabled') is not None else True,
+            ema_escalation_enabled=bool(mapping.get('ema_escalation_enabled', 1)) if mapping.get('ema_escalation_enabled') is not None else True,
+            ema_extended_hours=bool(mapping.get('ema_extended_hours', 0)),
+            ema_use_underlying=bool(mapping.get('ema_use_underlying', 1)) if mapping.get('ema_use_underlying') is not None else True,
+            ema_no_trend_candles=mapping.get('ema_no_trend_candles', 3) or 3,
+            trim_order_type=mapping.get('trim_order_type', 'market') or 'market',
+            sl_order_type=mapping.get('sl_order_type', 'limit') or 'limit',
+            trim_limit_offset=mapping.get('trim_limit_offset', 0.01) if mapping.get('trim_limit_offset') is not None else 0.01,
+            trim_limit_offset_mode=mapping.get('trim_limit_offset_mode', 'dollar') or 'dollar',
+            trim_limit_offset_pct=mapping.get('trim_limit_offset_pct', 2.0) if mapping.get('trim_limit_offset_pct') is not None else 2.0,
+            sl_limit_offset=mapping.get('sl_limit_offset', 0.03) if mapping.get('sl_limit_offset') is not None else 0.03,
         )
         
         self._configs[config.source_channel_id] = config
         return config
+    
+    def request_config_invalidation(self, source_channel_id: Optional[str] = None):
+        """Thread-safe request for config cache invalidation from Flask threads.
+        
+        Sets a flag that the routing engine's monitoring loop will process.
+        This avoids cross-thread dict mutation.
+        
+        Args:
+            source_channel_id: If provided, only invalidate that channel's config.
+                             If None, invalidate all configs.
+        """
+        if not hasattr(self, '_pending_invalidations'):
+            self._pending_invalidations: list = []
+        self._pending_invalidations.append(source_channel_id)
+        print(f"[ROUTING_ENGINE] ♻️ Config invalidation requested for: {source_channel_id or 'ALL'}")
+    
+    def _process_pending_invalidations(self):
+        """Process any pending config invalidation requests (called from engine's own loop)."""
+        if not hasattr(self, '_pending_invalidations') or not self._pending_invalidations:
+            return
+        
+        pending = list(self._pending_invalidations)
+        self._pending_invalidations.clear()
+        
+        if None in pending:
+            self._configs.clear()
+            count = self._preload_all_routing_configs()
+            print(f"[ROUTING_ENGINE] ♻️ Reloaded all routing configs ({count} loaded)")
+        else:
+            for channel_id in set(pending):
+                if channel_id in self._configs:
+                    del self._configs[channel_id]
+                    print(f"[ROUTING_ENGINE] ♻️ Invalidated config cache for channel {channel_id}")
+            for channel_id in set(pending):
+                try:
+                    from gui_app.database import get_signal_routing_by_source
+                    mapping = get_signal_routing_by_source(channel_id)
+                    if mapping and mapping.get('enabled'):
+                        self.load_mapping_config(mapping)
+                        print(f"[ROUTING_ENGINE] ♻️ Reloaded config for channel {channel_id}")
+                except Exception as e:
+                    print(f"[ROUTING_ENGINE] ⚠️ Could not reload config for {channel_id}: {e}")
     
     def get_routing_config(self, routing_mapping_id: Optional[int]) -> Optional[RoutingMappingConfig]:
         """Get routing config by mapping ID."""
@@ -654,6 +737,8 @@ class SignalRoutingEngine:
         _quote_fail_counts = {}
         while self._running:
             try:
+                self._process_pending_invalidations()
+                
                 loop_count += 1
                 positions = self.ledger.get_open_positions()
                 

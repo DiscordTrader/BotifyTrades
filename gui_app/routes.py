@@ -2282,6 +2282,15 @@ def register_routes(app):
             data = request.json
             success = db.update_signal_routing_mapping(mapping_id, **data)
             if success:
+                try:
+                    mapping = db.get_signal_routing_mapping(mapping_id)
+                    if mapping:
+                        from src.services.signal_routing_engine import SignalRoutingEngine
+                        engine = SignalRoutingEngine._instance
+                        if engine:
+                            engine.request_config_invalidation(str(mapping.get('source_channel_id', '')))
+                except Exception:
+                    pass
                 return jsonify({'success': True, 'message': 'Mapping updated'})
             else:
                 return jsonify({'success': False, 'error': 'Mapping not found or no changes'}), 404
@@ -2418,7 +2427,7 @@ def register_routes(app):
     def api_get_routing_risk_settings(channel_id):
         """Get risk settings for a signal routing mapping by source channel ID (admin only)"""
         try:
-            mapping = db.get_signal_routing_by_source(channel_id)
+            mapping = db.get_signal_routing_by_source(channel_id, require_enabled=False)
             if mapping:
                 settings = {
                     'pt1_pct': mapping.get('pt1_pct', 15),
@@ -2446,6 +2455,19 @@ def register_routes(app):
                     'early_trailing_step_pct': mapping.get('early_trailing_step_pct', 3.0),
                     'order_chase_enabled': mapping.get('order_chase_enabled'),
                     'escalation_only_mode': mapping.get('escalation_only_mode', 0),
+                    'ema_risk_enabled': mapping.get('ema_risk_enabled', 0),
+                    'ema_period': mapping.get('ema_period', 5),
+                    'ema_timeframe_minutes': mapping.get('ema_timeframe_minutes', 5),
+                    'ema_buffer_pct': mapping.get('ema_buffer_pct', 0.1),
+                    'ema_exit_enabled': mapping.get('ema_exit_enabled', 1),
+                    'ema_escalation_enabled': mapping.get('ema_escalation_enabled', 1),
+                    'ema_extended_hours': mapping.get('ema_extended_hours', 0),
+                    'ema_use_underlying': mapping.get('ema_use_underlying', 1),
+                    'ema_no_trend_candles': mapping.get('ema_no_trend_candles', 3),
+                    'trim_limit_offset': mapping.get('trim_limit_offset', 0.01),
+                    'trim_limit_offset_mode': mapping.get('trim_limit_offset_mode', 'dollar'),
+                    'trim_limit_offset_pct': mapping.get('trim_limit_offset_pct', 2.0),
+                    'sl_limit_offset': mapping.get('sl_limit_offset', 0.03),
                 }
                 return jsonify({'success': True, 'settings': settings})
             else:
@@ -2459,7 +2481,12 @@ def register_routes(app):
                     'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30,
                     'exit_strategy_mode': 'risk',
                     'enable_early_trailing': 0, 'early_trailing_activation_pct': 5.0, 'early_trailing_step_pct': 3.0,
-                    'order_chase_enabled': None, 'escalation_only_mode': 0
+                    'order_chase_enabled': None, 'escalation_only_mode': 0,
+                    'ema_risk_enabled': 0, 'ema_period': 5, 'ema_timeframe_minutes': 5,
+                    'ema_buffer_pct': 0.1, 'ema_exit_enabled': 1, 'ema_escalation_enabled': 1,
+                    'ema_extended_hours': 0, 'ema_use_underlying': 1, 'ema_no_trend_candles': 3,
+                    'trim_limit_offset': 0.01, 'trim_limit_offset_mode': 'dollar',
+                    'trim_limit_offset_pct': 2.0, 'sl_limit_offset': 0.03
                 }})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -2471,7 +2498,7 @@ def register_routes(app):
         """Update risk settings for a signal routing mapping by source channel ID (admin only)"""
         try:
             data = request.json
-            mapping = db.get_signal_routing_by_source(channel_id)
+            mapping = db.get_signal_routing_by_source(channel_id, require_enabled=False)
             if not mapping:
                 return jsonify({'success': False, 'error': 'Mapping not found for this channel'}), 404
             
@@ -2509,13 +2536,33 @@ def register_routes(app):
                 early_trailing_activation_pct=data.get('early_trailing_activation_pct', 5.0),
                 early_trailing_step_pct=data.get('early_trailing_step_pct', 3.0),
                 order_chase_enabled=data.get('order_chase_enabled'),
-                escalation_only_mode=data.get('escalation_only_mode', 0)
+                escalation_only_mode=data.get('escalation_only_mode', 0),
+                ema_risk_enabled=data.get('ema_risk_enabled', 0),
+                ema_period=data.get('ema_period', 5),
+                ema_timeframe_minutes=data.get('ema_timeframe_minutes', 5),
+                ema_buffer_pct=data.get('ema_buffer_pct', 0.1),
+                ema_exit_enabled=data.get('ema_exit_enabled', 1),
+                ema_escalation_enabled=data.get('ema_escalation_enabled', 1),
+                ema_extended_hours=data.get('ema_extended_hours', 0),
+                ema_use_underlying=data.get('ema_use_underlying', 1),
+                ema_no_trend_candles=data.get('ema_no_trend_candles', 3),
+                trim_limit_offset=data.get('trim_limit_offset', 0.01),
+                trim_limit_offset_mode=data.get('trim_limit_offset_mode', 'dollar'),
+                trim_limit_offset_pct=data.get('trim_limit_offset_pct', 2.0),
+                sl_limit_offset=data.get('sl_limit_offset', 0.03),
             )
             
             if success:
                 try:
                     from src.risk.position_monitor import request_settings_invalidation
                     request_settings_invalidation()
+                except Exception:
+                    pass
+                try:
+                    from src.services.signal_routing_engine import SignalRoutingEngine
+                    engine = SignalRoutingEngine._instance
+                    if engine:
+                        engine.request_config_invalidation(channel_id)
                 except Exception:
                     pass
                 return jsonify({'success': True, 'message': 'Risk settings updated'})
