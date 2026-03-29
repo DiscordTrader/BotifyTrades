@@ -267,10 +267,12 @@ class RiskDBAdapter:
             r_trim_limit_offset_pct = row[39] if len(row) > 39 and row[39] is not None else 2.0
             r_sl_limit_offset = row[40] if len(row) > 40 and row[40] is not None else 0.03
             
+            exit_strategy = row[19] if len(row) > 19 and row[19] else 'risk'
             has_any_risk_config = (
                 sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or 
                 trail > 0 or enable_early_trailing or dynamic_sl_enabled or 
-                giveback_enabled or ema_risk_enabled or escalation_only
+                giveback_enabled or ema_risk_enabled or escalation_only or
+                exit_strategy != 'risk'
             )
             
             if not has_any_risk_config:
