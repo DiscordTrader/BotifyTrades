@@ -348,6 +348,19 @@ async function loadChannels() {
                                             <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive - More room to run (PT1: -2%, PT2: BE, PT3: +10%, PT4: +20%)</option>
                                         </select>
                                     </div>
+                                    <div style="margin-top: 10px; padding: 10px; background: rgba(255, 100, 100, 0.03); border: 1px solid rgba(255, 100, 100, 0.12); border-radius: 6px;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <span style="font-size: 14px;">🔒</span>
+                                                <label style="font-size: 12px; font-weight: 600; color: #ff8a80;">SL Escalation Only</label>
+                                            </div>
+                                            <label class="toggle-switch" title="Targets escalate stop loss only — no partial sells">
+                                                <input type="checkbox" id="risk-escalation-only-${channel.id}" ${channel.escalation_only_mode ? 'checked' : ''}>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <p style="font-size: 10px; color: #666; margin: 6px 0 0 0; font-style: italic;">Targets escalate stop loss only — no partial sells. Closing via Early Trailing + Giveback Guard.</p>
+                                    </div>
                                 </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 200, 0, 0.05); border: 1px solid rgba(255, 200, 0, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -1356,8 +1369,8 @@ async function saveRiskManagement(channelId) {
         const trimOffsetPct = document.getElementById(`risk-trim-offset-pct-${channelId}`)?.value;
         const slOrderMode = document.querySelector(`input[name="sl-order-mode-${channelId}"]:checked`)?.value || 'limit';
         const slLimitOffset = document.getElementById(`risk-sl-limit-offset-${channelId}`).value;
-        const exitStrategyEl = document.getElementById(`exit-strategy-mode-${channelId}`);
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
+        const escalationOnlyMode = document.getElementById(`risk-escalation-only-${channelId}`)?.checked ? 1 : 0;
         
         // Enhanced risk settings
         const enableDynamicSl = document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked ? 1 : 0;
@@ -1425,11 +1438,9 @@ async function saveRiskManagement(channelId) {
                 ema_no_trend_candles: parseInt(emaNoTrend),
                 ema_use_underlying: emaUseUnderlying,
                 ema_extended_hours: emaExtendedHours,
+                escalation_only_mode: escalationOnlyMode,
                 use_global_risk_settings: 0
         };
-        if (exitStrategyEl) {
-            payload.exit_strategy_mode = exitStrategyEl.value;
-        }
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
