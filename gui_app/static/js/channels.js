@@ -260,7 +260,6 @@ async function loadChannels() {
                                 </div>
                                 <div style="display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #3A3A3C; padding-bottom: 0;">
                                     <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="targets" onclick="switchRiskTab(${channel.id}, 'targets')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid #00d4ff; color: #00d4ff; font-size: 12px; font-weight: 600; cursor: pointer;">Targets & SL</button>
-                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="protection" onclick="switchRiskTab(${channel.id}, 'protection')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: #8E8E93; font-size: 12px; font-weight: 600; cursor: pointer;">Protection</button>
                                     <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="advanced" onclick="switchRiskTab(${channel.id}, 'advanced')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: #8E8E93; font-size: 12px; font-weight: 600; cursor: pointer;">Advanced</button>
                                 </div>
 
@@ -337,8 +336,8 @@ async function loadChannels() {
                                 </div>
                                 </div>
 
-                                <!-- TAB 2: Protection -->
-                                <div id="risk-tab-protection-${channel.id}" style="display: none;">
+                                <!-- TAB 2: Advanced -->
+                                <div id="risk-tab-advanced-${channel.id}" style="display: none;">
                                 <div style="padding: 12px; background: rgba(255, 100, 100, 0.05); border: 1px solid rgba(255, 100, 100, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
@@ -456,11 +455,7 @@ async function loadChannels() {
                                         </div>
                                     </div>
                                 </div>
-                                </div>
-
-                                <!-- TAB 3: Advanced -->
-                                <div id="risk-tab-advanced-${channel.id}" style="display: none;">
-                                <div style="padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
                                     <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
@@ -1518,7 +1513,7 @@ function switchRiskTab(channelId, tabName) {
         b.style.borderBottomColor = 'transparent';
         b.style.color = '#8E8E93';
     });
-    ['targets', 'protection', 'advanced'].forEach(t => {
+    ['targets', 'advanced'].forEach(t => {
         const pane = document.getElementById(`risk-tab-${t}-${channelId}`);
         if (pane) pane.style.display = 'none';
     });
