@@ -979,30 +979,45 @@ class SignalRoutingEngine:
                         price = None
                         _hub_source = None
                         occ_key = getattr(position, 'option_key', None)
-                        is_option = bool(position.strike)
-                        try:
-                            from src.services.webull_data_hub import get_webull_data_hub
-                            _wb_hub = get_webull_data_hub()
-                            if _wb_hub.is_streaming():
-                                _lookup = occ_key if is_option else position.symbol
-                                if _lookup:
-                                    price = _wb_hub.get_quote_price(_lookup)
-                                    if price and price > 0:
-                                        _hub_source = 'webull_hub'
-                        except Exception:
+                        is_option = bool(position.strike) or bool(getattr(position, 'option_type', None))
+                        if is_option and (not position.strike or position.strike == 0):
                             pass
-                        if not price:
+                        else:
                             try:
-                                from src.services.schwab_data_hub import get_schwab_data_hub
-                                _sw_hub = get_schwab_data_hub()
-                                if _sw_hub.is_streaming():
+                                from src.services.webull_data_hub import get_webull_data_hub
+                                _wb_hub = get_webull_data_hub()
+                                if _wb_hub.is_streaming():
                                     _lookup = occ_key if is_option else position.symbol
                                     if _lookup:
-                                        price = _sw_hub.get_quote_price(_lookup)
+                                        price = _wb_hub.get_quote_price(_lookup)
                                         if price and price > 0:
-                                            _hub_source = 'schwab_hub'
+                                            _hub_source = 'webull_hub'
                             except Exception:
                                 pass
+                            if not price:
+                                try:
+                                    from src.services.schwab_data_hub import get_schwab_data_hub
+                                    _sw_hub = get_schwab_data_hub()
+                                    if _sw_hub.is_streaming():
+                                        _lookup = occ_key if is_option else position.symbol
+                                        if _lookup:
+                                            price = _sw_hub.get_quote_price(_lookup)
+                                            if price and price > 0:
+                                                _hub_source = 'schwab_hub'
+                                except Exception:
+                                    pass
+
+                        if price and price > 0 and position.entry_price > 0:
+                            ratio = price / position.entry_price
+                            if ratio > 50:
+                                sys.stderr.write(
+                                    f"[ROUTING_ENGINE] ⚠️ INDEX PRICE GUARD: {position.symbol} "
+                                    f"price ${price:.2f} is {ratio:.0f}x entry ${position.entry_price:.2f} "
+                                    f"— likely underlying index, NOT option premium. Rejecting.\n"
+                                )
+                                sys.stderr.flush()
+                                price = None
+                                _hub_source = None
 
                         if price and price > 0:
                             _quote_fail_counts.pop(pos_key, None)
@@ -1021,7 +1036,17 @@ class SignalRoutingEngine:
                                 )
                             )
                             price = quote_result.mid if quote_result.success else None
-                            if quote_result.success:
+                            if price and price > 0 and position.entry_price > 0:
+                                ratio = price / position.entry_price
+                                if ratio > 50:
+                                    sys.stderr.write(
+                                        f"[ROUTING_ENGINE] ⚠️ INDEX PRICE GUARD (REST): {position.symbol} "
+                                        f"price ${price:.2f} is {ratio:.0f}x entry ${position.entry_price:.2f} "
+                                        f"— likely underlying index, NOT option premium. Rejecting.\n"
+                                    )
+                                    sys.stderr.flush()
+                                    price = None
+                            if price and price > 0:
                                 _quote_fail_counts.pop(pos_key, None)
                             else:
                                 _quote_fail_counts[pos_key] = fail_count + 1
