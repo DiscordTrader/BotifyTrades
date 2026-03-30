@@ -19302,7 +19302,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 multi_broker_results = resp.get('_multi_broker_results')
                                 if multi_broker_results:
                                     # Save ONE trade entry PER successful broker
-                                    successful_results = [r for r in multi_broker_results if r.get('success') or r.get('orderId')]
+                                    successful_results = [r for r in multi_broker_results if r.get('success') == True or (r.get('orderId') and r.get('success') is not False)]
                                     _original_print(f"[DATABASE] Multi-broker execution - saving {len(successful_results)} trade entries")
                                     # Lookup routing_mapping_id for signal routing risk discrimination
                                     routing_mapping_id = signal.get('routing_mapping_id')
