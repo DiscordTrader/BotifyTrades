@@ -5041,7 +5041,7 @@ class RiskManager:
                             rest_via = getattr(self, '_last_rest_source', None)
                             source = f'REST/{rest_via}' if rest_via else 'REST'
                             rest_repairs_this_cycle += 1
-                if fresh_price and fresh_price > 0 and session == 'extended' and source and 'REST' in source:
+                if fresh_price and fresh_price > 0 and source and 'REST' in source:
                     cache_entry = self.cache.get(key) or self.cache.get(f"{pos.broker}_{pos.symbol}")
                     if cache_entry and cache_entry.entry_price > 0:
                         entry = cache_entry.entry_price
@@ -5051,6 +5051,13 @@ class RiskManager:
                             print(f"[RISK] 🛡️ REST SANITY REJECT: {pos.symbol} REST=${fresh_price:.2f} "
                                   f"is {rest_deviation*100:.0f}% from entry ${entry:.2f} but streaming "
                                   f"shows ${pos.current_price:.2f} ({streaming_deviation*100:.1f}% dev) — rejecting stale REST price")
+                            fresh_price = None
+                    if fresh_price and fresh_price > 0 and pos.current_price > 0:
+                        price_jump = abs(fresh_price - pos.current_price) / pos.current_price
+                        if price_jump > 0.30:
+                            print(f"[RISK] 🛡️ REST SANITY REJECT: {pos.symbol} REST=${fresh_price:.2f} "
+                                  f"is {price_jump*100:.0f}% jump from streaming ${pos.current_price:.2f} — "
+                                  f"rejecting suspicious REST price (session={session})")
                             fresh_price = None
 
                 if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
