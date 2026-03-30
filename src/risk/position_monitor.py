@@ -1797,32 +1797,36 @@ class RiskManager:
                         _remaining = interval - (_cycle_t.monotonic() - _sleep_start)
                         if _remaining <= 0:
                             break
+                        _has_reason = getattr(self, '_has_open_positions_or_watches_cache', True) or self._has_active_fill_watches()
                         try:
                             from src.services.webull_data_hub import get_webull_data_hub
                             if get_webull_data_hub().check_risk_eval_requested():
-                                print("[RISK] ⚡ Early wake: order event from Webull stream")
-                                self._force_rest_refresh = True
-                                _order_event_woke = True
-                                break
+                                if _has_reason:
+                                    print("[RISK] ⚡ Early wake: order event from Webull stream")
+                                    self._force_rest_refresh = True
+                                    _order_event_woke = True
+                                    break
                         except Exception:
                             pass
                         try:
                             from src.services.schwab_data_hub import get_schwab_data_hub
                             if get_schwab_data_hub().check_risk_eval_requested():
-                                print("[RISK] ⚡ Early wake: order event from Schwab stream")
-                                self._force_rest_refresh = True
-                                _order_event_woke = True
-                                break
+                                if _has_reason:
+                                    print("[RISK] ⚡ Early wake: order event from Schwab stream")
+                                    self._force_rest_refresh = True
+                                    _order_event_woke = True
+                                    break
                         except Exception:
                             pass
                         try:
                             from src.services.ibkr_data_hub import get_ibkr_data_hub
                             _ibkr_h = get_ibkr_data_hub()
                             if _ibkr_h.is_streaming() and _ibkr_h.check_risk_eval_requested():
-                                print("[RISK] ⚡ Early wake: order event from IBKR stream")
-                                self._force_rest_refresh = True
-                                _order_event_woke = True
-                                break
+                                if _has_reason:
+                                    print("[RISK] ⚡ Early wake: order event from IBKR stream")
+                                    self._force_rest_refresh = True
+                                    _order_event_woke = True
+                                    break
                         except Exception:
                             pass
                         try:
@@ -2070,7 +2074,7 @@ class RiskManager:
                 self._streaming_mode_logged = True
             self._rest_fallback_logged = False
         else:
-            if not getattr(self, '_rest_fallback_logged', False):
+            if not getattr(self, '_rest_fallback_logged', False) and _has_open_positions_or_watches:
                 print(f"[RISK] ⚠️ Streaming dead — REST fallback active (every {self._PERIODIC_REST_FALLBACK_INTERVAL}s)")
                 self._rest_fallback_logged = True
             self._streaming_mode_logged = False
@@ -2533,7 +2537,13 @@ class RiskManager:
             if webull_snapshots is not None:
                 return []
             if not _has_open and not self._has_active_fill_watches():
-                return []
+                _now_disc = _time.time()
+                _disc_age = _now_disc - getattr(self, '_webull_discovery_ts', 0)
+                if _disc_age < 60:
+                    return []
+                self._webull_discovery_ts = _now_disc
+                self._schwab_discovery_ts = _now_disc
+                self._tastytrade_discovery_ts = _now_disc
             cache_age = _time.time() - getattr(self, '_webull_cache_ts', 0)
             if hasattr(self, '_last_webull_positions') and self._last_webull_positions is not None and cache_age < _REST_CACHE_TTL:
                 return list(self._last_webull_positions)
@@ -2661,13 +2671,11 @@ class RiskManager:
                 schwab_cache_age = _time.time() - getattr(self, '_schwab_cache_ts', 0)
                 if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
                     return list(self._last_schwab_positions)
-                if not _has_open and not self._has_active_fill_watches():
-                    return []
                 _schwab_streaming = False
                 try:
                     from src.services.schwab_data_hub import get_schwab_data_hub
                     schwab_hub = get_schwab_data_hub()
-                    _schwab_streaming = schwab_hub.is_streaming()
+                    _schwab_streaming = schwab_hub.is_streaming() or getattr(schwab_hub, '_streaming_active', False)
                     hub_pos = schwab_hub.get_positions(detailed=True)
                     if hub_pos is not None:
                         schwab_positions = []
@@ -2699,9 +2707,14 @@ class RiskManager:
                 except (ImportError, Exception):
                     pass
                 if _schwab_streaming:
-                    if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions and schwab_cache_age < 120:
+                    if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < 120:
                         return list(self._last_schwab_positions)
                     return []
+                if not _has_open and not self._has_active_fill_watches():
+                    _disc_age = _time.time() - getattr(self, '_schwab_discovery_ts', 0)
+                    if _disc_age < 60:
+                        return []
+                    self._schwab_discovery_ts = _time.time()
                 if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('schwab')
                     if not can_proceed:
@@ -2793,7 +2806,10 @@ class RiskManager:
                 if hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions is not None and tt_cache_age < _REST_CACHE_TTL:
                     return list(self._last_tastytrade_positions)
                 if not _has_open and not self._has_active_fill_watches():
-                    return []
+                    _disc_age = _time.time() - getattr(self, '_tastytrade_discovery_ts', 0)
+                    if _disc_age < 60:
+                        return []
+                    self._tastytrade_discovery_ts = _time.time()
                 if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('tastytrade')
                     if not can_proceed:
@@ -2897,14 +2913,22 @@ class RiskManager:
                         return list(self._last_trading212_positions)
                 return []
 
+        async def _timed(name, coro):
+            _t0 = _time.time()
+            r = await coro
+            _elapsed = (_time.time() - _t0) * 1000
+            if _elapsed > 100:
+                print(f"[RISK] ⏱ {name}: {_elapsed:.0f}ms")
+            return r
+
         results = await asyncio.gather(
-            _fetch_webull_rest(),
-            _fetch_alpaca_cached(),
-            _fetch_schwab_cached(),
-            _fetch_ibkr_cached(),
-            _fetch_tastytrade_cached(),
-            _fetch_robinhood_cached(),
-            _fetch_trading212_cached(),
+            _timed('webull', _fetch_webull_rest()),
+            _timed('alpaca', _fetch_alpaca_cached()),
+            _timed('schwab', _fetch_schwab_cached()),
+            _timed('ibkr', _fetch_ibkr_cached()),
+            _timed('tastytrade', _fetch_tastytrade_cached()),
+            _timed('robinhood', _fetch_robinhood_cached()),
+            _timed('trading212', _fetch_trading212_cached()),
             return_exceptions=True
         )
         for r in results:
