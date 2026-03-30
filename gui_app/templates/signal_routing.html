@@ -909,10 +909,16 @@
                 <h4 style="margin: 25px 0 15px; color: var(--violet); font-size: 0.95rem;">🔄 Unfilled Order Chaser</h4>
                 <div style="padding: 15px; background: rgba(124, 58, 237, 0.08); border-radius: 8px; border-left: 3px solid var(--violet);">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                        <input type="checkbox" id="risk-order-chase">
-                        <label for="risk-order-chase" style="font-weight: 600;">Enable Order Chase</label>
+                        <label for="risk-chase-mode" style="font-weight: 600;">Order Chase</label>
+                        <select id="risk-chase-mode" class="form-input" style="width: 150px; padding: 6px 10px; font-size: 0.85rem;">
+                            <option value="off">Off</option>
+                            <option value="entry">Entry Only</option>
+                            <option value="exit">Exit Only</option>
+                            <option value="both">Both</option>
+                        </select>
                     </div>
-                    <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Automatically replaces unfilled exit orders with mid-price limit orders for better fills. Uses global timeout/attempts settings.</p>
+                    <input type="checkbox" id="risk-order-chase" style="display:none;">
+                    <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Chase unfilled orders with mid-price replacement for better fills. Uses global timeout/attempts settings.</p>
                 </div>
             </div>
 
@@ -1274,6 +1280,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-giveback').checked = !!s.max_profit_giveback_enabled;
                 document.getElementById('risk-giveback-pct').value = s.max_profit_giveback_pct || 30;
                 document.getElementById('risk-order-chase').checked = !!s.order_chase_enabled;
+                const entryChase = !!s.entry_chase_enabled;
+                const exitChase = !!s.order_chase_enabled;
+                if (entryChase && exitChase) document.getElementById('risk-chase-mode').value = 'both';
+                else if (entryChase) document.getElementById('risk-chase-mode').value = 'entry';
+                else if (exitChase) document.getElementById('risk-chase-mode').value = 'exit';
+                else document.getElementById('risk-chase-mode').value = 'off';
                 document.getElementById('risk-escalation-only').checked = !!s.escalation_only_mode;
                 
                 document.getElementById('risk-early-trailing').checked = !!s.enable_early_trailing;
@@ -1362,7 +1374,8 @@ document.addEventListener('DOMContentLoaded', function() {
             max_profit_giveback_enabled: document.getElementById('risk-giveback').checked ? 1 : 0,
             max_profit_giveback_pct: parseFloat(document.getElementById('risk-giveback-pct').value) || 30,
             exit_strategy_mode: document.querySelector('input[name="exit-strategy-mode"]:checked')?.value || 'risk',
-            order_chase_enabled: document.getElementById('risk-order-chase').checked ? 1 : 0,
+            order_chase_enabled: (['exit','both'].includes(document.getElementById('risk-chase-mode').value)) ? 1 : 0,
+            entry_chase_enabled: (['entry','both'].includes(document.getElementById('risk-chase-mode').value)) ? 1 : 0,
             escalation_only_mode: document.getElementById('risk-escalation-only').checked ? 1 : 0,
             enable_early_trailing: document.getElementById('risk-early-trailing').checked ? 1 : 0,
             early_trailing_activation_pct: parseFloat(document.getElementById('risk-early-activation').value) || 5.0,
@@ -1456,10 +1469,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    ['risk-dynamic-sl', 'risk-giveback', 'risk-order-chase', 'risk-escalation-only', 'risk-leave-runner'].forEach(id => {
+    ['risk-dynamic-sl', 'risk-giveback', 'risk-escalation-only', 'risk-leave-runner'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', updateSummaryRail);
     });
+    const chaseModeEl = document.getElementById('risk-chase-mode');
+    if (chaseModeEl) chaseModeEl.addEventListener('change', updateSummaryRail);
     ['risk-pt1', 'risk-pt2', 'risk-pt3', 'risk-pt4', 'risk-stop-loss'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('input', updateSummaryRail);
@@ -1483,7 +1498,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (document.getElementById('risk-escalation-only').checked) pills.push(pill('Esc Only', '#F59E0B'));
         if (document.getElementById('risk-giveback').checked) pills.push(pill('Giveback', '#17a2b8'));
         if (document.getElementById('risk-ema-enabled').checked) pills.push(pill('EMA', '#38bdf8'));
-        if (document.getElementById('risk-order-chase').checked) pills.push(pill('Chase', '#7C3AED'));
+        const chaseMode = document.getElementById('risk-chase-mode').value;
+        if (chaseMode === 'entry') pills.push(pill('Chase Entry', '#7C3AED'));
+        else if (chaseMode === 'exit') pills.push(pill('Chase Exit', '#7C3AED'));
+        else if (chaseMode === 'both') pills.push(pill('Chase Both', '#7C3AED'));
         if (document.getElementById('risk-leave-runner').checked) pills.push(pill('Runner', '#7C3AED'));
         
         document.getElementById('summaryPills').innerHTML = pills.length > 0 ? pills.join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">No risk features enabled</span>';
@@ -1532,6 +1550,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('risk-leave-runner').checked = p.runner;
         document.getElementById('risk-runner-size').value = p.runner_pct;
         document.getElementById('risk-order-chase').checked = p.chase;
+        document.getElementById('risk-chase-mode').value = p.chase ? 'exit' : 'off';
         const trimPresetEl = document.querySelector(`input[name="trim-order-type"][value="${p.trim_order}"]`);
         if (trimPresetEl) trimPresetEl.checked = true;
         const slPresetEl = document.querySelector(`input[name="sl-order-type"][value="${p.sl_order}"]`);
