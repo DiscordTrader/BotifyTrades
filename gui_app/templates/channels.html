@@ -646,6 +646,202 @@
         line-height: 1.5;
     }
 
+    .action-btn {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        color: rgba(255,255,255,0.55);
+        width: 30px; height: 30px;
+        border-radius: 7px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+    .action-btn:hover {
+        background: rgba(255,255,255,0.10);
+        border-color: rgba(255,255,255,0.18);
+        color: #fff;
+        transform: translateY(-1px);
+    }
+    .action-btn.danger { border-color: rgba(239,68,68,0.18); color: rgba(239,68,68,0.6); }
+    .action-btn.danger:hover { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); color: #EF4444; }
+    .action-btn.active-indicator { border-color: rgba(16,185,129,0.25); color: rgba(16,185,129,0.7); }
+    .action-btn.active-indicator:hover { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: #10B981; }
+
+    .risk-section {
+        padding: 14px 16px;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 10px;
+        margin-top: 12px;
+    }
+    .risk-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .risk-section-title {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85);
+    }
+    .risk-section-title .rs-icon {
+        width: 24px; height: 24px; border-radius: 6px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; background: rgba(255,255,255,0.06);
+    }
+    .risk-section p.rs-desc {
+        font-size: 11px; color: rgba(255,255,255,0.38); margin: 0 0 6px;
+    }
+    .risk-heading {
+        margin: 18px 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255,255,255,0.50);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+    }
+    .risk-heading:first-child { margin-top: 0; }
+
+    .risk-input {
+        width: 100%; padding: 8px 12px; font-size: 13px;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        background: rgba(0,0,0,0.25);
+        color: #fff;
+        transition: border-color 0.2s;
+    }
+    .risk-input:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+    .risk-input::placeholder { color: rgba(255,255,255,0.22); }
+    .risk-input:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .risk-label {
+        display: block; font-size: 11px;
+        color: rgba(255,255,255,0.40);
+        margin-bottom: 4px; font-weight: 500;
+    }
+
+    .risk-tab-bar {
+        display: flex; gap: 0; margin-bottom: 16px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .risk-tab {
+        padding: 8px 18px; background: none; border: none;
+        border-bottom: 2px solid transparent;
+        color: rgba(255,255,255,0.38);
+        font-size: 12px; font-weight: 600;
+        cursor: pointer; transition: all 0.2s;
+    }
+    .risk-tab:hover { color: rgba(255,255,255,0.65); }
+    .risk-tab.active {
+        color: #fff;
+        border-bottom-color: var(--mint);
+    }
+
+    .preset-bar {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        margin-bottom: 16px;
+    }
+    .preset-btn {
+        padding: 5px 14px; border-radius: 20px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.03);
+        color: rgba(255,255,255,0.45);
+        font-size: 11px; font-weight: 500;
+        cursor: pointer; transition: all 0.2s;
+        letter-spacing: 0.3px;
+    }
+    .preset-btn:hover {
+        border-color: rgba(255,255,255,0.20);
+        color: rgba(255,255,255,0.75);
+        background: rgba(255,255,255,0.06);
+    }
+    .preset-btn.active {
+        border-color: var(--mint);
+        background: rgba(15,240,179,0.10);
+        color: var(--mint);
+    }
+
+    .risk-radio-group {
+        display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .risk-radio-card {
+        flex: 1; min-width: 100px; padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.06);
+        background: rgba(255,255,255,0.02);
+        cursor: pointer; text-align: center;
+        transition: all 0.2s;
+    }
+    .risk-radio-card:hover { border-color: rgba(255,255,255,0.15); }
+    .risk-radio-card.selected {
+        border-color: var(--mint);
+        background: rgba(15,240,179,0.06);
+    }
+    .risk-radio-card .rrc-title {
+        font-size: 12px; font-weight: 600; color: #fff; margin-top: 4px;
+    }
+    .risk-radio-card .rrc-desc {
+        font-size: 10px; color: rgba(255,255,255,0.38);
+    }
+
+    .risk-save-btn {
+        margin-top: 16px; padding: 10px 24px;
+        background: linear-gradient(135deg, var(--mint) 0%, #06B6D4 100%);
+        border: none; border-radius: 8px;
+        color: #0E1117; font-size: 12px; font-weight: 700;
+        cursor: pointer; transition: all 0.2s;
+        letter-spacing: 0.3px;
+    }
+    .risk-save-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(15,240,179,0.25);
+    }
+
+    .risk-summary-rail {
+        margin-bottom: 14px;
+        padding: 8px 14px;
+        background: rgba(255,255,255,0.02);
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.06);
+        display: flex; flex-wrap: wrap; gap: 6px;
+        align-items: center; min-height: 30px;
+    }
+
+    .risk-validation-box {
+        display: none; margin-bottom: 12px;
+        padding: 8px 14px;
+        background: rgba(239,68,68,0.06);
+        border-radius: 8px;
+        border-left: 3px solid rgba(239,68,68,0.4);
+    }
+
+    .risk-status-pill {
+        font-size: 11px; padding: 3px 10px;
+        border-radius: 20px; font-weight: 600;
+        letter-spacing: 0.3px;
+    }
+    .risk-status-pill.on {
+        background: rgba(16,185,129,0.12);
+        border: 1px solid rgba(16,185,129,0.25);
+        color: #10B981;
+    }
+    .risk-status-pill.off {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        color: rgba(255,255,255,0.35);
+    }
+
+    .data-table th {
+        background: rgba(255,255,255,0.02);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .data-table tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .data-table tr:hover { background: rgba(255,255,255,0.02); }
+
     .modal-overlay {
         display: none;
         position: fixed;
