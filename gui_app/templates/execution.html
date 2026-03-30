@@ -198,7 +198,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/channels.js') }}"></script>
+<script src="{{ url_for('static', filename='js/channels.js') }}?v={{ range(1, 999999) | random }}"></script>
 <script>
 // Current channel type (EXECUTE or TRACK)
 let currentChannelType = 'EXECUTE';

@@ -408,6 +408,7 @@ async function loadChannels() {
                                     </div>
                                 </div>
                                 </div>
+                                </div>
 
                                 <!-- TAB 2: Advanced -->
                                 <div id="risk-tab-advanced-${channel.id}" style="display: none;">
