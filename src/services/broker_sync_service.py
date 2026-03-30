@@ -90,6 +90,42 @@ class BrokerSyncService:
         self._risk_manager = risk_manager
         if risk_manager:
             print("[SYNC] ✓ Risk manager linked for order reconciliation")
+
+    def _find_risk_cache_entry(self, cache, broker_name, symbol, trade):
+        """Check if risk cache has an active entry for this trade.
+        
+        Returns the current_price if found, None otherwise.
+        Handles both stock keys (broker_symbol_stock) and option keys
+        (broker_symbol_strike_expiry_direction) by iterating cache entries.
+        """
+        asset_type = trade.get('asset_type', 'stock')
+        simple_key = f"{broker_name}_{symbol}_{asset_type}"
+        entry = cache.get(simple_key)
+        if entry and getattr(entry, 'current_price', 0) > 0:
+            return entry.current_price
+
+        if asset_type == 'option':
+            strike = trade.get('strike')
+            expiry = trade.get('expiry')
+            call_put = trade.get('call_put', '')
+            if strike and expiry:
+                option_key = f"{broker_name}_{symbol}_{strike}_{expiry}_{call_put}"
+                entry = cache.get(option_key)
+                if entry and getattr(entry, 'current_price', 0) > 0:
+                    return entry.current_price
+
+            try:
+                symbol_upper = symbol.upper()
+                broker_upper = broker_name.upper()
+                for cache_key in list(cache._cache.keys()):
+                    if symbol_upper in cache_key.upper() and broker_upper in cache_key.upper():
+                        e = cache._cache.get(cache_key)
+                        if e and getattr(e, 'current_price', 0) > 0:
+                            return e.current_price
+            except Exception:
+                pass
+
+        return None
     
     def _normalize_timestamp(self, timestamp_str: str) -> str:
         """Convert various timestamp formats to ISO format.
@@ -1568,7 +1604,17 @@ class BrokerSyncService:
                             print(f"[SYNC] ⚠️ Could not query order history for rejection reason: {hist_err}")
                         if _skip_cancel:
                             continue
-                    
+
+                    if hasattr(self, '_risk_manager') and self._risk_manager:
+                        if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
+                            _risk_found = self._find_risk_cache_entry(
+                                self._risk_manager.cache, broker_name, symbol, trade)
+                            if _risk_found:
+                                print(f"[SYNC] ⚠️ RISK GUARD: Trade #{trade_id} ({symbol}) "
+                                      f"still in risk cache with price ${_risk_found:.2f} "
+                                      f"— skipping cancellation despite broker returning empty positions")
+                                continue
+
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in pending orders: PENDING → CLOSED (cancelled) reason={cancel_reason}")
                     update_kwargs = dict(
                         status='CLOSED',
@@ -1631,12 +1677,20 @@ class BrokerSyncService:
                     except Exception as cache_err:
                         print(f"[SYNC] Warning: Could not clean up cache: {cache_err}")
                 elif current_status == 'OPEN':
-                    # PAPER_SIM orders don't have real broker positions - skip reconciliation
                     order_id_val = trade.get('order_id', '') or ''
                     if order_id_val.startswith('PAPER_SIM'):
                         continue
-                    
-                    # Open position no longer exists = broker closed it (manual close, stop/target hit, or liquidation)
+
+                    if hasattr(self, '_risk_manager') and self._risk_manager:
+                        if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
+                            _risk_found = self._find_risk_cache_entry(
+                                self._risk_manager.cache, broker_name, symbol, trade)
+                            if _risk_found:
+                                print(f"[SYNC] ⚠️ RISK GUARD: OPEN Trade #{trade_id} ({symbol}) "
+                                      f"still in risk cache with price ${_risk_found:.2f} "
+                                      f"— skipping closure despite broker returning empty positions")
+                                continue
+
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in positions: OPEN → CLOSED (broker closed)")
                     
                     entry_price = float(trade.get('executed_price') or 0)

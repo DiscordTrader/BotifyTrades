@@ -298,7 +298,11 @@ class IBKRDataHub:
                 return q.last
             if q.bid > 0 and q.ask > 0:
                 return round((q.bid + q.ask) / 2, 4)
-            return q.bid or q.ask or None
+            if q.bid > 0:
+                return q.bid
+            if q.ask > 0:
+                return q.ask
+            return None
 
     def get_quote_detailed(self, symbol: str, max_age: Optional[float] = None) -> Optional[Dict[str, Any]]:
         with self._quotes_lock:

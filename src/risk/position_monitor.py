@@ -1015,6 +1015,32 @@ class RiskDBAdapter:
                 else:
                     call_put = d
             
+            inherited_channel_id = None
+            try:
+                from gui_app.database import get_trades
+                recent_closed = get_trades(status='CLOSED', limit=50)
+                for rc in recent_closed:
+                    if ((rc.get('symbol') or '').upper() == position.symbol.upper() and
+                        (rc.get('broker') or '').upper() == position.broker.upper() and
+                        rc.get('channel_id')):
+                        closed_at = rc.get('closed_at')
+                        if closed_at:
+                            try:
+                                closed_time = datetime.fromisoformat(str(closed_at).replace('Z', '+00:00'))
+                                if hasattr(closed_time, 'timestamp'):
+                                    elapsed = (datetime.now() - closed_time.replace(tzinfo=None)).total_seconds()
+                                else:
+                                    elapsed = 0
+                                if 0 <= elapsed < 300:
+                                    inherited_channel_id = rc['channel_id']
+                                    print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
+                                          f"recently-closed trade #{rc.get('id')} for {position.symbol}")
+                                    break
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
             trade_data = {
                 'symbol': position.symbol,
                 'direction': 'BTO',
@@ -1028,7 +1054,7 @@ class RiskDBAdapter:
                 'status': 'OPEN',
                 'asset_type': position.asset or 'stock',
                 'executed': True,
-                'channel_id': None,
+                'channel_id': inherited_channel_id,
                 'message_id': None,
                 'order_id': None,
                 'source': 'risk_auto_import',
@@ -4753,7 +4779,10 @@ class RiskManager:
                             stuck_candidates.append((stuck_seconds, pos, key, tracker))
                             continue
 
-            if stuck_seconds < self._STUCK_PRICE_THRESHOLD:
+            effective_threshold = self._STUCK_PRICE_THRESHOLD
+            if session == 'extended':
+                effective_threshold = 15.0
+            if stuck_seconds < effective_threshold:
                 continue
             if (now - tracker.get('rest_refreshed', 0)) < rest_cooldown:
                 continue
@@ -4776,6 +4805,18 @@ class RiskManager:
                             rest_via = getattr(self, '_last_rest_source', None)
                             source = f'REST/{rest_via}' if rest_via else 'REST'
                             rest_repairs_this_cycle += 1
+                if fresh_price and fresh_price > 0 and session == 'extended' and source and 'REST' in source:
+                    cache_entry = self.cache.get(key) or self.cache.get(f"{pos.broker}_{pos.symbol}")
+                    if cache_entry and cache_entry.entry_price > 0:
+                        entry = cache_entry.entry_price
+                        rest_deviation = abs(fresh_price - entry) / entry if entry > 0 else 0
+                        streaming_deviation = abs(pos.current_price - entry) / entry if entry > 0 else 0
+                        if rest_deviation > 0.30 and streaming_deviation < 0.10:
+                            print(f"[RISK] 🛡️ REST SANITY REJECT: {pos.symbol} REST=${fresh_price:.2f} "
+                                  f"is {rest_deviation*100:.0f}% from entry ${entry:.2f} but streaming "
+                                  f"shows ${pos.current_price:.2f} ({streaming_deviation*100:.1f}% dev) — rejecting stale REST price")
+                            fresh_price = None
+
                 if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
                     print(f"[RISK] 🔄 STUCK PRICE FIX ({source}): {pos.broker} {pos.symbol} "
                           f"was ${pos.current_price:.4f} (frozen {stuck_seconds:.0f}s) → ${fresh_price:.4f}")
@@ -5020,13 +5061,17 @@ class RiskManager:
                 bid = float(raw_quote.get('bidPrice', 0) or 0)
                 last = float(raw_quote.get('last', 0) or 0)
                 premarket_price = float(raw_quote.get('pPrice', 0) or 0)
-                close = float(raw_quote.get('close', 0) or 0)
+                session = self._get_market_session()
                 if bid > 0 and ask > 0:
                     return (bid + ask) / 2
                 elif premarket_price > 0:
                     return premarket_price
-                elif last > 0:
+                elif session == 'regular' and last > 0:
                     return last
+                elif session != 'regular' and last > 0:
+                    print(f"[RISK] 🛡️ REST GUARD: Webull {symbol} REST returned last=${last:.2f} "
+                          f"with bid/ask=0 during {session} hours — rejecting stale close/last price")
+                    return None
         except asyncio.TimeoutError:
             return None
         except Exception:
@@ -5053,7 +5098,7 @@ class RiskManager:
             'GET',
             'https://api.schwabapi.com/marketdata/v1/quotes',
             params={'symbols': symbol, 'indicative': 'false',
-                    'needExtendedHoursData': 'true', 'needPreviousClose': 'true'}
+                    'needExtendedHoursData': 'true'}
         )
         if response and response.status_code == 200:
             data = response.json()
@@ -5062,10 +5107,15 @@ class RiskManager:
                 bid = float(quote.get('bidPrice', 0) or 0)
                 ask = float(quote.get('askPrice', 0) or 0)
                 last = float(quote.get('lastPrice', 0) or 0)
+                session = self._get_market_session()
                 if bid > 0 and ask > 0:
                     return (bid + ask) / 2
-                elif last > 0:
+                elif session == 'regular' and last > 0:
                     return last
+                elif session != 'regular' and last > 0:
+                    print(f"[RISK] 🛡️ REST GUARD: Schwab {symbol} REST returned lastPrice=${last:.2f} "
+                          f"with bid/ask=0 during {session} hours — rejecting RTH-only lastPrice")
+                    return None
         return None
 
     async def _try_broker_get_quote(self, pos):
