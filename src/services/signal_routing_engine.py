@@ -980,6 +980,19 @@ class SignalRoutingEngine:
                         _hub_source = None
                         occ_key = getattr(position, 'option_key', None)
                         is_option = bool(position.strike) or bool(getattr(position, 'option_type', None))
+
+                        schwab_occ = None
+                        if is_option and position.strike and position.strike > 0:
+                            try:
+                                _ot = (position.option_type or 'C').upper()
+                                _ep = expiry_fmt.split('-')
+                                if len(_ep) == 3:
+                                    _sym = position.symbol.upper()
+                                    _schwab_sym = 'SPXW' if _sym == 'SPX' else _sym
+                                    schwab_occ = f"{_schwab_sym.ljust(6)}{_ep[0][2:]}{_ep[1]}{_ep[2]}{_ot}{int(float(position.strike) * 1000):08d}"
+                            except Exception:
+                                pass
+
                         if is_option and (not position.strike or position.strike == 0):
                             pass
                         else:
@@ -999,11 +1012,19 @@ class SignalRoutingEngine:
                                     from src.services.schwab_data_hub import get_schwab_data_hub
                                     _sw_hub = get_schwab_data_hub()
                                     if _sw_hub.is_streaming():
-                                        _lookup = occ_key if is_option else position.symbol
+                                        _lookup = schwab_occ if (is_option and schwab_occ) else (occ_key if is_option else position.symbol)
                                         if _lookup:
-                                            price = _sw_hub.get_quote_price(_lookup)
-                                            if price and price > 0:
-                                                _hub_source = 'schwab_hub'
+                                            _sw_data = _sw_hub.get_quote_detailed(_lookup)
+                                            if _sw_data:
+                                                _bid = _sw_data.get('bid', 0) or 0
+                                                _ask = _sw_data.get('ask', 0) or 0
+                                                _last = _sw_data.get('last', 0) or 0
+                                                if _bid > 0 and _ask > 0:
+                                                    price = (_bid + _ask) / 2
+                                                elif _last > 0:
+                                                    price = _last
+                                                if price and price > 0:
+                                                    _hub_source = 'schwab_hub'
                                 except Exception:
                                     pass
 
