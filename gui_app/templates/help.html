@@ -620,6 +620,7 @@
     <a href="#entry-settings" class="toc-item"><span class="toc-icon">🎯</span> Entry Settings Guide</a>
     <a href="#execution" class="toc-item"><span class="toc-icon">⚡</span> Execution Page</a>
     <a href="#risk" class="toc-item"><span class="toc-icon">🛡️</span> Risk Management</a>
+    <a href="#exit-deep-dive" class="toc-item"><span class="toc-icon">📊</span> Exit Strategy Deep Dive</a>
     <a href="#notifications" class="toc-item"><span class="toc-icon">🔔</span> Notifications</a>
     <a href="#advanced" class="toc-item"><span class="toc-icon">🔧</span> Advanced Settings</a>
 </div>
@@ -1451,6 +1452,705 @@
             <div class="setting-row">
                 <div class="setting-name">Max Open Positions</div>
                 <div class="setting-explain">Hard limit on how many positions can be open simultaneously across all channels and brokers. New signals are rejected when this limit is reached.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== EXIT STRATEGY DEEP DIVE ========== -->
+<div class="help-section" id="exit-deep-dive">
+    <div class="help-section-header">
+        <span class="section-badge">📊</span>
+        <h2>Exit Strategy Deep Dive</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>How the Risk Engine Evaluates Exits</h3>
+        <p>Every time a new price arrives (as fast as every 20-70ms with streaming brokers), the risk engine runs through a strict priority chain. <strong>Higher-priority rules fire first</strong>, and if any rule triggers a full exit, the chain stops immediately.</p>
+
+        <div class="es-pipeline">
+            <div class="es-pipeline-stage" style="background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4);">
+                <div class="es-stage-icon">🛑</div>
+                <div class="es-stage-label">1. Hard SL</div>
+                <div class="es-stage-val">Priority 1</div>
+                <div class="es-stage-sub">Max loss floor</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage" style="background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.3);">
+                <div class="es-stage-icon">📈</div>
+                <div class="es-stage-label">2. Dynamic SL</div>
+                <div class="es-stage-val">Priority 2</div>
+                <div class="es-stage-sub">Escalated stop</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage" style="background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3);">
+                <div class="es-stage-icon">📉</div>
+                <div class="es-stage-label">3. EMA Exit</div>
+                <div class="es-stage-val">Priority 3</div>
+                <div class="es-stage-sub">Trend analysis</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage" style="background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.3);">
+                <div class="es-stage-icon">🔒</div>
+                <div class="es-stage-label">4. Giveback</div>
+                <div class="es-stage-val">Priority 3</div>
+                <div class="es-stage-sub">Profit protection</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage" style="background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3);">
+                <div class="es-stage-icon">🎯</div>
+                <div class="es-stage-label">5. Early Trail</div>
+                <div class="es-stage-val">Priority 4</div>
+                <div class="es-stage-sub">Step-up stop</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage" style="background: rgba(16,185,129,0.25); border-color: rgba(16,185,129,0.4);">
+                <div class="es-stage-icon">💰</div>
+                <div class="es-stage-label">6. Profit Targets</div>
+                <div class="es-stage-val">Priority 4</div>
+                <div class="es-stage-sub">Partial trims</div>
+            </div>
+            <span class="es-pipe-arrow">&#8594;</span>
+            <div class="es-pipeline-stage" style="background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.25);">
+                <div class="es-stage-icon">📐</div>
+                <div class="es-stage-label">7. Legacy Trail</div>
+                <div class="es-stage-val">Priority 5</div>
+                <div class="es-stage-sub">Classic trailing</div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">Priority matters</div>
+            <p>If price drops below both the Hard SL and the Dynamic SL at the same time, the Hard SL fires first because it has higher priority. This ensures the most critical protection always wins.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Exit Strategy Modes Explained</h3>
+        <p>The <strong>Exit Strategy Mode</strong> controls which exit mechanisms are active for a position. This is the most important setting to understand.</p>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0;">
+            <div style="padding: 18px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.3); border-radius: 10px;">
+                <div style="font-size: 1.3rem; margin-bottom: 8px;">📨</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.95rem; margin-bottom: 6px;">Signal Mode</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
+                    Only exits when the signal provider posts a <strong>sell command</strong> (STC). No automated stop loss, no profit targets, no trailing stops. If the provider enables EMA risk for the channel, EMA exits will still run independently.
+                </div>
+                <div style="margin-top: 10px; font-size: 0.75rem; color: var(--help-warn); font-weight: 600;">Least protection &mdash; fully depends on the signal provider</div>
+            </div>
+            <div style="padding: 18px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px;">
+                <div style="font-size: 1.3rem; margin-bottom: 8px;">🤖</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.95rem; margin-bottom: 6px;">Risk Mode</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
+                    The bot manages all exits automatically using <strong>your configured rules</strong>: Stop Loss, Profit Targets, Dynamic SL, Early Trailing, Giveback Guard, and Legacy Trailing. Signal provider STC messages are ignored.
+                </div>
+                <div style="margin-top: 10px; font-size: 0.75rem; color: var(--help-success); font-weight: 600;">Full automated protection</div>
+            </div>
+            <div style="padding: 18px; background: rgba(168,85,247,0.08); border: 1px solid rgba(168,85,247,0.3); border-radius: 10px;">
+                <div style="font-size: 1.3rem; margin-bottom: 8px;">⚡</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.95rem; margin-bottom: 6px;">Hybrid Mode</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
+                    <strong>Both active</strong> &mdash; whichever triggers first wins. If the signal provider posts STC before your stop loss hits, the position closes. If your PT1 hits before the provider trims, the bot trims automatically.
+                </div>
+                <div style="margin-top: 10px; font-size: 0.75rem; color: var(--help-accent); font-weight: 600;">Recommended &mdash; best of both worlds</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Early Trailing Stop</h3>
+        <p>A smarter trailing stop that locks in breakeven as soon as a small profit is reached, then <strong>steps up your stop</strong> in fixed increments as the price climbs. Much faster than the legacy trailing stop.</p>
+
+        <div class="settings-grid" style="margin: 16px 0;">
+            <div class="setting-row">
+                <div class="setting-name">Activation %</div>
+                <div class="setting-explain">The minimum profit needed before the early trailing stop activates. When hit, your stop immediately moves to <strong>breakeven</strong> (entry price). Example: 5% activation means once you're up 5%, your stop moves to your entry price &mdash; you can't lose money anymore.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Step %</div>
+                <div class="setting-explain">After activation, for every additional X% of profit above the activation level, the stop ratchets up by that same X%. The stop <strong>never moves down</strong> &mdash; it only steps higher.</div>
+            </div>
+        </div>
+
+        <div class="risk-diagram">
+            <div style="text-align: center; color: var(--help-text); font-weight: 600; margin-bottom: 14px;">Early Trailing Example: Entry $10.00, Activation 5%, Step 3%</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <span style="color: var(--help-muted); font-size: 0.82rem; font-weight: 600;">Price hits $10.50</span>
+                    <div style="height: 4px; background: var(--help-success); border-radius: 2px; width: 50%;"></div>
+                    <span style="color: var(--help-accent); font-size: 0.82rem; font-weight: 700;">+5% &rarr; Stop moves to $10.00 (breakeven)</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <span style="color: var(--help-muted); font-size: 0.82rem; font-weight: 600;">Price hits $10.80</span>
+                    <div style="height: 4px; background: var(--help-success); border-radius: 2px; width: 60%;"></div>
+                    <span style="color: var(--help-accent); font-size: 0.82rem; font-weight: 700;">+8% &rarr; Step 1 &rarr; Stop at $10.30 (+3%)</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <span style="color: var(--help-muted); font-size: 0.82rem; font-weight: 600;">Price hits $11.10</span>
+                    <div style="height: 4px; background: var(--help-success); border-radius: 2px; width: 70%;"></div>
+                    <span style="color: var(--help-accent); font-size: 0.82rem; font-weight: 700;">+11% &rarr; Step 2 &rarr; Stop at $10.60 (+6%)</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <span style="color: var(--help-muted); font-size: 0.82rem; font-weight: 600;">Price hits $11.40</span>
+                    <div style="height: 4px; background: var(--help-success); border-radius: 2px; width: 80%;"></div>
+                    <span style="color: var(--help-accent); font-size: 0.82rem; font-weight: 700;">+14% &rarr; Step 3 &rarr; Stop at $10.90 (+9%)</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px;">
+                    <span style="color: var(--help-danger); font-size: 0.82rem; font-weight: 600;">Price drops to $10.90</span>
+                    <div style="height: 4px; background: var(--help-danger); border-radius: 2px; width: 55%;"></div>
+                    <span style="color: var(--help-danger); font-size: 0.82rem; font-weight: 700;">SOLD at $10.90 &mdash; +9% profit locked</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin: 16px 0;">
+            <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem; margin-bottom: 10px;">How Step Calculation Works:</div>
+            <div class="es-calc-box">
+                <span class="es-calc-dim">Entry:</span> <span class="es-calc-highlight">$10.00</span> &nbsp;|&nbsp;
+                <span class="es-calc-dim">Activation:</span> <span class="es-calc-highlight">5%</span> &nbsp;|&nbsp;
+                <span class="es-calc-dim">Step:</span> <span class="es-calc-highlight">3%</span><br><br>
+                <span class="es-calc-dim">Current P&amp;L: +11%</span><br>
+                <span class="es-calc-dim">Steps earned:</span> floor((11% - 5%) / 3%) = <span class="es-calc-highlight">2 steps</span><br>
+                <span class="es-calc-dim">New stop at:</span> 2 steps &times; 3% = +6% &rarr; $10.00 &times; 1.06 = <span class="es-calc-result">$10.60</span><br><br>
+                <span class="es-calc-dim" style="font-style: italic;">The stop only moves up &mdash; if price drops from +11% to +9%, the stop stays at $10.60</span>
+            </div>
+        </div>
+
+        <div class="warn-box">
+            <div class="warn-title">Early Trailing vs. Legacy Trailing</div>
+            <p>These two are <strong>mutually exclusive</strong>. If Early Trailing is enabled, Legacy Trailing is automatically skipped. Early Trailing is recommended for most strategies because it locks breakeven much faster.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Dynamic Stop Loss Profiles</h3>
+        <p>Dynamic SL automatically moves your stop loss up each time a profit target is hit. There are <strong>3 built-in profiles</strong> that control how aggressively the stop escalates.</p>
+
+        <div style="margin: 16px 0;">
+            <table class="es-versus-table">
+                <thead>
+                    <tr>
+                        <th>After PT Hit</th>
+                        <th style="color: #93c5fd;">Conservative</th>
+                        <th style="color: #6ee7b7;">Standard</th>
+                        <th style="color: #fca5a5;">Aggressive</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>PT1 Hit</td>
+                        <td>SL &rarr; Entry (breakeven)</td>
+                        <td>SL &rarr; Entry (breakeven)</td>
+                        <td>SL &rarr; Entry - 2%</td>
+                    </tr>
+                    <tr>
+                        <td>PT2 Hit</td>
+                        <td>SL &rarr; Entry + 3%</td>
+                        <td>SL &rarr; Entry + 5%</td>
+                        <td>SL &rarr; Entry (breakeven)</td>
+                    </tr>
+                    <tr>
+                        <td>PT3 Hit</td>
+                        <td>SL &rarr; Entry + 10%</td>
+                        <td>SL &rarr; Entry + 15%</td>
+                        <td>SL &rarr; Entry + 10%</td>
+                    </tr>
+                    <tr>
+                        <td>PT4 Hit</td>
+                        <td>SL &rarr; Entry + 20%</td>
+                        <td>SL &rarr; Entry + 25%</td>
+                        <td>SL &rarr; Entry + 20%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0;">
+            <div style="padding: 16px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 10px;">
+                <div style="font-weight: 700; color: #93c5fd; font-size: 0.9rem; margin-bottom: 8px;">Conservative</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
+                    Keeps stops close to entry until deep profits are reached. Best for <strong>volatile assets</strong> that often retrace before continuing higher. Gives maximum room for the trade to work.
+                </div>
+            </div>
+            <div style="padding: 16px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 10px;">
+                <div style="font-weight: 700; color: #6ee7b7; font-size: 0.9rem; margin-bottom: 8px;">Standard</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
+                    Balanced approach. Locks breakeven at PT1, then escalates with meaningful profit protection at each tier. <strong>Recommended for most traders.</strong>
+                </div>
+            </div>
+            <div style="padding: 16px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px;">
+                <div style="font-weight: 700; color: #fca5a5; font-size: 0.9rem; margin-bottom: 8px;">Aggressive</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
+                    Allows a small loss even after PT1 hit (-2% below entry). Gets to breakeven only at PT2. Best for <strong>scalping strategies</strong> where you want the most room for momentum to build.
+                </div>
+            </div>
+        </div>
+
+        <div class="example-box">
+            <div class="ex-title">Standard Profile Example: Entry at $10.00</div>
+            <p><strong>PT1 hits (+10% = $11.00)</strong> &rarr; SL moves from $9.00 to $10.00 (breakeven locked)</p>
+            <p><strong>PT2 hits (+25% = $12.50)</strong> &rarr; SL moves up to $10.50 (+5% guaranteed)</p>
+            <p><strong>PT3 hits (+50% = $15.00)</strong> &rarr; SL moves up to $11.50 (+15% guaranteed)</p>
+            <p><strong>Price reverses and drops to $11.50</strong> &rarr; Dynamic SL triggers &rarr; EXIT with +15% profit</p>
+            <p style="color: var(--help-accent); margin-top: 8px; font-weight: 600;">Without Dynamic SL, the position might have dropped all the way back to the original $9.00 stop loss = -10% loss.</p>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">Dynamic SL requires Profit Targets</div>
+            <p>Dynamic SL only activates after at least one profit target is hit. If you have no profit targets configured, the Dynamic SL will never fire. Make sure to set PT1-PT4 alongside Dynamic SL.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Leave Runner</h3>
+        <p>Reserves a percentage of your original position that is <strong>never sold by profit targets</strong>. The runner rides the trade for maximum upside and is only closed by a stop loss, trailing stop, or manual exit.</p>
+
+        <div class="settings-grid" style="margin: 16px 0;">
+            <div class="setting-row">
+                <div class="setting-name">Leave Runner</div>
+                <div class="setting-explain">Master toggle. When ON, a percentage of your position is reserved and excluded from profit target trims.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Runner %</div>
+                <div class="setting-explain">The percentage of your original position to keep as a runner. E.g., 20% of 10 contracts = 2 contracts held back from all PT trims.</div>
+            </div>
+        </div>
+
+        <div class="risk-diagram">
+            <div style="text-align: center; color: var(--help-text); font-weight: 600; margin-bottom: 14px;">Leave Runner Example: 100 shares, Runner 20%, 4 Profit Targets</div>
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+                <div style="text-align: center; padding: 14px 6px; background: rgba(16,185,129,0.1); border-radius: 8px; border: 1px solid rgba(16,185,129,0.25);">
+                    <div style="font-size: 0.78rem; color: var(--help-success); font-weight: 600;">PT1</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 4px 0;">Sell 20</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">80 remaining</div>
+                </div>
+                <div style="text-align: center; padding: 14px 6px; background: rgba(16,185,129,0.15); border-radius: 8px; border: 1px solid rgba(16,185,129,0.3);">
+                    <div style="font-size: 0.78rem; color: var(--help-success); font-weight: 600;">PT2</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 4px 0;">Sell 20</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">60 remaining</div>
+                </div>
+                <div style="text-align: center; padding: 14px 6px; background: rgba(16,185,129,0.2); border-radius: 8px; border: 1px solid rgba(16,185,129,0.35);">
+                    <div style="font-size: 0.78rem; color: var(--help-success); font-weight: 600;">PT3</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 4px 0;">Sell 20</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">40 remaining</div>
+                </div>
+                <div style="text-align: center; padding: 14px 6px; background: rgba(16,185,129,0.25); border-radius: 8px; border: 1px solid rgba(16,185,129,0.4);">
+                    <div style="font-size: 0.78rem; color: var(--help-success); font-weight: 600;">PT4</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 4px 0;">Sell 20</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">20 remaining</div>
+                </div>
+                <div style="text-align: center; padding: 14px 6px; background: rgba(245,158,11,0.15); border-radius: 8px; border: 1px solid rgba(245,158,11,0.3);">
+                    <div style="font-size: 0.78rem; color: var(--help-warn); font-weight: 600;">RUNNER</div>
+                    <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 4px 0;">20 kept</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">Rides for max upside</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="es-calc-box">
+            <span class="es-calc-dim">Total qty:</span> <span class="es-calc-highlight">100 shares</span><br>
+            <span class="es-calc-dim">Runner %:</span> <span class="es-calc-highlight">20%</span> &rarr; Runner qty = floor(100 &times; 0.20) = <span class="es-calc-highlight">20 shares</span><br>
+            <span class="es-calc-dim">Sellable:</span> 100 - 20 = <span class="es-calc-highlight">80 shares</span><br>
+            <span class="es-calc-dim">Per tier (4 PTs):</span> 80 / 4 = <span class="es-calc-result">20 shares per PT</span><br><br>
+            <span class="es-calc-dim" style="font-style: italic;">If you have 3 PTs enabled instead of 4: 80 / 3 = 27/27/26 shares (remainder distributed to earlier tiers first)</span>
+        </div>
+
+        <div class="warn-box">
+            <div class="warn-title">The runner is NOT protected from most exits</div>
+            <p>The runner is only exempt from <strong>profit target trims</strong>. If the Hard SL, Dynamic SL, Early Trailing Stop, or Giveback Guard fires, the runner gets sold along with everything else. The one exception is <strong>EMA exits</strong> &mdash; when Leave Runner is enabled, EMA can do a partial exit and preserve the runner position.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Giveback Guard &mdash; In Detail</h3>
+        <p>Tracks the <strong>highest unrealized profit</strong> your position has ever reached. If the position gives back too much of that peak profit, it forces an exit to protect your gains.</p>
+
+        <div class="settings-grid" style="margin: 16px 0;">
+            <div class="setting-row">
+                <div class="setting-name">Giveback Guard</div>
+                <div class="setting-explain">Master toggle. When ON, the guard tracks your position's high-water mark and exits if too much profit is given back.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Allowed Giveback %</div>
+                <div class="setting-explain">The maximum percentage of peak profit you're willing to lose. E.g., 30% means if your peak was +$500 and it drops to +$350 (gave back 30%), the guard triggers.</div>
+            </div>
+        </div>
+
+        <div class="risk-diagram">
+            <div style="text-align: center; color: var(--help-text); font-weight: 600; margin-bottom: 14px;">Giveback Guard Example: Allowed 30%, Entry $10.00</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <span style="color: var(--help-muted); font-size: 0.82rem; font-weight: 600;">Price rises to $13.00</span>
+                    <div style="height: 4px; background: var(--help-success); border-radius: 2px; width: 70%;"></div>
+                    <span style="color: var(--help-success); font-size: 0.82rem;">Max P&amp;L: +30% (high-water mark)</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <span style="color: var(--help-muted); font-size: 0.82rem; font-weight: 600;">Price drops to $12.50</span>
+                    <div style="height: 4px; background: var(--help-success); border-radius: 2px; width: 60%;"></div>
+                    <span style="color: var(--help-muted); font-size: 0.82rem;">P&amp;L now +25%. Gave back 17%. OK.</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 140px 1fr 180px; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px;">
+                    <span style="color: var(--help-danger); font-size: 0.82rem; font-weight: 600;">Price drops to $12.10</span>
+                    <div style="height: 4px; background: var(--help-danger); border-radius: 2px; width: 50%;"></div>
+                    <span style="color: var(--help-danger); font-size: 0.82rem; font-weight: 700;">P&amp;L +21%. Gave back 30%. EXIT!</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="es-calc-box">
+            <span class="es-calc-dim">Peak P&amp;L:</span> <span class="es-calc-highlight">+30%</span><br>
+            <span class="es-calc-dim">Allowed giveback:</span> <span class="es-calc-highlight">30%</span><br>
+            <span class="es-calc-dim">Threshold:</span> 30% &times; (1 - 30/100) = 30% &times; 0.70 = <span class="es-calc-result">+21%</span><br>
+            <span class="es-calc-dim">If current P&amp;L drops to or below +21% &rarr;</span> <span class="es-calc-result">SELL ALL</span>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">When does the Giveback Guard activate?</div>
+            <p>The guard arms itself when <strong>PT2 is hit</strong> OR when the max P&amp;L exceeds the early trailing activation threshold (or 30% if no trailing is set). Before activation, it does nothing &mdash; this prevents premature exits on normal early-trade volatility.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>EMA Risk Management</h3>
+        <p>Uses <strong>Exponential Moving Average (EMA)</strong> analysis on candle data to detect when a trade's momentum has reversed. This is a trend-based exit that fires independently of price-based stops.</p>
+
+        <div class="settings-grid" style="margin: 16px 0;">
+            <div class="setting-row">
+                <div class="setting-name">EMA Risk</div>
+                <div class="setting-explain">Master toggle. When ON, the bot monitors the EMA cross state (price crossing above or below the EMA line) and exits when momentum fades.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">EMA Period</div>
+                <div class="setting-explain">Number of candles used to calculate the EMA. Lower = more sensitive (faster exits). Default: 5 candles. Common values: 3 (aggressive), 5 (standard), 9 (conservative).</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">EMA Timeframe</div>
+                <div class="setting-explain">Candle size used for EMA calculation. Options: 1-minute, 5-minute, 15-minute. Smaller timeframes react faster to reversals.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">EMA Escalation</div>
+                <div class="setting-explain">Instead of exiting immediately on an EMA cross, the bot first <strong>tightens the stop loss to near the EMA level</strong> (with a small buffer). Only exits if that tightened stop is then hit. Gives the trade one more chance to recover above the EMA.</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0;">
+            <div style="padding: 14px; background: rgba(30,41,59,0.5); border-radius: 8px; border: 1px solid var(--help-card-border); text-align: center;">
+                <div style="font-size: 1.3rem; margin-bottom: 6px;">📊</div>
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px;">Seeding</div>
+                <div style="font-size: 0.78rem; color: var(--help-muted);">Collecting initial candles to build EMA. No decisions made until enough data.</div>
+            </div>
+            <div style="padding: 14px; background: rgba(16,185,129,0.08); border-radius: 8px; border: 1px solid rgba(16,185,129,0.25); text-align: center;">
+                <div style="font-size: 1.3rem; margin-bottom: 6px;">✅</div>
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px;">Above EMA</div>
+                <div style="font-size: 0.78rem; color: var(--help-muted);">Price is above EMA line. Trend is bullish. Position held.</div>
+            </div>
+            <div style="padding: 14px; background: rgba(239,68,68,0.08); border-radius: 8px; border: 1px solid rgba(239,68,68,0.25); text-align: center;">
+                <div style="font-size: 1.3rem; margin-bottom: 6px;">❌</div>
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px;">Below EMA</div>
+                <div style="font-size: 0.78rem; color: var(--help-muted);">Price crossed below EMA. Trend turned bearish. Exit triggered.</div>
+            </div>
+        </div>
+
+        <div class="warn-box">
+            <div class="warn-title">EMA has a warmup period</div>
+            <p>The EMA evaluator requires <strong>2 candles after entry</strong> before it can make any decisions, plus enough candle history to calculate the EMA itself (default 5 candles). During the warmup period, EMA exits are frozen and will not fire.</p>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">Signal Mode + EMA</div>
+            <p>In <strong>Signal</strong> exit strategy mode, EMA is the <strong>only automated exit</strong> that runs. All other risk settings (SL, PT, trailing) are stripped. EMA exits act independently in this mode, giving signal-followers an additional safety net.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>SL Escalation Only Mode</h3>
+        <p>A special mode where hitting profit targets does <strong>NOT sell any shares</strong>. Instead, each PT hit only moves the stop loss higher. Your full position stays open until the escalated stop loss is finally hit.</p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0;">
+            <div style="padding: 16px; border: 1px solid var(--help-card-border); border-radius: 10px; background: rgba(30,41,59,0.3);">
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem; margin-bottom: 10px;">Normal Mode (Escalation OFF)</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.8;">
+                    PT1 hit &rarr; <span style="color: var(--help-success); font-weight: 600;">Sell 25%</span> + Move SL<br>
+                    PT2 hit &rarr; <span style="color: var(--help-success); font-weight: 600;">Sell 25%</span> + Move SL<br>
+                    PT3 hit &rarr; <span style="color: var(--help-success); font-weight: 600;">Sell 25%</span> + Move SL<br>
+                    PT4 hit &rarr; <span style="color: var(--help-success); font-weight: 600;">Sell 25%</span> + Move SL
+                </div>
+            </div>
+            <div style="padding: 16px; border: 1px solid rgba(245,158,11,0.3); border-radius: 10px; background: rgba(245,158,11,0.05);">
+                <div style="font-weight: 700; color: var(--help-warn); font-size: 0.9rem; margin-bottom: 10px;">Escalation Only Mode (ON)</div>
+                <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.8;">
+                    PT1 hit &rarr; <span style="color: var(--help-warn); font-weight: 600;">Move SL only</span> (no sell)<br>
+                    PT2 hit &rarr; <span style="color: var(--help-warn); font-weight: 600;">Move SL only</span> (no sell)<br>
+                    PT3 hit &rarr; <span style="color: var(--help-warn); font-weight: 600;">Move SL only</span> (no sell)<br>
+                    SL hit &rarr; <span style="color: var(--help-danger); font-weight: 600;">Sell ALL at escalated SL</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="example-box">
+            <div class="ex-title">When to use Escalation Only</div>
+            <p>Use this when you want to <strong>ride the full position</strong> for maximum profit and only exit when the trend reverses. The escalating stop loss still protects you &mdash; after hitting PT3 with Standard profile, your stop is at +15%, so even in a crash you keep +15% on your entire position.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>How All Settings Work Together &mdash; Full Walkthrough</h3>
+        <p>Here's a complete example showing every exit mechanism in action on a single trade.</p>
+
+        <div class="es-combo-settings" style="margin: 12px 0;">
+            <span class="es-chip es-chip-val">Entry: $10.00</span>
+            <span class="es-chip es-chip-on">SL: 10%</span>
+            <span class="es-chip es-chip-on">PT1: 10%</span>
+            <span class="es-chip es-chip-on">PT2: 25%</span>
+            <span class="es-chip es-chip-on">PT3: 50%</span>
+            <span class="es-chip es-chip-on">Dynamic SL: Standard</span>
+            <span class="es-chip es-chip-on">Early Trail: 5% act, 3% step</span>
+            <span class="es-chip es-chip-on">Giveback: 30%</span>
+            <span class="es-chip es-chip-val">Leave Runner: 20%</span>
+            <span class="es-chip es-chip-val">Qty: 10 contracts</span>
+        </div>
+
+        <div class="es-timeline">
+            <div class="es-tl-item">
+                <div class="es-tl-dot"></div>
+                <div class="es-tl-time">9:31</div>
+                <div class="es-tl-content">
+                    <div class="es-tl-title">Position opened at $10.00 &mdash; 10 contracts</div>
+                    <div class="es-tl-desc">Hard SL at $9.00 (10% below). Runner: 2 contracts reserved. Sellable: 8 contracts across 3 PTs (3, 3, 2). Early trail and giveback are dormant.</div>
+                </div>
+            </div>
+            <div class="es-tl-item">
+                <div class="es-tl-dot es-filled"></div>
+                <div class="es-tl-time">9:38</div>
+                <div class="es-tl-content es-highlight">
+                    <div class="es-tl-title">Price $10.50 &mdash; Early Trailing Activates (+5%)</div>
+                    <div class="es-tl-desc">Stop moves to $10.00 (breakeven). You can no longer lose money on this trade. Giveback guard still dormant (waiting for PT2 or higher P&amp;L threshold).</div>
+                </div>
+            </div>
+            <div class="es-tl-item">
+                <div class="es-tl-dot es-filled"></div>
+                <div class="es-tl-time">9:45</div>
+                <div class="es-tl-content es-highlight">
+                    <div class="es-tl-title">Price $11.00 &mdash; PT1 Hit (+10%)</div>
+                    <div class="es-tl-desc"><strong>Sell 3 contracts</strong> at $11.00. Dynamic SL (Standard) moves to $10.00 (breakeven). Early trail Step 1: stop at $10.30 (+3%). 7 contracts remain.</div>
+                </div>
+            </div>
+            <div class="es-tl-item">
+                <div class="es-tl-dot es-filled"></div>
+                <div class="es-tl-time">10:02</div>
+                <div class="es-tl-content es-highlight">
+                    <div class="es-tl-title">Price $12.50 &mdash; PT2 Hit (+25%)</div>
+                    <div class="es-tl-desc"><strong>Sell 3 contracts</strong> at $12.50. Dynamic SL moves to $10.50 (+5%). Early trail Step 6: stop at $11.80 (+18%). Giveback guard now ARMED (PT2 hit). Max P&amp;L seen: 25%. 4 contracts remain.</div>
+                </div>
+            </div>
+            <div class="es-tl-item">
+                <div class="es-tl-dot"></div>
+                <div class="es-tl-time">10:15</div>
+                <div class="es-tl-content">
+                    <div class="es-tl-title">Price pulls back to $12.00 (+20%)</div>
+                    <div class="es-tl-desc">Early trail stop at $11.80 &mdash; not hit (price $12.00 is still above $11.80). Giveback check: peak was 25%, current is 20% &mdash; gave back 20% of peak gains (threshold is 30%). Safe.</div>
+                </div>
+            </div>
+            <div class="es-tl-item">
+                <div class="es-tl-dot"></div>
+                <div class="es-tl-time">10:16</div>
+                <div class="es-tl-content">
+                    <div class="es-tl-title">Price bounces to $14.00 (+40%)</div>
+                    <div class="es-tl-desc">Early trail Step 11: stop at $13.30 (+33%). Max P&amp;L updated to 40%. Giveback threshold: 40% &times; 0.70 = +28% floor.</div>
+                </div>
+            </div>
+            <div class="es-tl-item">
+                <div class="es-tl-dot es-filled"></div>
+                <div class="es-tl-time">10:22</div>
+                <div class="es-tl-content es-highlight">
+                    <div class="es-tl-title">Price $15.00 &mdash; PT3 Hit (+50%)</div>
+                    <div class="es-tl-desc"><strong>Sell 2 contracts</strong> at $15.00. Dynamic SL moves to $11.50 (+15%). Early trail Step 15: stop at $14.50 (+45%). 2 runner contracts remain.</div>
+                </div>
+            </div>
+            <div class="es-tl-item">
+                <div class="es-tl-dot es-filled"></div>
+                <div class="es-tl-time">10:35</div>
+                <div class="es-tl-content es-danger">
+                    <div class="es-tl-title">Price drops to $14.50 &mdash; Early Trail Stop Hit!</div>
+                    <div class="es-tl-desc"><strong>EXIT ALL</strong> &mdash; remaining 2 runner contracts sold at $14.50 (+45%). Trade complete.</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin: 16px 0; padding: 18px; background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.25); border-radius: 10px;">
+            <div style="font-weight: 700; color: var(--help-success); font-size: 0.95rem; margin-bottom: 12px;">Trade Summary</div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                <div style="text-align: center; padding: 10px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--help-muted);">PT1 (3 contracts)</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--help-success);">+10%</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">+$3.00</div>
+                </div>
+                <div style="text-align: center; padding: 10px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--help-muted);">PT2 (3 contracts)</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--help-success);">+25%</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">+$7.50</div>
+                </div>
+                <div style="text-align: center; padding: 10px; background: rgba(30,41,59,0.5); border-radius: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--help-muted);">PT3 (2 contracts)</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--help-success);">+50%</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">+$10.00</div>
+                </div>
+                <div style="text-align: center; padding: 10px; background: rgba(245,158,11,0.1); border-radius: 8px; border: 1px solid rgba(245,158,11,0.25);">
+                    <div style="font-size: 0.75rem; color: var(--help-warn);">Runner (2 contracts)</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--help-warn);">+45%</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted);">+$9.00</div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 14px; font-size: 1.1rem; font-weight: 700; color: var(--help-accent);">
+                Total Profit: +$29.50 on 10 contracts ($10.00 entry) = +29.5% weighted average
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Quick Reference &mdash; All Exit Settings</h3>
+        <table class="es-versus-table">
+            <thead>
+                <tr>
+                    <th>Setting</th>
+                    <th>What It Does</th>
+                    <th>Exit Type</th>
+                    <th>Priority</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Stop Loss %</td>
+                    <td>Exits if price drops X% below entry</td>
+                    <td style="color: var(--help-danger);">SELL ALL</td>
+                    <td>1 (Highest)</td>
+                </tr>
+                <tr>
+                    <td>Dynamic SL</td>
+                    <td>Moves stop up as PTs are hit (3 profiles)</td>
+                    <td style="color: var(--help-danger);">SELL ALL</td>
+                    <td>2</td>
+                </tr>
+                <tr>
+                    <td>EMA Risk</td>
+                    <td>Exits on EMA trend reversal</td>
+                    <td style="color: var(--help-danger);">SELL ALL</td>
+                    <td>3</td>
+                </tr>
+                <tr>
+                    <td>Giveback Guard</td>
+                    <td>Exits if too much unrealized profit is given back</td>
+                    <td style="color: var(--help-danger);">SELL ALL</td>
+                    <td>3</td>
+                </tr>
+                <tr>
+                    <td>Early Trailing</td>
+                    <td>Locks breakeven fast, then steps up stop in increments</td>
+                    <td style="color: var(--help-danger);">SELL ALL</td>
+                    <td>4</td>
+                </tr>
+                <tr>
+                    <td>Profit Targets (PT1-4)</td>
+                    <td>Partial sells at preset profit levels</td>
+                    <td style="color: var(--help-success);">PARTIAL SELL</td>
+                    <td>4</td>
+                </tr>
+                <tr>
+                    <td>Leave Runner %</td>
+                    <td>Reserves X% of position from PT trims</td>
+                    <td style="color: var(--help-muted);">Modifier</td>
+                    <td>&mdash;</td>
+                </tr>
+                <tr>
+                    <td>Escalation Only</td>
+                    <td>PTs move SL instead of selling</td>
+                    <td style="color: var(--help-muted);">Modifier</td>
+                    <td>&mdash;</td>
+                </tr>
+                <tr>
+                    <td>Legacy Trailing</td>
+                    <td>Classic % trailing from peak (disabled if Early Trail is ON)</td>
+                    <td style="color: var(--help-danger);">SELL ALL</td>
+                    <td>5 (Lowest)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="help-card">
+        <h3>Recommended Combinations</h3>
+
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(16,185,129,0.15);">A</div>
+                <div>
+                    <div class="es-combo-title">Balanced &mdash; Best for Most Traders</div>
+                    <div class="es-combo-subtitle">Locks profits progressively while keeping a runner for big moves</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-on">SL: 15%</span>
+                <span class="es-chip es-chip-on">PT1: 10%</span>
+                <span class="es-chip es-chip-on">PT2: 25%</span>
+                <span class="es-chip es-chip-on">PT3: 50%</span>
+                <span class="es-chip es-chip-on">Dynamic SL: Standard</span>
+                <span class="es-chip es-chip-on">Early Trail: 8% act, 5% step</span>
+                <span class="es-chip es-chip-on">Giveback: 35%</span>
+                <span class="es-chip es-chip-val">Runner: 15%</span>
+                <span class="es-chip es-chip-val">Mode: Hybrid</span>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6; margin-top: 8px;">
+                Good for options and large-cap stocks. The 15% SL gives room for normal swings, early trailing locks breakeven at 8%, and the standard dynamic SL profile escalates conservatively. The 15% runner captures extended moves.
+            </div>
+        </div>
+
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(245,158,11,0.15);">B</div>
+                <div>
+                    <div class="es-combo-title">Penny Stock Momentum Capture</div>
+                    <div class="es-combo-subtitle">Fast breakeven lock, wide PTs for volatile runners</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-on">SL: 10%</span>
+                <span class="es-chip es-chip-on">PT1: 8%</span>
+                <span class="es-chip es-chip-on">PT2: 20%</span>
+                <span class="es-chip es-chip-on">PT3: 40%</span>
+                <span class="es-chip es-chip-on">PT4: 75%</span>
+                <span class="es-chip es-chip-on">Dynamic SL: Aggressive</span>
+                <span class="es-chip es-chip-on">Early Trail: 5% act, 3% step</span>
+                <span class="es-chip es-chip-on">Giveback: 40%</span>
+                <span class="es-chip es-chip-val">Runner: 15%</span>
+                <span class="es-chip es-chip-val">SL Order: Market</span>
+                <span class="es-chip es-chip-val">Trim Order: Market</span>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6; margin-top: 8px;">
+                Penny stocks move fast and reverse hard. The tight 5% early trailing activation locks breakeven quickly. Market orders for stops and trims ensure fills on wide-spread stocks. The aggressive dynamic SL profile allows a small dip after PT1 but locks breakeven at PT2. The 40% giveback guard catches violent reversals.
+            </div>
+        </div>
+
+        <div class="es-combo-card">
+            <div class="es-combo-header">
+                <div class="es-combo-badge" style="background: rgba(99,102,241,0.15);">C</div>
+                <div>
+                    <div class="es-combo-title">Full Ride &mdash; Escalation Only</div>
+                    <div class="es-combo-subtitle">Keep full position, only exit when trend reverses</div>
+                </div>
+            </div>
+            <div class="es-combo-settings">
+                <span class="es-chip es-chip-on">SL: 12%</span>
+                <span class="es-chip es-chip-on">PT1: 10%</span>
+                <span class="es-chip es-chip-on">PT2: 25%</span>
+                <span class="es-chip es-chip-on">PT3: 50%</span>
+                <span class="es-chip es-chip-on">PT4: 100%</span>
+                <span class="es-chip es-chip-on">Dynamic SL: Standard</span>
+                <span class="es-chip es-chip-val">Escalation Only: ON</span>
+                <span class="es-chip es-chip-on">Early Trail: 10% act, 5% step</span>
+                <span class="es-chip es-chip-on">Giveback: 25%</span>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6; margin-top: 8px;">
+                No partial sells at any profit target. Instead, hitting PTs only moves the stop loss higher. Your full position rides until the escalated stop or early trailing stop is hit. Best for high-conviction trades where you want maximum exposure to the upside.
             </div>
         </div>
     </div>
