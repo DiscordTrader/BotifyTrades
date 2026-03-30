@@ -382,10 +382,13 @@ async function loadChannels() {
                                             <span style="font-size: 16px;">🔄</span>
                                             <label style="font-size: 13px; font-weight: 600; color: #a78bfa;">Order Chase</label>
                                         </div>
-                                        <label class="toggle-switch" title="Chase unfilled orders with mid-price replacement">
-                                            <input type="checkbox" id="risk-order-chase-${channel.id}" ${channel.order_chase_enabled === 1 || channel.entry_chase_enabled === 1 ? 'checked' : ''}>
-                                            <span class="toggle-slider"></span>
-                                        </label>
+                                        <select id="risk-chase-mode-${channel.id}" style="width: 130px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                            <option value="off" ${!channel.entry_chase_enabled && !channel.order_chase_enabled ? 'selected' : ''}>Off</option>
+                                            <option value="entry" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled !== 1 ? 'selected' : ''}>Entry Only</option>
+                                            <option value="exit" ${channel.order_chase_enabled === 1 && channel.entry_chase_enabled !== 1 ? 'selected' : ''}>Exit Only</option>
+                                            <option value="both" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled === 1 ? 'selected' : ''}>Both</option>
+                                        </select>
+                                        <input type="checkbox" id="risk-order-chase-${channel.id}" style="display:none;" ${channel.order_chase_enabled === 1 || channel.entry_chase_enabled === 1 ? 'checked' : ''}>
                                     </div>
                                     <p style="font-size: 11px; color: #8E8E93; margin: 0;">Chase unfilled orders with mid-price replacement for better fills.</p>
                                 </div>
@@ -1416,7 +1419,9 @@ async function saveRiskManagement(channelId) {
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         const escalationOnlyMode = document.getElementById(`risk-escalation-only-${channelId}`)?.checked ? 1 : 0;
         const exitStrategyMode = document.querySelector(`input[name="exit-strategy-mode-${channelId}"]:checked`)?.value || 'hybrid';
-        const orderChaseEnabled = document.getElementById(`risk-order-chase-${channelId}`)?.checked ? 1 : 0;
+        const chaseModeVal = document.getElementById(`risk-chase-mode-${channelId}`)?.value || 'off';
+        const orderChaseEnabled = ['exit','both'].includes(chaseModeVal) ? 1 : 0;
+        const entryChaseEnabled = ['entry','both'].includes(chaseModeVal) ? 1 : 0;
 
         // Enhanced risk settings
         const enableDynamicSl = document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked ? 1 : 0;
@@ -1487,7 +1492,7 @@ async function saveRiskManagement(channelId) {
                 escalation_only_mode: escalationOnlyMode,
                 exit_strategy_mode: exitStrategyMode,
                 order_chase_enabled: orderChaseEnabled,
-                entry_chase_enabled: orderChaseEnabled,
+                entry_chase_enabled: entryChaseEnabled,
                 use_global_risk_settings: 0
         };
         const response = await fetch(`/api/channels/${channelId}`, {
@@ -1542,7 +1547,10 @@ function updateRiskSummaryRail(channelId) {
     if (document.getElementById(`risk-escalation-only-${channelId}`)?.checked) pills.push(pill('Esc Only', '#F59E0B'));
     if (document.getElementById(`risk-giveback-guard-${channelId}`)?.checked) pills.push(pill('Giveback', '#17a2b8'));
     if (document.getElementById(`risk-ema-enabled-${channelId}`)?.checked) pills.push(pill('EMA', '#38bdf8'));
-    if (document.getElementById(`risk-order-chase-${channelId}`)?.checked) pills.push(pill('Chase', '#7C3AED'));
+    const chaseModeForPill = document.getElementById(`risk-chase-mode-${channelId}`)?.value || 'off';
+    if (chaseModeForPill === 'entry') pills.push(pill('Chase Entry', '#7C3AED'));
+    else if (chaseModeForPill === 'exit') pills.push(pill('Chase Exit', '#7C3AED'));
+    else if (chaseModeForPill === 'both') pills.push(pill('Chase Both', '#7C3AED'));
     if (document.getElementById(`risk-leave-runner-enabled-${channelId}`)?.checked) pills.push(pill('Runner', '#7C3AED'));
     const pillsEl = document.getElementById(`risk-summary-pills-${channelId}`);
     if (pillsEl) pillsEl.innerHTML = pills.length > 0 ? pills.join(' ') : '<span style="color:#8E8E93;font-size:11px;">No risk features enabled</span>';
@@ -1649,6 +1657,8 @@ function applyRiskPreset(channelId, preset) {
     setChk(`risk-leave-runner-enabled-${channelId}`, p.runner);
     setVal(`risk-leave-runner-pct-${channelId}`, p.runner_pct);
     setChk(`risk-order-chase-${channelId}`, p.chase);
+    const chaseModePresetEl = document.getElementById(`risk-chase-mode-${channelId}`);
+    if (chaseModePresetEl) chaseModePresetEl.value = p.chase ? 'exit' : 'off';
 
     const trimRadio = document.querySelector(`input[name="trim-order-mode-${channelId}"][value="${p.trim_order}"]`);
     if (trimRadio) trimRadio.checked = true;
@@ -1694,7 +1704,7 @@ function initRiskRowListeners(channelId) {
         const el = document.getElementById(id);
         if (el) el.addEventListener('input', () => { updateRiskSummaryRail(channelId); validateRiskSettings(channelId); });
     });
-    const changeIds = [`risk-early-trailing-${channelId}`, `risk-dynamic-sl-${channelId}`, `risk-giveback-guard-${channelId}`, `risk-order-chase-${channelId}`, `risk-escalation-only-${channelId}`, `risk-leave-runner-enabled-${channelId}`, `risk-ema-enabled-${channelId}`];
+    const changeIds = [`risk-early-trailing-${channelId}`, `risk-dynamic-sl-${channelId}`, `risk-giveback-guard-${channelId}`, `risk-chase-mode-${channelId}`, `risk-escalation-only-${channelId}`, `risk-leave-runner-enabled-${channelId}`, `risk-ema-enabled-${channelId}`];
     changeIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', () => { updateRiskSummaryRail(channelId); validateRiskSettings(channelId); });
