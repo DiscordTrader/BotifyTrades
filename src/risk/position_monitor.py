@@ -2535,12 +2535,17 @@ class RiskManager:
                     if hub_pos is not None:
                         schwab_positions = []
                         for pos in hub_pos:
+                            _schwab_asset = pos.get('asset', 'stock')
+                            _schwab_sym = pos.get('symbol', '')
+                            if _schwab_asset == 'stock' and (_schwab_sym or '').upper() in self._INDEX_TO_CANONICAL:
+                                _schwab_asset = 'option'
+                                print(f"[RISK] ✓ INDEX GUARD: Forced Schwab hub {_schwab_sym} to option")
                             schwab_positions.append(PositionSnapshot(
-                                symbol=pos.get('symbol', ''),
+                                symbol=_schwab_sym,
                                 quantity=abs(float(pos.get('quantity', 0))),
                                 avg_cost=float(pos.get('avg_cost', 0)),
                                 current_price=float(pos.get('current_price', 0)),
-                                asset=pos.get('asset', 'stock'),
+                                asset=_schwab_asset,
                                 broker='SCHWAB',
                                 strike=pos.get('strike'),
                                 expiry=pos.get('expiry'),
@@ -2598,12 +2603,17 @@ class RiskManager:
                             broker_label = 'IBKR_LIVE' if not getattr(self.ibkr_broker, 'paper_trade', True) else 'IBKR_PAPER'
                             snapshots = []
                             for p in hub_pos:
+                                _ibkr_asset = p.get('asset', 'stock')
+                                _ibkr_sym = p.get('symbol', '')
+                                if _ibkr_asset == 'stock' and (_ibkr_sym or '').upper() in self._INDEX_TO_CANONICAL:
+                                    _ibkr_asset = 'option'
+                                    print(f"[RISK] ✓ INDEX GUARD: Forced IBKR hub {_ibkr_sym} to option")
                                 snap = PositionSnapshot(
-                                    symbol=p.get('symbol', ''),
+                                    symbol=_ibkr_sym,
                                     quantity=p.get('quantity', 0),
                                     avg_cost=p.get('avg_cost', 0),
                                     current_price=0,
-                                    asset=p.get('asset', 'stock'),
+                                    asset=_ibkr_asset,
                                     broker=broker_label,
                                     strike=p.get('strike', 0),
                                     expiry=p.get('expiry', ''),
@@ -2787,6 +2797,13 @@ class RiskManager:
         for ap in alpaca_raw:
             symbol = ap.symbol
             is_option = '  ' in symbol or len(symbol) > 10
+            if not is_option and hasattr(ap, 'asset_class'):
+                is_option = str(getattr(ap, 'asset_class', '')).lower() == 'us_option'
+            if not is_option:
+                _upper_sym = (symbol or '').upper()
+                if _upper_sym in self._INDEX_TO_CANONICAL:
+                    is_option = True
+                    print(f"[RISK] ✓ INDEX GUARD: Forced Alpaca {symbol} to option (index symbols are always options)")
             
             if is_option:
                 snapshot = self._parse_alpaca_option(ap, symbol)
@@ -2859,8 +2876,10 @@ class RiskManager:
             
             for pos in schwab_raw:
                 asset_type = pos.get('asset', 'stock')
-                
                 raw_sym = pos.get('symbol', '')
+                if asset_type == 'stock' and (raw_sym or '').upper() in self._INDEX_TO_CANONICAL:
+                    asset_type = 'option'
+                    print(f"[RISK] ✓ INDEX GUARD: Forced Schwab REST {raw_sym} to option")
                 normalized_sym = normalize_index_symbol(raw_sym) if asset_type == 'option' else raw_sym
                 positions.append(PositionSnapshot(
                     symbol=normalized_sym,
@@ -2950,8 +2969,11 @@ class RiskManager:
                 
                 for pos in raw_positions:
                     asset_type = pos.get('asset_type', 'stock')
-                    
                     tt_sym = pos.get('symbol', '')
+                    _tt_underlying = pos.get('underlying_symbol', tt_sym)
+                    if asset_type == 'stock' and (_tt_underlying or '').upper() in self._INDEX_TO_CANONICAL:
+                        asset_type = 'option'
+                        print(f"[RISK] ✓ INDEX GUARD: Forced Tastytrade {_tt_underlying} to option")
                     normalized_tt_sym = normalize_index_symbol(tt_sym) if asset_type == 'option' else tt_sym
                     positions.append(PositionSnapshot(
                         symbol=normalized_tt_sym,
@@ -2982,6 +3004,10 @@ class RiskManager:
                 
                 for pos in raw_positions:
                     pos_type = pos.get('type', 'stock')
+                    rh_sym = pos.get('symbol', '')
+                    if pos_type == 'stock' and (rh_sym or '').upper() in self._INDEX_TO_CANONICAL:
+                        pos_type = 'option'
+                        print(f"[RISK] ✓ INDEX GUARD: Forced Robinhood {rh_sym} to option")
                     
                     call_put = None
                     if pos.get('option_type') == 'call':
@@ -2989,7 +3015,6 @@ class RiskManager:
                     elif pos.get('option_type') == 'put':
                         call_put = 'P'
                     
-                    rh_sym = pos.get('symbol', '')
                     normalized_rh_sym = normalize_index_symbol(rh_sym) if pos_type == 'option' else rh_sym
                     positions.append(PositionSnapshot(
                         symbol=normalized_rh_sym,
