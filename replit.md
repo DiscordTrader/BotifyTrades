@@ -65,6 +65,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **SYNC-RISK Coordination Guard**: `broker_sync_service.py` checks the risk engine position cache before cancelling or closing trades, preventing erroneous actions due to transient broker API issues.
 - **Channel Inheritance on Auto-Import**: `auto_import_manual_position` now inherits `channel_id` from recently-closed trades for consistent risk settings.
 - **Advanced Tab Nesting Fix**: The `risk-tab-advanced` div in `channels.js` was nested INSIDE the `risk-tab-targets` div due to a missing `</div>` closing tag. When `switchRiskTab()` hid the targets pane, the advanced pane (as a child) was also hidden. Fixed by adding the missing closing div to make both tabs siblings. Also quoted all channel.id references in onclick handlers as strings to prevent JS precision loss on 18-19 digit Discord IDs.
+- **Multi-Broker STC Qty Fix (3-part)**: (1) STC DB save now writes one trade per successful broker with actual `executed_qty` instead of a single shared entry using `signal['qty']`. (2) Added `original_quantity` column to trades table — set on BTO insert, preserved by sync when broker qty decreases after partial exits. (3) Initial trim qty query includes `original_quantity` for better estimates; TRIM FIX per-broker recalculation remains the authoritative correction.
 
 ## External Dependencies
 

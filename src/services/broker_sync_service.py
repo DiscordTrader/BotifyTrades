@@ -1431,10 +1431,15 @@ class BrokerSyncService:
                         update_fields['intended_price'] = broker_avg_cost
                         print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) entry price synced: DB=${db_entry_price:.4f} → Broker=${broker_avg_cost:.4f}")
                     
-                    # CRITICAL: Sync quantity from broker if different
+                    # Sync quantity from broker — but never overwrite original_quantity
                     if broker_quantity > 0 and abs(broker_quantity - db_quantity) > 0.001:
                         update_fields['quantity'] = broker_quantity
-                        print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) quantity synced: DB={db_quantity} → Broker={broker_quantity}")
+                        original_qty = trade.get('original_quantity')
+                        if not original_qty and broker_quantity < db_quantity:
+                            update_fields['original_quantity'] = int(db_quantity)
+                            print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) qty synced: DB={db_quantity} → Broker={broker_quantity} (preserved original_quantity={int(db_quantity)})")
+                        else:
+                            print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) qty synced: DB={db_quantity} → Broker={broker_quantity} (original_quantity={original_qty or 'same'})")
                     
                     # Update all fields
                     self.db.update_trade(trade_id, **update_fields)

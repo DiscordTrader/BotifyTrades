@@ -14977,7 +14977,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stc_sym = stk.get('symbol')
                     if not stc_sym:
                         cursor.execute('''
-                            SELECT id, symbol, quantity, broker
+                            SELECT id, symbol, quantity, broker, original_quantity
                             FROM trades 
                             WHERE channel_id = ? 
                             AND direction = 'BTO' 
@@ -14987,7 +14987,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         ''', (str(message.channel.id),))
                     else:
                         cursor.execute('''
-                            SELECT id, symbol, quantity, broker
+                            SELECT id, symbol, quantity, broker, original_quantity
                             FROM trades 
                             WHERE symbol = ?
                             AND channel_id = ? 
@@ -15008,14 +15008,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[PHOENIX STC] ✓ Injected broker={pos_broker} from open trade for {stc_sym}")
                         if stk.get('_phoenix_exit') or stk.get('is_full_exit'):
                             stk['qty'] = our_qty
-                            print(f"[PHOENIX EXIT] ✓ Full exit {stc_sym}: selling ALL {our_qty} shares")
+                            print(f"[PHOENIX EXIT] ✓ Full exit {stc_sym}: selling ALL {our_qty} shares (current position)")
                         elif stk.get('trim_percentage'):
                             import math
                             trim_pct = stk['trim_percentage']
                             exit_qty = max(1, math.ceil(our_qty * trim_pct / 100))
                             exit_qty = min(exit_qty, our_qty)
                             stk['qty'] = exit_qty
-                            print(f"[PHOENIX TRIM] ✓ Trim {trim_pct}% of {stc_sym}: selling {exit_qty} of {our_qty} shares")
+                            print(f"[PHOENIX TRIM] ✓ Trim {trim_pct}% of {stc_sym}: selling {exit_qty} of {our_qty} shares (initial estimate, TRIM FIX recalcs per-broker)")
                     else:
                         print(f"[PHOENIX STC] ⚠️ No open position found for {stc_sym or 'channel'} - cannot calculate exit qty")
                 except Exception as trim_err:
@@ -19508,9 +19508,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             )
                             
                             elif signal['action'] == 'STC':
-                                # Handle STC trades - especially for risk management exits
                                 from datetime import datetime
-                                # Lookup routing_mapping_id for signal routing risk discrimination
                                 routing_mapping_id = signal.get('routing_mapping_id')
                                 if not routing_mapping_id and channel_id_str:
                                     try:
@@ -19519,35 +19517,74 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             routing_mapping_id = mapping.get('id')
                                     except Exception:
                                         pass
-                                trade_data = {
-                                    'channel_id': channel_id_str,
-                                    'message_id': str(signal.get('message_id', '')),
-                                    'direction': 'STC',
-                                    'asset_type': signal['asset'],
-                                    'symbol': signal['symbol'],
-                                    'strike': signal.get('strike'),
-                                    'expiry': signal.get('expiry'),
-                                    'call_put': signal.get('opt_type'),
-                                    'quantity': signal['qty'],
-                                    'intended_price': signal.get('price'),
-                                    'executed_price': signal.get('price'),
-                                    'executed': True,
-                                    'status': 'CLOSED',
-                                    'broker': resp.get('broker', 'UNKNOWN').upper(),
-                                    'order_id': resp.get('orderId'),
-                                    'risk_trigger': signal.get('risk_trigger'),
-                                    'origin_trade_id': signal.get('origin_trade_id'),
-                                    'routing_mapping_id': routing_mapping_id
-                                }
-                                stc_trade_id = db.add_trade(trade_data)
-                                _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']} channel={channel_id_str or 'NONE'}")
-                                
-                                # If this is a risk management exit, close the original BTO trade
-                                if signal.get('origin_trade_id'):
-                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
-                                    _original_print(f"[DATABASE] ✓ Closed origin trade #{signal['origin_trade_id']}")
-                                
-                                # Process lot matching for PNL calculation
+
+                                multi_broker_results = resp.get('_multi_broker_results') if isinstance(resp, dict) else None
+                                if multi_broker_results:
+                                    successful_stc = [r for r in multi_broker_results if r.get('success') == True or (r.get('orderId') and r.get('success') is not False)]
+                                    _original_print(f"[DATABASE] Multi-broker STC - saving {len(successful_stc)} trade entries")
+                                    for stc_resp in successful_stc:
+                                        broker_name_upper = stc_resp.get('broker', 'UNKNOWN').upper()
+                                        broker_executed_qty = stc_resp.get('executed_qty', signal['qty'])
+                                        trade_data = {
+                                            'channel_id': channel_id_str,
+                                            'message_id': str(signal.get('message_id', '')),
+                                            'direction': 'STC',
+                                            'asset_type': signal['asset'],
+                                            'symbol': signal['symbol'],
+                                            'strike': signal.get('strike'),
+                                            'expiry': signal.get('expiry'),
+                                            'call_put': signal.get('opt_type'),
+                                            'quantity': broker_executed_qty,
+                                            'intended_price': signal.get('price'),
+                                            'executed_price': stc_resp.get('fill_price') or signal.get('price'),
+                                            'executed': True,
+                                            'status': 'CLOSED',
+                                            'broker': broker_name_upper,
+                                            'order_id': stc_resp.get('orderId') or stc_resp.get('order_id'),
+                                            'risk_trigger': signal.get('risk_trigger'),
+                                            'origin_trade_id': signal.get('origin_trade_id'),
+                                            'routing_mapping_id': routing_mapping_id
+                                        }
+                                        stc_trade_id = db.add_trade(trade_data)
+                                        _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={broker_name_upper} qty={broker_executed_qty} channel={channel_id_str or 'NONE'}")
+
+                                        if signal.get('origin_trade_id'):
+                                            try:
+                                                origin_trade = db.get_trade_by_id(signal['origin_trade_id'])
+                                                if origin_trade and (origin_trade.get('broker') or '').upper() == broker_name_upper:
+                                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
+                                                    _original_print(f"[DATABASE] ✓ Closed origin trade #{signal['origin_trade_id']} for {broker_name_upper}")
+                                            except Exception:
+                                                pass
+                                else:
+                                    broker_executed_qty = resp.get('executed_qty', signal['qty']) if isinstance(resp, dict) else signal['qty']
+                                    trade_data = {
+                                        'channel_id': channel_id_str,
+                                        'message_id': str(signal.get('message_id', '')),
+                                        'direction': 'STC',
+                                        'asset_type': signal['asset'],
+                                        'symbol': signal['symbol'],
+                                        'strike': signal.get('strike'),
+                                        'expiry': signal.get('expiry'),
+                                        'call_put': signal.get('opt_type'),
+                                        'quantity': broker_executed_qty,
+                                        'intended_price': signal.get('price'),
+                                        'executed_price': signal.get('price'),
+                                        'executed': True,
+                                        'status': 'CLOSED',
+                                        'broker': resp.get('broker', 'UNKNOWN').upper() if isinstance(resp, dict) else 'UNKNOWN',
+                                        'order_id': resp.get('orderId') if isinstance(resp, dict) else None,
+                                        'risk_trigger': signal.get('risk_trigger'),
+                                        'origin_trade_id': signal.get('origin_trade_id'),
+                                        'routing_mapping_id': routing_mapping_id
+                                    }
+                                    stc_trade_id = db.add_trade(trade_data)
+                                    _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']} qty={broker_executed_qty} channel={channel_id_str or 'NONE'}")
+
+                                    if signal.get('origin_trade_id'):
+                                        db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
+                                        _original_print(f"[DATABASE] ✓ Closed origin trade #{signal['origin_trade_id']}")
+
                                 if signal.get('_risk_management_order'):
                                     try:
                                         from gui_app.lot_matcher import get_matcher

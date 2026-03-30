@@ -973,6 +973,16 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Rejection reason tracking columns added")
     
+    # Migration: Add original_quantity to preserve entry size across sync/partial exits
+    try:
+        cursor.execute('SELECT original_quantity FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding original_quantity column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN original_quantity INTEGER")
+        cursor.execute("UPDATE trades SET original_quantity = quantity WHERE original_quantity IS NULL AND direction = 'BTO'")
+        conn.commit()
+        print("[DATABASE] ✓ original_quantity column added (preserves entry size across partial exits)")
+
     # Signals table (all signals received, including tracked ones)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
@@ -3295,6 +3305,10 @@ def add_trade(signal_data: Dict) -> int:
         except Exception as e:
             print(f"[DATABASE] Error calculating STC PNL: {e}")
     
+    original_quantity = signal_data.get('original_quantity')
+    if original_quantity is None and signal_data.get('direction') == 'BTO':
+        original_quantity = signal_data['quantity']
+
     cursor.execute('''
         INSERT INTO trades (
             channel_id, message_id, direction, asset_type, symbol,
@@ -3302,8 +3316,8 @@ def add_trade(signal_data: Dict) -> int:
             executed_price, executed_at, status, broker, order_id,
             stop_loss_price, profit_target_price, risk_trigger, origin_trade_id,
             user_id, source, pnl, pnl_percent, conditional_order_id, routing_mapping_id,
-            original_symbol, original_strike, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            original_symbol, original_strike, created_at, original_quantity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         signal_data.get('channel_id'),
         signal_data.get('message_id'),
@@ -3332,7 +3346,8 @@ def add_trade(signal_data: Dict) -> int:
         signal_data.get('routing_mapping_id'),  # Signal routing discriminator
         signal_data.get('original_symbol'),  # NDX→QQQ conversion tracking
         signal_data.get('original_strike'),  # Original strike before conversion
-        datetime.now()  # created_at - always set explicitly for migrated DBs
+        datetime.now(),  # created_at - always set explicitly for migrated DBs
+        original_quantity
     ))
     
     conn.commit()
