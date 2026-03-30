@@ -333,6 +333,79 @@ async function loadChannels() {
                                             <div style="font-size: 10px; color: #8E8E93;">Both active</div>
                                         </label>
                                     </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
+                                    <div style="display: flex; gap: 16px; align-items: center;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
+                                            <span style="font-size: 12px; color: white;">Market</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="trim-order-mode-${channel.id}" value="limit" ${channel.trim_order_mode === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='flex'">
+                                            <span style="font-size: 12px; color: white;">Limit</span>
+                                        </label>
+                                        <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; flex-wrap: wrap;" id="limit-offset-container-${channel.id}">
+                                            <select id="risk-trim-offset-mode-${channel.id}" style="padding: 4px 6px; font-size: 11px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;" onchange="toggleTrimOffsetMode(${channel.id}, this.value)">
+                                                <option value="dollar" ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'selected' : ''}>$</option>
+                                                <option value="percent" ${channel.trim_limit_offset_mode === 'percent' ? 'selected' : ''}>%</option>
+                                            </select>
+                                            <div id="trim-offset-dollar-${channel.id}" style="display: ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
+                                                <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="5" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                            </div>
+                                            <div id="trim-offset-pct-${channel.id}" style="display: ${channel.trim_limit_offset_mode === 'percent' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
+                                                <input type="number" id="risk-trim-offset-pct-${channel.id}" value="${channel.trim_limit_offset_pct || 2.0}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ff5252; margin-bottom: 8px;">Stop Loss Order Type</label>
+                                    <div style="display: flex; gap: 16px; align-items: center;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='flex'">
+                                            <span style="font-size: 12px; color: white;">Limit</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='none'">
+                                            <span style="font-size: 12px; color: white;">Market</span>
+                                        </label>
+                                    </div>
+                                    <div style="display: ${(channel.sl_order_mode || 'limit') === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; margin-top: 8px;" id="sl-limit-offset-container-${channel.id}">
+                                        <label style="font-size: 11px; color: #8E8E93;">Limit Offset %:</label>
+                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset || 0.03) * 100}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                        <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔄</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #a78bfa;">Order Chase</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Chase unfilled orders with mid-price replacement">
+                                            <input type="checkbox" id="risk-order-chase-${channel.id}" ${channel.order_chase_enabled === 1 || channel.entry_chase_enabled === 1 ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Chase unfilled orders with mid-price replacement for better fills.</p>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🏃</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00ff88;">Leave Runner</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Keep a portion of your position to ride further gains">
+                                            <input type="checkbox" id="risk-leave-runner-enabled-${channel.id}" ${channel.leave_runner_enabled ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Keep a percentage of your position after hitting profit targets.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Runner Size:</label>
+                                        <input type="number" id="risk-leave-runner-pct-${channel.id}" value="${channel.leave_runner_pct || 25}" placeholder="25" step="1" min="1" max="100" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                        <span style="font-size: 12px; color: #8E8E93;">% of position</span>
+                                    </div>
                                 </div>
                                 </div>
 
@@ -453,80 +526,6 @@ async function loadChannels() {
                                                 <label style="font-size: 11px; color: #8E8E93;">Extended Hours</label>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
-                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
-                                    <div style="display: flex; gap: 16px; align-items: center;">
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
-                                            <span style="font-size: 12px; color: white;">Market</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="trim-order-mode-${channel.id}" value="limit" ${channel.trim_order_mode === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='flex'">
-                                            <span style="font-size: 12px; color: white;">Limit</span>
-                                        </label>
-                                        <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; flex-wrap: wrap;" id="limit-offset-container-${channel.id}">
-                                            <select id="risk-trim-offset-mode-${channel.id}" style="padding: 4px 6px; font-size: 11px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;" onchange="toggleTrimOffsetMode(${channel.id}, this.value)">
-                                                <option value="dollar" ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'selected' : ''}>$</option>
-                                                <option value="percent" ${channel.trim_limit_offset_mode === 'percent' ? 'selected' : ''}>%</option>
-                                            </select>
-                                            <div id="trim-offset-dollar-${channel.id}" style="display: ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
-                                                <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="5" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
-                                            </div>
-                                            <div id="trim-offset-pct-${channel.id}" style="display: ${channel.trim_limit_offset_mode === 'percent' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
-                                                <input type="number" id="risk-trim-offset-pct-${channel.id}" value="${channel.trim_limit_offset_pct || 2.0}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
-                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ff5252; margin-bottom: 8px;">Stop Loss Order Type</label>
-                                    <div style="display: flex; gap: 16px; align-items: center;">
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='flex'">
-                                            <span style="font-size: 12px; color: white;">Limit</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='none'">
-                                            <span style="font-size: 12px; color: white;">Market</span>
-                                        </label>
-                                    </div>
-                                    <div style="display: ${(channel.sl_order_mode || 'limit') === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; margin-top: 8px;" id="sl-limit-offset-container-${channel.id}">
-                                        <label style="font-size: 11px; color: #8E8E93;">Limit Offset %:</label>
-                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset || 0.03) * 100}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
-                                        <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">🔄</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #a78bfa;">Order Chase</label>
-                                        </div>
-                                        <label class="toggle-switch" title="Chase unfilled orders with mid-price replacement">
-                                            <input type="checkbox" id="risk-order-chase-${channel.id}" ${channel.order_chase_enabled === 1 || channel.entry_chase_enabled === 1 ? 'checked' : ''}>
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Chase unfilled orders with mid-price replacement for better fills.</p>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">🏃</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #00ff88;">Leave Runner</label>
-                                        </div>
-                                        <label class="toggle-switch" title="Keep a portion of your position to ride further gains">
-                                            <input type="checkbox" id="risk-leave-runner-enabled-${channel.id}" ${channel.leave_runner_enabled ? 'checked' : ''}>
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Keep a percentage of your position after hitting profit targets.</p>
-                                    <div style="display: flex; align-items: center; gap: 12px;">
-                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Runner Size:</label>
-                                        <input type="number" id="risk-leave-runner-pct-${channel.id}" value="${channel.leave_runner_pct || 25}" placeholder="25" step="1" min="1" max="100" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
-                                        <span style="font-size: 12px; color: #8E8E93;">% of position</span>
                                     </div>
                                 </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
