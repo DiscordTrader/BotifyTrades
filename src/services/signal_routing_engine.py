@@ -382,6 +382,50 @@ class SignalRoutingEngine:
         
         return 1
     
+    def resolve_signal_exit_qty(
+        self,
+        position: LedgerPosition,
+        signal: dict,
+        config: Optional[RoutingMappingConfig] = None
+    ) -> int:
+        remaining = position.remaining_qty
+        if remaining <= 0:
+            return 0
+
+        is_full = signal.get('is_full_exit', False) or signal.get('_phoenix_exit', False)
+        is_trim = signal.get('is_trim', False) or signal.get('_phoenix_trim', False)
+        trim_pct = signal.get('trim_percentage') or signal.get('trim_percent')
+        signal_qty = signal.get('qty', 0) or 0
+
+        runner_size = 0
+        if config and config.leave_runner_enabled and not is_full:
+            runner_size = max(1, int(math.floor(
+                position.entry_qty * (config.leave_runner_size_pct / 100.0)
+            )))
+        max_exit_qty = max(0, remaining - runner_size) if not is_full else remaining
+
+        if is_full:
+            return remaining
+
+        if trim_pct and float(trim_pct) > 0:
+            pct = float(trim_pct)
+            calculated = max(1, int(math.ceil(remaining * (pct / 100.0))))
+            return min(calculated, max_exit_qty)
+
+        if signal_qty > 0:
+            if signal_qty <= remaining:
+                return min(signal_qty, max_exit_qty)
+            else:
+                conservative_qty = max(1, int(math.ceil(remaining * 0.5)))
+                print(f"[ROUTING_ENGINE] ⚠️ Signal qty ({signal_qty}) > user remaining ({remaining}) — ambiguous trim, conservative 50% = {conservative_qty}")
+                return min(conservative_qty, max_exit_qty)
+
+        if is_trim:
+            half_qty = max(1, remaining // 2)
+            return min(half_qty, max_exit_qty)
+
+        return max_exit_qty if max_exit_qty > 0 else remaining
+
     def calculate_exit_quantity(
         self,
         position: LedgerPosition,
@@ -1292,8 +1336,10 @@ class SignalRoutingEngine:
             position = fresh_position
             # ===== END POSITION STATE GATE =====
             
-            actual_exit_qty = exit_qty if exit_qty > 0 else position.remaining_qty
-            actual_exit_qty = min(actual_exit_qty, position.remaining_qty)
+            actual_exit_qty = self.resolve_signal_exit_qty(position, signal, config)
+            if actual_exit_qty <= 0:
+                actual_exit_qty = exit_qty if exit_qty > 0 else position.remaining_qty
+                actual_exit_qty = min(actual_exit_qty, position.remaining_qty)
             
             if actual_exit_qty <= 0:
                 return False

@@ -11643,7 +11643,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt_type = routing_parsed.get('opt_type', 'C')
                                 expiry = routing_parsed.get('expiry', '')
                                 exit_price = float(routing_parsed.get('price', 0) or 0)
-                                is_full_exit = routing_parsed.get('is_full_exit', True)
+                                is_full_exit = routing_parsed.get('is_full_exit', False)
                                 is_trim = routing_parsed.get('is_trim', False)
                                 
                                 # Handle Sir Goldman EXIT/TRIM without symbol - find most recent open position
@@ -11676,8 +11676,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             break
                                     
                                     if matching_position and matching_position.remaining_qty > 0:
-                                        # Calculate exit qty
-                                        exit_qty = matching_position.remaining_qty if is_full_exit else max(1, matching_position.remaining_qty // 2)
+                                        stc_signal_meta = {
+                                            'is_full_exit': is_full_exit,
+                                            'is_trim': is_trim,
+                                            'qty': int(routing_parsed.get('qty', 0) or 0),
+                                            'trim_percentage': routing_parsed.get('trim_percentage') or routing_parsed.get('trim_percent'),
+                                            '_phoenix_exit': routing_parsed.get('_phoenix_exit', False),
+                                            '_phoenix_trim': routing_parsed.get('_phoenix_trim', False),
+                                            '_bishop_trim_percent': routing_parsed.get('_bishop_trim_percent', False),
+                                        }
+                                        exit_qty = routing_engine.resolve_signal_exit_qty(
+                                            matching_position, stc_signal_meta, signal_routing_config
+                                        )
                                         actual_price = exit_price if exit_price > 0 else (matching_position.current_price or matching_position.entry_price)
                                         
                                         success = await routing_engine.post_stc_signal(
@@ -11686,10 +11696,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             exit_qty=exit_qty,
                                             exit_price=actual_price,
                                             exit_reason=ExitReason.SIGNAL,
-                                            pnl_pct=0.0
+                                            pnl_pct=0.0,
+                                            trim_percent=stc_signal_meta.get('trim_percentage')
                                         )
                                         if success:
-                                            print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type} qty={exit_qty}")
+                                            print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type} qty={exit_qty} (remaining={matching_position.remaining_qty})")
                                         else:
                                             print(f"[SIGNAL_ROUTING] ⚠️ STC forward failed for {symbol}")
                                     else:
@@ -16112,8 +16123,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _original_print(f"[{broker_name}] [TRIM FIX] ✓ Recalculated trim from broker position: {signal['qty']} → {recalc_qty} ({trim_pct}% of {matched_qty} contracts)")
                                     signal['qty'] = recalc_qty
                             elif signal['qty'] > matched_qty:
-                                _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
-                                signal['qty'] = matched_qty
+                                import math
+                                conservative_qty = max(1, math.ceil(matched_qty * 0.5))
+                                _original_print(f"[{broker_name}] ⚠️ STC qty mismatch: signal={signal['qty']} > held={matched_qty} — conservative 50% trim = {conservative_qty}")
+                                signal['qty'] = conservative_qty
                     except Exception as e:
                         _original_print(f"[{broker_name}] Position check for STC failed (proceeding): {e}")
                 
@@ -16446,8 +16459,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _original_print(f"[{broker_name}] [TRIM FIX] ✓ Recalculated trim from broker position: {signal['qty']} → {recalc_qty} ({trim_pct}% of {matched_qty} shares)")
                                     signal['qty'] = recalc_qty
                             elif signal['qty'] > matched_qty:
-                                _original_print(f"[{broker_name}] ⚠️ STC qty adjusted: signal={signal['qty']} → actual={matched_qty}")
-                                signal['qty'] = matched_qty
+                                import math
+                                conservative_qty = max(1, math.ceil(matched_qty * 0.5))
+                                _original_print(f"[{broker_name}] ⚠️ STC qty mismatch: signal={signal['qty']} > held={matched_qty} — conservative 50% trim = {conservative_qty}")
+                                signal['qty'] = conservative_qty
                     except Exception as e:
                         _original_print(f"[{broker_name}] Stock position check for STC failed (proceeding): {e}")
 
