@@ -169,8 +169,15 @@ class RiskDBAdapter:
             return self._db.get_connection()
         return None
     
+    _channels_risk_cache = None
+    _channels_risk_cache_ts = 0
+
     def count_channels_with_risk(self) -> int:
-        """Count channels with risk management explicitly enabled."""
+        """Count channels with risk management explicitly enabled (cached 5s)."""
+        import time as _t
+        now = _t.monotonic()
+        if self._channels_risk_cache is not None and (now - self._channels_risk_cache_ts) < 5:
+            return self._channels_risk_cache
         if not self._db:
             return 0
         try:
@@ -180,9 +187,45 @@ class RiskDBAdapter:
                 SELECT COUNT(*) FROM channels 
                 WHERE risk_management_enabled = 1
             ''')
-            return cursor.fetchone()[0]
+            count = cursor.fetchone()[0]
+            RiskDBAdapter._channels_risk_cache = count
+            RiskDBAdapter._channels_risk_cache_ts = now
+            return count
         except Exception as e:
             print(f"[RISK] Warning: Could not count channels with risk: {e}")
+            return 0
+
+    _open_trades_cache = None
+    _open_trades_cache_ts = 0
+
+    def count_open_trades(self, connected_brokers=None) -> int:
+        """Count open BTO trades (cached 2s to avoid DB overhead every cycle).
+        If connected_brokers is provided, only count trades on those brokers."""
+        import time as _t
+        now = _t.monotonic()
+        _cache_key = frozenset(connected_brokers) if connected_brokers else None
+        _cached = getattr(self, '_open_trades_cache_ext', None)
+        if _cached and _cached[0] == _cache_key and (now - _cached[2]) < 2:
+            return _cached[1]
+        if not self._db:
+            return 0
+        try:
+            conn = self._db.get_connection()
+            cursor = conn.cursor()
+            if connected_brokers:
+                placeholders = ','.join(['?' for _ in connected_brokers])
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM trades WHERE status = 'OPEN' AND direction = 'BTO' AND broker IN ({placeholders})",
+                    list(connected_brokers)
+                )
+            else:
+                cursor.execute("SELECT COUNT(*) FROM trades WHERE status = 'OPEN' AND direction = 'BTO'")
+            count = cursor.fetchone()[0]
+            self._open_trades_cache_ext = (_cache_key, count, now)
+            RiskDBAdapter._open_trades_cache = count
+            RiskDBAdapter._open_trades_cache_ts = now
+            return count
+        except Exception:
             return 0
     
     def _get_signal_routing_risk_settings(
@@ -1306,6 +1349,9 @@ class RiskManager:
         if self._webull_broker:
             print(f"[RISK] ✓ Webull broker reference acquired ({type(self._webull_broker).__name__})")
         
+        self._connected_broker_names_cache = None
+        self._connected_broker_names_ts = 0
+        
         self._stuck_price_tracker = {}
         self._STUCK_PRICE_THRESHOLD = 3
         self._rest_repaired_prices = {}
@@ -1736,8 +1782,14 @@ class RiskManager:
                     if not hasattr(self, '_cycle_timing_log_counter'):
                         self._cycle_timing_log_counter = 0
                     self._cycle_timing_log_counter += 1
-                    if self._cycle_timing_log_counter <= 5 or self._cycle_timing_log_counter % 60 == 0 or _cycle_elapsed_ms > 2000:
-                        print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms")
+                    _should_log_timing = (
+                        self._cycle_timing_log_counter <= 5
+                        or self._cycle_timing_log_counter % 100 == 0
+                        or _cycle_elapsed_ms > 500
+                    )
+                    if _should_log_timing:
+                        _detail = getattr(self, '_last_cycle_timing_detail', '')
+                        print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms{_detail}")
                     interval = self._get_adaptive_interval()
                     _sleep_start = _cycle_t.monotonic()
                     _order_event_woke = False
@@ -1834,6 +1886,34 @@ class RiskManager:
         self._service_enabled_cache_ts = now
         return result
     
+    def _get_connected_broker_names(self):
+        """Return set of broker name strings for connected brokers (cached 10s)."""
+        import time as _cbn_t
+        _now = _cbn_t.monotonic()
+        if self._connected_broker_names_cache is not None and (_now - self._connected_broker_names_ts) < 10:
+            return self._connected_broker_names_cache
+        names = set()
+        if self._webull_broker and getattr(self._webull_broker, 'connected', False):
+            names.add('Webull')
+            names.add('WEBULL')
+        if self.schwab_broker and (getattr(self.schwab_broker, 'connected', False) or getattr(self.schwab_broker, 'is_authenticated', lambda: False)()):
+            names.add('SCHWAB')
+            names.add('Schwab')
+        if self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False):
+            names.add('TASTYTRADE_LIVE')
+            names.add('TASTYTRADE')
+        if self.alpaca_broker and getattr(self.alpaca_broker, 'connected', False):
+            names.add('ALPACA_PAPER')
+            names.add('ALPACA_LIVE')
+        if self.robinhood_broker and (getattr(self.robinhood_broker, 'connected', False) or getattr(self.robinhood_broker, '_logged_in', False)):
+            names.add('ROBINHOOD')
+        if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
+            names.add('IBKR_LIVE')
+            names.add('IBKR_PAPER')
+        self._connected_broker_names_cache = names
+        self._connected_broker_names_ts = _now
+        return names
+
     def _get_adaptive_interval(self) -> float:
         """Get monitoring interval - configurable via GUI settings.
         
@@ -1857,12 +1937,18 @@ class RiskManager:
             return min_interval
 
         try:
+            import time as _int_t
+            _int_now = _int_t.monotonic()
+            _cached = getattr(self, '_adaptive_interval_cache', None)
+            if _cached and (_int_now - _cached[1]) < 5:
+                return _cached[0]
             from gui_app.database import get_global_risk_settings
             settings = get_global_risk_settings()
             custom_interval = settings.get('risk_check_interval_seconds')
             if custom_interval is not None:
                 interval = float(custom_interval)
                 if 0.2 <= interval <= 60:
+                    self._adaptive_interval_cache = (interval, _int_now)
                     return interval
         except Exception:
             pass
@@ -1926,9 +2012,16 @@ class RiskManager:
             if channel_count == 0:
                 return
             else:
-                print(f"[RISK] Per-channel risk ACTIVE for {channel_count} channel(s)")
+                if not hasattr(self, '_per_channel_risk_log_ts'):
+                    self._per_channel_risk_log_ts = 0
+                import time as _pcrl_t
+                _pcrl_now = _pcrl_t.monotonic()
+                if (_pcrl_now - self._per_channel_risk_log_ts) > 30:
+                    print(f"[RISK] Per-channel risk ACTIVE for {channel_count} channel(s)")
+                    self._per_channel_risk_log_ts = _pcrl_now
         
         import time as _mc_time
+        _mc_t0 = _mc_time.monotonic()
         _now = _mc_time.time()
         _last_refresh = getattr(self, '_last_periodic_webull_rest_ts', 0)
 
@@ -1951,11 +2044,25 @@ class RiskManager:
             if len(_fw_brokers - {'WEBULL'}) > 0:
                 self._force_rest_refresh = True
 
+        _has_open_positions_or_watches = _fill_watch_active or bool(getattr(self, '_last_positions_snapshot', None))
+        if not _has_open_positions_or_watches:
+            try:
+                _connected = self._get_connected_broker_names()
+                _open_count = self.db_adapter.count_open_trades(connected_brokers=_connected) if _connected else self.db_adapter.count_open_trades()
+            except Exception:
+                _open_count = 1
+            self._last_db_open_count = _open_count
+            _has_open_positions_or_watches = _open_count > 0
+        self._has_open_positions_or_watches_cache = _has_open_positions_or_watches
+
         _pos_refresh_interval = self._POSITION_REST_REFRESH_INTERVAL if _streaming_live else self._PERIODIC_REST_FALLBACK_INTERVAL
 
         if (_now - _last_refresh) > _pos_refresh_interval:
-            self._force_webull_rest_refresh = True
+            if _has_open_positions_or_watches:
+                self._force_webull_rest_refresh = True
             self._last_periodic_webull_rest_ts = _now
+
+        _mc_t1 = _mc_time.monotonic()
 
         if _streaming_live:
             if not getattr(self, '_streaming_mode_logged', False):
@@ -1968,6 +2075,7 @@ class RiskManager:
                 self._rest_fallback_logged = True
             self._streaming_mode_logged = False
         
+        _mc_t2 = _mc_time.monotonic()
         try:
             positions = await self._fetch_all_positions()
         except Exception as e:
@@ -1975,6 +2083,7 @@ class RiskManager:
             import traceback
             traceback.print_exc()
             positions = []
+        _mc_t3 = _mc_time.monotonic()
         
         if not positions:
             if not hasattr(self, '_empty_pos_logged') or not self._empty_pos_logged:
@@ -1982,6 +2091,9 @@ class RiskManager:
                 self._empty_pos_logged = True
             self._last_positions_snapshot = []
             self._update_monitored_symbols([])
+            _fetch_ms = (_mc_t3 - _mc_t2) * 1000
+            _setup_ms = (_mc_t1 - _mc_t0) * 1000
+            self._last_cycle_timing_detail = f" [setup={_setup_ms:.0f}ms fetch={_fetch_ms:.0f}ms pos=0]"
             return
         self._empty_pos_logged = False
         
@@ -2179,6 +2291,14 @@ class RiskManager:
         if (_now_save - self._last_cache_save_ts) >= 2.0:
             self.cache.save()
             self._last_cache_save_ts = _now_save
+
+        _mc_t4 = _mc_time.monotonic()
+        _setup_ms = (_mc_t1 - _mc_t0) * 1000
+        _fetch_ms = (_mc_t3 - _mc_t2) * 1000
+        _eval_ms = (_mc_t4 - _mc_t3) * 1000
+        self._last_cycle_timing_detail = (
+            f" [setup={_setup_ms:.0f}ms fetch={_fetch_ms:.0f}ms eval={_eval_ms:.0f}ms pos={len(positions)}]"
+        )
     
     async def _fetch_all_positions(self) -> List[PositionSnapshot]:
         """Fetch positions from all brokers — hub-first, zero API cost when possible.
@@ -2209,21 +2329,33 @@ class RiskManager:
         if _force_webull:
             self._force_webull_rest_refresh = False
 
+        _has_open = getattr(self, '_has_open_positions_or_watches_cache', True)
         if _force_webull or _force_global:
-            _wb_rate_ok = True
-            if rate_manager:
-                _wb_rate_ok, _ = rate_manager.can_make_request('webull')
-            if _wb_rate_ok:
+            if not _has_open:
                 try:
-                    from src.services.webull_data_hub import get_webull_data_hub as _gwdh
-                    _fhub = _gwdh()
-                    _raw_wb = self._get_raw_webull_client()
-                    if _raw_wb:
-                        if rate_manager:
-                            rate_manager.record_request('webull')
-                        await _fhub.refresh_positions_once(_raw_wb)
+                    _connected = self._get_connected_broker_names()
+                    _open_count = self.db_adapter.count_open_trades(connected_brokers=_connected) if _connected else self.db_adapter.count_open_trades()
                 except Exception:
-                    pass
+                    _open_count = 1
+                _has_open = _open_count > 0 or self._has_active_fill_watches()
+            if _has_open:
+                _wb_rate_ok = True
+                if rate_manager:
+                    _wb_rate_ok, _ = rate_manager.can_make_request('webull')
+                if _wb_rate_ok:
+                    try:
+                        from src.services.webull_data_hub import get_webull_data_hub as _gwdh
+                        _fhub = _gwdh()
+                        _raw_wb = self._get_raw_webull_client()
+                        if _raw_wb:
+                            if rate_manager:
+                                rate_manager.record_request('webull')
+                            try:
+                                await asyncio.wait_for(_fhub.refresh_positions_once(_raw_wb), timeout=3.0)
+                            except asyncio.TimeoutError:
+                                print("[RISK] ⚠️ Webull REST refresh timed out (3s) — using cached data")
+                    except Exception:
+                        pass
         
         try:
             from src.services.webull_data_hub import get_webull_data_hub
@@ -2394,10 +2526,13 @@ class RiskManager:
         _REST_CACHE_TTL = 10
         if _force_global:
             self._force_rest_refresh = False
-            _REST_CACHE_TTL = 0
+            if _has_open:
+                _REST_CACHE_TTL = 0
 
         async def _fetch_webull_rest():
             if webull_snapshots is not None:
+                return []
+            if not _has_open and not self._has_active_fill_watches():
                 return []
             cache_age = _time.time() - getattr(self, '_webull_cache_ts', 0)
             if hasattr(self, '_last_webull_positions') and self._last_webull_positions is not None and cache_age < _REST_CACHE_TTL:
@@ -2526,6 +2661,8 @@ class RiskManager:
                 schwab_cache_age = _time.time() - getattr(self, '_schwab_cache_ts', 0)
                 if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
                     return list(self._last_schwab_positions)
+                if not _has_open and not self._has_active_fill_watches():
+                    return []
                 _schwab_streaming = False
                 try:
                     from src.services.schwab_data_hub import get_schwab_data_hub
@@ -2655,6 +2792,8 @@ class RiskManager:
                 tt_cache_age = _time.time() - getattr(self, '_tastytrade_cache_ts', 0)
                 if hasattr(self, '_last_tastytrade_positions') and self._last_tastytrade_positions is not None and tt_cache_age < _REST_CACHE_TTL:
                     return list(self._last_tastytrade_positions)
+                if not _has_open and not self._has_active_fill_watches():
+                    return []
                 if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('tastytrade')
                     if not can_proceed:
