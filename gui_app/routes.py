@@ -1962,6 +1962,9 @@ def register_routes(app):
             return jsonify({'success': False, 'error': 'Invalid request body'}), 400
         
         VALID_ORDER_MODES = {'market', 'limit'}
+        VALID_EXIT_STRATEGIES = {'signal', 'risk', 'hybrid'}
+        if 'exit_strategy_mode' in data and data['exit_strategy_mode'] not in VALID_EXIT_STRATEGIES:
+            return jsonify({'success': False, 'error': "exit_strategy_mode must be 'signal', 'risk', or 'hybrid'"}), 400
         NUMERIC_FIELDS = {
             'stop_loss_pct': (0, 100), 'trailing_stop_pct': (0, 100), 'trailing_activation_pct': (0, 100),
             'profit_target_1_pct': (0, 1000), 'profit_target_2_pct': (0, 1000),

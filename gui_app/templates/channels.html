@@ -1739,16 +1739,8 @@ function buildRiskControlsTab(ch) {
     const ndxT212Note = t212Only ? ' <span style="color: #64B5F6; font-size: 10px;">(N/A for T212 — stocks only)</span>' : '';
     return `
         <div class="settings-section violet">
-            <div class="settings-section-title">🎯 Exit Strategy</div>
+            <div class="settings-section-title">🎯 Signal Handling</div>
             <div class="settings-row">
-                <div class="settings-field">
-                    <label>Exit Mode</label>
-                    <select onchange="updateExitStrategy(${ch.id}, this.value)">
-                        <option value="signal" ${ch.exit_strategy_mode === 'signal' ? 'selected' : ''}>Signal (Follow Trader)</option>
-                        <option value="risk" ${ch.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk (Auto Targets/Stops)</option>
-                        <option value="hybrid" ${(ch.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'selected' : ''}>Hybrid (Both)</option>
-                    </select>
-                </div>
                 <div style="display: flex; align-items: flex-end;">
                     <div class="settings-toggle-row" style="width: 100%;">
                         <span>Signal Update Automation</span>
@@ -1759,7 +1751,7 @@ function buildRiskControlsTab(ch) {
                     </div>
                 </div>
             </div>
-            <div class="settings-helper">Signal: follow trader exits. Risk: auto PT/SL. Hybrid: both active, first trigger wins.</div>
+            <div class="settings-helper">Exit Mode & Order Chase have moved to the Risk Management section on the Execution page.</div>
         </div>
         <div class="settings-section cyan">
             <div class="settings-section-title">🛡 Slippage Protection</div>
@@ -1801,16 +1793,6 @@ function buildRiskControlsTab(ch) {
                                ${ch.limit_cap_enabled ? '' : 'disabled'} onchange="updateLimitCap(${ch.id}, null, this.value)">
                         <div class="settings-helper">Max price above trigger for conditional orders</div>
                     </div>
-                </div>
-                <div class="settings-field">
-                    <label>Order Chase</label>
-                    <select onchange="updateChaseMode(${ch.id}, this.value)">
-                        <option value="off" ${!ch.entry_chase_enabled && !ch.order_chase_enabled ? 'selected' : ''}>OFF</option>
-                        <option value="entry" ${ch.entry_chase_enabled === 1 && !ch.order_chase_enabled ? 'selected' : ''}>Entry Only</option>
-                        <option value="exit" ${!ch.entry_chase_enabled && ch.order_chase_enabled === 1 ? 'selected' : ''}>Exit Only</option>
-                        <option value="both" ${ch.entry_chase_enabled === 1 && ch.order_chase_enabled === 1 ? 'selected' : ''}>Both</option>
-                    </select>
-                    <div class="settings-helper">Chase unfilled orders with mid-price replacement</div>
                 </div>
             </div>
         </div>

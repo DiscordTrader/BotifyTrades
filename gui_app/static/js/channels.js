@@ -242,6 +242,31 @@ async function loadChannels() {
                                     </label>
                                 </div>
                                 <div id="risk-settings-panel-${channel.id}" style="display: ${channel.risk_management_enabled ? 'block' : 'none'};">
+                                <div id="risk-summary-rail-${channel.id}" style="margin-bottom: 14px; padding: 8px 12px; background: rgba(15,240,179,0.07); border-radius: 8px; border: 1px solid rgba(15,240,179,0.18); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 30px;">
+                                    <span style="color: #8E8E93; font-size: 11px; margin-right: 4px;">Active:</span>
+                                    <span id="risk-summary-pills-${channel.id}"></span>
+                                </div>
+                                <div style="margin-bottom: 14px;">
+                                    <label style="font-size: 11px; color: #8E8E93; display: block; margin-bottom: 6px;">Quick Presets</label>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'scalp')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Scalp</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'swing')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Swing</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'momentum')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Momentum</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'trend')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Trend</button>
+                                    </div>
+                                </div>
+                                <div id="risk-validation-${channel.id}" style="display: none; margin-bottom: 12px; padding: 8px 12px; background: rgba(239,68,68,0.08); border-radius: 8px; border-left: 3px solid #EF4444;">
+                                    <p id="risk-validation-msg-${channel.id}" style="color: #EF4444; margin: 0; font-size: 11px;"></p>
+                                </div>
+                                <div style="display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #3A3A3C; padding-bottom: 0;">
+                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="targets" onclick="switchRiskTab(${channel.id}, 'targets')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid #00d4ff; color: #00d4ff; font-size: 12px; font-weight: 600; cursor: pointer;">Targets & SL</button>
+                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="protection" onclick="switchRiskTab(${channel.id}, 'protection')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: #8E8E93; font-size: 12px; font-weight: 600; cursor: pointer;">Protection</button>
+                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="advanced" onclick="switchRiskTab(${channel.id}, 'advanced')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: #8E8E93; font-size: 12px; font-weight: 600; cursor: pointer;">Advanced</button>
+                                </div>
+
+                                <!-- TAB 1: Targets & SL -->
+                                <div id="risk-tab-targets-${channel.id}" style="display: block;">
+                                <h5 style="margin: 0 0 10px; color: #00d4ff; font-size: 12px;">📊 Profit Targets</h5>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P1 Target %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="e.g. 10" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P2 Target %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="e.g. 20" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -258,14 +283,185 @@ async function loadChannels() {
                                         <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P4 Qty</label><input type="number" id="risk-qty-4-${channel.id}" value="${channel.profit_target_qty_4 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     </div>
                                 </div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px;">
+                                <h5 style="margin: 16px 0 10px; color: #EF4444; font-size: 12px;">🛑 Stop Loss & Trailing</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Stop % <span id="trailing-disabled-note-${channel.id}" style="color: #ff6b6b; font-size: 10px; display: ${channel.enable_early_trailing ? 'inline' : 'none'};">(disabled - Early Trailing active)</span></label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="100" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="500" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
                                 </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 200, 150, 0.05); border: 1px solid rgba(0, 200, 150, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔒</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
+                                            <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion(${channel.id}, this.checked)">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;">Move stop to breakeven after X% gain, then lock profit in step increments. Mutually exclusive with legacy Trailing Stop.</p>
+                                    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Breakeven at:</label>
+                                            <input type="number" id="risk-early-activation-${channel.id}" value="${channel.early_trailing_activation_pct || 5}" placeholder="5" step="0.5" min="1" max="20" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% gain</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Lock profit every:</label>
+                                            <input type="number" id="risk-early-step-${channel.id}" value="${channel.early_trailing_step_pct || 3}" placeholder="3" step="0.5" min="1" max="10" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% more</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <h5 style="margin: 16px 0 10px; color: #10B981; font-size: 12px;">🎯 Exit Strategy Mode</h5>
+                                <div style="padding: 12px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;">
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">Choose how positions are exited when both trader signals and risk management are active.</p>
+                                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                        <label class="exit-mode-opt-${channel.id}" style="flex: 1; min-width: 120px; padding: 10px; border-radius: 8px; border: 2px solid ${(channel.exit_strategy_mode || 'hybrid') === 'signal' ? '#10B981' : 'transparent'}; background: ${(channel.exit_strategy_mode || 'hybrid') === 'signal' ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}; cursor: pointer; text-align: center;">
+                                            <input type="radio" name="exit-strategy-mode-${channel.id}" value="signal" ${(channel.exit_strategy_mode || 'hybrid') === 'signal' ? 'checked' : ''} style="margin-bottom: 4px;" onchange="updateExitModeHighlight(${channel.id})">
+                                            <div style="font-size: 12px; font-weight: 600; color: white;">Signal</div>
+                                            <div style="font-size: 10px; color: #8E8E93;">Follow trader exits</div>
+                                        </label>
+                                        <label class="exit-mode-opt-${channel.id}" style="flex: 1; min-width: 120px; padding: 10px; border-radius: 8px; border: 2px solid ${(channel.exit_strategy_mode || 'hybrid') === 'risk' ? '#10B981' : 'transparent'}; background: ${(channel.exit_strategy_mode || 'hybrid') === 'risk' ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}; cursor: pointer; text-align: center;">
+                                            <input type="radio" name="exit-strategy-mode-${channel.id}" value="risk" ${(channel.exit_strategy_mode || 'hybrid') === 'risk' ? 'checked' : ''} style="margin-bottom: 4px;" onchange="updateExitModeHighlight(${channel.id})">
+                                            <div style="font-size: 12px; font-weight: 600; color: white;">Risk</div>
+                                            <div style="font-size: 10px; color: #8E8E93;">Auto PT/SL only</div>
+                                        </label>
+                                        <label class="exit-mode-opt-${channel.id}" style="flex: 1; min-width: 120px; padding: 10px; border-radius: 8px; border: 2px solid ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? '#10B981' : 'transparent'}; background: ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}; cursor: pointer; text-align: center;">
+                                            <input type="radio" name="exit-strategy-mode-${channel.id}" value="hybrid" ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'checked' : ''} style="margin-bottom: 4px;" onchange="updateExitModeHighlight(${channel.id})">
+                                            <div style="font-size: 12px; font-weight: 600; color: white;">Hybrid</div>
+                                            <div style="font-size: 10px; color: #8E8E93;">Both active</div>
+                                        </label>
+                                    </div>
+                                </div>
+                                </div>
+
+                                <!-- TAB 2: Protection -->
+                                <div id="risk-tab-protection-${channel.id}" style="display: none;">
+                                <div style="padding: 12px; background: rgba(255, 100, 100, 0.05); border: 1px solid rgba(255, 100, 100, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🎯</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #ff6b6b;">Dynamic Stop Loss Escalation</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Automatically move stop loss after hitting profit targets">
+                                            <input type="checkbox" id="risk-dynamic-sl-${channel.id}" ${channel.enable_dynamic_sl ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;">Each time you hit a profit target, your stop loss moves UP to lock in more gains.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Profile:</label>
+                                        <select id="risk-dynamic-sl-profile-${channel.id}" style="padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                            <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative (PT1: BE, PT2: +3%, PT3: +10%, PT4: +20%)</option>
+                                            <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
+                                            <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive (PT1: -2%, PT2: BE, PT3: +10%, PT4: +20%)</option>
+                                        </select>
+                                    </div>
+                                    <div style="margin-top: 10px; padding: 10px; background: rgba(255, 100, 100, 0.03); border: 1px solid rgba(255, 100, 100, 0.12); border-radius: 6px;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <span style="font-size: 14px;">🔒</span>
+                                                <label style="font-size: 12px; font-weight: 600; color: #ff8a80;">SL Escalation Only</label>
+                                            </div>
+                                            <label class="toggle-switch" title="Targets escalate stop loss only — no partial sells">
+                                                <input type="checkbox" id="risk-escalation-only-${channel.id}" ${channel.escalation_only_mode ? 'checked' : ''}>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <p style="font-size: 10px; color: #666; margin: 6px 0 0 0; font-style: italic;">Targets escalate stop loss only — no partial sells.</p>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 200, 0, 0.05); border: 1px solid rgba(255, 200, 0, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🛡️</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #ffc800;">Max Profit Giveback Guard</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Exit if profit drops too much from peak">
+                                            <input type="checkbox" id="risk-giveback-guard-${channel.id}" ${channel.enable_giveback_guard ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Exit if profit drops too much from its highest point. Activates after PT2 or trailing activation threshold.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Max Giveback:</label>
+                                        <input type="number" id="risk-giveback-pct-${channel.id}" value="${channel.giveback_allowed_pct || 30}" placeholder="30" step="1" min="5" max="80" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                        <span style="font-size: 12px; color: #8E8E93;">% from peak profit</span>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 188, 212, 0.05); border: 1px solid rgba(0, 188, 212, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">📊</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00bcd4;">EMA Risk Management</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Monitor EMA crossovers for exit/escalation signals">
+                                            <input type="checkbox" id="risk-ema-enabled-${channel.id}" ${channel.ema_risk_enabled ? 'checked' : ''} onchange="document.getElementById('ema-settings-grid-${channel.id}').style.display = this.checked ? 'block' : 'none';">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Builds live candles, computes EMA, and exits when price crosses unfavorably.</p>
+                                    <div id="ema-settings-grid-${channel.id}" style="display: ${channel.ema_risk_enabled ? 'block' : 'none'};">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">EMA Period</label>
+                                                <select id="risk-ema-period-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                                    <option value="3" ${(channel.ema_period || 5) == 3 ? 'selected' : ''}>3 (Fast)</option>
+                                                    <option value="5" ${(channel.ema_period || 5) == 5 ? 'selected' : ''}>5 (Standard)</option>
+                                                    <option value="8" ${(channel.ema_period || 5) == 8 ? 'selected' : ''}>8 (Moderate)</option>
+                                                    <option value="13" ${(channel.ema_period || 5) == 13 ? 'selected' : ''}>13 (Slow)</option>
+                                                    <option value="21" ${(channel.ema_period || 5) == 21 ? 'selected' : ''}>21 (Very Slow)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Candle Timeframe</label>
+                                                <select id="risk-ema-timeframe-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                                    <option value="1" ${(channel.ema_timeframe_minutes || 5) == 1 ? 'selected' : ''}>1 min</option>
+                                                    <option value="2" ${(channel.ema_timeframe_minutes || 5) == 2 ? 'selected' : ''}>2 min</option>
+                                                    <option value="3" ${(channel.ema_timeframe_minutes || 5) == 3 ? 'selected' : ''}>3 min</option>
+                                                    <option value="5" ${(channel.ema_timeframe_minutes || 5) == 5 ? 'selected' : ''}>5 min</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Buffer %</label>
+                                                <input type="number" id="risk-ema-buffer-${channel.id}" value="${channel.ema_buffer_pct != null ? channel.ema_buffer_pct : 0.1}" placeholder="0.1" step="0.05" min="0" max="2" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            </div>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch"><input type="checkbox" id="risk-ema-exit-${channel.id}" ${channel.ema_exit_enabled !== 0 ? 'checked' : ''}><span class="toggle-slider"></span></label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Exit on Cross</label>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch"><input type="checkbox" id="risk-ema-escalation-${channel.id}" ${channel.ema_escalation_enabled !== 0 ? 'checked' : ''}><span class="toggle-slider"></span></label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Stop Escalation</label>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label style="font-size: 11px; color: #8E8E93;">No-Trend:</label>
+                                                <input type="number" id="risk-ema-no-trend-${channel.id}" value="${channel.ema_no_trend_candles != null ? channel.ema_no_trend_candles : 3}" placeholder="3" step="1" min="1" max="20" style="width: 50px; padding: 6px 8px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                                <span style="font-size: 10px; color: #666;">candles</span>
+                                            </div>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch"><input type="checkbox" id="risk-ema-underlying-${channel.id}" ${channel.ema_use_underlying !== 0 ? 'checked' : ''}><span class="toggle-slider"></span></label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Use Underlying Chart</label>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="toggle-switch"><input type="checkbox" id="risk-ema-extended-${channel.id}" ${channel.ema_extended_hours ? 'checked' : ''}><span class="toggle-slider"></span></label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Extended Hours</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                </div>
+
+                                <!-- TAB 3: Advanced -->
+                                <div id="risk-tab-advanced-${channel.id}" style="display: none;">
+                                <div style="padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
                                     <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Market orders fill immediately. Limit orders place below target for higher fill chance.</p>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                                             <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
@@ -291,7 +487,6 @@ async function loadChannels() {
                                 </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
                                     <label style="display: block; font-size: 12px; font-weight: 600; color: #ff5252; margin-bottom: 8px;">Stop Loss Order Type</label>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Market exits instantly. Limit retries 3x before switching to market.</p>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                                             <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='flex'">
@@ -308,7 +503,20 @@ async function loadChannels() {
                                         <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
                                     </div>
                                 </div>
-                                <div style="margin-top: 16px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔄</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #a78bfa;">Order Chase</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Chase unfilled orders with mid-price replacement">
+                                            <input type="checkbox" id="risk-order-chase-${channel.id}" ${channel.order_chase_enabled === 1 || channel.entry_chase_enabled === 1 ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Chase unfilled orders with mid-price replacement for better fills.</p>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
                                             <span style="font-size: 16px;">🏃</span>
@@ -319,178 +527,14 @@ async function loadChannels() {
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Keep a percentage of your position after hitting profit targets to capture additional gains.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Keep a percentage of your position after hitting profit targets.</p>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Runner Size:</label>
                                         <input type="number" id="risk-leave-runner-pct-${channel.id}" value="${channel.leave_runner_pct || 25}" placeholder="25" step="1" min="1" max="100" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
                                         <span style="font-size: 12px; color: #8E8E93;">% of position</span>
                                     </div>
                                 </div>
-                                <div style="margin-top: 16px; padding: 12px; background: rgba(255, 100, 100, 0.05); border: 1px solid rgba(255, 100, 100, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">🎯</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #ff6b6b;">Dynamic Stop Loss Escalation</label>
-                                        </div>
-                                        <label class="toggle-switch" title="Automatically move stop loss after hitting profit targets">
-                                            <input type="checkbox" id="risk-dynamic-sl-${channel.id}" ${channel.enable_dynamic_sl ? 'checked' : ''}>
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Each time you hit a profit target (PT1, PT2, PT3, PT4), your stop loss automatically moves UP to lock in more gains.</p>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Example:</strong> You buy at $1.00. When you hit PT1 (+10%), Standard profile moves your stop to $1.00 (breakeven) - now you can't lose money. Hit PT2 (+20%)? Stop moves to $1.05 (+5% locked in).</p>
-                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: Stop loss only moves UP (never down). Your original stop loss still protects you before any PT is hit.</p>
-                                    <div style="display: flex; align-items: center; gap: 12px;">
-                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Profile:</label>
-                                        <select id="risk-dynamic-sl-profile-${channel.id}" style="padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
-                                            <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative - Safer, locks gains slowly (PT1: BE, PT2: +3%, PT3: +10%, PT4: +20%)</option>
-                                            <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard - Balanced protection (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
-                                            <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive - More room to run (PT1: -2%, PT2: BE, PT3: +10%, PT4: +20%)</option>
-                                        </select>
-                                    </div>
-                                    <div style="margin-top: 10px; padding: 10px; background: rgba(255, 100, 100, 0.03); border: 1px solid rgba(255, 100, 100, 0.12); border-radius: 6px;">
-                                        <div style="display: flex; align-items: center; justify-content: space-between;">
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <span style="font-size: 14px;">🔒</span>
-                                                <label style="font-size: 12px; font-weight: 600; color: #ff8a80;">SL Escalation Only</label>
-                                            </div>
-                                            <label class="toggle-switch" title="Targets escalate stop loss only — no partial sells">
-                                                <input type="checkbox" id="risk-escalation-only-${channel.id}" ${channel.escalation_only_mode ? 'checked' : ''}>
-                                                <span class="toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                        <p style="font-size: 10px; color: #666; margin: 6px 0 0 0; font-style: italic;">Targets escalate stop loss only — no partial sells. Closing via Early Trailing + Giveback Guard.</p>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 200, 0, 0.05); border: 1px solid rgba(255, 200, 0, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">🛡️</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #ffc800;">Max Profit Giveback Guard</label>
-                                        </div>
-                                        <label class="toggle-switch" title="Exit if profit drops too much from peak">
-                                            <input type="checkbox" id="risk-giveback-guard-${channel.id}" ${channel.enable_giveback_guard ? 'checked' : ''}>
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Protects your gains by exiting if profit drops too much from its highest point.</p>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Example:</strong> Your trade reaches +50% profit (peak). With 30% giveback, if profit drops to +35% (gave back 30% of gains), you exit automatically - keeping +35% instead of watching it fall further.</p>
-                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: Only activates after hitting PT2 or your trailing activation threshold - won't trigger on early volatility.</p>
-                                    <div style="display: flex; align-items: center; gap: 12px;">
-                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Max Giveback:</label>
-                                        <input type="number" id="risk-giveback-pct-${channel.id}" value="${channel.giveback_allowed_pct || 30}" placeholder="30" step="1" min="5" max="80" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
-                                        <span style="font-size: 12px; color: #8E8E93;">% from peak profit</span>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 200, 150, 0.05); border: 1px solid rgba(0, 200, 150, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">🔒</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
-                                        </div>
-                                        <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
-                                            <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion(${channel.id}, this.checked)">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Move stop to breakeven (zero risk) after price gains your activation %, then lock profit in step increments.</p>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Example:</strong> With 5%/3%: At +5% gain, stop moves to entry (breakeven). At +8%, stop locks +3% profit. At +11%, stop locks +6% profit.</p>
-                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: Mutually exclusive with legacy Trailing Stop - enable only one.</p>
-                                    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Breakeven at:</label>
-                                            <input type="number" id="risk-early-activation-${channel.id}" value="${channel.early_trailing_activation_pct || 5}" placeholder="5" step="0.5" min="1" max="20" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
-                                            <span style="font-size: 12px; color: #8E8E93;">% gain</span>
-                                        </div>
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Lock profit every:</label>
-                                            <input type="number" id="risk-early-step-${channel.id}" value="${channel.early_trailing_step_pct || 3}" placeholder="3" step="0.5" min="1" max="10" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
-                                            <span style="font-size: 12px; color: #8E8E93;">% more</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 188, 212, 0.05); border: 1px solid rgba(0, 188, 212, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">📊</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #00bcd4;">EMA Risk Management</label>
-                                            <span style="font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: ${channel.ema_risk_enabled ? 'rgba(0, 188, 212, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.ema_risk_enabled ? 'rgba(0, 188, 212, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; color: ${channel.ema_risk_enabled ? '#00bcd4' : '#8E8E93'};">${channel.ema_risk_enabled ? 'ENABLED' : 'DISABLED'}</span>
-                                        </div>
-                                        <label class="toggle-switch" title="Monitor EMA crossovers for exit/escalation signals">
-                                            <input type="checkbox" id="risk-ema-enabled-${channel.id}" ${channel.ema_risk_enabled ? 'checked' : ''} onchange="document.getElementById('ema-settings-grid-${channel.id}').style.display = this.checked ? 'block' : 'none';">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Builds live candles from streaming data, computes EMA, and exits when price crosses below EMA (calls/stocks) or above (puts).</p>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Priority 2.5:</strong> Runs after Dynamic SL but before Giveback Guard. Can also escalate stop loss toward EMA level.</p>
-                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: EMA needs ${channel.ema_period || 5} completed candles to seed. Until then, other risk rules protect your position.</p>
-                                    <div id="ema-settings-grid-${channel.id}" style="display: ${channel.ema_risk_enabled ? 'block' : 'none'};">
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
-                                            <div>
-                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">EMA Period</label>
-                                                <select id="risk-ema-period-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
-                                                    <option value="3" ${(channel.ema_period || 5) == 3 ? 'selected' : ''}>3 (Fast)</option>
-                                                    <option value="5" ${(channel.ema_period || 5) == 5 ? 'selected' : ''}>5 (Standard)</option>
-                                                    <option value="8" ${(channel.ema_period || 5) == 8 ? 'selected' : ''}>8 (Moderate)</option>
-                                                    <option value="13" ${(channel.ema_period || 5) == 13 ? 'selected' : ''}>13 (Slow)</option>
-                                                    <option value="21" ${(channel.ema_period || 5) == 21 ? 'selected' : ''}>21 (Very Slow)</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Candle Timeframe</label>
-                                                <select id="risk-ema-timeframe-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
-                                                    <option value="1" ${(channel.ema_timeframe_minutes || 5) == 1 ? 'selected' : ''}>1 min (Fastest seed)</option>
-                                                    <option value="2" ${(channel.ema_timeframe_minutes || 5) == 2 ? 'selected' : ''}>2 min</option>
-                                                    <option value="3" ${(channel.ema_timeframe_minutes || 5) == 3 ? 'selected' : ''}>3 min</option>
-                                                    <option value="5" ${(channel.ema_timeframe_minutes || 5) == 5 ? 'selected' : ''}>5 min (Recommended)</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Buffer %</label>
-                                                <input type="number" id="risk-ema-buffer-${channel.id}" value="${channel.ema_buffer_pct != null ? channel.ema_buffer_pct : 0.1}" placeholder="0.1" step="0.05" min="0" max="2" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;" title="Buffer zone around EMA to prevent whipsaw exits">
-                                            </div>
-                                        </div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <label class="toggle-switch" title="Exit position when price crosses EMA unfavorably">
-                                                    <input type="checkbox" id="risk-ema-exit-${channel.id}" ${channel.ema_exit_enabled !== 0 ? 'checked' : ''}>
-                                                    <span class="toggle-slider"></span>
-                                                </label>
-                                                <label style="font-size: 11px; color: #8E8E93;">Exit on Cross</label>
-                                            </div>
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <label class="toggle-switch" title="Escalate stop loss toward EMA when price is favorable">
-                                                    <input type="checkbox" id="risk-ema-escalation-${channel.id}" ${channel.ema_escalation_enabled !== 0 ? 'checked' : ''}>
-                                                    <span class="toggle-slider"></span>
-                                                </label>
-                                                <label style="font-size: 11px; color: #8E8E93;">Stop Escalation</label>
-                                            </div>
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">No-Trend Guard:</label>
-                                                <input type="number" id="risk-ema-no-trend-${channel.id}" value="${channel.ema_no_trend_candles != null ? channel.ema_no_trend_candles : 3}" placeholder="3" step="1" min="1" max="20" style="width: 50px; padding: 6px 8px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;" title="Auto-exit if price never moves to favorable side of EMA after this many completed candles">
-                                                <span style="font-size: 10px; color: #666;">candles</span>
-                                            </div>
-                                        </div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <label class="toggle-switch" title="For options like SPY 600C, monitor SPY's chart instead of the option price. Underlying has cleaner price action for EMA signals.">
-                                                    <input type="checkbox" id="risk-ema-underlying-${channel.id}" ${channel.ema_use_underlying !== 0 ? 'checked' : ''}>
-                                                    <span class="toggle-slider"></span>
-                                                </label>
-                                                <label style="font-size: 11px; color: #8E8E93;">Use Underlying Chart</label>
-                                                <span style="font-size: 10px; color: #555; cursor: help;" title="For options like SPY 600C, monitor SPY's chart instead of the option price. Underlying has cleaner price action for EMA signals.">ℹ️</span>
-                                            </div>
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <label class="toggle-switch" title="Build candles during pre-market/after-hours (4AM-8PM ET)">
-                                                    <input type="checkbox" id="risk-ema-extended-${channel.id}" ${channel.ema_extended_hours ? 'checked' : ''}>
-                                                    <span class="toggle-slider"></span>
-                                                </label>
-                                                <label style="font-size: 11px; color: #8E8E93;">Extended Hours</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 16px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
                                             <span style="font-size: 16px;">📊</span>
@@ -501,8 +545,10 @@ async function loadChannels() {
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Post a P/L summary message to Discord when STC signals close positions for this channel.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Post a P/L summary message to Discord when STC signals close positions.</p>
                                 </div>
+                                </div>
+
                                 <button onclick="saveRiskManagement(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Risk Settings</button>
                                 </div>
                             </td>
@@ -637,6 +683,7 @@ async function loadChannels() {
         // Load allowed users for each channel
         channels.forEach(channel => {
             loadAllowedUsers(channel.id);
+            initRiskRowListeners(channel.id);
         });
         
     } catch (error) {
@@ -1371,7 +1418,9 @@ async function saveRiskManagement(channelId) {
         const slLimitOffset = document.getElementById(`risk-sl-limit-offset-${channelId}`).value;
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         const escalationOnlyMode = document.getElementById(`risk-escalation-only-${channelId}`)?.checked ? 1 : 0;
-        
+        const exitStrategyMode = document.querySelector(`input[name="exit-strategy-mode-${channelId}"]:checked`)?.value || 'hybrid';
+        const orderChaseEnabled = document.getElementById(`risk-order-chase-${channelId}`)?.checked ? 1 : 0;
+
         // Enhanced risk settings
         const enableDynamicSl = document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked ? 1 : 0;
         const dynamicSlProfile = document.getElementById(`risk-dynamic-sl-profile-${channelId}`)?.value || 'standard';
@@ -1439,6 +1488,9 @@ async function saveRiskManagement(channelId) {
                 ema_use_underlying: emaUseUnderlying,
                 ema_extended_hours: emaExtendedHours,
                 escalation_only_mode: escalationOnlyMode,
+                exit_strategy_mode: exitStrategyMode,
+                order_chase_enabled: orderChaseEnabled,
+                entry_chase_enabled: orderChaseEnabled,
                 use_global_risk_settings: 0
         };
         const response = await fetch(`/api/channels/${channelId}`, {
@@ -1459,6 +1511,199 @@ async function saveRiskManagement(channelId) {
         console.error('Failed to save risk management settings:', error);
         showMessage('❌ Failed to save settings', 'error');
     }
+}
+
+function switchRiskTab(channelId, tabName) {
+    document.querySelectorAll(`.risk-tab-btn-${channelId}`).forEach(b => {
+        b.style.borderBottomColor = 'transparent';
+        b.style.color = '#8E8E93';
+    });
+    ['targets', 'protection', 'advanced'].forEach(t => {
+        const pane = document.getElementById(`risk-tab-${t}-${channelId}`);
+        if (pane) pane.style.display = 'none';
+    });
+    const activeBtn = document.querySelector(`.risk-tab-btn-${channelId}[data-risk-tab="${tabName}"]`);
+    if (activeBtn) {
+        activeBtn.style.borderBottomColor = '#00d4ff';
+        activeBtn.style.color = '#00d4ff';
+    }
+    const activePane = document.getElementById(`risk-tab-${tabName}-${channelId}`);
+    if (activePane) activePane.style.display = 'block';
+}
+
+function updateRiskSummaryRail(channelId) {
+    const pills = [];
+    const pill = (text, color) => `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:${color}22;color:${color};border:1px solid ${color}44;">${text}</span>`;
+    const sl = parseFloat(document.getElementById(`risk-stop-loss-${channelId}`)?.value) || 0;
+    if (sl > 0) pills.push(pill('SL ' + sl + '%', '#EF4444'));
+    const pts = [1,2,3,4].filter(i => parseFloat(document.getElementById(`risk-profit-target-${i}-${channelId}`)?.value) > 0);
+    if (pts.length > 0) pills.push(pill('PT' + pts.join('/'), '#00d4ff'));
+    const trail = parseFloat(document.getElementById(`risk-trailing-stop-${channelId}`)?.value) || 0;
+    if (trail > 0) pills.push(pill('Trail ' + trail + '%', '#F59E0B'));
+    if (document.getElementById(`risk-early-trailing-${channelId}`)?.checked) pills.push(pill('Early Trail', '#e879f9'));
+    if (document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked) pills.push(pill('Dyn SL', '#F59E0B'));
+    if (document.getElementById(`risk-escalation-only-${channelId}`)?.checked) pills.push(pill('Esc Only', '#F59E0B'));
+    if (document.getElementById(`risk-giveback-guard-${channelId}`)?.checked) pills.push(pill('Giveback', '#17a2b8'));
+    if (document.getElementById(`risk-ema-enabled-${channelId}`)?.checked) pills.push(pill('EMA', '#38bdf8'));
+    if (document.getElementById(`risk-order-chase-${channelId}`)?.checked) pills.push(pill('Chase', '#7C3AED'));
+    if (document.getElementById(`risk-leave-runner-enabled-${channelId}`)?.checked) pills.push(pill('Runner', '#7C3AED'));
+    const pillsEl = document.getElementById(`risk-summary-pills-${channelId}`);
+    if (pillsEl) pillsEl.innerHTML = pills.length > 0 ? pills.join(' ') : '<span style="color:#8E8E93;font-size:11px;">No risk features enabled</span>';
+}
+
+function validateRiskSettings(channelId) {
+    const warnings = [];
+    const pt1 = parseFloat(document.getElementById(`risk-profit-target-1-${channelId}`)?.value) || 0;
+    const pt2 = parseFloat(document.getElementById(`risk-profit-target-2-${channelId}`)?.value) || 0;
+    const pt3 = parseFloat(document.getElementById(`risk-profit-target-3-${channelId}`)?.value) || 0;
+    const pt4 = parseFloat(document.getElementById(`risk-profit-target-4-${channelId}`)?.value) || 0;
+    const sl = parseFloat(document.getElementById(`risk-stop-loss-${channelId}`)?.value) || 0;
+    const trail = parseFloat(document.getElementById(`risk-trailing-stop-${channelId}`)?.value) || 0;
+    const earlyOn = document.getElementById(`risk-early-trailing-${channelId}`)?.checked;
+    const earlyAct = parseFloat(document.getElementById(`risk-early-activation-${channelId}`)?.value) || 0;
+    const escOnly = document.getElementById(`risk-escalation-only-${channelId}`)?.checked;
+    const dynSl = document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked;
+    const activePTs = [pt1, pt2, pt3, pt4].filter(v => v > 0);
+    for (let i = 1; i < activePTs.length; i++) {
+        if (activePTs[i] <= activePTs[i-1]) { warnings.push('Profit targets must be in ascending order.'); break; }
+    }
+    if (sl > 0 && activePTs.length > 0 && sl >= activePTs[0]) {
+        warnings.push(`Stop loss (${sl}%) is >= your lowest PT (${activePTs[0]}%). The SL could trigger before any profit target.`);
+    }
+    if (earlyOn && trail > 0) {
+        warnings.push('Both Early Trailing and Legacy Trailing are configured. Early Trailing takes priority.');
+    }
+    if (earlyOn && earlyAct <= 0) {
+        warnings.push('Early Trailing is enabled but activation % is 0. It will not activate.');
+    }
+    if (escOnly && !dynSl && !earlyOn) {
+        warnings.push('SL Escalation Only is enabled but neither Dynamic SL nor Early Trailing is active. Stop loss will not escalate.');
+    }
+    const validEl = document.getElementById(`risk-validation-${channelId}`);
+    const msgEl = document.getElementById(`risk-validation-msg-${channelId}`);
+    if (validEl && msgEl) {
+        if (warnings.length > 0) {
+            msgEl.innerHTML = warnings.map(w => '\u26a0\ufe0f ' + w).join('<br>');
+            validEl.style.display = 'block';
+        } else {
+            validEl.style.display = 'none';
+        }
+    }
+}
+
+function updateExitModeHighlight(channelId) {
+    document.querySelectorAll(`.exit-mode-opt-${channelId}`).forEach(opt => {
+        const radio = opt.querySelector('input[type="radio"]');
+        opt.style.border = radio?.checked ? '2px solid #10B981' : '2px solid transparent';
+        opt.style.background = radio?.checked ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)';
+    });
+    updateRiskSummaryRail(channelId);
+}
+
+function applyRiskPreset(channelId, preset) {
+    const presets = {
+        scalp: { pt1: 10, pt2: 20, pt3: 0, pt4: 0, sl: 15, trail: 0, trail_act: 0, early: true, early_act: 5, early_step: 3, dynamic: false, escalation: false, giveback: true, giveback_pct: 30, ema: false, ema_period: 5, ema_tf: 1, ema_buffer: 0.1, ema_exit: true, ema_esc: true, ema_ext: false, ema_under: true, ema_notrend: 3, runner: false, runner_pct: 25, exit_mode: 'risk', trim_order: 'market', sl_order: 'market', chase: false, sl_profile: 'standard', trim_offset_mode: 'dollar', trim_offset_dollar: 0.01, trim_offset_pct: 2.0, sl_offset: 3 },
+        swing: { pt1: 15, pt2: 30, pt3: 50, pt4: 75, sl: 25, trail: 15, trail_act: 30, early: false, early_act: 5, early_step: 3, dynamic: true, escalation: false, giveback: true, giveback_pct: 35, ema: true, ema_period: 5, ema_tf: 5, ema_buffer: 0.1, ema_exit: true, ema_esc: true, ema_ext: false, ema_under: true, ema_notrend: 3, runner: true, runner_pct: 25, exit_mode: 'hybrid', trim_order: 'limit', sl_order: 'limit', chase: true, sl_profile: 'standard', trim_offset_mode: 'dollar', trim_offset_dollar: 0.01, trim_offset_pct: 2.0, sl_offset: 3 },
+        momentum: { pt1: 20, pt2: 40, pt3: 60, pt4: 100, sl: 20, trail: 0, trail_act: 0, early: true, early_act: 8, early_step: 5, dynamic: true, escalation: true, giveback: true, giveback_pct: 25, ema: false, ema_period: 5, ema_tf: 5, ema_buffer: 0.1, ema_exit: true, ema_esc: true, ema_ext: false, ema_under: true, ema_notrend: 3, runner: true, runner_pct: 30, exit_mode: 'risk', trim_order: 'market', sl_order: 'market', chase: false, sl_profile: 'aggressive', trim_offset_mode: 'dollar', trim_offset_dollar: 0.01, trim_offset_pct: 2.0, sl_offset: 3 },
+        trend: { pt1: 25, pt2: 50, pt3: 100, pt4: 150, sl: 30, trail: 20, trail_act: 40, early: false, early_act: 10, early_step: 5, dynamic: true, escalation: false, giveback: true, giveback_pct: 40, ema: true, ema_period: 5, ema_tf: 5, ema_buffer: 0.15, ema_exit: true, ema_esc: true, ema_ext: false, ema_under: true, ema_notrend: 5, runner: true, runner_pct: 30, exit_mode: 'hybrid', trim_order: 'limit', sl_order: 'limit', chase: true, sl_profile: 'standard', trim_offset_mode: 'dollar', trim_offset_dollar: 0.01, trim_offset_pct: 2.0, sl_offset: 3 }
+    };
+    const p = presets[preset];
+    if (!p) return;
+
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    const setChk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
+
+    setVal(`risk-profit-target-1-${channelId}`, p.pt1 || '');
+    setVal(`risk-profit-target-2-${channelId}`, p.pt2 || '');
+    setVal(`risk-profit-target-3-${channelId}`, p.pt3 || '');
+    setVal(`risk-profit-target-4-${channelId}`, p.pt4 || '');
+    setVal(`risk-qty-1-${channelId}`, '');
+    setVal(`risk-qty-2-${channelId}`, '');
+    setVal(`risk-qty-3-${channelId}`, '');
+    setVal(`risk-qty-4-${channelId}`, '');
+    setVal(`risk-stop-loss-${channelId}`, p.sl || '');
+    setVal(`risk-trailing-stop-${channelId}`, p.trail || '');
+    setVal(`risk-trailing-activation-${channelId}`, p.trail_act || '');
+
+    setChk(`risk-early-trailing-${channelId}`, p.early);
+    setVal(`risk-early-activation-${channelId}`, p.early_act);
+    setVal(`risk-early-step-${channelId}`, p.early_step);
+    toggleEarlyTrailingExclusion(channelId, p.early);
+
+    setChk(`risk-dynamic-sl-${channelId}`, p.dynamic);
+    const profileEl = document.getElementById(`risk-dynamic-sl-profile-${channelId}`);
+    if (profileEl) profileEl.value = p.sl_profile;
+    setChk(`risk-escalation-only-${channelId}`, p.escalation);
+    setChk(`risk-giveback-guard-${channelId}`, p.giveback);
+    setVal(`risk-giveback-pct-${channelId}`, p.giveback_pct);
+
+    setChk(`risk-ema-enabled-${channelId}`, p.ema);
+    const emaGrid = document.getElementById(`ema-settings-grid-${channelId}`);
+    if (emaGrid) emaGrid.style.display = p.ema ? 'block' : 'none';
+    setVal(`risk-ema-period-${channelId}`, p.ema_period);
+    setVal(`risk-ema-timeframe-${channelId}`, p.ema_tf);
+    setVal(`risk-ema-buffer-${channelId}`, p.ema_buffer);
+    setChk(`risk-ema-exit-${channelId}`, p.ema_exit);
+    setChk(`risk-ema-escalation-${channelId}`, p.ema_esc);
+    setChk(`risk-ema-extended-${channelId}`, p.ema_ext);
+    setChk(`risk-ema-underlying-${channelId}`, p.ema_under);
+    setVal(`risk-ema-no-trend-${channelId}`, p.ema_notrend);
+
+    setChk(`risk-leave-runner-enabled-${channelId}`, p.runner);
+    setVal(`risk-leave-runner-pct-${channelId}`, p.runner_pct);
+    setChk(`risk-order-chase-${channelId}`, p.chase);
+
+    const trimRadio = document.querySelector(`input[name="trim-order-mode-${channelId}"][value="${p.trim_order}"]`);
+    if (trimRadio) trimRadio.checked = true;
+    const limContainer = document.getElementById(`limit-offset-container-${channelId}`);
+    if (limContainer) limContainer.style.display = p.trim_order === 'limit' ? 'flex' : 'none';
+    const slRadio = document.querySelector(`input[name="sl-order-mode-${channelId}"][value="${p.sl_order}"]`);
+    if (slRadio) slRadio.checked = true;
+    const slContainer = document.getElementById(`sl-limit-offset-container-${channelId}`);
+    if (slContainer) slContainer.style.display = p.sl_order === 'limit' ? 'flex' : 'none';
+
+    setVal(`risk-trim-offset-mode-${channelId}`, p.trim_offset_mode);
+    setVal(`risk-trim-offset-${channelId}`, p.trim_offset_dollar);
+    setVal(`risk-trim-offset-pct-${channelId}`, p.trim_offset_pct);
+    const dol = document.getElementById(`trim-offset-dollar-${channelId}`);
+    const pctD = document.getElementById(`trim-offset-pct-${channelId}`);
+    if (dol) dol.style.display = p.trim_offset_mode === 'dollar' ? 'flex' : 'none';
+    if (pctD) pctD.style.display = p.trim_offset_mode === 'percent' ? 'flex' : 'none';
+    setVal(`risk-sl-limit-offset-${channelId}`, p.sl_offset);
+
+    const exitRadio = document.querySelector(`input[name="exit-strategy-mode-${channelId}"][value="${p.exit_mode}"]`);
+    if (exitRadio) exitRadio.checked = true;
+    updateExitModeHighlight(channelId);
+
+    document.querySelectorAll(`.risk-preset-btn-${channelId}`).forEach(b => {
+        b.style.borderColor = 'rgba(255,255,255,0.12)';
+        b.style.background = 'rgba(255,255,255,0.04)';
+        b.style.color = '#8E8E93';
+    });
+    const activeBtn = document.querySelector(`.risk-preset-btn-${channelId}[onclick="applyRiskPreset(${channelId}, '${preset}')"]`);
+    if (activeBtn) {
+        activeBtn.style.borderColor = '#00d4ff';
+        activeBtn.style.background = 'rgba(0,212,255,0.12)';
+        activeBtn.style.color = '#00d4ff';
+    }
+
+    updateRiskSummaryRail(channelId);
+    validateRiskSettings(channelId);
+}
+
+function initRiskRowListeners(channelId) {
+    const inputIds = [`risk-profit-target-1-${channelId}`, `risk-profit-target-2-${channelId}`, `risk-profit-target-3-${channelId}`, `risk-profit-target-4-${channelId}`, `risk-stop-loss-${channelId}`, `risk-trailing-stop-${channelId}`, `risk-early-activation-${channelId}`];
+    inputIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => { updateRiskSummaryRail(channelId); validateRiskSettings(channelId); });
+    });
+    const changeIds = [`risk-early-trailing-${channelId}`, `risk-dynamic-sl-${channelId}`, `risk-giveback-guard-${channelId}`, `risk-order-chase-${channelId}`, `risk-escalation-only-${channelId}`, `risk-leave-runner-enabled-${channelId}`, `risk-ema-enabled-${channelId}`];
+    changeIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => { updateRiskSummaryRail(channelId); validateRiskSettings(channelId); });
+    });
+    updateRiskSummaryRail(channelId);
+    validateRiskSettings(channelId);
 }
 
 // Show User Performance Modal
