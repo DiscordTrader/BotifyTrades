@@ -64,6 +64,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Session-Aware REST Price Guard**: REST fallback methods reject stale `last`/`lastPrice` values outside regular trading hours, accepting only bid/ask midpoint or Webull pPrice during extended hours.
 - **SYNC-RISK Coordination Guard**: `broker_sync_service.py` checks the risk engine position cache before cancelling or closing trades, preventing erroneous actions due to transient broker API issues.
 - **Channel Inheritance on Auto-Import**: `auto_import_manual_position` now inherits `channel_id` from recently-closed trades for consistent risk settings.
+- **Discord ID Precision Fix**: All `channels.js` onclick/onchange handlers now pass `channel.id` as quoted strings to prevent JavaScript `Number.MAX_SAFE_INTEGER` precision loss for 18-19 digit Discord IDs. Without quoting, IDs like `1453888723273943181` become `1453888723273943296`, causing `getElementById` mismatches.
 
 ## External Dependencies
 

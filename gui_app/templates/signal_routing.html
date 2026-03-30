@@ -1353,15 +1353,15 @@ document.addEventListener('DOMContentLoaded', function() {
             stop_loss_pct: parseFloat(document.getElementById('risk-stop-loss').value) || 0,
             trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
             trailing_activation_pct: parseFloat(document.getElementById('risk-trailing-activation').value) || 15,
-            trim_order_type: document.querySelector('input[name="trim-order-type"]:checked').value,
-            sl_order_type: document.querySelector('input[name="sl-order-type"]:checked').value,
+            trim_order_type: document.querySelector('input[name="trim-order-type"]:checked')?.value || 'market',
+            sl_order_type: document.querySelector('input[name="sl-order-type"]:checked')?.value || 'limit',
             leave_runner_enabled: document.getElementById('risk-leave-runner').checked ? 1 : 0,
             leave_runner_size_pct: parseFloat(document.getElementById('risk-runner-size').value) || 25,
             dynamic_sl_escalation_enabled: document.getElementById('risk-dynamic-sl').checked ? 1 : 0,
             sl_escalation_profile: document.getElementById('risk-sl-profile').value,
             max_profit_giveback_enabled: document.getElementById('risk-giveback').checked ? 1 : 0,
             max_profit_giveback_pct: parseFloat(document.getElementById('risk-giveback-pct').value) || 30,
-            exit_strategy_mode: document.querySelector('input[name="exit-strategy-mode"]:checked').value,
+            exit_strategy_mode: document.querySelector('input[name="exit-strategy-mode"]:checked')?.value || 'risk',
             order_chase_enabled: document.getElementById('risk-order-chase').checked ? 1 : 0,
             escalation_only_mode: document.getElementById('risk-escalation-only').checked ? 1 : 0,
             enable_early_trailing: document.getElementById('risk-early-trailing').checked ? 1 : 0,
@@ -1532,15 +1532,18 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('risk-leave-runner').checked = p.runner;
         document.getElementById('risk-runner-size').value = p.runner_pct;
         document.getElementById('risk-order-chase').checked = p.chase;
-        document.querySelector(`input[name="trim-order-type"][value="${p.trim_order}"]`).checked = true;
-        document.querySelector(`input[name="sl-order-type"][value="${p.sl_order}"]`).checked = true;
+        const trimPresetEl = document.querySelector(`input[name="trim-order-type"][value="${p.trim_order}"]`);
+        if (trimPresetEl) trimPresetEl.checked = true;
+        const slPresetEl = document.querySelector(`input[name="sl-order-type"][value="${p.sl_order}"]`);
+        if (slPresetEl) slPresetEl.checked = true;
         document.getElementById('risk-trim-offset-mode').value = p.trim_offset_mode;
         document.getElementById('risk-trim-offset-dollar').value = p.trim_offset_dollar;
         document.getElementById('risk-trim-offset-pct').value = p.trim_offset_pct;
         document.getElementById('risk-trim-offset-dollar').style.display = p.trim_offset_mode === 'dollar' ? 'block' : 'none';
         document.getElementById('risk-trim-offset-pct').style.display = p.trim_offset_mode === 'percent' ? 'block' : 'none';
         document.getElementById('risk-sl-offset').value = p.sl_offset;
-        document.querySelector(`input[name="exit-strategy-mode"][value="${p.exit_mode}"]`).checked = true;
+        const exitPresetEl = document.querySelector(`input[name="exit-strategy-mode"][value="${p.exit_mode}"]`);
+        if (exitPresetEl) exitPresetEl.checked = true;
         document.querySelectorAll('.exit-mode-option').forEach(opt => {
             const radio = opt.querySelector('input[type="radio"]');
             opt.style.border = radio.checked ? '2px solid var(--success)' : '2px solid transparent';
