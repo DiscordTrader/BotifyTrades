@@ -1756,6 +1756,7 @@ def init_db():
         ('early_trailing_activation_pct', 'REAL DEFAULT 5.0'),
         ('early_trailing_step_pct', 'REAL DEFAULT 3.0'),
         ('order_chase_enabled', 'INTEGER DEFAULT NULL'),
+        ('entry_chase_enabled', 'INTEGER DEFAULT NULL'),
         ('escalation_only_mode', 'INTEGER DEFAULT 0'),
         ('ema_risk_enabled', 'INTEGER DEFAULT 0'),
         ('ema_period', 'INTEGER DEFAULT 5'),
