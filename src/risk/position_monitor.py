@@ -2243,6 +2243,12 @@ class RiskManager:
                     asset_type = pos.get('assetType', 'unknown')
                     is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos or asset_type in ('option', 'OPTION', 'OPT'))
                     
+                    if not is_option:
+                        _upper_sym = (symbol or '').upper()
+                        if _upper_sym in self._INDEX_TO_CANONICAL:
+                            is_option = True
+                            print(f"[RISK] ✓ INDEX GUARD: Forced {symbol} to option (index symbols are always options, never stocks)")
+
                     if not is_option and hasattr(self, '_webull_enrichment_cache'):
                         _tid_check = pos.get('tickerId', 0) or pos.get('ticker', {}).get('tickerId', 0)
                         _oid_check = pos.get('optionId', 0)
@@ -2427,6 +2433,11 @@ class RiskManager:
                             continue
                         symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
                         is_option = ('optionId' in pos or 'strikePrice' in pos or 'expireDate' in pos)
+                        if not is_option:
+                            _upper_sym = (symbol or '').upper()
+                            if _upper_sym in self._INDEX_TO_CANONICAL:
+                                is_option = True
+                                print(f"[RISK] ✓ INDEX GUARD: Forced {symbol} to option (fallback path — index symbols are always options)")
                         if not is_option and hasattr(self, '_stable_option_symbols'):
                             _bs_key = f"Webull_{symbol}"
                             if _bs_key in self._stable_option_symbols:
@@ -3096,6 +3107,43 @@ class RiskManager:
         
         pct_change = position.pct_change
         
+        if position.avg_cost <= 0:
+            if not hasattr(self, '_zero_entry_logged'):
+                self._zero_entry_logged = set()
+            if pos_key not in self._zero_entry_logged:
+                self._zero_entry_logged.add(pos_key)
+                print(f"[RISK] 🛡️ ENTRY GUARD: {pos_key} has zero/negative avg_cost (${position.avg_cost}) — "
+                      f"skipping risk evaluation until entry price is resolved")
+            return
+
+        _ABSURD_PNL_THRESHOLD = 500.0
+        if abs(pct_change) > _ABSURD_PNL_THRESHOLD:
+            if not hasattr(self, '_absurd_pnl_defer'):
+                self._absurd_pnl_defer = {}
+            import time as _apt
+            _defer_info = self._absurd_pnl_defer.get(pos_key)
+            if _defer_info is None:
+                self._absurd_pnl_defer[pos_key] = {'since': _apt.time(), 'count': 1}
+                print(f"[RISK] 🛡️ ABSURD PNL GUARD: {pos_key} showing {pct_change:.1f}% "
+                      f"(entry=${position.avg_cost}, current=${position.current_price}) — "
+                      f"deferring exit for data stabilization")
+                return
+            elif _defer_info['count'] < 3:
+                _defer_info['count'] += 1
+                print(f"[RISK] 🛡️ ABSURD PNL GUARD: {pos_key} still at {pct_change:.1f}% "
+                      f"— defer cycle {_defer_info['count']}/3")
+                return
+            else:
+                elapsed = _apt.time() - _defer_info['since']
+                print(f"[RISK] ⚠️ ABSURD PNL GUARD: {pos_key} at {pct_change:.1f}% persisted through "
+                      f"3 cycles ({elapsed:.1f}s) — proceeding with evaluation (may be genuine)")
+                del self._absurd_pnl_defer[pos_key]
+
+        if hasattr(self, '_zero_entry_logged') and pos_key in self._zero_entry_logged:
+            self._zero_entry_logged.discard(pos_key)
+        if hasattr(self, '_absurd_pnl_defer') and pos_key in self._absurd_pnl_defer:
+            del self._absurd_pnl_defer[pos_key]
+
         channel_settings = cache.channel_settings
         if channel_settings is None:
             call_put = self._normalize_call_put(position.direction)
