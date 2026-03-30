@@ -724,9 +724,9 @@
                     <div class="form-group" style="margin: 0;">
                         <label style="font-size: 0.85rem;">Profile</label>
                         <select id="risk-sl-profile" class="form-input">
-                            <option value="conservative">Conservative (PT1: BE, PT2: +2%, PT3: +5%, PT4: +10%)</option>
-                            <option value="standard" selected>Standard - Balanced (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
-                            <option value="aggressive">Aggressive (PT1: BE, PT2: +10%, PT3: +25%, PT4: +40%)</option>
+                            <option value="conservative">Conservative (PT1: BE, PT2: +3%, PT3: +10%, PT4: +20%)</option>
+                            <option value="standard" selected>Standard (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
+                            <option value="aggressive">Aggressive (PT1: -2%, PT2: BE, PT3: +10%, PT4: +20%)</option>
                         </select>
                     </div>
                 </div>
@@ -1263,8 +1263,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-stop-loss').value = s.stop_loss_pct || '';
                 document.getElementById('risk-trailing-stop').value = s.trailing_stop_pct || '';
                 document.getElementById('risk-trailing-activation').value = s.trailing_activation_pct || '';
-                document.querySelector(`input[name="trim-order-type"][value="${s.trim_order_type || 'market'}"]`).checked = true;
-                document.querySelector(`input[name="sl-order-type"][value="${s.sl_order_type || s.sl_order_mode || 'limit'}"]`).checked = true;
+                const trimEl = document.querySelector(`input[name="trim-order-type"][value="${s.trim_order_type || 'market'}"]`);
+                if (trimEl) trimEl.checked = true;
+                const slEl = document.querySelector(`input[name="sl-order-type"][value="${s.sl_order_type || s.sl_order_mode || 'limit'}"]`);
+                if (slEl) slEl.checked = true;
                 document.getElementById('risk-leave-runner').checked = !!s.leave_runner_enabled;
                 document.getElementById('risk-runner-size').value = s.leave_runner_size_pct || 25;
                 document.getElementById('risk-dynamic-sl').checked = !!s.dynamic_sl_escalation_enabled;
@@ -1299,7 +1301,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-sl-offset').value = s.sl_limit_offset != null ? (s.sl_limit_offset * 100) : 3;
                 
                 const exitMode = s.exit_strategy_mode || 'risk';
-                document.querySelector(`input[name="exit-strategy-mode"][value="${exitMode}"]`).checked = true;
+                const exitEl = document.querySelector(`input[name="exit-strategy-mode"][value="${exitMode}"]`);
+                if (exitEl) exitEl.checked = true;
                 document.querySelectorAll('.exit-mode-option').forEach(opt => {
                     const radio = opt.querySelector('input[type="radio"]');
                     opt.style.border = radio.checked ? '2px solid var(--success)' : '2px solid transparent';
