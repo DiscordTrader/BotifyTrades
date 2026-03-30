@@ -64,61 +64,67 @@ async function loadChannels() {
             <table class="data-table" style="width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr>
-                        <th style="text-align: left; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Channel</th>
-                        <th style="text-align: center; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Status</th>
-                        <th style="text-align: center; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Broker</th>
-                        <th style="text-align: center; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Signals</th>
-                        <th style="text-align: center; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Cond.</th>
-                        <th style="text-align: center; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Today</th>
-                        <th style="text-align: left; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Last Signal</th>
-                        <th style="text-align: center; padding: 12px 16px; font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; font-weight: 600; letter-spacing: 0.8px;">Actions</th>
+                        <th style="text-align: left; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Channel</th>
+                        <th style="text-align: center; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Status</th>
+                        <th style="text-align: center; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Broker</th>
+                        <th style="text-align: center; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Total Signals</th>
+                        <th style="text-align: center; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Cond. Orders</th>
+                        <th style="text-align: center; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Today</th>
+                        <th style="text-align: left; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Last Signal</th>
+                        <th style="text-align: center; padding: 12px 16px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${channels.map(channel => `
-                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
-                            <td style="padding: 14px 16px; border-left: 2px solid ${channel.is_active ? 'var(--success)' : 'var(--danger)'};">
-                                <div style="font-weight: 600; font-size: 13px; color: #fff; margin-bottom: 3px;">${channel.name}</div>
-                                <div style="font-size: 10px; color: rgba(255,255,255,0.28); font-family: 'JetBrains Mono', monospace;">${channel.discord_channel_id}</div>
+                        <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 212, 255, 0.05)'" onmouseout="this.style.background='transparent'">
+                            <td style="padding: 16px; border-left: 3px solid ${channel.is_active ? '#00ff88' : '#ff6b6b'};">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div>
+                                        <div style="font-weight: 700; font-size: 14px; color: #ffffff; margin-bottom: 4px;">${channel.name}</div>
+                                        <div style="font-size: 10px; color: #6b7280; font-family: 'Consolas', monospace;">ID: ${channel.discord_channel_id}</div>
+                                    </div>
+                                </div>
                             </td>
-                            <td style="padding: 14px 16px; text-align: center;">
-                                <span class="risk-status-pill ${channel.is_active ? 'on' : 'off'}">${channel.is_active ? 'ACTIVE' : 'OFF'}</span>
+                            <td style="padding: 16px; text-align: center;">
+                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; background: ${channel.is_active ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 107, 107, 0.15)'}; border: 1px solid ${channel.is_active ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 107, 0.3)'}; border-radius: 6px; font-size: 11px; color: ${channel.is_active ? '#00ff88' : '#ff6b6b'}; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;">
+                                    ${channel.is_active ? 'ACTIVE' : 'INACTIVE'}
+                                </span>
                             </td>
-                            <td style="padding: 14px 16px; text-align: center;">
+                            <td style="padding: 16px; text-align: center;">
                                 ${renderBrokerBadges(channel.enabled_brokers)}
                             </td>
-                            <td style="padding: 14px 16px; text-align: center;">
-                                <span style="font-weight: 600; font-size: 14px; color: rgba(255,255,255,0.75);">${channel.total_signals || 0}</span>
+                            <td style="padding: 16px; text-align: center;">
+                                <span style="font-weight: 700; font-size: 16px; color: #00d4ff;">${channel.total_signals || 0}</span>
                             </td>
-                            <td style="padding: 14px 16px; text-align: center;">
-                                <span style="font-weight: 600; font-size: 14px; color: ${channel.conditional_order_count > 0 ? 'var(--warning)' : 'rgba(255,255,255,0.28)'};">${channel.conditional_order_count || 0}</span>
+                            <td style="padding: 16px; text-align: center;">
+                                <span style="font-weight: 700; font-size: 16px; color: ${channel.conditional_order_count > 0 ? '#ffb300' : '#6b7280'};">${channel.conditional_order_count || 0}</span>
                             </td>
-                            <td style="padding: 14px 16px; text-align: center;">
-                                <span style="font-weight: 600; font-size: 14px; color: ${channel.signals_today > 0 ? 'var(--success)' : 'rgba(255,255,255,0.28)'};">${channel.signals_today || 0}</span>
+                            <td style="padding: 16px; text-align: center;">
+                                <span style="font-weight: 700; font-size: 16px; color: ${channel.signals_today > 0 ? '#00ff88' : '#6b7280'};">${channel.signals_today || 0}</span>
                             </td>
-                            <td style="padding: 14px 16px;">
-                                <span style="font-size: 11px; color: rgba(255,255,255,0.40);">
+                            <td style="padding: 16px;">
+                                <span style="font-size: 12px; color: #b4b8c5;">
                                     ${channel.last_signal_at ? new Date(channel.last_signal_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Never'}
                                 </span>
                             </td>
-                            <td style="padding: 14px 16px; text-align: center;">
-                                <div style="display: flex; gap: 3px; justify-content: center; flex-wrap: nowrap;">
-                                    <button onclick="toggleBrokerSelection(${channel.id})" title="Brokers" class="action-btn">B</button>
-                                    <button onclick="toggleRiskManagement(${channel.id})" title="Risk Management" class="action-btn">R</button>
-                                    <button onclick="toggleTickerFilter(${channel.id})" title="Ticker Filter${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? ' (Active)' : ''}" class="action-btn ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'active-indicator' : ''}">F</button>
-                                    ${channelCategory === 'TRACK' ? `<button onclick="togglePaperTradeSection(${channel.id})" title="Paper Trading" class="action-btn ${channel.paper_trade_enabled ? 'active-indicator' : ''}">P</button>` : ''}
-                                    <button onclick="toggleAllowedUsers(${channel.id})" title="Manage Users" class="action-btn">U</button>
-                                    <button onclick="showUserPerformance('${channel.id}', '${channel.name}')" title="Performance" class="action-btn">%</button>
-                                    <button onclick="window.location.href='/signals?channel_id=${channel.id}&channel_name=${encodeURIComponent(channel.name)}'" title="View Signals" class="action-btn">S</button>
-                                    <button onclick="resetChannelTracking(${channel.id}, '${channel.name}')" title="Reset Tracking" class="action-btn">&#x21bb;</button>
-                                    <button onclick="toggleChannel(${channel.id}, ${channel.is_active})" title="${channel.is_active ? 'Disable' : 'Enable'}" class="action-btn">${channel.is_active ? '&#x23F8;' : '&#x25B6;'}</button>
-                                    <button onclick="deleteChannel(${channel.id}, '${channel.name}')" title="Delete" class="action-btn danger">&#x2715;</button>
+                            <td style="padding: 16px; text-align: center;">
+                                <div style="display: flex; gap: 4px; justify-content: center;">
+                                    <button onclick="toggleBrokerSelection(${channel.id})" title="Select Brokers" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">🔌</button>
+                                    <button onclick="toggleRiskManagement(${channel.id})" title="Risk Management" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">🛡️</button>
+                                    <button onclick="toggleTickerFilter(${channel.id})" title="Ticker Filter${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? ' (Active)' : ''}" style="background: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(0, 212, 255, 0.1)'}; border: 1px solid ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.3)' : 'rgba(0, 212, 255, 0.3)'}; color: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? '#ffb300' : '#00d4ff'}; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.25)' : 'rgba(0, 212, 255, 0.25)'}'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(0, 212, 255, 0.1)'}'; this.style.transform='scale(1)'">🎯</button>
+                                    ${channelCategory === 'TRACK' ? `<button onclick="togglePaperTradeSection(${channel.id})" title="Paper Trading Settings" style="background: ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 212, 255, 0.1)'}; border: 1px solid ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(0, 212, 255, 0.3)'}; color: ${channel.paper_trade_enabled ? '#00ff88' : '#00d4ff'}; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.25)' : 'rgba(0, 212, 255, 0.25)'}'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 212, 255, 0.1)'}'; this.style.transform='scale(1)'">📄</button>` : ''}
+                                    <button onclick="toggleAllowedUsers(${channel.id})" title="Manage Users" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">👥</button>
+                                    <button onclick="showUserPerformance('${channel.id}', '${channel.name}')" title="User Performance" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">📈</button>
+                                    <button onclick="window.location.href='/signals?channel_id=${channel.id}&channel_name=${encodeURIComponent(channel.name)}'" title="View Signals" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">📊</button>
+                                    <button onclick="resetChannelTracking(${channel.id}, '${channel.name}')" title="Reset" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">🔄</button>
+                                    <button onclick="toggleChannel(${channel.id}, ${channel.is_active})" title="${channel.is_active ? 'Disable' : 'Enable'}" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">${channel.is_active ? '⏸️' : '▶️'}</button>
+                                    <button onclick="deleteChannel(${channel.id}, '${channel.name}')" title="Delete" style="background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); color: #ff6b6b; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(255, 107, 107, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255, 107, 107, 0.1)'; this.style.transform='scale(1)'">🗑️</button>
                                 </div>
                             </td>
                         </tr>
-                        <tr id="broker-selection-row-${channel.id}" style="display: none;">
-                            <td colspan="8" style="padding: 20px 24px; background: rgba(0,0,0,0.15);">
-                                <h4 style="margin: 0 0 16px 0; font-size: 14px; font-weight: 600; color: #fff;">Multi-Broker ${channelCategory === 'EXECUTE' ? 'Execution' : 'Tracking'}</h4>
+                        <tr id="broker-selection-row-${channel.id}" style="display: none; background: rgba(0, 212, 255, 0.03);">
+                            <td colspan="8" style="padding: 20px;">
+                                <h4 style="margin: 0 0 16px 0; font-size: 14px; color: var(--primary-blue); display: flex; align-items: center; gap: 8px;">🔌 Multi-Broker ${channelCategory === 'EXECUTE' ? 'Execution' : 'Tracking'}</h4>
                                 <p style="margin: 0 0 16px 0; font-size: 12px; color: #8E8E93;">Select which brokerage accounts should ${channelCategory === 'EXECUTE' ? 'execute trades' : 'track signals'} from this channel. When enabled, signals will ${channelCategory === 'EXECUTE' ? 'execute on ALL selected accounts simultaneously' : 'be tracked across selected accounts'}.</p>
                                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
                                     <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid #3A3A3C; border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00d4ff'" onmouseout="this.style.borderColor='#3A3A3C'">
@@ -220,308 +226,334 @@ async function loadChannels() {
                                         <input type="number" id="ndx-delta-${channel.id}" value="${channel.ndx_to_qqq_delta || 0.3}" placeholder="0.3" step="0.05" min="0.1" max="0.9" style="width: 70px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
                                     </div>
                                 </div>
-                                <button onclick="saveBrokerSelection(${channel.id})" class="risk-save-btn">Save Broker Selection</button>
+                                <button onclick="saveBrokerSelection(${channel.id})" style="padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Broker Selection</button>
                             </td>
                         </tr>
-                        <tr id="risk-management-row-${channel.id}" style="display: none;">
-                            <td colspan="8" style="padding: 20px 24px; background: rgba(0,0,0,0.15);">
+                        <tr id="risk-management-row-${channel.id}" style="display: none; background: rgba(0, 212, 255, 0.03);">
+                            <td colspan="8" style="padding: 20px;">
                                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-size: 14px; font-weight: 600; color: #fff;">Risk Management</span>
-                                        <span id="risk-status-badge-${channel.id}" class="risk-status-pill ${channel.risk_management_enabled ? 'on' : 'off'}">${channel.risk_management_enabled ? 'ENABLED' : 'DISABLED'}</span>
-                                    </div>
+                                    <h4 style="margin: 0; font-size: 14px; color: var(--primary-blue); display: flex; align-items: center; gap: 8px;">
+                                        🛡️ Risk Management Settings
+                                        <span id="risk-status-badge-${channel.id}" style="font-size: 11px; padding: 2px 8px; background: ${channel.risk_management_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.risk_management_enabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; border-radius: 4px; color: ${channel.risk_management_enabled ? '#00ff88' : '#8E8E93'}; font-weight: 600;">${channel.risk_management_enabled ? '✓ ENABLED' : '✗ DISABLED'}</span>
+                                    </h4>
                                     <label class="toggle-switch" title="Enable per-channel risk management for this channel">
                                         <input type="checkbox" id="risk-enabled-${channel.id}" ${channel.risk_management_enabled ? 'checked' : ''} onchange="toggleChannelRisk(${channel.id}, this.checked)">
                                         <span class="toggle-slider"></span>
                                     </label>
                                 </div>
                                 <div id="risk-settings-panel-${channel.id}" style="display: ${channel.risk_management_enabled ? 'block' : 'none'};">
-                                <div id="risk-summary-rail-${channel.id}" class="risk-summary-rail">
-                                    <span style="color: rgba(255,255,255,0.35); font-size: 11px; margin-right: 4px;">Active:</span>
+                                <div id="risk-summary-rail-${channel.id}" style="margin-bottom: 14px; padding: 8px 12px; background: rgba(15,240,179,0.07); border-radius: 8px; border: 1px solid rgba(15,240,179,0.18); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 30px;">
+                                    <span style="color: #8E8E93; font-size: 11px; margin-right: 4px;">Active:</span>
                                     <span id="risk-summary-pills-${channel.id}"></span>
                                 </div>
-                                <div class="preset-bar">
-                                    <span class="risk-label" style="margin-bottom: 0; line-height: 28px; margin-right: 4px;">Presets</span>
-                                    <button type="button" class="risk-preset-btn-${channel.id} preset-btn" onclick="applyRiskPreset(${channel.id}, 'scalp')">Scalp</button>
-                                    <button type="button" class="risk-preset-btn-${channel.id} preset-btn" onclick="applyRiskPreset(${channel.id}, 'swing')">Swing</button>
-                                    <button type="button" class="risk-preset-btn-${channel.id} preset-btn" onclick="applyRiskPreset(${channel.id}, 'momentum')">Momentum</button>
-                                    <button type="button" class="risk-preset-btn-${channel.id} preset-btn" onclick="applyRiskPreset(${channel.id}, 'trend')">Trend</button>
+                                <div style="margin-bottom: 14px;">
+                                    <label style="font-size: 11px; color: #8E8E93; display: block; margin-bottom: 6px;">Quick Presets</label>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'scalp')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Scalp</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'swing')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Swing</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'momentum')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Momentum</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset(${channel.id}, 'trend')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Trend</button>
+                                    </div>
                                 </div>
-                                <div id="risk-validation-${channel.id}" class="risk-validation-box">
-                                    <p id="risk-validation-msg-${channel.id}" style="color: var(--danger); margin: 0; font-size: 11px;"></p>
+                                <div id="risk-validation-${channel.id}" style="display: none; margin-bottom: 12px; padding: 8px 12px; background: rgba(239,68,68,0.08); border-radius: 8px; border-left: 3px solid #EF4444;">
+                                    <p id="risk-validation-msg-${channel.id}" style="color: #EF4444; margin: 0; font-size: 11px;"></p>
                                 </div>
-                                <div class="risk-tab-bar">
-                                    <button type="button" class="risk-tab-btn-${channel.id} risk-tab active" data-risk-tab="targets" onclick="switchRiskTab(${channel.id}, 'targets')">Targets & SL</button>
-                                    <button type="button" class="risk-tab-btn-${channel.id} risk-tab" data-risk-tab="advanced" onclick="switchRiskTab(${channel.id}, 'advanced')">Advanced</button>
+                                <div style="display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #3A3A3C; padding-bottom: 0;">
+                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="targets" onclick="switchRiskTab(${channel.id}, 'targets')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid #00d4ff; color: #00d4ff; font-size: 12px; font-weight: 600; cursor: pointer;">Targets & SL</button>
+                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="advanced" onclick="switchRiskTab(${channel.id}, 'advanced')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: #8E8E93; font-size: 12px; font-weight: 600; cursor: pointer;">Advanced</button>
                                 </div>
 
                                 <!-- TAB 1: Targets & SL -->
                                 <div id="risk-tab-targets-${channel.id}" style="display: block;">
-                                <h5 class="risk-heading">Profit Targets</h5>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px;">
-                                    <div><label class="risk-label">PT1 %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="10" step="0.01" min="0" max="500" class="risk-input"></div>
-                                    <div><label class="risk-label">PT2 %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="20" step="0.01" min="0" max="500" class="risk-input"></div>
-                                    <div><label class="risk-label">PT3 %</label><input type="number" id="risk-profit-target-3-${channel.id}" value="${channel.profit_target_3_pct || ''}" placeholder="30" step="0.01" min="0" max="500" class="risk-input"></div>
-                                    <div><label class="risk-label">PT4 %</label><input type="number" id="risk-profit-target-4-${channel.id}" value="${channel.profit_target_4_pct || ''}" placeholder="40" step="0.01" min="0" max="500" class="risk-input"></div>
+                                <h5 style="margin: 0 0 10px; color: #00d4ff; font-size: 12px;">📊 Profit Targets</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P1 Target %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="e.g. 10" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P2 Target %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="e.g. 20" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P3 Target %</label><input type="number" id="risk-profit-target-3-${channel.id}" value="${channel.profit_target_3_pct || ''}" placeholder="e.g. 30" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P4 Target %</label><input type="number" id="risk-profit-target-4-${channel.id}" value="${channel.profit_target_4_pct || ''}" placeholder="e.g. 40" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                 </div>
-                                <div class="risk-section" style="margin-top: 10px;">
-                                    <label class="risk-label" style="font-weight: 600; margin-bottom: 6px;">Custom Trim Quantities <span style="font-weight: 400; opacity: 0.7;">(optional, leave empty for auto)</span></label>
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px;">
-                                        <div><label class="risk-label">PT1 Qty</label><input type="number" id="risk-qty-1-${channel.id}" value="${channel.profit_target_qty_1 || ''}" placeholder="Auto" step="1" min="0" class="risk-input" style="padding: 6px 10px;"></div>
-                                        <div><label class="risk-label">PT2 Qty</label><input type="number" id="risk-qty-2-${channel.id}" value="${channel.profit_target_qty_2 || ''}" placeholder="Auto" step="1" min="0" class="risk-input" style="padding: 6px 10px;"></div>
-                                        <div><label class="risk-label">PT3 Qty</label><input type="number" id="risk-qty-3-${channel.id}" value="${channel.profit_target_qty_3 || ''}" placeholder="Auto" step="1" min="0" class="risk-input" style="padding: 6px 10px;"></div>
-                                        <div><label class="risk-label">PT4 Qty</label><input type="number" id="risk-qty-4-${channel.id}" value="${channel.profit_target_qty_4 || ''}" placeholder="Auto" step="1" min="0" class="risk-input" style="padding: 6px 10px;"></div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #818cf8; margin-bottom: 8px;">Custom Trim Quantities (optional)</label>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Specify exact contracts to trim at each target. Leave empty for auto-calculation.</p>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P1 Qty</label><input type="number" id="risk-qty-1-${channel.id}" value="${channel.profit_target_qty_1 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P2 Qty</label><input type="number" id="risk-qty-2-${channel.id}" value="${channel.profit_target_qty_2 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P3 Qty</label><input type="number" id="risk-qty-3-${channel.id}" value="${channel.profit_target_qty_3 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P4 Qty</label><input type="number" id="risk-qty-4-${channel.id}" value="${channel.profit_target_qty_4 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     </div>
                                 </div>
-                                <h5 class="risk-heading">Stop Loss & Trailing</h5>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-                                    <div><label class="risk-label">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Default" step="0.01" min="0" max="100" class="risk-input"></div>
-                                    <div><label class="risk-label">Trailing Stop % <span id="trailing-disabled-note-${channel.id}" style="color: var(--danger); font-size: 10px; display: ${channel.enable_early_trailing ? 'inline' : 'none'};">(Early active)</span></label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Off' : 'Default'}" step="0.01" min="0" max="100" ${channel.enable_early_trailing ? 'disabled' : ''} class="risk-input"></div>
-                                    <div><label class="risk-label">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Off' : 'Default'}" step="0.01" min="0" max="500" ${channel.enable_early_trailing ? 'disabled' : ''} class="risk-input"></div>
+                                <h5 style="margin: 16px 0 10px; color: #EF4444; font-size: 12px;">🛑 Stop Loss & Trailing</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Stop % <span id="trailing-disabled-note-${channel.id}" style="color: #ff6b6b; font-size: 10px; display: ${channel.enable_early_trailing ? 'inline' : 'none'};">(disabled - Early Trailing active)</span></label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="100" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="500" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
                                 </div>
-                                <div class="risk-section">
-                                    <div class="risk-section-header">
-                                        <div class="risk-section-title"><span class="rs-icon">ET</span>Early Trailing Stop</div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 200, 150, 0.05); border: 1px solid rgba(0, 200, 150, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔒</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
+                                        </div>
                                         <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
                                             <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion(${channel.id}, this.checked)">
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="rs-desc">Breakeven after X% gain, then lock profit in step increments. Replaces legacy trailing stop.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;">Move stop to breakeven after X% gain, then lock profit in step increments. Mutually exclusive with legacy Trailing Stop.</p>
                                     <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <label class="risk-label" style="margin: 0; white-space: nowrap;">Breakeven at</label>
-                                            <input type="number" id="risk-early-activation-${channel.id}" value="${channel.early_trailing_activation_pct || 5}" placeholder="5" step="0.5" min="1" max="20" class="risk-input" style="width: 58px; text-align: center; padding: 6px 8px;">
-                                            <span style="font-size: 11px; color: rgba(255,255,255,0.35);">%</span>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Breakeven at:</label>
+                                            <input type="number" id="risk-early-activation-${channel.id}" value="${channel.early_trailing_activation_pct || 5}" placeholder="5" step="0.5" min="1" max="20" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% gain</span>
                                         </div>
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <label class="risk-label" style="margin: 0; white-space: nowrap;">Lock every</label>
-                                            <input type="number" id="risk-early-step-${channel.id}" value="${channel.early_trailing_step_pct || 3}" placeholder="3" step="0.5" min="1" max="10" class="risk-input" style="width: 58px; text-align: center; padding: 6px 8px;">
-                                            <span style="font-size: 11px; color: rgba(255,255,255,0.35);">%</span>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Lock profit every:</label>
+                                            <input type="number" id="risk-early-step-${channel.id}" value="${channel.early_trailing_step_pct || 3}" placeholder="3" step="0.5" min="1" max="10" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% more</span>
                                         </div>
                                     </div>
                                 </div>
-                                <h5 class="risk-heading">Exit Strategy</h5>
-                                <div class="risk-section" style="margin-top: 6px;">
-                                    <p class="rs-desc">How positions are exited when both trader signals and risk management are active.</p>
-                                    <div class="risk-radio-group">
-                                        <label class="exit-mode-opt-${channel.id} risk-radio-card ${(channel.exit_strategy_mode || 'hybrid') === 'signal' ? 'selected' : ''}">
+                                <h5 style="margin: 16px 0 10px; color: #10B981; font-size: 12px;">🎯 Exit Strategy Mode</h5>
+                                <div style="padding: 12px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;">
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">Choose how positions are exited when both trader signals and risk management are active.</p>
+                                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                        <label class="exit-mode-opt-${channel.id}" style="flex: 1; min-width: 120px; padding: 10px; border-radius: 8px; border: 2px solid ${(channel.exit_strategy_mode || 'hybrid') === 'signal' ? '#10B981' : 'transparent'}; background: ${(channel.exit_strategy_mode || 'hybrid') === 'signal' ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}; cursor: pointer; text-align: center;">
                                             <input type="radio" name="exit-strategy-mode-${channel.id}" value="signal" ${(channel.exit_strategy_mode || 'hybrid') === 'signal' ? 'checked' : ''} style="margin-bottom: 4px;" onchange="updateExitModeHighlight(${channel.id})">
-                                            <div class="rrc-title">Signal</div>
-                                            <div class="rrc-desc">Follow trader exits</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: white;">Signal</div>
+                                            <div style="font-size: 10px; color: #8E8E93;">Follow trader exits</div>
                                         </label>
-                                        <label class="exit-mode-opt-${channel.id} risk-radio-card ${(channel.exit_strategy_mode || 'hybrid') === 'risk' ? 'selected' : ''}">
+                                        <label class="exit-mode-opt-${channel.id}" style="flex: 1; min-width: 120px; padding: 10px; border-radius: 8px; border: 2px solid ${(channel.exit_strategy_mode || 'hybrid') === 'risk' ? '#10B981' : 'transparent'}; background: ${(channel.exit_strategy_mode || 'hybrid') === 'risk' ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}; cursor: pointer; text-align: center;">
                                             <input type="radio" name="exit-strategy-mode-${channel.id}" value="risk" ${(channel.exit_strategy_mode || 'hybrid') === 'risk' ? 'checked' : ''} style="margin-bottom: 4px;" onchange="updateExitModeHighlight(${channel.id})">
-                                            <div class="rrc-title">Risk</div>
-                                            <div class="rrc-desc">Auto PT/SL only</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: white;">Risk</div>
+                                            <div style="font-size: 10px; color: #8E8E93;">Auto PT/SL only</div>
                                         </label>
-                                        <label class="exit-mode-opt-${channel.id} risk-radio-card ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'selected' : ''}">
+                                        <label class="exit-mode-opt-${channel.id}" style="flex: 1; min-width: 120px; padding: 10px; border-radius: 8px; border: 2px solid ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? '#10B981' : 'transparent'}; background: ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}; cursor: pointer; text-align: center;">
                                             <input type="radio" name="exit-strategy-mode-${channel.id}" value="hybrid" ${(channel.exit_strategy_mode || 'hybrid') === 'hybrid' ? 'checked' : ''} style="margin-bottom: 4px;" onchange="updateExitModeHighlight(${channel.id})">
-                                            <div class="rrc-title">Hybrid</div>
-                                            <div class="rrc-desc">Both active</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: white;">Hybrid</div>
+                                            <div style="font-size: 10px; color: #8E8E93;">Both active</div>
                                         </label>
                                     </div>
-                                </div>
-                                <h5 class="risk-heading">Order Types</h5>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <div class="risk-section" style="margin-top: 0;">
-                                    <label class="risk-label" style="font-weight: 600; margin-bottom: 6px;">Trim Orders</label>
-                                    <div style="display: flex; gap: 14px; align-items: center;">
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
-                                            <span style="font-size: 12px; color: rgba(255,255,255,0.75);">Market</span>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
+                                    <div style="display: flex; gap: 16px; align-items: center;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
+                                            <span style="font-size: 12px; color: white;">Market</span>
                                         </label>
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="trim-order-mode-${channel.id}" value="limit" ${channel.trim_order_mode === 'limit' ? 'checked' : ''} onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='flex'">
-                                            <span style="font-size: 12px; color: rgba(255,255,255,0.75);">Limit</span>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="trim-order-mode-${channel.id}" value="limit" ${channel.trim_order_mode === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='flex'">
+                                            <span style="font-size: 12px; color: white;">Limit</span>
                                         </label>
-                                    </div>
-                                    <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap;" id="limit-offset-container-${channel.id}">
-                                        <select id="risk-trim-offset-mode-${channel.id}" class="risk-input" style="width: auto; padding: 4px 6px; font-size: 11px;" onchange="toggleTrimOffsetMode(${channel.id}, this.value)">
-                                            <option value="dollar" ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'selected' : ''}>$</option>
-                                            <option value="percent" ${channel.trim_limit_offset_mode === 'percent' ? 'selected' : ''}>%</option>
-                                        </select>
-                                        <div id="trim-offset-dollar-${channel.id}" style="display: ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
-                                            <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="5" class="risk-input" style="width: 58px; padding: 4px 8px; font-size: 12px;">
-                                        </div>
-                                        <div id="trim-offset-pct-${channel.id}" style="display: ${channel.trim_limit_offset_mode === 'percent' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
-                                            <input type="number" id="risk-trim-offset-pct-${channel.id}" value="${channel.trim_limit_offset_pct || 2.0}" step="0.5" min="0" max="20" class="risk-input" style="width: 58px; padding: 4px 8px; font-size: 12px;">
+                                        <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; flex-wrap: wrap;" id="limit-offset-container-${channel.id}">
+                                            <select id="risk-trim-offset-mode-${channel.id}" style="padding: 4px 6px; font-size: 11px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;" onchange="toggleTrimOffsetMode(${channel.id}, this.value)">
+                                                <option value="dollar" ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'selected' : ''}>$</option>
+                                                <option value="percent" ${channel.trim_limit_offset_mode === 'percent' ? 'selected' : ''}>%</option>
+                                            </select>
+                                            <div id="trim-offset-dollar-${channel.id}" style="display: ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
+                                                <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="5" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                            </div>
+                                            <div id="trim-offset-pct-${channel.id}" style="display: ${channel.trim_limit_offset_mode === 'percent' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
+                                                <input type="number" id="risk-trim-offset-pct-${channel.id}" value="${channel.trim_limit_offset_pct || 2.0}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="risk-section" style="margin-top: 0;">
-                                    <label class="risk-label" style="font-weight: 600; margin-bottom: 6px;">Stop Loss Orders</label>
-                                    <div style="display: flex; gap: 14px; align-items: center;">
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='flex'">
-                                            <span style="font-size: 12px; color: rgba(255,255,255,0.75);">Limit</span>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ff5252; margin-bottom: 8px;">Stop Loss Order Type</label>
+                                    <div style="display: flex; gap: 16px; align-items: center;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='flex'">
+                                            <span style="font-size: 12px; color: white;">Limit</span>
                                         </label>
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='none'">
-                                            <span style="font-size: 12px; color: rgba(255,255,255,0.75);">Market</span>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='none'">
+                                            <span style="font-size: 12px; color: white;">Market</span>
                                         </label>
                                     </div>
-                                    <div style="display: ${(channel.sl_order_mode || 'limit') === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 6px; margin-top: 8px;" id="sl-limit-offset-container-${channel.id}">
-                                        <label class="risk-label" style="margin: 0; white-space: nowrap;">Offset</label>
-                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset || 0.03) * 100}" step="0.5" min="0" max="20" class="risk-input" style="width: 58px; padding: 4px 8px; font-size: 12px;">
-                                        <span style="font-size: 10px; color: rgba(255,255,255,0.30);">%</span>
+                                    <div style="display: ${(channel.sl_order_mode || 'limit') === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; margin-top: 8px;" id="sl-limit-offset-container-${channel.id}">
+                                        <label style="font-size: 11px; color: #8E8E93;">Limit Offset %:</label>
+                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset || 0.03) * 100}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                        <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
                                     </div>
                                 </div>
-                                </div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                                <div class="risk-section" style="margin-top: 0;">
-                                    <div class="risk-section-header">
-                                        <div class="risk-section-title"><span class="rs-icon">OC</span>Order Chase</div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔄</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #a78bfa;">Order Chase</label>
+                                        </div>
                                         <label class="toggle-switch" title="Chase unfilled orders with mid-price replacement">
                                             <input type="checkbox" id="risk-order-chase-${channel.id}" ${channel.order_chase_enabled === 1 || channel.entry_chase_enabled === 1 ? 'checked' : ''}>
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="rs-desc">Replace unfilled orders at mid-price for better fills.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Chase unfilled orders with mid-price replacement for better fills.</p>
                                 </div>
-                                <div class="risk-section" style="margin-top: 0;">
-                                    <div class="risk-section-header">
-                                        <div class="risk-section-title"><span class="rs-icon">LR</span>Leave Runner</div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🏃</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00ff88;">Leave Runner</label>
+                                        </div>
                                         <label class="toggle-switch" title="Keep a portion of your position to ride further gains">
                                             <input type="checkbox" id="risk-leave-runner-enabled-${channel.id}" ${channel.leave_runner_enabled ? 'checked' : ''}>
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                                        <label class="risk-label" style="margin: 0;">Size</label>
-                                        <input type="number" id="risk-leave-runner-pct-${channel.id}" value="${channel.leave_runner_pct || 25}" placeholder="25" step="1" min="1" max="100" class="risk-input" style="width: 60px; text-align: center; padding: 6px 8px;">
-                                        <span style="font-size: 11px; color: rgba(255,255,255,0.30);">%</span>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Keep a percentage of your position after hitting profit targets.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Runner Size:</label>
+                                        <input type="number" id="risk-leave-runner-pct-${channel.id}" value="${channel.leave_runner_pct || 25}" placeholder="25" step="1" min="1" max="100" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                        <span style="font-size: 12px; color: #8E8E93;">% of position</span>
                                     </div>
-                                </div>
                                 </div>
                                 </div>
 
                                 <!-- TAB 2: Advanced -->
                                 <div id="risk-tab-advanced-${channel.id}" style="display: none;">
-                                <div class="risk-section" style="margin-top: 0;">
-                                    <div class="risk-section-header">
-                                        <div class="risk-section-title"><span class="rs-icon">DS</span>Dynamic SL Escalation</div>
+                                <div style="padding: 12px; background: rgba(255, 100, 100, 0.05); border: 1px solid rgba(255, 100, 100, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🎯</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #ff6b6b;">Dynamic Stop Loss Escalation</label>
+                                        </div>
                                         <label class="toggle-switch" title="Automatically move stop loss after hitting profit targets">
                                             <input type="checkbox" id="risk-dynamic-sl-${channel.id}" ${channel.enable_dynamic_sl ? 'checked' : ''}>
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="rs-desc">Each profit target hit moves your stop loss up to lock in more gains.</p>
-                                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                                        <label class="risk-label" style="margin: 0; white-space: nowrap;">Profile</label>
-                                        <select id="risk-dynamic-sl-profile-${channel.id}" class="risk-input" style="width: auto;">
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;">Each time you hit a profit target, your stop loss moves UP to lock in more gains.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Profile:</label>
+                                        <select id="risk-dynamic-sl-profile-${channel.id}" style="padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
                                             <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative (PT1: BE, PT2: +3%, PT3: +10%, PT4: +20%)</option>
                                             <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
                                             <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive (PT1: -2%, PT2: BE, PT3: +10%, PT4: +20%)</option>
                                         </select>
                                     </div>
-                                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <span class="risk-label" style="margin: 0; font-weight: 600;">SL Escalation Only</span>
+                                    <div style="margin-top: 10px; padding: 10px; background: rgba(255, 100, 100, 0.03); border: 1px solid rgba(255, 100, 100, 0.12); border-radius: 6px;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <span style="font-size: 14px;">🔒</span>
+                                                <label style="font-size: 12px; font-weight: 600; color: #ff8a80;">SL Escalation Only</label>
+                                            </div>
+                                            <label class="toggle-switch" title="Targets escalate stop loss only — no partial sells">
+                                                <input type="checkbox" id="risk-escalation-only-${channel.id}" ${channel.escalation_only_mode ? 'checked' : ''}>
+                                                <span class="toggle-slider"></span>
+                                            </label>
                                         </div>
-                                        <label class="toggle-switch" title="Targets escalate stop loss only — no partial sells">
-                                            <input type="checkbox" id="risk-escalation-only-${channel.id}" ${channel.escalation_only_mode ? 'checked' : ''}>
-                                            <span class="toggle-slider"></span>
-                                        </label>
+                                        <p style="font-size: 10px; color: #666; margin: 6px 0 0 0; font-style: italic;">Targets escalate stop loss only — no partial sells.</p>
                                     </div>
                                 </div>
-                                <div class="risk-section">
-                                    <div class="risk-section-header">
-                                        <div class="risk-section-title"><span class="rs-icon">GG</span>Giveback Guard</div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 200, 0, 0.05); border: 1px solid rgba(255, 200, 0, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🛡️</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #ffc800;">Max Profit Giveback Guard</label>
+                                        </div>
                                         <label class="toggle-switch" title="Exit if profit drops too much from peak">
                                             <input type="checkbox" id="risk-giveback-guard-${channel.id}" ${channel.enable_giveback_guard ? 'checked' : ''}>
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="rs-desc">Exit if profit drops too much from its peak. Activates after PT2 or trailing threshold.</p>
-                                    <div style="display: flex; align-items: center; gap: 8px;">
-                                        <label class="risk-label" style="margin: 0; white-space: nowrap;">Max Giveback</label>
-                                        <input type="number" id="risk-giveback-pct-${channel.id}" value="${channel.giveback_allowed_pct || 30}" placeholder="30" step="1" min="5" max="80" class="risk-input" style="width: 60px; text-align: center; padding: 6px 8px;">
-                                        <span style="font-size: 11px; color: rgba(255,255,255,0.30);">% from peak</span>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Exit if profit drops too much from its highest point. Activates after PT2 or trailing activation threshold.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Max Giveback:</label>
+                                        <input type="number" id="risk-giveback-pct-${channel.id}" value="${channel.giveback_allowed_pct || 30}" placeholder="30" step="1" min="5" max="80" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                        <span style="font-size: 12px; color: #8E8E93;">% from peak profit</span>
                                     </div>
                                 </div>
-                                <div class="risk-section">
-                                    <div class="risk-section-header">
-                                        <div class="risk-section-title"><span class="rs-icon">EM</span>EMA Risk</div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 188, 212, 0.05); border: 1px solid rgba(0, 188, 212, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">📊</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00bcd4;">EMA Risk Management</label>
+                                        </div>
                                         <label class="toggle-switch" title="Monitor EMA crossovers for exit/escalation signals">
                                             <input type="checkbox" id="risk-ema-enabled-${channel.id}" ${channel.ema_risk_enabled ? 'checked' : ''} onchange="document.getElementById('ema-settings-grid-${channel.id}').style.display = this.checked ? 'block' : 'none';">
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="rs-desc">Live candle EMA — exits when price crosses unfavorably.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Builds live candles, computes EMA, and exits when price crosses unfavorably.</p>
                                     <div id="ema-settings-grid-${channel.id}" style="display: ${channel.ema_risk_enabled ? 'block' : 'none'};">
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
                                             <div>
-                                                <label class="risk-label">Period</label>
-                                                <select id="risk-ema-period-${channel.id}" class="risk-input" style="padding: 6px 10px;">
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">EMA Period</label>
+                                                <select id="risk-ema-period-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
                                                     <option value="3" ${(channel.ema_period || 5) == 3 ? 'selected' : ''}>3 (Fast)</option>
-                                                    <option value="5" ${(channel.ema_period || 5) == 5 ? 'selected' : ''}>5 (Std)</option>
-                                                    <option value="8" ${(channel.ema_period || 5) == 8 ? 'selected' : ''}>8 (Mod)</option>
+                                                    <option value="5" ${(channel.ema_period || 5) == 5 ? 'selected' : ''}>5 (Standard)</option>
+                                                    <option value="8" ${(channel.ema_period || 5) == 8 ? 'selected' : ''}>8 (Moderate)</option>
                                                     <option value="13" ${(channel.ema_period || 5) == 13 ? 'selected' : ''}>13 (Slow)</option>
-                                                    <option value="21" ${(channel.ema_period || 5) == 21 ? 'selected' : ''}>21 (V.Slow)</option>
+                                                    <option value="21" ${(channel.ema_period || 5) == 21 ? 'selected' : ''}>21 (Very Slow)</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="risk-label">Timeframe</label>
-                                                <select id="risk-ema-timeframe-${channel.id}" class="risk-input" style="padding: 6px 10px;">
-                                                    <option value="1" ${(channel.ema_timeframe_minutes || 5) == 1 ? 'selected' : ''}>1m</option>
-                                                    <option value="2" ${(channel.ema_timeframe_minutes || 5) == 2 ? 'selected' : ''}>2m</option>
-                                                    <option value="3" ${(channel.ema_timeframe_minutes || 5) == 3 ? 'selected' : ''}>3m</option>
-                                                    <option value="5" ${(channel.ema_timeframe_minutes || 5) == 5 ? 'selected' : ''}>5m</option>
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Candle Timeframe</label>
+                                                <select id="risk-ema-timeframe-${channel.id}" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                                    <option value="1" ${(channel.ema_timeframe_minutes || 5) == 1 ? 'selected' : ''}>1 min</option>
+                                                    <option value="2" ${(channel.ema_timeframe_minutes || 5) == 2 ? 'selected' : ''}>2 min</option>
+                                                    <option value="3" ${(channel.ema_timeframe_minutes || 5) == 3 ? 'selected' : ''}>3 min</option>
+                                                    <option value="5" ${(channel.ema_timeframe_minutes || 5) == 5 ? 'selected' : ''}>5 min</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="risk-label">Buffer %</label>
-                                                <input type="number" id="risk-ema-buffer-${channel.id}" value="${channel.ema_buffer_pct != null ? channel.ema_buffer_pct : 0.1}" placeholder="0.1" step="0.05" min="0" max="2" class="risk-input" style="text-align: center; padding: 6px 10px;">
+                                                <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Buffer %</label>
+                                                <input type="number" id="risk-ema-buffer-${channel.id}" value="${channel.ema_buffer_pct != null ? channel.ema_buffer_pct : 0.1}" placeholder="0.1" step="0.05" min="0" max="2" style="width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
                                             </div>
                                         </div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 8px;">
-                                            <div style="display: flex; align-items: center; gap: 6px;">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
                                                 <label class="toggle-switch"><input type="checkbox" id="risk-ema-exit-${channel.id}" ${channel.ema_exit_enabled !== 0 ? 'checked' : ''}><span class="toggle-slider"></span></label>
-                                                <label class="risk-label" style="margin: 0;">Exit on Cross</label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Exit on Cross</label>
                                             </div>
-                                            <div style="display: flex; align-items: center; gap: 6px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
                                                 <label class="toggle-switch"><input type="checkbox" id="risk-ema-escalation-${channel.id}" ${channel.ema_escalation_enabled !== 0 ? 'checked' : ''}><span class="toggle-slider"></span></label>
-                                                <label class="risk-label" style="margin: 0;">SL Escalation</label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Stop Escalation</label>
                                             </div>
-                                            <div style="display: flex; align-items: center; gap: 6px;">
-                                                <label class="risk-label" style="margin: 0;">No-Trend</label>
-                                                <input type="number" id="risk-ema-no-trend-${channel.id}" value="${channel.ema_no_trend_candles != null ? channel.ema_no_trend_candles : 3}" placeholder="3" step="1" min="1" max="20" class="risk-input" style="width: 45px; text-align: center; padding: 4px 6px; font-size: 12px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <label style="font-size: 11px; color: #8E8E93;">No-Trend:</label>
+                                                <input type="number" id="risk-ema-no-trend-${channel.id}" value="${channel.ema_no_trend_candles != null ? channel.ema_no_trend_candles : 3}" placeholder="3" step="1" min="1" max="20" style="width: 50px; padding: 6px 8px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                                <span style="font-size: 10px; color: #666;">candles</span>
                                             </div>
                                         </div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                            <div style="display: flex; align-items: center; gap: 6px;">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
                                                 <label class="toggle-switch"><input type="checkbox" id="risk-ema-underlying-${channel.id}" ${channel.ema_use_underlying !== 0 ? 'checked' : ''}><span class="toggle-slider"></span></label>
-                                                <label class="risk-label" style="margin: 0;">Underlying</label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Use Underlying Chart</label>
                                             </div>
-                                            <div style="display: flex; align-items: center; gap: 6px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
                                                 <label class="toggle-switch"><input type="checkbox" id="risk-ema-extended-${channel.id}" ${channel.ema_extended_hours ? 'checked' : ''}><span class="toggle-slider"></span></label>
-                                                <label class="risk-label" style="margin: 0;">Extended Hrs</label>
+                                                <label style="font-size: 11px; color: #8E8E93;">Extended Hours</label>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="risk-section">
-                                    <div class="risk-section-header">
-                                        <div class="risk-section-title"><span class="rs-icon">TS</span>Trade Summary</div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">📊</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #a855f7;">Trade Summary</label>
+                                        </div>
                                         <label class="toggle-switch" title="Post P/L summary to Discord when positions are closed">
                                             <input type="checkbox" id="trade-summary-enabled-${channel.id}" ${channel.trade_summary_enabled !== 0 ? 'checked' : ''}>
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="rs-desc">Post a P/L summary to Discord when positions close.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Post a P/L summary message to Discord when STC signals close positions.</p>
                                 </div>
                                 </div>
 
-                                <button onclick="saveRiskManagement(${channel.id})" class="risk-save-btn">Save Risk Settings</button>
+                                <button onclick="saveRiskManagement(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Risk Settings</button>
                                 </div>
                             </td>
                         </tr>
-                        <tr id="ticker-filter-row-${channel.id}" style="display: none;">
-                            <td colspan="8" style="padding: 20px 24px; background: rgba(0,0,0,0.15);">
-                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
-                                    <span style="font-size: 14px; font-weight: 600; color: #fff;">Ticker Filter</span>
-                                    <span id="ticker-filter-badge-${channel.id}" class="risk-status-pill ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'on' : 'off'}">${channel.ticker_filter_mode === 'allow' ? 'ALLOW' : channel.ticker_filter_mode === 'block' ? 'BLOCK' : 'OFF'}</span>
+                        <tr id="ticker-filter-row-${channel.id}" style="display: none; background: rgba(255, 179, 0, 0.03);">
+                            <td colspan="8" style="padding: 20px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                                    <h4 style="margin: 0; font-size: 14px; color: #ffb300; display: flex; align-items: center; gap: 8px;">
+                                        🎯 Ticker Filter
+                                        <span id="ticker-filter-badge-${channel.id}" style="font-size: 11px; padding: 2px 8px; background: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; border-radius: 4px; color: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? '#ffb300' : '#8E8E93'}; font-weight: 600;">${channel.ticker_filter_mode === 'allow' ? '✓ ALLOW LIST' : channel.ticker_filter_mode === 'block' ? '✗ BLOCK LIST' : 'OFF'}</span>
+                                    </h4>
                                 </div>
                                 <p style="font-size: 12px; color: #8E8E93; margin: 0 0 16px 0;">Filter which tickers this channel can trade. Useful when a trader excels at specific symbols but underperforms on others.</p>
                                 <div style="display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start;">
@@ -546,17 +578,17 @@ async function loadChannels() {
                                         • <span style="color: #ff6b6b;">Block List "COIN, GME, AMC"</span> → Trades everything except COIN, GME, AMC
                                     </div>
                                 </div>
-                                <button onclick="saveTickerFilter(${channel.id})" class="risk-save-btn">Save Ticker Filter</button>
+                                <button onclick="saveTickerFilter(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: linear-gradient(135deg, #ffb300 0%, #ff8c00 100%); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Ticker Filter</button>
                             </td>
                         </tr>
                         ${channelCategory === 'TRACK' ? `
-                        <tr id="paper-trade-row-${channel.id}" style="display: none;">
-                            <td colspan="8" style="padding: 20px 24px; background: rgba(0,0,0,0.15);">
+                        <tr id="paper-trade-row-${channel.id}" style="display: none; background: rgba(0, 212, 255, 0.03);">
+                            <td colspan="8" style="padding: 20px;">
                                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-size: 14px; font-weight: 600; color: #fff;">Paper Trading</span>
-                                        <span class="risk-status-pill ${channel.paper_trade_enabled ? 'on' : 'off'}">${channel.paper_trade_enabled ? 'ENABLED' : 'DISABLED'}</span>
-                                    </div>
+                                    <h4 style="margin: 0; font-size: 14px; color: var(--primary-blue); display: flex; align-items: center; gap: 8px;">
+                                        📄 Paper Trading & Account Info
+                                        <span style="font-size: 11px; padding: 2px 8px; background: ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; border-radius: 4px; color: ${channel.paper_trade_enabled ? '#00ff88' : '#8E8E93'}; font-weight: 600;">Execution: ${channel.paper_trade_enabled ? '✓ ENABLED' : '✗ DISABLED'}</span>
+                                    </h4>
                                     <label class="toggle-switch">
                                         <input type="checkbox" id="paper-trade-${channel.id}" ${channel.paper_trade_enabled ? 'checked' : ''} onchange="togglePaperTrade(${channel.id})">
                                         <span class="toggle-slider"></span>
@@ -593,7 +625,7 @@ async function loadChannels() {
                         </tr>
                         ` : ''}
                         <tr id="allowed-users-row-${channel.id}" style="display: none;">
-                            <td colspan="8" style="padding: 0; background: rgba(0,0,0,0.15);">
+                            <td colspan="8" style="padding: 0; background: rgba(0, 0, 0, 0.2);">
                                 <div class="channel-stats" style="display: none;">
                     <div class="stat-item">
                         <div class="stat-item-label">Total Signals</div>
@@ -1288,13 +1320,17 @@ async function toggleChannelRisk(channelId, enabled) {
             const panel = document.getElementById(`risk-settings-panel-${channelId}`);
             
             if (enabled) {
-                badge.textContent = 'ENABLED';
-                badge.className = 'risk-status-pill on';
+                badge.textContent = '✓ ENABLED';
+                badge.style.background = 'rgba(0, 255, 136, 0.15)';
+                badge.style.borderColor = 'rgba(0, 255, 136, 0.3)';
+                badge.style.color = '#00ff88';
                 panel.style.display = 'block';
                 showMessage('✅ Per-channel risk management ENABLED');
             } else {
-                badge.textContent = 'DISABLED';
-                badge.className = 'risk-status-pill off';
+                badge.textContent = '✗ DISABLED';
+                badge.style.background = 'rgba(142, 142, 147, 0.15)';
+                badge.style.borderColor = 'rgba(142, 142, 147, 0.3)';
+                badge.style.color = '#8E8E93';
                 panel.style.display = 'none';
                 showMessage('⚠️ Per-channel risk management DISABLED');
             }
@@ -1475,36 +1511,40 @@ async function saveRiskManagement(channelId) {
 
 function switchRiskTab(channelId, tabName) {
     document.querySelectorAll(`.risk-tab-btn-${channelId}`).forEach(b => {
-        b.classList.remove('active');
+        b.style.borderBottomColor = 'transparent';
+        b.style.color = '#8E8E93';
     });
     ['targets', 'advanced'].forEach(t => {
         const pane = document.getElementById(`risk-tab-${t}-${channelId}`);
         if (pane) pane.style.display = 'none';
     });
     const activeBtn = document.querySelector(`.risk-tab-btn-${channelId}[data-risk-tab="${tabName}"]`);
-    if (activeBtn) activeBtn.classList.add('active');
+    if (activeBtn) {
+        activeBtn.style.borderBottomColor = '#00d4ff';
+        activeBtn.style.color = '#00d4ff';
+    }
     const activePane = document.getElementById(`risk-tab-${tabName}-${channelId}`);
     if (activePane) activePane.style.display = 'block';
 }
 
 function updateRiskSummaryRail(channelId) {
     const pills = [];
-    const pill = (text) => `<span class="risk-status-pill on">${text}</span>`;
+    const pill = (text, color) => `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;background:${color}22;color:${color};border:1px solid ${color}44;">${text}</span>`;
     const sl = parseFloat(document.getElementById(`risk-stop-loss-${channelId}`)?.value) || 0;
-    if (sl > 0) pills.push(pill('SL ' + sl + '%'));
+    if (sl > 0) pills.push(pill('SL ' + sl + '%', '#EF4444'));
     const pts = [1,2,3,4].filter(i => parseFloat(document.getElementById(`risk-profit-target-${i}-${channelId}`)?.value) > 0);
-    if (pts.length > 0) pills.push(pill('PT' + pts.join('/')));
+    if (pts.length > 0) pills.push(pill('PT' + pts.join('/'), '#00d4ff'));
     const trail = parseFloat(document.getElementById(`risk-trailing-stop-${channelId}`)?.value) || 0;
-    if (trail > 0) pills.push(pill('Trail ' + trail + '%'));
-    if (document.getElementById(`risk-early-trailing-${channelId}`)?.checked) pills.push(pill('Early Trail'));
-    if (document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked) pills.push(pill('Dyn SL'));
-    if (document.getElementById(`risk-escalation-only-${channelId}`)?.checked) pills.push(pill('Esc Only'));
-    if (document.getElementById(`risk-giveback-guard-${channelId}`)?.checked) pills.push(pill('Giveback'));
-    if (document.getElementById(`risk-ema-enabled-${channelId}`)?.checked) pills.push(pill('EMA'));
-    if (document.getElementById(`risk-order-chase-${channelId}`)?.checked) pills.push(pill('Chase'));
-    if (document.getElementById(`risk-leave-runner-enabled-${channelId}`)?.checked) pills.push(pill('Runner'));
+    if (trail > 0) pills.push(pill('Trail ' + trail + '%', '#F59E0B'));
+    if (document.getElementById(`risk-early-trailing-${channelId}`)?.checked) pills.push(pill('Early Trail', '#e879f9'));
+    if (document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked) pills.push(pill('Dyn SL', '#F59E0B'));
+    if (document.getElementById(`risk-escalation-only-${channelId}`)?.checked) pills.push(pill('Esc Only', '#F59E0B'));
+    if (document.getElementById(`risk-giveback-guard-${channelId}`)?.checked) pills.push(pill('Giveback', '#17a2b8'));
+    if (document.getElementById(`risk-ema-enabled-${channelId}`)?.checked) pills.push(pill('EMA', '#38bdf8'));
+    if (document.getElementById(`risk-order-chase-${channelId}`)?.checked) pills.push(pill('Chase', '#7C3AED'));
+    if (document.getElementById(`risk-leave-runner-enabled-${channelId}`)?.checked) pills.push(pill('Runner', '#7C3AED'));
     const pillsEl = document.getElementById(`risk-summary-pills-${channelId}`);
-    if (pillsEl) pillsEl.innerHTML = pills.length > 0 ? pills.join(' ') : '<span style="color:rgba(255,255,255,0.28);font-size:11px;">No risk features enabled</span>';
+    if (pillsEl) pillsEl.innerHTML = pills.length > 0 ? pills.join(' ') : '<span style="color:#8E8E93;font-size:11px;">No risk features enabled</span>';
 }
 
 function validateRiskSettings(channelId) {
@@ -1550,7 +1590,8 @@ function validateRiskSettings(channelId) {
 function updateExitModeHighlight(channelId) {
     document.querySelectorAll(`.exit-mode-opt-${channelId}`).forEach(opt => {
         const radio = opt.querySelector('input[type="radio"]');
-        if (radio?.checked) { opt.classList.add('selected'); } else { opt.classList.remove('selected'); }
+        opt.style.border = radio?.checked ? '2px solid #10B981' : '2px solid transparent';
+        opt.style.background = radio?.checked ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)';
     });
     updateRiskSummaryRail(channelId);
 }
