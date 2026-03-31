@@ -10152,6 +10152,10 @@ def register_routes(app):
             if not symbol:
                 return jsonify({'error': 'Symbol is required'}), 400
             
+            _EXP_SYMBOL_ALIASES = {'SPXW': 'SPX', 'NDXP': 'NDX', 'RUTW': 'RUT'}
+            original_symbol = symbol
+            symbol = _EXP_SYMBOL_ALIASES.get(symbol, symbol)
+            
             # Route to Alpaca if selected
             if 'ALPACA' in selected_broker:
                 try:
@@ -10273,7 +10277,7 @@ def register_routes(app):
             loop = get_webull_loop()
             
             # For index options (SPX, NDX, etc.), use Alpaca which has better support for daily expirations
-            index_symbols = ['SPX', 'NDX', 'RUT', 'VIX', 'DJX', 'XSP']
+            index_symbols = ['SPX', 'NDX', 'RUT', 'VIX', 'DJX', 'XSP', 'SPXW', 'NDXP', 'RUTW']
             use_alpaca_for_expirations = symbol in index_symbols
             
             if broker and loop and not use_alpaca_for_expirations:
@@ -10374,6 +10378,10 @@ def register_routes(app):
             # Catch JavaScript undefined converted to string
             if expiry == 'undefined' or expiry == 'null':
                 return jsonify({'error': 'Please select a valid expiration date'}), 400
+            
+            _CHAIN_SYMBOL_ALIASES = {'SPXW': 'SPX', 'NDXP': 'NDX', 'RUTW': 'RUT'}
+            original_symbol = symbol
+            symbol = _CHAIN_SYMBOL_ALIASES.get(symbol, symbol)
             
             # Validate date format (YYYY-MM-DD)
             try:
@@ -10517,6 +10525,10 @@ def register_routes(app):
             if not expiry or expiry in ['undefined', 'null', '']:
                 return jsonify({'error': 'Expiration date is required'}), 400
             
+            _CHAIN_SYMBOL_ALIASES = {'SPXW': 'SPX', 'NDXP': 'NDX', 'RUTW': 'RUT'}
+            original_symbol = symbol
+            symbol = _CHAIN_SYMBOL_ALIASES.get(symbol, symbol)
+            
             chain = get_option_chain_for_broker(symbol, expiry, broker)
             
             if not chain or (not chain.get('calls') and not chain.get('puts')):
@@ -10625,7 +10637,7 @@ def register_routes(app):
 
             return jsonify({
                 'success': True,
-                'symbol': symbol,
+                'symbol': original_symbol,
                 'expiry': expiry,
                 'stock_price': stock_price,
                 'atm_strike': atm_strike,
