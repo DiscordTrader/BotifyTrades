@@ -4575,28 +4575,9 @@ class RiskManager:
                         print(f"[RISK] 🧹 Cleaned stale cache for {symbol} (no open trade, order #{order_id})")
                     continue
                 
-                channel_sl_pct = None
-                try:
-                    ch_id = str(order['channel_id']) if order.get('channel_id') else None
-                    if ch_id:
-                        cursor.execute('''
-                            SELECT stop_loss_pct FROM channels 
-                            WHERE discord_channel_id = ? AND risk_management_enabled = 1
-                        ''', (ch_id,))
-                        ch_row = cursor.fetchone()
-                        if ch_row and ch_row['stop_loss_pct'] and float(ch_row['stop_loss_pct']) > 0:
-                            channel_sl_pct = float(ch_row['stop_loss_pct'])
-                except Exception:
-                    pass
-
-                if channel_sl_pct:
-                    sl_pct = channel_sl_pct
-                    sl_type = 'pct'
-                    sl_fixed = None
-                else:
-                    sl_pct = order['stop_loss_pct'] or order['stop_loss_value']
-                    sl_fixed = order['stop_loss_fixed']
-                    sl_type = order['stop_loss_type'] or 'pct'
+                sl_pct = order['stop_loss_pct'] or order['stop_loss_value']
+                sl_fixed = order['stop_loss_fixed']
+                sl_type = order['stop_loss_type'] or 'pct'
                 
                 profit_targets_raw = order['take_profit_targets'] or order['target_ranges']
                 

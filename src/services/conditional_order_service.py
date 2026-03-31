@@ -711,24 +711,15 @@ class ConditionalOrderService:
         else:
             print(f"[CONDITIONAL] No signal targets - will use channel settings at trigger time")
         
-        channel_sl = channel_settings.get('stop_loss_pct')
-        signal_sl = parsed_signal.get('stop_loss_value') or parsed_signal.get('stop_loss')
-        signal_sl_type = parsed_signal.get('stop_loss_type')
-
-        if channel_sl and float(channel_sl) > 0:
+        # Stop loss: signal first, then channel settings
+        stop_loss = parsed_signal.get('stop_loss')
+        stop_loss_type = parsed_signal.get('stop_loss_type')
+        stop_loss_value = parsed_signal.get('stop_loss_value') or stop_loss
+        
+        if not stop_loss_value and channel_settings.get('stop_loss_pct'):
             stop_loss_type = 'percent'
-            stop_loss_value = float(channel_sl)
-            if signal_sl:
-                print(f"[CONDITIONAL] Signal SL={signal_sl}% overridden by channel setting: {stop_loss_value}%")
-            else:
-                print(f"[CONDITIONAL] Using channel stop_loss_pct: {stop_loss_value}%")
-        elif signal_sl:
-            stop_loss_type = signal_sl_type or 'percent'
-            stop_loss_value = signal_sl
-            print(f"[CONDITIONAL] Using signal SL: {stop_loss_value}% (no channel SL configured)")
-        else:
-            stop_loss_type = None
-            stop_loss_value = None
+            stop_loss_value = channel_settings.get('stop_loss_pct')
+            print(f"[CONDITIONAL] Using channel stop_loss_pct: {stop_loss_value}%")
         
         market = parsed_signal.get('market', 'US')
         strike = parsed_signal.get('strike')
