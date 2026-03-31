@@ -10272,15 +10272,11 @@ def register_routes(app):
                     traceback.print_exc()
                     return jsonify({'error': f'Robinhood error: {str(e)}', 'expirations': []}), 500
             
-            # Default: Use Webull
+            # Default: Use Webull first, then Alpaca as fallback
             broker = get_webull_broker()
             loop = get_webull_loop()
             
-            # For index options (SPX, NDX, etc.), use Alpaca which has better support for daily expirations
-            index_symbols = ['SPX', 'NDX', 'RUT', 'VIX', 'DJX', 'XSP', 'SPXW', 'NDXP', 'RUTW']
-            use_alpaca_for_expirations = symbol in index_symbols
-            
-            if broker and loop and not use_alpaca_for_expirations:
+            if broker and loop:
                 try:
                     from datetime import datetime
                     
@@ -10313,7 +10309,7 @@ def register_routes(app):
                         if expirations:
                             print(f"[API] Loaded {len(expirations)} Webull expirations for {symbol}")
                             return jsonify({
-                                'symbol': symbol,
+                                'symbol': original_symbol,
                                 'expirations': expirations,
                                 'data_source': 'Webull'
                             })
@@ -10350,7 +10346,7 @@ def register_routes(app):
                         continue
                 
                 return jsonify({
-                    'symbol': symbol,
+                    'symbol': original_symbol,
                     'expirations': expirations,
                     'data_source': 'Alpaca'
                 })
