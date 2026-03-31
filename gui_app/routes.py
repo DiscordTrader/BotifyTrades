@@ -10829,26 +10829,26 @@ def register_routes(app):
                 yield f"data: {json.dumps({'type': 'connected', 'symbol': symbol, 'client_id': client_id})}\n\n"
                 last_flush = time.time()
                 keepalive_at = time.time()
+                pending = {}
                 while True:
-                    batch = {}
                     try:
                         tick = client_queue.get(timeout=0.1)
                         key = tick.get('key', '')
-                        batch[key] = tick
+                        pending[key] = tick
                         while not client_queue.empty():
                             try:
                                 tick = client_queue.get_nowait()
                                 key = tick.get('key', '')
-                                batch[key] = tick
+                                pending[key] = tick
                             except _queue.Empty:
                                 break
                     except _queue.Empty:
                         pass
 
                     now = time.time()
-                    if batch and (now - last_flush) >= batch_interval:
+                    if pending and (now - last_flush) >= batch_interval:
                         ticks = []
-                        for k, t in batch.items():
+                        for k, t in pending.items():
                             entry = {'k': t['key'], 'b': t['bid'], 'a': t['ask'], 'l': t['last']}
                             if t.get('mid'):
                                 entry['m'] = t['mid']
@@ -10856,11 +10856,10 @@ def register_routes(app):
                                 entry['n'] = t['norm']
                             ticks.append(entry)
                         yield f"data: {json.dumps({'type': 'ticks', 'ts': round(now, 3), 'd': ticks})}\n\n"
+                        pending = {}
                         last_flush = now
                         keepalive_at = now
-                    elif batch:
-                        pass
-                    elif now - keepalive_at > 25:
+                    elif not pending and now - keepalive_at > 25:
                         yield f": keepalive\n\n"
                         keepalive_at = now
 
