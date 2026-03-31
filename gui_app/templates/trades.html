@@ -2001,6 +2001,8 @@ window.addEventListener('beforeunload', () => {
     if (riskPollInterval) clearInterval(riskPollInterval);
     if (streamingPollInterval) clearInterval(streamingPollInterval);
     if (qtStreamingTimer) clearInterval(qtStreamingTimer);
+    if (qtSSESource) { try { qtSSESource.close(); } catch(e) {} }
+    if (qtSSEFallbackTimer) clearInterval(qtSSEFallbackTimer);
     if (_sseSource) { try { _sseSource.close(); } catch(e) {} }
     if (_sseFallbackTimer) clearInterval(_sseFallbackTimer);
 });
@@ -2514,6 +2516,10 @@ let qtPrevPrices = {};
 let qtInitialPollTimeout = null;
 let qtStreamingActive = false;
 let qtStreamingLastUpdate = 0;
+let qtSSESource = null;
+let qtSSEClientId = null;
+let qtSSEFallbackTimer = null;
+let qtSSETickCount = 0;
 
 async function qtSubscribeStream() {
     if (!qtChainData || !qtChainData.strikes) return;
@@ -2558,40 +2564,195 @@ function qtFlashPrice(el, direction) {
     });
 }
 
-async function qtStreamQuotePoll() {
-    if (!qtChainData) { console.log('[QT_STREAM] No chainData, skipping poll'); return; }
+function qtBuildWatchedKeys() {
+    if (!qtChainData || !qtChainData.strikes) return [];
+    const symbol = qtChainData.symbol;
+    const keys = [];
+    qtChainData.strikes.forEach(s => {
+        keys.push(`${symbol}_${s.strike}_C`);
+        keys.push(`${symbol}_${s.strike}_P`);
+        if (s.call && s.call.option_id) keys.push(String(s.call.option_id));
+        if (s.put && s.put.option_id) keys.push(String(s.put.option_id));
+    });
+    return keys;
+}
+
+function qtConnectSSE() {
+    if (qtSSESource) {
+        try { qtSSESource.close(); } catch(e) {}
+        qtSSESource = null;
+    }
+    qtSSEClientId = null;
+    qtSSETickCount = 0;
+
+    if (!qtChainData || !qtChainData.strikes) return;
+    const symbol = qtChainData.symbol;
+    const broker = document.getElementById('qt-broker').value;
+    const watchedKeys = qtBuildWatchedKeys();
+
+    const url = `/api/options/chain-stream?symbol=${encodeURIComponent(symbol)}&broker=${encodeURIComponent(broker)}&contracts=${encodeURIComponent(watchedKeys.join(','))}`;
+    qtSSESource = new EventSource(url);
+
+    qtSSESource.onmessage = function(event) {
+        try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'connected') {
+                qtSSEClientId = msg.client_id;
+                console.log(`[QT_SSE] Connected, client_id=${msg.client_id}`);
+                return;
+            }
+            if (msg.type === 'ticks' && msg.d) {
+                qtSSETickCount++;
+                qtApplySSETicks(msg.d);
+            }
+        } catch(e) { console.error('[QT_SSE] parse error:', e); }
+    };
+
+    qtSSESource.onerror = function() {
+        console.warn('[QT_SSE] Connection error, falling back to polling');
+        qtSSESource.close();
+        qtSSESource = null;
+        qtSSEClientId = null;
+        if (!qtSSEFallbackTimer) {
+            qtSSEFallbackTimer = setInterval(qtStreamQuotePollFallback, 400);
+        }
+        setTimeout(() => {
+            if (!qtSSESource && qtChainData) {
+                console.log('[QT_SSE] Attempting reconnect...');
+                if (qtSSEFallbackTimer) { clearInterval(qtSSEFallbackTimer); qtSSEFallbackTimer = null; }
+                qtConnectSSE();
+            }
+        }, 5000);
+    };
+}
+
+function qtApplySSETicks(ticks) {
+    if (!qtChainData || !qtChainData.strikes) return;
+    const symbol = qtChainData.symbol;
+    const rows = document.querySelectorAll('.qt-chain tbody tr');
+    const qtInd = document.getElementById('qt-streaming-indicator');
+    let anyUpdated = false;
+
+    const tickMap = {};
+    ticks.forEach(t => {
+        const k = (t.k || '').toUpperCase();
+        tickMap[k] = t;
+        if (t.n) tickMap[t.n.toUpperCase()] = t;
+    });
+
+    qtChainData.strikes.forEach((s, idx) => {
+        const row = rows[idx];
+        if (!row) return;
+        const prices = row.querySelectorAll('.qt-price');
+        if (prices.length < 6) return;
+
+        const cKey = `${symbol}_${s.strike}_C`.toUpperCase();
+        const pKey = `${symbol}_${s.strike}_P`.toUpperCase();
+        let cTick = tickMap[cKey];
+        let pTick = tickMap[pKey];
+
+        if (!cTick && s.call && s.call.option_id) {
+            cTick = tickMap[String(s.call.option_id).toUpperCase()];
+        }
+        if (!pTick && s.put && s.put.option_id) {
+            pTick = tickMap[String(s.put.option_id).toUpperCase()];
+        }
+
+        if (cTick) {
+            anyUpdated = true;
+            const cBid = cTick.b || 0, cAsk = cTick.a || 0;
+            const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cTick.l || 0);
+            const vals = [cBid, cMid, cAsk];
+            [0, 1, 2].forEach(i => {
+                const newText = '$' + vals[i].toFixed(2);
+                if (prices[i].textContent !== newText) {
+                    const prevKey = `c_${idx}_${i}`;
+                    const prev = qtPrevPrices[prevKey] || 0;
+                    qtPrevPrices[prevKey] = vals[i];
+                    prices[i].textContent = newText;
+                    if (prev > 0) qtFlashPrice(prices[i], vals[i] >= prev ? 'up' : 'down');
+                }
+            });
+            s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
+            if (cTick.l > 0) s.call.last = cTick.l;
+        }
+
+        if (pTick) {
+            anyUpdated = true;
+            const pBid = pTick.b || 0, pAsk = pTick.a || 0;
+            const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pTick.l || 0);
+            const vals = [pBid, pMid, pAsk];
+            [0, 1, 2].forEach(i => {
+                const newText = '$' + vals[i].toFixed(2);
+                if (prices[i + 3].textContent !== newText) {
+                    const prevKey = `p_${idx}_${i}`;
+                    const prev = qtPrevPrices[prevKey] || 0;
+                    qtPrevPrices[prevKey] = vals[i];
+                    prices[i + 3].textContent = newText;
+                    if (prev > 0) qtFlashPrice(prices[i + 3], vals[i] >= prev ? 'up' : 'down');
+                }
+            });
+            s.put.bid = pBid; s.put.ask = pAsk; s.put.mid = pMid;
+            if (pTick.l > 0) s.put.last = pTick.l;
+        }
+    });
+
+    const stockTick = tickMap[symbol.toUpperCase()];
+    if (stockTick && stockTick.l > 0) {
+        qtLastStreamPrice = stockTick.l;
+        const priceEl = document.getElementById('qt-stock-price');
+        if (priceEl) {
+            const oldText = priceEl.textContent.replace(/[^0-9.]/g, '');
+            const newText = stockTick.l.toFixed(2);
+            const changed = oldText !== newText;
+            const color = stockTick.l >= (qtChainData.stock_price || 0) ? '#22c55e' : '#ef4444';
+            priceEl.innerHTML = `<span class="qt-price-badge stock" style="border-color:${color}40;">$${newText}</span>`;
+            if (changed) {
+                priceEl.style.textShadow = `0 0 10px ${color}60`;
+                setTimeout(() => { priceEl.style.textShadow = 'none'; }, 800);
+            }
+        }
+    }
+
+    if (anyUpdated) {
+        qtStreamingActive = true;
+        qtStreamingLastUpdate = Date.now();
+        if (qtInd) {
+            qtInd.style.display = 'inline';
+            qtInd.textContent = '\u26A1 LIVE';
+            qtInd.style.color = '#22c55e';
+        }
+        const srcEl = document.getElementById('qt-data-source');
+        if (srcEl) {
+            const broker = document.getElementById('qt-broker').value;
+            const srcLabel = broker.includes('SCHWAB') ? 'Schwab WS' : 'Webull MQTT';
+            srcEl.innerHTML = `<span class="qt-source" style="background:#22c55e22; color:#22c55e;">\u26A1 ${srcLabel} SSE Stream</span>`;
+        }
+    }
+}
+
+async function qtStreamQuotePollFallback() {
+    if (!qtChainData) return;
     const symbol = qtChainData.symbol;
     const broker = document.getElementById('qt-broker').value;
     try {
         const r = await fetch(`/api/options/stream-quotes?symbol=${symbol}&broker=${broker}`, { credentials: 'include' });
-        if (!r.ok) { console.warn('[QT_STREAM] stream-quotes HTTP', r.status); return; }
+        if (!r.ok) return;
         const data = await r.json();
-        if (!qtStreamQuotePoll._logCount) qtStreamQuotePoll._logCount = 0;
-        qtStreamQuotePoll._logCount++;
-        if (qtStreamQuotePoll._logCount <= 5) {
-            console.log('[QT_STREAM] poll#' + qtStreamQuotePoll._logCount, 'count=' + data.count, 'streaming=' + data.streaming, 'keys=', Object.keys(data.quotes || {}).slice(0, 3));
-        }
         if (!data.quotes || data.count === 0) return;
 
         const rows = document.querySelectorAll('.qt-chain tbody tr');
-        const qtInd = document.getElementById('qt-streaming-indicator');
         let anyStreaming = false;
 
         qtChainData.strikes.forEach((s, idx) => {
             const row = rows[idx];
             if (!row) return;
-
             const cKey = `${symbol}_${s.strike}_C`;
             const pKey = `${symbol}_${s.strike}_P`;
             let cQuote = data.quotes[cKey];
             let pQuote = data.quotes[pKey];
-
-            if (!cQuote || !pQuote) {
-                const cOCC = s.call && s.call.option_id ? s.call.option_id : '';
-                const pOCC = s.put && s.put.option_id ? s.put.option_id : '';
-                if (!cQuote && cOCC && data.quotes[cOCC]) cQuote = data.quotes[cOCC];
-                if (!pQuote && pOCC && data.quotes[pOCC]) pQuote = data.quotes[pOCC];
-            }
+            if (!cQuote && s.call && s.call.option_id && data.quotes[s.call.option_id]) cQuote = data.quotes[s.call.option_id];
+            if (!pQuote && s.put && s.put.option_id && data.quotes[s.put.option_id]) pQuote = data.quotes[s.put.option_id];
 
             const prices = row.querySelectorAll('.qt-price');
             if (prices.length < 6) return;
@@ -2600,69 +2761,43 @@ async function qtStreamQuotePoll() {
                 anyStreaming = true;
                 const cBid = cQuote.bid || 0, cAsk = cQuote.ask || 0;
                 const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cQuote.last || 0);
-                const vals = [cBid, cMid, cAsk];
-                [0, 1, 2].forEach(i => {
-                    const newText = '$' + vals[i].toFixed(2);
+                [cBid, cMid, cAsk].forEach((v, i) => {
+                    const newText = '$' + v.toFixed(2);
                     if (prices[i].textContent !== newText) {
                         const prevKey = `c_${idx}_${i}`;
                         const prev = qtPrevPrices[prevKey] || 0;
-                        qtPrevPrices[prevKey] = vals[i];
+                        qtPrevPrices[prevKey] = v;
                         prices[i].textContent = newText;
-                        if (prev > 0) qtFlashPrice(prices[i], vals[i] >= prev ? 'up' : 'down');
+                        if (prev > 0) qtFlashPrice(prices[i], v >= prev ? 'up' : 'down');
                     }
                 });
                 s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
-                if (cQuote.last > 0) s.call.last = cQuote.last;
             }
-
             if (pQuote && pQuote.streaming) {
                 anyStreaming = true;
                 const pBid = pQuote.bid || 0, pAsk = pQuote.ask || 0;
                 const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pQuote.last || 0);
-                const vals = [pBid, pMid, pAsk];
-                [0, 1, 2].forEach(i => {
-                    const newText = '$' + vals[i].toFixed(2);
+                [pBid, pMid, pAsk].forEach((v, i) => {
+                    const newText = '$' + v.toFixed(2);
                     if (prices[i + 3].textContent !== newText) {
                         const prevKey = `p_${idx}_${i}`;
                         const prev = qtPrevPrices[prevKey] || 0;
-                        qtPrevPrices[prevKey] = vals[i];
+                        qtPrevPrices[prevKey] = v;
                         prices[i + 3].textContent = newText;
-                        if (prev > 0) qtFlashPrice(prices[i + 3], vals[i] >= prev ? 'up' : 'down');
+                        if (prev > 0) qtFlashPrice(prices[i + 3], v >= prev ? 'up' : 'down');
                     }
                 });
                 s.put.bid = pBid; s.put.ask = pAsk; s.put.mid = pMid;
-                if (pQuote.last > 0) s.put.last = pQuote.last;
             }
         });
 
         if (anyStreaming) {
             qtStreamingActive = true;
             qtStreamingLastUpdate = Date.now();
-        } else if (Date.now() - qtStreamingLastUpdate > 10000) {
-            qtStreamingActive = false;
+            const qtInd = document.getElementById('qt-streaming-indicator');
+            if (qtInd) { qtInd.style.display = 'inline'; qtInd.textContent = '\u26A1 LIVE'; qtInd.style.color = '#22c55e'; }
         }
-
-        if (qtInd) {
-            if (anyStreaming) {
-                qtInd.style.display = 'inline';
-                qtInd.textContent = '\u26A1 LIVE';
-                qtInd.style.color = '#22c55e';
-            } else {
-                qtInd.style.display = 'none';
-            }
-        }
-
-        const srcEl = document.getElementById('qt-data-source');
-        if (srcEl && anyStreaming) {
-            const srcLabel = broker.includes('SCHWAB') ? 'Schwab WS' : 'Webull MQTT';
-            srcEl.innerHTML = `<span class="qt-source" style="background:#22c55e22; color:#22c55e;">\u26A1 ${srcLabel} Stream</span>`;
-        } else if (srcEl && !anyStreaming && data.count > 0) {
-            const curSrc = srcEl.innerHTML;
-            if (!curSrc.includes('connecting') && !curSrc.includes('Stream')) {
-                srcEl.innerHTML = '<span class="qt-source" style="background:#ffc80022;color:#ffc800;">\u23F3 REST (waiting for stream...)</span>';
-            }
-        }
-    } catch (e) { console.error('[QT_STREAM] poll error:', e); }
+    } catch (e) { /* silent */ }
 }
 
 function qtStartAutoRefresh() {
@@ -2670,15 +2805,18 @@ function qtStartAutoRefresh() {
     if (qtStreamingTimer) clearInterval(qtStreamingTimer);
     if (qtStreamQuoteTimer) clearInterval(qtStreamQuoteTimer);
     if (qtInitialPollTimeout) clearTimeout(qtInitialPollTimeout);
+    if (qtSSEFallbackTimer) { clearInterval(qtSSEFallbackTimer); qtSSEFallbackTimer = null; }
+    if (qtSSESource) { try { qtSSESource.close(); } catch(e) {} qtSSESource = null; }
     qtPrevPrices = {};
     qtStreamSubscribed = false;
     qtStreamingActive = false;
     qtStreamingLastUpdate = 0;
+    qtSSEClientId = null;
+    qtSSETickCount = 0;
 
     qtSubscribeStream();
 
-    qtStreamQuoteTimer = setInterval(qtStreamQuotePoll, 300);
-    qtInitialPollTimeout = setTimeout(qtStreamQuotePoll, 500);
+    setTimeout(() => { qtConnectSSE(); }, 1000);
 
     qtRefreshTimer = setInterval(async () => {
         if (!qtChainData) return;
@@ -2693,6 +2831,15 @@ function qtStartAutoRefresh() {
             if (!qtStreamSubscribed) {
                 qtChainData = data;
                 qtSubscribeStream();
+                if (qtSSEClientId) {
+                    const keys = qtBuildWatchedKeys();
+                    fetch('/api/options/chain-stream/update-keys', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ client_id: qtSSEClientId, keys: keys, symbol: symbol })
+                    }).catch(() => {});
+                }
             } else {
                 data.strikes.forEach((s, idx) => {
                     if (!qtChainData.strikes[idx]) return;
@@ -2732,9 +2879,12 @@ function qtStartAutoRefresh() {
                 document.getElementById('qt-stock-price').innerHTML = `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`;
             }
         } catch (e) { /* silent */ }
-    }, 15000);
+    }, 30000);
 
-    qtStreamingTimer = setInterval(qtStreamingStockPoll, 1500);
+    qtStreamingTimer = setInterval(() => {
+        if (qtSSESource && qtSSETickCount > 0) return;
+        qtStreamingStockPoll();
+    }, 2000);
     qtStreamingStockPoll();
 }
 
@@ -2764,7 +2914,7 @@ async function qtStreamingStockPoll() {
                 qtInd.style.display = 'inline';
                 qtInd.textContent = '\u26A1 LIVE';
             }
-        } else {
+        } else if (!qtStreamingActive) {
             qtLastStreamPrice = 0;
             if (qtInd) qtInd.style.display = 'none';
         }

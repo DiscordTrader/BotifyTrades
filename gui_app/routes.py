@@ -10702,6 +10702,212 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'quotes': {}, 'streaming': False, 'error': str(e)})
 
+    _chain_sse_clients: Dict[int, dict] = {}
+    _chain_sse_lock = threading.Lock()
+    _chain_sse_next_id = 0
+    _chain_sse_hub_handler_installed = False
+
+    def _install_chain_sse_hub_handler():
+        nonlocal _chain_sse_hub_handler_installed
+        if _chain_sse_hub_handler_installed:
+            return
+        _chain_sse_hub_handler_installed = True
+
+        def _on_chain_sse_quote(data):
+            if not data or not isinstance(data, dict):
+                return
+            symbol = data.get('symbol', '')
+            if not symbol:
+                q = data.get('quote')
+                if q:
+                    symbol = getattr(q, 'symbol', '') if hasattr(q, 'symbol') else (q.get('symbol', '') if isinstance(q, dict) else '')
+            if not symbol:
+                return
+            symbol_upper = symbol.upper()
+
+            quote_obj = data.get('quote')
+            bid = ask = last = 0.0
+            if quote_obj:
+                if hasattr(quote_obj, 'bid'):
+                    bid = float(getattr(quote_obj, 'bid', 0) or 0)
+                    ask = float(getattr(quote_obj, 'ask', 0) or 0)
+                    last = float(getattr(quote_obj, 'last', 0) or 0)
+                elif isinstance(quote_obj, dict):
+                    bid = float(quote_obj.get('bid', 0) or 0)
+                    ask = float(quote_obj.get('ask', 0) or 0)
+                    last = float(quote_obj.get('last', 0) or 0)
+
+            if bid <= 0 and ask <= 0 and last <= 0:
+                return
+
+            with _chain_sse_lock:
+                for cid, client in list(_chain_sse_clients.items()):
+                    watched = client.get('watched_keys', set())
+                    symbol_base = client.get('symbol', '')
+                    if symbol_upper in watched or symbol_upper == symbol_base:
+                        norm_key = _TRAILING_ZERO_RE.sub(r'_\1_\2', symbol_upper)
+                        mid = round((bid + ask) / 2, 4) if bid > 0 and ask > 0 else 0
+                        tick = {
+                            'key': symbol_upper,
+                            'norm': norm_key if norm_key != symbol_upper else None,
+                            'bid': bid,
+                            'ask': ask,
+                            'mid': mid,
+                            'last': last,
+                        }
+                        q = client.get('queue')
+                        if q:
+                            try:
+                                if q.qsize() < 200:
+                                    q.put_nowait(tick)
+                            except Exception:
+                                pass
+
+        for hub_getter, hub_name in [
+            ('src.services.webull_data_hub', 'webull'),
+            ('src.services.schwab_data_hub', 'schwab'),
+            ('src.services.ibkr_data_hub', 'ibkr'),
+        ]:
+            try:
+                mod = __import__(hub_getter, fromlist=['get_%s_data_hub' % hub_name])
+                hub_fn = getattr(mod, 'get_%s_data_hub' % hub_name)
+                hub = hub_fn()
+                hub.on('quote_updated', _on_chain_sse_quote)
+            except Exception:
+                pass
+
+        print("[OPTIONS_SSE] Hub quote handlers installed for chain SSE streaming")
+
+    @app.route('/api/options/chain-stream', methods=['GET'])
+    @login_required
+    def api_option_chain_stream():
+        import queue as _queue
+        nonlocal _chain_sse_next_id
+
+        _install_chain_sse_hub_handler()
+
+        symbol = request.args.get('symbol', '').upper()
+        broker = request.args.get('broker', 'WEBULL').upper()
+
+        if not symbol:
+            return jsonify({'error': 'Symbol required'}), 400
+
+        with _chain_sse_lock:
+            _chain_sse_next_id += 1
+            client_id = _chain_sse_next_id
+
+        contracts_param = request.args.get('contracts', '')
+        watched_keys = set()
+        if contracts_param:
+            for key in contracts_param.split(','):
+                k = key.strip().upper()
+                if k:
+                    watched_keys.add(k)
+                    norm = _TRAILING_ZERO_RE.sub(r'_\1_\2', k)
+                    if norm != k:
+                        watched_keys.add(norm)
+        watched_keys.add(symbol)
+
+        client_queue = _queue.Queue(maxsize=500)
+
+        client_info = {
+            'queue': client_queue,
+            'symbol': symbol,
+            'broker': broker,
+            'watched_keys': watched_keys,
+            'created_at': time.time(),
+        }
+
+        with _chain_sse_lock:
+            _chain_sse_clients[client_id] = client_info
+
+        print(f"[OPTIONS_SSE] Client #{client_id} connected: {symbol} ({broker}), watching {len(watched_keys)} keys")
+
+        def event_stream():
+            batch_interval = 0.08
+            try:
+                yield f"data: {json.dumps({'type': 'connected', 'symbol': symbol, 'client_id': client_id})}\n\n"
+                last_flush = time.time()
+                keepalive_at = time.time()
+                while True:
+                    batch = {}
+                    try:
+                        tick = client_queue.get(timeout=0.1)
+                        key = tick.get('key', '')
+                        batch[key] = tick
+                        while not client_queue.empty():
+                            try:
+                                tick = client_queue.get_nowait()
+                                key = tick.get('key', '')
+                                batch[key] = tick
+                            except _queue.Empty:
+                                break
+                    except _queue.Empty:
+                        pass
+
+                    now = time.time()
+                    if batch and (now - last_flush) >= batch_interval:
+                        ticks = []
+                        for k, t in batch.items():
+                            entry = {'k': t['key'], 'b': t['bid'], 'a': t['ask'], 'l': t['last']}
+                            if t.get('mid'):
+                                entry['m'] = t['mid']
+                            if t.get('norm'):
+                                entry['n'] = t['norm']
+                            ticks.append(entry)
+                        yield f"data: {json.dumps({'type': 'ticks', 'ts': round(now, 3), 'd': ticks})}\n\n"
+                        last_flush = now
+                        keepalive_at = now
+                    elif batch:
+                        pass
+                    elif now - keepalive_at > 25:
+                        yield f": keepalive\n\n"
+                        keepalive_at = now
+
+            except GeneratorExit:
+                pass
+            finally:
+                with _chain_sse_lock:
+                    _chain_sse_clients.pop(client_id, None)
+                print(f"[OPTIONS_SSE] Client #{client_id} disconnected ({symbol})")
+
+        return app.response_class(
+            event_stream(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive',
+            }
+        )
+
+    @app.route('/api/options/chain-stream/update-keys', methods=['POST'])
+    @login_required
+    def api_update_chain_stream_keys():
+        data = request.json or {}
+        client_id = data.get('client_id')
+        keys = data.get('keys', [])
+        symbol = data.get('symbol', '').upper()
+        if client_id is None:
+            return jsonify({'error': 'client_id required'}), 400
+        watched = set()
+        for k in keys:
+            ku = k.strip().upper()
+            if ku:
+                watched.add(ku)
+                norm = _TRAILING_ZERO_RE.sub(r'_\1_\2', ku)
+                if norm != ku:
+                    watched.add(norm)
+        if symbol:
+            watched.add(symbol)
+        with _chain_sse_lock:
+            client = _chain_sse_clients.get(int(client_id))
+            if client:
+                client['watched_keys'] = watched
+                client['symbol'] = symbol
+                return jsonify({'success': True, 'watching': len(watched)})
+        return jsonify({'error': 'Client not found'}), 404
+
     @app.route('/api/options/order', methods=['POST'])
     def api_place_option_order():
         """Place an option order (buy call/put) - routes to selected broker"""
