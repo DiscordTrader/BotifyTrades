@@ -401,14 +401,18 @@ class BrokerSyncService:
         
         has_positions = bool(normalized_data.get('positions'))
         has_db_trades = False
+        has_pending_trades = False
         try:
             from gui_app.database import get_open_trades_for_broker
             active = get_open_trades_for_broker(broker_name)
             has_db_trades = bool(active)
+            if active:
+                has_pending_trades = any(t.get('status') == 'PENDING' for t in active)
         except Exception:
             has_db_trades = True
 
-        if self._fill_sync_counter[broker_name] >= 5 and (has_positions or has_db_trades):
+        fill_sync_interval = 1 if (has_pending_trades or has_positions) else 5
+        if self._fill_sync_counter[broker_name] >= fill_sync_interval and (has_positions or has_db_trades):
             await self._sync_filled_orders(broker_name, broker_instance)
             self._fill_sync_counter[broker_name] = 0
             await asyncio.sleep(0)
@@ -1884,7 +1888,7 @@ class BrokerSyncService:
                         close_reason='broker_closed_position'
                     )
                     
-                    if exit_price_source != 'last_sync' and exit_price > 0:
+                    if exit_price > 0:
                         try:
                             from gui_app.database import get_connection as _get_fill_conn, update_closure_exit_fill
                             _fill_conn = _get_fill_conn()
@@ -1898,6 +1902,9 @@ class BrokerSyncService:
                                   AND UPPER(t.broker) = UPPER(?)
                             '''
                             _fill_params = [symbol, broker_name]
+                            if discord_channel_id:
+                                _fill_query += ' AND sl.channel_id = ?'
+                                _fill_params.append(str(discord_channel_id))
                             if asset_type == 'option' and trade.get('strike'):
                                 _fill_query += ' AND sl.strike = ?'
                                 _fill_params.append(str(trade['strike']))
@@ -1909,7 +1916,8 @@ class BrokerSyncService:
                             _fill_cur.execute(_fill_query, _fill_params)
                             _best_closure = _fill_cur.fetchone()
                             if _best_closure:
-                                update_closure_exit_fill(_best_closure['id'], exit_price, broker_name, filled_at=datetime.now().isoformat(), exit_source='broker_sync')
+                                _exit_src = 'broker_sync' if exit_price_source != 'last_sync' else 'provisional_sync'
+                                update_closure_exit_fill(_best_closure['id'], exit_price, broker_name, filled_at=datetime.now().isoformat(), exit_source=_exit_src)
                                 print(f"[SYNC] ✓ Updated lot_closure #{_best_closure['id']} exit fill: ${exit_price:.4f} via {broker_name}")
                         except Exception as fill_err:
                             print(f"[SYNC] ⚠️ Lot closure fill update warning: {fill_err}")
@@ -2588,6 +2596,26 @@ class BrokerSyncService:
                         pass
                 
                 if should_process:
+                    try:
+                        from gui_app.database import process_filled_order_event
+                        fill_result = process_filled_order_event(
+                            broker=broker_name,
+                            broker_order_id=str(order.get('order_id', '')),
+                            symbol=order.get('symbol', ''),
+                            side=side,
+                            quantity=qty,
+                            fill_price=price,
+                            filled_at=filled_time,
+                            asset_type=order.get('asset_type', 'stock'),
+                            strike=order.get('strike'),
+                            expiry=order.get('expiry'),
+                            call_put=order.get('direction')
+                        )
+                        if fill_result.get('trades_updated') or fill_result.get('lots_updated'):
+                            print(f"[FILL_EVENT] ✓ Unified fill: {side} {order.get('symbol','')} trades={fill_result['trades_updated']} lots={fill_result['lots_updated']}")
+                    except Exception as uf_err:
+                        print(f"[FILL_EVENT] ⚠️ Unified fill warning: {uf_err}")
+                    
                     if side == 'BTO':
                         await self._record_execution_lot(
                             broker=broker_name,
@@ -2846,6 +2874,7 @@ class BrokerSyncService:
                 final_sizing_mode = sizing_mode or (meta['sizing_mode'] if meta else None)
                 final_signal_lot_id = signal_lot_id or (meta['signal_lot_id'] if meta else None)
                 _insert_lot._resolved_lot_id = final_signal_lot_id
+                _insert_lot._resolved_channel_id = final_channel_id
                 final_signal_detected = signal_detected_at or (meta['signal_detected_at'] if meta else None)
                 final_signal_parsed = signal_parsed_at or (meta['signal_parsed_at'] if meta else None)
                 final_order_submitted = order_submitted_at or (meta['order_submitted_at'] if meta else None)
@@ -2928,10 +2957,12 @@ class BrokerSyncService:
                 return result
             
             _resolved_signal_lot_id = [signal_lot_id]
+            _resolved_channel_id = [channel_id]
             _original_insert_lot = _insert_lot
             def _insert_lot_and_capture():
                 result = _original_insert_lot()
                 _resolved_signal_lot_id[0] = _insert_lot._resolved_lot_id
+                _resolved_channel_id[0] = getattr(_insert_lot, '_resolved_channel_id', channel_id)
                 return result
             
             result = await asyncio.to_thread(_insert_lot_and_capture)
@@ -2955,7 +2986,11 @@ class BrokerSyncService:
                     print(f"[EXEC] ⚠️ Could not update signal lot fill: {fill_err}")
             else:
                 try:
+                    _fb_channel = _resolved_channel_id[0] if _resolved_channel_id[0] and _resolved_channel_id[0] != 'UNKNOWN' else None
                     def _fallback_lot_fill():
+                        if not _fb_channel:
+                            print(f"[EXEC] ⚠️ Skipping fallback lot fill for {symbol}: no channel_id (would risk cross-channel match)")
+                            return
                         from gui_app.database import get_connection
                         conn = get_connection()
                         cursor = conn.cursor()
@@ -2964,13 +2999,14 @@ class BrokerSyncService:
                             JOIN trades t ON sl.trade_id = t.id
                             WHERE UPPER(sl.symbol) = UPPER(?) AND UPPER(t.broker) = UPPER(?)
                               AND sl.entry_fill_price IS NULL AND sl.status != 'CLOSED'
+                              AND sl.channel_id = ?
                             ORDER BY sl.id DESC LIMIT 1
-                        ''', (symbol, broker))
+                        ''', (symbol, broker, _fb_channel))
                         row = cursor.fetchone()
                         if row:
                             from gui_app.database import update_lot_entry_fill
                             update_lot_entry_fill(row['id'], fill_price, broker, broker_order_id, filled_at)
-                            print(f"[EXEC] ✓ Fallback entry fill: lot #{row['id']} {symbol} @${fill_price:.2f} via {broker}")
+                            print(f"[EXEC] ✓ Fallback entry fill: lot #{row['id']} {symbol} ch={_fb_channel} @${fill_price:.2f} via {broker}")
                     await asyncio.to_thread(_fallback_lot_fill)
                 except Exception as fb_err:
                     print(f"[EXEC] ⚠️ Fallback entry fill failed: {fb_err}")
@@ -3048,17 +3084,25 @@ class BrokerSyncService:
                         target_lot_id = row['signal_lot_id'] if row and row['signal_lot_id'] else None
                         
                         if not target_lot_id:
-                            cursor.execute('''
+                            _exit_fb_query = '''
                                 SELECT sl.id FROM signal_lots sl
                                 JOIN trades t ON sl.trade_id = t.id
                                 WHERE UPPER(sl.symbol) = UPPER(?) AND UPPER(t.broker) = UPPER(?)
                                   AND sl.remaining_qty <= 0 AND sl.status = 'CLOSED'
-                                ORDER BY sl.id DESC LIMIT 1
-                            ''', (symbol, broker))
-                            fb_row = cursor.fetchone()
-                            if fb_row:
-                                target_lot_id = fb_row['id']
-                                print(f"[EXEC] ✓ Fallback exit fill: matched lot #{target_lot_id} for {symbol} via {broker}")
+                            '''
+                            _exit_fb_params = [symbol, broker]
+                            if channel_id and channel_id != 'UNKNOWN':
+                                _exit_fb_query += ' AND sl.channel_id = ?'
+                                _exit_fb_params.append(channel_id)
+                            else:
+                                print(f"[EXEC] ⚠️ Skipping fallback exit fill for {symbol}: no channel_id (would risk cross-channel match)")
+                            _exit_fb_query += ' ORDER BY sl.id DESC LIMIT 1'
+                            if channel_id and channel_id != 'UNKNOWN':
+                                cursor.execute(_exit_fb_query, _exit_fb_params)
+                                fb_row = cursor.fetchone()
+                                if fb_row:
+                                    target_lot_id = fb_row['id']
+                                    print(f"[EXEC] ✓ Fallback exit fill: matched lot #{target_lot_id} for {symbol} ch={channel_id} via {broker}")
                         
                         if target_lot_id:
                             cursor.execute('''

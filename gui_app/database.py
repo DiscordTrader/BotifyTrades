@@ -5013,6 +5013,169 @@ def update_closure_exit_fill(closure_id: int, fill_price: float, broker: str, or
     return False
 
 
+def process_filled_order_event(broker: str, broker_order_id: str, symbol: str,
+                               side: str, quantity: int, fill_price: float,
+                               filled_at: str = None, asset_type: str = 'stock',
+                               strike: str = None, expiry: str = None,
+                               call_put: str = None):
+    """Unified fill propagation: updates BOTH trades and signal_lots/lot_closures from a single fill event.
+    
+    This is the single entry point for propagating broker fill prices to all tracking systems.
+    Matching priority:
+      1. pending_order_metadata (deterministic: broker_order_id -> channel_id + signal_lot_id)
+      2. trades table by order_id (deterministic)
+      3. trades table by symbol+broker+channel (ONLY when channel_id is known)
+    
+    Channel-strict: all fallback matching requires a known channel_id.
+    No-channel fills only match via deterministic order_id paths.
+    Idempotent: safe to call multiple times for the same fill.
+    """
+    if not fill_price or fill_price <= 0:
+        return {'trades_updated': False, 'lots_updated': False}
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    result = {'trades_updated': False, 'lots_updated': False, 'channel_id': None}
+    
+    try:
+        cursor.execute('BEGIN IMMEDIATE')
+    except Exception:
+        pass
+    
+    try:
+        is_entry = side.upper() in ('BUY', 'BTO', 'BUY_TO_OPEN', 'BUY_OPEN')
+        
+        metadata = None
+        if broker_order_id:
+            cursor.execute('''SELECT channel_id, signal_lot_id, action, symbol 
+                             FROM pending_order_metadata 
+                             WHERE broker_order_id = ? AND UPPER(broker) = UPPER(?)
+                             LIMIT 1''', (broker_order_id, broker))
+            metadata = cursor.fetchone()
+        
+        channel_id = metadata['channel_id'] if metadata else None
+        if channel_id == 'UNKNOWN' or channel_id == '':
+            channel_id = None
+        signal_lot_id = metadata['signal_lot_id'] if metadata else None
+        result['channel_id'] = channel_id
+        
+        if is_entry:
+            trade_row = None
+            if broker_order_id:
+                cursor.execute('''SELECT id, channel_id FROM trades 
+                                 WHERE order_id = ? AND UPPER(broker) = UPPER(?) AND direction = 'BTO'
+                                 LIMIT 1''', (broker_order_id, broker))
+                trade_row = cursor.fetchone()
+            
+            if not trade_row and channel_id:
+                cursor.execute('''SELECT id, channel_id FROM trades 
+                              WHERE UPPER(broker) = UPPER(?) AND UPPER(symbol) = UPPER(?) 
+                              AND direction = 'BTO' AND status IN ('PENDING', 'OPEN')
+                              AND channel_id = ?
+                              ORDER BY id DESC LIMIT 1''', (broker, symbol, channel_id))
+                trade_row = cursor.fetchone()
+            
+            if trade_row:
+                if not channel_id:
+                    channel_id = trade_row['channel_id']
+                    result['channel_id'] = channel_id
+                cursor.execute('''UPDATE trades SET executed_price = ?, status = 'OPEN', 
+                                 executed_at = COALESCE(?, executed_at, datetime('now'))
+                                 WHERE id = ? AND (executed_price IS NULL OR status = 'PENDING')''',
+                              (fill_price, filled_at, trade_row['id']))
+                if cursor.rowcount > 0:
+                    result['trades_updated'] = True
+                    print(f"[FILL_EVENT] ✓ trades #{trade_row['id']} entry fill: ${fill_price:.4f} via {broker}")
+            
+            if signal_lot_id:
+                updated = update_lot_entry_fill(signal_lot_id, fill_price, broker, broker_order_id, filled_at)
+                if updated:
+                    result['lots_updated'] = True
+                    print(f"[FILL_EVENT] ✓ signal_lot #{signal_lot_id} entry fill: ${fill_price:.4f}")
+            elif channel_id:
+                cursor.execute('''SELECT id FROM signal_lots 
+                                 WHERE UPPER(symbol) = UPPER(?) AND entry_fill_price IS NULL
+                                 AND channel_id = ? AND status IN ('OPEN', 'PARTIAL')
+                                 ORDER BY id DESC LIMIT 1''', (symbol, channel_id))
+                lot_row = cursor.fetchone()
+                if lot_row:
+                    updated = update_lot_entry_fill(lot_row['id'], fill_price, broker, broker_order_id, filled_at)
+                    if updated:
+                        result['lots_updated'] = True
+                        print(f"[FILL_EVENT] ✓ signal_lot #{lot_row['id']} entry fill (channel match): ${fill_price:.4f}")
+        else:
+            trade_row = None
+            if broker_order_id:
+                cursor.execute('''SELECT id, origin_trade_id, channel_id FROM trades 
+                                 WHERE order_id = ? AND UPPER(broker) = UPPER(?) AND direction = 'STC'
+                                 LIMIT 1''', (broker_order_id, broker))
+                trade_row = cursor.fetchone()
+            
+            if not trade_row and channel_id:
+                cursor.execute('''SELECT id, origin_trade_id, channel_id FROM trades 
+                              WHERE UPPER(broker) = UPPER(?) AND UPPER(symbol) = UPPER(?)
+                              AND direction = 'STC' AND status IN ('CLOSED', 'FILLED')
+                              AND (executed_price IS NULL OR executed_price = 0)
+                              AND channel_id = ?
+                              ORDER BY id DESC LIMIT 1''', (broker, symbol, channel_id))
+                trade_row = cursor.fetchone()
+            
+            if trade_row:
+                if not channel_id:
+                    channel_id = trade_row['channel_id']
+                    result['channel_id'] = channel_id
+                cursor.execute('''UPDATE trades SET executed_price = ?,
+                                 executed_at = COALESCE(?, executed_at)
+                                 WHERE id = ? AND (executed_price IS NULL OR executed_price = 0)''',
+                              (fill_price, filled_at, trade_row['id']))
+                if cursor.rowcount > 0:
+                    result['trades_updated'] = True
+                    print(f"[FILL_EVENT] ✓ trades #{trade_row['id']} exit fill: ${fill_price:.4f} via {broker}")
+                
+                if trade_row['origin_trade_id']:
+                    multiplier = 100 if asset_type == 'option' else 1
+                    cursor.execute('SELECT executed_price FROM trades WHERE id = ?', (trade_row['origin_trade_id'],))
+                    bto_row = cursor.fetchone()
+                    if bto_row and bto_row['executed_price']:
+                        pnl = (fill_price - float(bto_row['executed_price'])) * quantity * multiplier
+                        pnl_pct = ((fill_price - float(bto_row['executed_price'])) / float(bto_row['executed_price'])) * 100 if float(bto_row['executed_price']) > 0 else 0
+                        cursor.execute('UPDATE trades SET pnl = ?, pnl_percent = ? WHERE id = ?',
+                                      (round(pnl, 2), round(pnl_pct, 2), trade_row['id']))
+            
+            if not channel_id:
+                print(f"[FILL_EVENT] ⚠️ Skipping lot_closure fill for {symbol}: no channel_id (deterministic match only)")
+            else:
+                closure_query = '''SELECT lc.id FROM lot_closures lc
+                                  JOIN signal_lots sl ON lc.lot_id = sl.id
+                                  WHERE UPPER(sl.symbol) = UPPER(?) AND UPPER(lc.broker) = UPPER(?)
+                                  AND lc.exit_fill_price IS NULL AND sl.channel_id = ?'''
+                closure_params = [symbol, broker, channel_id]
+                if strike:
+                    closure_query += ' AND sl.strike = ?'
+                    closure_params.append(str(strike))
+                if expiry:
+                    closure_query += ' AND sl.expiry = ?'
+                    closure_params.append(str(expiry))
+                closure_query += ' ORDER BY lc.closed_at DESC LIMIT 1'
+                cursor.execute(closure_query, closure_params)
+                closure_row = cursor.fetchone()
+                if closure_row:
+                    updated = update_closure_exit_fill(closure_row['id'], fill_price, broker, broker_order_id, filled_at)
+                    if updated:
+                        result['lots_updated'] = True
+                        print(f"[FILL_EVENT] ✓ lot_closure #{closure_row['id']} exit fill: ${fill_price:.4f}")
+        
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"[FILL_EVENT] ⚠️ Error in process_filled_order_event: {e}")
+    
+    return result
+
+
 def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
                                 strike: float = None, expiry: str = None, call_put: str = None,
                                 quantity: int = 0, fill_price: float = 0, broker_order_id: str = None,
