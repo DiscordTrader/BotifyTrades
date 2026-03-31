@@ -10500,13 +10500,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 signal['_channel_name'] = channel_settings.get('name', '')
                                 print(f"[CONDITIONAL] ✓ Linked to channel #{channel_settings['id']} ({signal['_channel_name']}) for trade tracking", flush=True)
                         
-                        # Stop Loss: Signal value first, then channel settings
+                        # Stop Loss: Channel settings FIRST (user's personal risk), then signal fallback
                         # Hybrid SL: Both fixed price AND percentage (whichever triggers first)
                         sl_type = order.get('stop_loss_type')
                         has_hybrid_sl = sl_type == 'hybrid' or (order.get('stop_loss_fixed') and order.get('stop_loss_pct'))
-                        
-                        if has_hybrid_sl:
-                            # Hybrid SL: set both price and percentage - risk manager uses whichever triggers first
+                        ch_sl_pct = channel_settings.get('stop_loss_pct') if channel_settings else None
+                        ch_risk_enabled = channel_settings.get('risk_management_enabled', 0) if channel_settings else 0
+
+                        if ch_sl_pct and float(ch_sl_pct) > 0 and ch_risk_enabled:
+                            ch_sl_pct = float(ch_sl_pct)
+                            signal['stop_loss_pct'] = ch_sl_pct
+                            ch_sl_price = triggered_price * (1 - ch_sl_pct / 100)
+                            signal['stop_loss_price'] = round(ch_sl_price, 2)
+                            if has_signal_sl:
+                                print(f"[CONDITIONAL] Signal SL overridden by channel setting: {ch_sl_pct}% = ${signal['stop_loss_price']:.2f} (signal had {order.get('stop_loss_value')})", flush=True)
+                            else:
+                                print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.2f}", flush=True)
+                        elif has_hybrid_sl:
                             sl_fixed = order.get('stop_loss_fixed') or order.get('stop_loss_value')
                             sl_pct = order.get('stop_loss_pct')
                             if sl_fixed:
@@ -10514,25 +10524,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if sl_pct:
                                 signal['stop_loss_pct'] = sl_pct
                             signal['_hybrid_sl'] = True
-                            print(f"[CONDITIONAL] Using HYBRID SL: ${sl_fixed} or {sl_pct}%", flush=True)
+                            print(f"[CONDITIONAL] Using HYBRID SL: ${sl_fixed} or {sl_pct}% (no channel SL configured)", flush=True)
                         elif has_signal_sl:
                             if sl_type == 'percent':
                                 sl_pct = order['stop_loss_value']
                                 signal['stop_loss_pct'] = sl_pct
-                                # Calculate actual stop loss price from percentage
                                 sl_price = triggered_price * (1 - sl_pct / 100)
                                 signal['stop_loss_price'] = round(sl_price, 2)
-                                print(f"[CONDITIONAL] Using signal SL: {sl_pct}% = ${signal['stop_loss_price']:.2f} (entry: ${triggered_price:.2f})", flush=True)
+                                print(f"[CONDITIONAL] Using signal SL: {sl_pct}% = ${signal['stop_loss_price']:.2f} (no channel SL configured)", flush=True)
                             else:
                                 signal['stop_loss_price'] = order['stop_loss_value']
-                                print(f"[CONDITIONAL] Using signal SL: ${order['stop_loss_value']}", flush=True)
-                        elif channel_settings and channel_settings.get('stop_loss_pct'):
-                            ch_sl_pct = channel_settings['stop_loss_pct']
-                            signal['stop_loss_pct'] = ch_sl_pct
-                            # Calculate actual stop loss price from channel percentage
-                            ch_sl_price = triggered_price * (1 - ch_sl_pct / 100)
-                            signal['stop_loss_price'] = round(ch_sl_price, 2)
-                            print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.2f}", flush=True)
+                                print(f"[CONDITIONAL] Using signal SL: ${order['stop_loss_value']} (no channel SL configured)", flush=True)
                         
                         # Profit Targets: Signal prices first, then channel percentage settings
                         if has_signal_targets:
