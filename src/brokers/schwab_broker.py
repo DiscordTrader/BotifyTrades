@@ -2858,10 +2858,12 @@ class SchwabBroker(BrokerInterface):
             has_sl_only = stop_loss_price is not None and profit_target_price is None
             has_pt_only = profit_target_price is not None and stop_loss_price is None
 
+            child_session = "NORMAL" if session == "SEAMLESS" else session
+
             if has_both:
                 profit_leg = {
                     "orderStrategyType": "SINGLE",
-                    "session": session,
+                    "session": child_session,
                     "duration": "GOOD_TILL_CANCEL",
                     "orderType": "LIMIT",
                     "price": self._format_price(profit_target_price),
@@ -2873,7 +2875,7 @@ class SchwabBroker(BrokerInterface):
                 }
                 stop_leg = {
                     "orderStrategyType": "SINGLE",
-                    "session": session,
+                    "session": child_session,
                     "duration": "GOOD_TILL_CANCEL",
                     "orderType": "STOP",
                     "stopPrice": self._format_price(stop_loss_price),
@@ -2888,10 +2890,12 @@ class SchwabBroker(BrokerInterface):
                     "childOrderStrategies": [profit_leg, stop_leg]
                 }]
                 print(f"[{self.name}] Full BRACKET order: Entry + OCO(PT=${profit_target_price} / SL=${stop_loss_price})")
+                if session == "SEAMLESS":
+                    print(f"[{self.name}] ℹ️ Child orders use NORMAL session (SEAMLESS doesn't support STOP orders)")
             elif has_sl_only:
                 stop_child = {
                     "orderStrategyType": "SINGLE",
-                    "session": session,
+                    "session": child_session,
                     "duration": "GOOD_TILL_CANCEL",
                     "orderType": "STOP",
                     "stopPrice": self._format_price(stop_loss_price),
@@ -2906,7 +2910,7 @@ class SchwabBroker(BrokerInterface):
             elif has_pt_only:
                 pt_child = {
                     "orderStrategyType": "SINGLE",
-                    "session": session,
+                    "session": child_session,
                     "duration": "GOOD_TILL_CANCEL",
                     "orderType": "LIMIT",
                     "price": self._format_price(profit_target_price),
