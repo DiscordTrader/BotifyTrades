@@ -9489,6 +9489,8 @@ def register_routes(app):
                 trade_summary_enabled = existing.get('trade_summary_enabled', False)
                 trade_summary_channel = existing.get('trade_summary_channel', '')
             
+            ema_risk_global_enabled = data.get('ema_risk_global_enabled', True)
+            
             # Validate max position size
             if not (100 <= max_position_size <= 10000):
                 return jsonify({'error': 'Max position size must be between 100 and 10000'}), 400
@@ -9505,7 +9507,7 @@ def register_routes(app):
                     except ValueError:
                         return jsonify({'error': 'Invalid global default quantity'}), 400
             
-            success = db.update_trading_settings(max_position_size, global_default_quantity, max_position_size_enabled, trade_summary_enabled, trade_summary_channel)
+            success = db.update_trading_settings(max_position_size, global_default_quantity, max_position_size_enabled, trade_summary_enabled, trade_summary_channel, ema_risk_global_enabled)
             
             if success:
                 return jsonify({
@@ -9516,7 +9518,8 @@ def register_routes(app):
                         'global_default_quantity': global_default_quantity,
                         'max_position_size_enabled': max_position_size_enabled,
                         'trade_summary_enabled': trade_summary_enabled,
-                        'trade_summary_channel': trade_summary_channel
+                        'trade_summary_channel': trade_summary_channel,
+                        'ema_risk_global_enabled': ema_risk_global_enabled
                     }
                 })
             else:

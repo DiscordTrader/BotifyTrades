@@ -8041,7 +8041,7 @@ def get_trading_settings() -> Dict[str, Any]:
         print(f"[DATABASE] Error adding trade_summary_channel column: {e}")
     
     cursor.execute('''
-        SELECT max_position_size, updated_at, global_default_quantity, max_position_size_enabled, trade_summary_enabled, trade_summary_channel
+        SELECT max_position_size, updated_at, global_default_quantity, max_position_size_enabled, trade_summary_enabled, trade_summary_channel, ema_risk_global_enabled
         FROM trading_settings
         WHERE id = 1
     ''')
@@ -8054,7 +8054,8 @@ def get_trading_settings() -> Dict[str, Any]:
             'global_default_quantity': row['global_default_quantity'],
             'max_position_size_enabled': bool(row['max_position_size_enabled']) if row['max_position_size_enabled'] is not None else True,
             'trade_summary_enabled': bool(row['trade_summary_enabled']) if row['trade_summary_enabled'] is not None else True,
-            'trade_summary_channel': row['trade_summary_channel'] or ''
+            'trade_summary_channel': row['trade_summary_channel'] or '',
+            'ema_risk_global_enabled': bool(row['ema_risk_global_enabled']) if row['ema_risk_global_enabled'] is not None else True
         }
     
     return {
@@ -8063,11 +8064,12 @@ def get_trading_settings() -> Dict[str, Any]:
         'global_default_quantity': None,
         'max_position_size_enabled': True,
         'trade_summary_enabled': True,
-        'trade_summary_channel': ''
+        'trade_summary_channel': '',
+        'ema_risk_global_enabled': True
     }
 
 
-def update_trading_settings(max_position_size: int, global_default_quantity: int = None, max_position_size_enabled: bool = True, trade_summary_enabled: bool = True, trade_summary_channel: str = '') -> bool:
+def update_trading_settings(max_position_size: int, global_default_quantity: int = None, max_position_size_enabled: bool = True, trade_summary_enabled: bool = True, trade_summary_channel: str = '', ema_risk_global_enabled: bool = True) -> bool:
     """Update trading settings"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -8087,9 +8089,10 @@ def update_trading_settings(max_position_size: int, global_default_quantity: int
                 max_position_size_enabled = ?,
                 trade_summary_enabled = ?,
                 trade_summary_channel = ?,
+                ema_risk_global_enabled = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = 1
-        ''', (int(max_position_size), global_default_quantity, 1 if max_position_size_enabled else 0, 1 if trade_summary_enabled else 0, trade_summary_channel or ''))
+        ''', (int(max_position_size), global_default_quantity, 1 if max_position_size_enabled else 0, 1 if trade_summary_enabled else 0, trade_summary_channel or '', 1 if ema_risk_global_enabled else 0))
         
         conn.commit()
         return True

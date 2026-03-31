@@ -1310,6 +1310,16 @@ input:checked + .slider:before {
             <input type="number" id="global-default-quantity" min="1" max="1000" step="1" placeholder="1">
             <p class="help-text">Default contracts/shares when signal has no qty (required when max position size is disabled)</p>
         </div>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>EMA Risk Global Enabled</span>
+                <label class="switch">
+                    <input type="checkbox" id="ema-risk-global-enabled" checked>
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <p class="help-text">Global kill switch for EMA-based risk exits across all channels. When OFF, no EMA risk evaluations will run even if enabled per-channel.</p>
+        </div>
         <div class="btn-group">
             <button id="save-trading" class="btn btn-success">💾 Save Settings</button>
             <span id="trading-save-message" style="margin-left: 12px; font-weight: 600;"></span>
@@ -3244,6 +3254,8 @@ async function loadTradingSettings() {
         const enabledCheckbox = document.getElementById('max-position-size-enabled');
         enabledCheckbox.checked = settings.max_position_size_enabled !== false;
         toggleMaxPositionSize(enabledCheckbox.checked);
+        
+        document.getElementById('ema-risk-global-enabled').checked = settings.ema_risk_global_enabled !== false;
     } catch (error) {
         console.error('Error loading trading settings:', error);
     }
@@ -3265,7 +3277,8 @@ document.getElementById('save-trading').addEventListener('click', async () => {
     const data = {
         max_position_size: parseInt(document.getElementById('max-position-size').value),
         global_default_quantity: globalDefaultQtyValue === '' ? null : parseInt(globalDefaultQtyValue),
-        max_position_size_enabled: maxPositionSizeEnabled
+        max_position_size_enabled: maxPositionSizeEnabled,
+        ema_risk_global_enabled: document.getElementById('ema-risk-global-enabled').checked
     };
     
     try {
