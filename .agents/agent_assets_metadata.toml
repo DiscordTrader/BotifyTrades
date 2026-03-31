@@ -30,3 +30,9 @@ id = "xQxflmxsI9aqHMxKSjMqS"
 uri = "file://docs/ENTRY_CONFIRMATION_LIMIT_CAP_GUIDE.md"
 type = "text"
 title = "Entry Confirmation & Limit Cap Guide"
+
+[[outputs]]
+id = "aZVjS822ubBs4LnEfbE1V"
+uri = "file://attached_assets/trade_analysis_report_2026-03-30.md"
+type = "text"
+title = "Trade Analysis Report — March 30, 2026"
