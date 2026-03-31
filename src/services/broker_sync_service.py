@@ -1440,6 +1440,36 @@ class BrokerSyncService:
                             print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) qty synced: DB={db_quantity} → Broker={broker_quantity} (preserved original_quantity={int(db_quantity)})")
                         else:
                             print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) qty synced: DB={db_quantity} → Broker={broker_quantity} (original_quantity={original_qty or 'same'})")
+                        
+                        # Create lot_closures for PNL tracking when qty decreased (partial exit)
+                        if broker_quantity < db_quantity:
+                            sold_qty = int(db_quantity - broker_quantity)
+                            discord_channel_id = trade.get('channel_id')
+                            if discord_channel_id and sold_qty > 0:
+                                try:
+                                    from gui_app.database import get_channel_by_discord_id
+                                    channel_row = get_channel_by_discord_id(str(discord_channel_id))
+                                    if channel_row:
+                                        exit_price = float(current_price) if current_price and float(current_price) > 0 else 0
+                                        matcher = get_matcher()
+                                        lot_signal = {
+                                            'action': 'STC',
+                                            'symbol': symbol,
+                                            'asset': asset_type,
+                                            'qty': sold_qty,
+                                            'price': exit_price,
+                                            'strike': trade.get('strike'),
+                                            'expiry': trade.get('expiry'),
+                                            'opt_type': trade.get('call_put'),
+                                            'channel_id': discord_channel_id,
+                                            'db_channel_id': channel_row['id'],
+                                            'received_at': datetime.now()
+                                        }
+                                        lot_result = matcher.process_signal(lot_signal)
+                                        if lot_result:
+                                            print(f"[SYNC] ✓ Created {len(lot_result)} lot_closure(s) for partial exit PNL tracking ({sold_qty} shares @ ${exit_price:.2f})")
+                                except Exception as le:
+                                    print(f"[SYNC] ⚠️ Partial exit lot_closure warning: {le}")
                     
                     # Update all fields
                     self.db.update_trade(trade_id, **update_fields)
