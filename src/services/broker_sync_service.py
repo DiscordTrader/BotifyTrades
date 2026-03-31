@@ -1387,21 +1387,25 @@ class BrokerSyncService:
                             if lot_row:
                                 print(f"[SYNC] Found lot #{lot_row['id']} via trade_id={trade_id}")
                         
-                        # Priority 2: Fallback to symbol/strike matching (legacy lots without trade_id)
                         if not lot_row and trade_symbol and trade_strike:
-                            cursor.execute('''
-                                SELECT id, executed_symbol, executed_strike, open_price
-                                FROM signal_lots
-                                WHERE executed_symbol = ?
-                                AND executed_strike = ?
-                                AND status = 'OPEN'
-                                AND trade_id IS NULL
-                                ORDER BY id DESC
-                                LIMIT 1
-                            ''', (trade_symbol, float(trade_strike)))
-                            lot_row = cursor.fetchone()
-                            if lot_row:
-                                print(f"[SYNC] Found lot #{lot_row['id']} via symbol/strike fallback (legacy)")
+                            _legacy_ch = trade.get('channel_id')
+                            if _legacy_ch and _legacy_ch != 'UNKNOWN':
+                                cursor.execute('''
+                                    SELECT id, executed_symbol, executed_strike, open_price
+                                    FROM signal_lots
+                                    WHERE executed_symbol = ?
+                                    AND executed_strike = ?
+                                    AND status = 'OPEN'
+                                    AND trade_id IS NULL
+                                    AND channel_id = ?
+                                    ORDER BY id DESC
+                                    LIMIT 1
+                                ''', (trade_symbol, float(trade_strike), str(_legacy_ch)))
+                                lot_row = cursor.fetchone()
+                                if lot_row:
+                                    print(f"[SYNC] Found lot #{lot_row['id']} via symbol/strike+channel fallback (legacy)")
+                            else:
+                                print(f"[SYNC] ⚠️ Skipping legacy lot fallback for {trade_symbol}: no channel_id")
                         
                         if lot_row:
                             old_price = lot_row['open_price']
@@ -1902,9 +1906,12 @@ class BrokerSyncService:
                                   AND UPPER(t.broker) = UPPER(?)
                             '''
                             _fill_params = [symbol, broker_name]
-                            if discord_channel_id:
+                            if discord_channel_id and str(discord_channel_id) != 'UNKNOWN':
                                 _fill_query += ' AND sl.channel_id = ?'
                                 _fill_params.append(str(discord_channel_id))
+                            else:
+                                print(f"[SYNC] ⚠️ Skipping lot_closure fill for {symbol}: no channel_id (would risk cross-channel match)")
+                                raise Exception("skip_no_channel")
                             if asset_type == 'option' and trade.get('strike'):
                                 _fill_query += ' AND sl.strike = ?'
                                 _fill_params.append(str(trade['strike']))
@@ -1918,7 +1925,7 @@ class BrokerSyncService:
                             if _best_closure:
                                 _exit_src = 'broker_sync' if exit_price_source != 'last_sync' else 'provisional_sync'
                                 update_closure_exit_fill(_best_closure['id'], exit_price, broker_name, filled_at=datetime.now().isoformat(), exit_source=_exit_src)
-                                print(f"[SYNC] ✓ Updated lot_closure #{_best_closure['id']} exit fill: ${exit_price:.4f} via {broker_name}")
+                                print(f"[SYNC] ✓ Updated lot_closure #{_best_closure['id']} exit fill: ${exit_price:.4f} via {broker_name} (src={_exit_src})")
                         except Exception as fill_err:
                             print(f"[SYNC] ⚠️ Lot closure fill update warning: {fill_err}")
                     
