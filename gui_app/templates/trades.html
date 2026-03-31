@@ -2392,6 +2392,13 @@ function qtResolveIdx(idx, expectedStrike) {
     return idx;
 }
 
+function qtSyncSignalDropdowns(strike, optType) {
+    const strikeSel = document.getElementById('qt-signal-strike');
+    const typeSel = document.getElementById('qt-signal-type');
+    if (strikeSel) strikeSel.value = String(strike);
+    if (typeSel && optType) typeSel.value = optType;
+}
+
 function qtSetPrice(idx, optType, priceType, expectedStrike) {
     if (!qtChainData) return;
     idx = qtResolveIdx(idx, expectedStrike);
@@ -2402,6 +2409,7 @@ function qtSetPrice(idx, optType, priceType, expectedStrike) {
     if (price <= 0) { showToast('No valid price', 'error'); return; }
     const key = `${s.strike}_${optType}`;
     qtSelectedPrice[key] = { price: price, type: priceType, strike: s.strike };
+    qtSyncSignalDropdowns(s.strike, optType);
     const qty = parseInt(document.getElementById('qt-qty').value) || 1;
     const total = (price * qty * 100).toFixed(0);
     const strikeD = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
@@ -2417,6 +2425,7 @@ async function qtExecute(idx, optType, side, expectedStrike) {
         showToast(`Strike mismatch: expected $${expectedStrike} but got $${s.strike} - reload chain`, 'error');
         return;
     }
+    qtSyncSignalDropdowns(s.strike, optType);
     const opt = (optType === 'CALL' ? s.call : s.put) || {};
     const key = `${s.strike}_${optType}`;
     const selected = qtSelectedPrice[key];
