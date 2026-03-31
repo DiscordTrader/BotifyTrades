@@ -19534,6 +19534,47 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         pass
 
                                 multi_broker_results = resp.get('_multi_broker_results') if isinstance(resp, dict) else None
+                                
+                                stc_origin_trade_id = signal.get('origin_trade_id')
+                                if not stc_origin_trade_id:
+                                    try:
+                                        bto_match = db.find_open_bto_trade(
+                                            symbol=signal['symbol'],
+                                            asset_type=signal['asset'],
+                                            broker=None,
+                                            strike=signal.get('strike'),
+                                            expiry=signal.get('expiry'),
+                                            call_put=signal.get('opt_type')
+                                        )
+                                        if bto_match:
+                                            stc_origin_trade_id = bto_match['id']
+                                            _original_print(f"[DATABASE] ✓ Found origin BTO #{stc_origin_trade_id} for STC {signal['symbol']}")
+                                        else:
+                                            from gui_app.database import get_connection as _stc_conn
+                                            _conn = _stc_conn()
+                                            _cur = _conn.cursor()
+                                            _fb_query = '''
+                                                SELECT id FROM trades
+                                                WHERE UPPER(symbol) = UPPER(?) AND direction = 'BTO'
+                                                  AND LOWER(asset_type) = LOWER(?)
+                                                  AND status IN ('OPEN', 'CLOSED', 'PARTIAL')
+                                            '''
+                                            _fb_params = [signal['symbol'], signal.get('asset', 'stock')]
+                                            if signal.get('strike'):
+                                                _fb_query += ' AND strike = ?'
+                                                _fb_params.append(signal['strike'])
+                                            if signal.get('expiry'):
+                                                _fb_query += ' AND expiry = ?'
+                                                _fb_params.append(signal['expiry'])
+                                            _fb_query += ' ORDER BY id DESC LIMIT 1'
+                                            _cur.execute(_fb_query, _fb_params)
+                                            _row = _cur.fetchone()
+                                            if _row:
+                                                stc_origin_trade_id = _row['id']
+                                                _original_print(f"[DATABASE] ✓ Found origin BTO #{stc_origin_trade_id} for STC {signal['symbol']} (closed BTO fallback)")
+                                    except Exception as origin_err:
+                                        _original_print(f"[DATABASE] ⚠️ Could not find origin BTO: {origin_err}")
+                                
                                 if multi_broker_results:
                                     successful_stc = [r for r in multi_broker_results if r.get('success') == True or (r.get('orderId') and r.get('success') is not False)]
                                     _original_print(f"[DATABASE] Multi-broker STC - saving {len(successful_stc)} trade entries")
@@ -19557,18 +19598,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'broker': broker_name_upper,
                                             'order_id': stc_resp.get('orderId') or stc_resp.get('order_id'),
                                             'risk_trigger': signal.get('risk_trigger'),
-                                            'origin_trade_id': signal.get('origin_trade_id'),
+                                            'origin_trade_id': stc_origin_trade_id,
                                             'routing_mapping_id': routing_mapping_id
                                         }
                                         stc_trade_id = db.add_trade(trade_data)
                                         _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={broker_name_upper} qty={broker_executed_qty} channel={channel_id_str or 'NONE'}")
 
-                                        if signal.get('origin_trade_id'):
+                                        if stc_origin_trade_id:
                                             try:
-                                                origin_trade = db.get_trade_by_id(signal['origin_trade_id'])
+                                                origin_trade = db.get_trade_by_id(stc_origin_trade_id)
                                                 if origin_trade and (origin_trade.get('broker') or '').upper() == broker_name_upper:
-                                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
-                                                    _original_print(f"[DATABASE] ✓ Closed origin trade #{signal['origin_trade_id']} for {broker_name_upper}")
+                                                    db.update_trade(stc_origin_trade_id, status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
+                                                    _original_print(f"[DATABASE] ✓ Closed origin trade #{stc_origin_trade_id} for {broker_name_upper}")
                                             except Exception:
                                                 pass
                                 else:
@@ -19590,15 +19631,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'broker': resp.get('broker', 'UNKNOWN').upper() if isinstance(resp, dict) else 'UNKNOWN',
                                         'order_id': resp.get('orderId') if isinstance(resp, dict) else None,
                                         'risk_trigger': signal.get('risk_trigger'),
-                                        'origin_trade_id': signal.get('origin_trade_id'),
+                                        'origin_trade_id': stc_origin_trade_id,
                                         'routing_mapping_id': routing_mapping_id
                                     }
                                     stc_trade_id = db.add_trade(trade_data)
                                     _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']} qty={broker_executed_qty} channel={channel_id_str or 'NONE'}")
 
-                                    if signal.get('origin_trade_id'):
-                                        db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
-                                        _original_print(f"[DATABASE] ✓ Closed origin trade #{signal['origin_trade_id']}")
+                                    if stc_origin_trade_id:
+                                        db.update_trade(stc_origin_trade_id, status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
+                                        _original_print(f"[DATABASE] ✓ Closed origin trade #{stc_origin_trade_id}")
 
                                 if signal.get('_risk_management_order'):
                                     try:

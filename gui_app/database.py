@@ -5093,16 +5093,41 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
         
         origin_id = stc_trade['origin_trade_id']
         bto_trade = None
+        
+        if not origin_id:
+            link_query = '''
+                SELECT id FROM trades
+                WHERE direction = 'BTO' AND UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                  AND status IN ('OPEN', 'PARTIAL', 'CLOSED')
+            '''
+            link_params = [symbol, broker]
+            if asset_type == 'option' and strike is not None:
+                link_query += ' AND strike = ?'
+                link_params.append(strike)
+            if expiry:
+                link_query += ' AND expiry = ?'
+                link_params.append(expiry)
+            if call_put:
+                link_query += ' AND call_put = ?'
+                link_params.append(call_put)
+            link_query += ' ORDER BY id DESC LIMIT 1'
+            cursor.execute(link_query, link_params)
+            link_row = cursor.fetchone()
+            if link_row:
+                origin_id = link_row['id']
+                cursor.execute('UPDATE trades SET origin_trade_id = ? WHERE id = ?', (origin_id, stc_id))
+                print(f"[FILL-RECONCILE] ✓ Linked STC #{stc_id} → BTO #{origin_id} (early link)")
+        
         if origin_id:
             cursor.execute('''
-                SELECT id, executed_price, quantity, asset_type
+                SELECT id, executed_price, quantity, original_quantity, asset_type
                 FROM trades WHERE id = ? AND direction = 'BTO'
             ''', (origin_id,))
             bto_trade = cursor.fetchone()
         
         if not bto_trade:
             bto_fallback_query = '''
-                SELECT id, executed_price, quantity, asset_type
+                SELECT id, executed_price, quantity, original_quantity, asset_type
                 FROM trades
                 WHERE direction = 'BTO' AND UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
                   AND status IN ('OPEN', 'PARTIAL', 'CLOSED')
@@ -5128,14 +5153,25 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
         if bto_trade:
             entry_price = float(bto_trade['executed_price'] or 0)
             if entry_price > 0:
+                stc_qty = int(stc_trade['quantity'] or 0)
+                stc_multiplier = 100 if (stc_trade['asset_type'] or '').lower() == 'option' else 1
+                if stc_qty > 0 and fill_price > 0:
+                    stc_pnl = round((fill_price - entry_price) * stc_qty * stc_multiplier, 2)
+                    stc_pnl_pct = round(((fill_price - entry_price) / entry_price) * 100, 4)
+                    cursor.execute('''
+                        UPDATE trades SET pnl = ?, pnl_percent = ?, intended_price = ? WHERE id = ?
+                    ''', (stc_pnl, stc_pnl_pct, entry_price, stc_id))
+                    print(f"[FILL-RECONCILE] ✓ STC #{stc_id} PNL: ${stc_pnl:+.2f} ({stc_pnl_pct:+.2f}%)")
+                
                 cursor.execute('''
                     SELECT id, quantity, executed_price FROM trades
                     WHERE origin_trade_id = ? AND direction = 'STC'
-                      AND status IN ('CLOSED', 'OPEN', 'FILLED')
+                      AND status IN ('CLOSED', 'FILLED')
+                      AND executed_price IS NOT NULL AND executed_price > 0
                 ''', (origin_id,))
                 all_stcs = cursor.fetchall()
                 
-                bto_qty = int(bto_trade['quantity'] or 0)
+                bto_orig_qty = int(bto_trade['original_quantity'] if 'original_quantity' in bto_trade.keys() and bto_trade['original_quantity'] else bto_trade['quantity'] or 0)
                 multiplier = 100 if (bto_trade['asset_type'] or '').lower() == 'option' else 1
                 total_pnl = 0
                 total_closed_qty = 0
@@ -5158,7 +5194,7 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
                 update_bto = 'UPDATE trades SET pnl = ?, pnl_percent = ?'
                 update_params = [total_pnl, pnl_percent]
                 
-                if total_closed_qty >= bto_qty:
+                if total_closed_qty >= bto_orig_qty:
                     update_bto += ', current_price = ?'
                     update_params.append(fill_price)
                 
@@ -5168,7 +5204,7 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
                 
                 if cursor.rowcount > 0:
                     pnl_sign = '+' if total_pnl >= 0 else ''
-                    print(f"[FILL-RECONCILE] ✓ BTO trade #{origin_id} PNL recalculated: {pnl_sign}${total_pnl:.2f} ({pnl_percent:.2f}%)")
+                    print(f"[FILL-RECONCILE] ✓ BTO trade #{origin_id} PNL recalculated: {pnl_sign}${total_pnl:.2f} ({pnl_percent:.2f}%) [from {len(all_stcs)} STC exits, {total_closed_qty}/{bto_orig_qty} shares]")
         
         conn.commit()
         return True

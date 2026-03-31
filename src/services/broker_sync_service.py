@@ -1776,12 +1776,49 @@ class BrokerSyncService:
                     pnl = float(trade.get('pnl') or 0)
                     pnl_percent = float(trade.get('pnl_percent') or 0)
                     
-                    if exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
-                        multiplier = 100 if asset_type == 'option' else 1
-                        pnl = (exit_price - entry_price) * quantity * multiplier
-                        pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+                    original_quantity = int(trade.get('original_quantity') or quantity)
+                    multiplier = 100 if asset_type == 'option' else 1
                     
-                    # Update trade with final status and close_reason
+                    try:
+                        from gui_app.database import get_connection as _pnl_conn
+                        _pc = _pnl_conn()
+                        _pcur = _pc.cursor()
+                        _pcur.execute('''
+                            SELECT id, quantity, executed_price FROM trades
+                            WHERE origin_trade_id = ? AND direction = 'STC'
+                              AND status IN ('CLOSED', 'FILLED')
+                              AND executed_price IS NOT NULL AND executed_price > 0
+                        ''', (trade_id,))
+                        linked_stcs = _pcur.fetchall()
+                        
+                        if linked_stcs:
+                            total_pnl = 0
+                            total_closed_qty = 0
+                            for stc_row in linked_stcs:
+                                sq = int(stc_row['quantity'] or 0)
+                                sp = float(stc_row['executed_price'] or 0)
+                                total_pnl += (sp - entry_price) * sq * multiplier
+                                total_closed_qty += sq
+                            
+                            unclosed_qty = original_quantity - total_closed_qty
+                            if unclosed_qty > 0 and exit_price > 0:
+                                total_pnl += (exit_price - entry_price) * unclosed_qty * multiplier
+                                total_closed_qty += unclosed_qty
+                            
+                            pnl = round(total_pnl, 2)
+                            if total_closed_qty > 0 and entry_price > 0:
+                                weighted_exit = (sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in linked_stcs) + (exit_price * unclosed_qty if unclosed_qty > 0 else 0)) / total_closed_qty
+                                pnl_percent = ((weighted_exit - entry_price) / entry_price) * 100
+                            print(f"[SYNC] ✓ Trade #{trade_id} PNL from {len(linked_stcs)} linked STCs: ${pnl:+.2f} ({pnl_percent:+.2f}%) [{total_closed_qty}/{original_quantity} shares]")
+                        elif exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
+                            pnl = (exit_price - entry_price) * original_quantity * multiplier
+                            pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+                    except Exception as pnl_err:
+                        print(f"[SYNC] ⚠️ Linked STC PNL calc error: {pnl_err}")
+                        if exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
+                            pnl = (exit_price - entry_price) * original_quantity * multiplier
+                            pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+                    
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
