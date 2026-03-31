@@ -1506,20 +1506,28 @@ class SchwabBroker(BrokerInterface):
                     self._consecutive_zero_positions = 0
 
                 _pos_key = kwargs.get('position_key') or kwargs.get('_exit_marker_key')
+                _verify_coro = self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity, position_key=_pos_key)
+                _scheduled = False
                 try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(
-                        self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity, position_key=_pos_key)
-                    )
+                    running_loop = asyncio.get_running_loop()
+                    main_loop = getattr(self, '_event_loop', None)
+                    if main_loop and main_loop is not running_loop and not main_loop.is_closed():
+                        asyncio.run_coroutine_threadsafe(_verify_coro, main_loop)
+                    else:
+                        running_loop.create_task(_verify_coro)
+                    _scheduled = True
                 except RuntimeError:
-                    try:
-                        asyncio.ensure_future(
-                            self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity, position_key=_pos_key)
-                        )
-                    except Exception:
-                        pass
+                    main_loop = getattr(self, '_event_loop', None)
+                    if main_loop and not main_loop.is_closed():
+                        try:
+                            asyncio.run_coroutine_threadsafe(_verify_coro, main_loop)
+                            _scheduled = True
+                        except Exception:
+                            pass
                 except Exception:
                     pass
+                if not _scheduled:
+                    _verify_coro.close()
 
                 if action.upper() == "BTO" and self._streaming_client:
                     try:
@@ -1579,13 +1587,26 @@ class SchwabBroker(BrokerInterface):
                                 self._position_cache_invalidated = True
                                 self._consecutive_zero_positions = 0
                             _pos_key = kwargs.get('position_key') or kwargs.get('_exit_marker_key')
+                            _verify_coro2 = self._background_verify_order(order_id, action, alt_symbol, symbol, price, quantity, position_key=_pos_key)
+                            _sched2 = False
                             try:
-                                loop = asyncio.get_running_loop()
-                                loop.create_task(
-                                    self._background_verify_order(order_id, action, alt_symbol, symbol, price, quantity, position_key=_pos_key)
-                                )
+                                running_loop = asyncio.get_running_loop()
+                                main_loop = getattr(self, '_event_loop', None)
+                                if main_loop and main_loop is not running_loop and not main_loop.is_closed():
+                                    asyncio.run_coroutine_threadsafe(_verify_coro2, main_loop)
+                                else:
+                                    running_loop.create_task(_verify_coro2)
+                                _sched2 = True
                             except Exception:
-                                pass
+                                main_loop = getattr(self, '_event_loop', None)
+                                if main_loop and not main_loop.is_closed():
+                                    try:
+                                        asyncio.run_coroutine_threadsafe(_verify_coro2, main_loop)
+                                        _sched2 = True
+                                    except Exception:
+                                        pass
+                            if not _sched2:
+                                _verify_coro2.close()
                             if action.upper() == "BTO" and self._streaming_client:
                                 try:
                                     await self._streaming_client.subscribe_options([alt_symbol])

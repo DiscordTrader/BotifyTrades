@@ -2603,26 +2603,24 @@ function qtConnectSSE() {
             }
             if (msg.type === 'ticks' && msg.d) {
                 qtSSETickCount++;
+                if (qtSSETickCount === 1 && qtSSEFallbackTimer) {
+                    console.log('[QT_SSE] SSE delivering ticks, stopping poll fallback');
+                    clearInterval(qtSSEFallbackTimer);
+                    qtSSEFallbackTimer = null;
+                }
                 qtApplySSETicks(msg.d);
             }
         } catch(e) { console.error('[QT_SSE] parse error:', e); }
     };
 
     qtSSESource.onerror = function() {
-        console.warn('[QT_SSE] Connection error, falling back to polling');
+        console.warn('[QT_SSE] Connection error, poll fallback active');
         qtSSESource.close();
         qtSSESource = null;
         qtSSEClientId = null;
         if (!qtSSEFallbackTimer) {
-            qtSSEFallbackTimer = setInterval(qtStreamQuotePollFallback, 400);
+            qtSSEFallbackTimer = setInterval(qtStreamQuotePollFallback, 500);
         }
-        setTimeout(() => {
-            if (!qtSSESource && qtChainData) {
-                console.log('[QT_SSE] Attempting reconnect...');
-                if (qtSSEFallbackTimer) { clearInterval(qtSSEFallbackTimer); qtSSEFallbackTimer = null; }
-                qtConnectSSE();
-            }
-        }, 5000);
     };
 }
 
@@ -2816,7 +2814,10 @@ function qtStartAutoRefresh() {
 
     qtSubscribeStream();
 
-    setTimeout(() => { qtConnectSSE(); }, 1000);
+    qtSSEFallbackTimer = setInterval(qtStreamQuotePollFallback, 500);
+    console.log('[QT] Poll-based streaming started (500ms)');
+
+    setTimeout(() => { qtConnectSSE(); }, 2000);
 
     qtRefreshTimer = setInterval(async () => {
         if (!qtChainData) return;
@@ -2882,7 +2883,6 @@ function qtStartAutoRefresh() {
     }, 30000);
 
     qtStreamingTimer = setInterval(() => {
-        if (qtSSESource && qtSSETickCount > 0) return;
         qtStreamingStockPoll();
     }, 2000);
     qtStreamingStockPoll();
