@@ -1,7 +1,7 @@
 {
   "SCHWAB_KIDZ_stock": {
     "entry_price": 3.4,
-    "highest_price": 3.9895,
+    "highest_price": 4.2583,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -16,10 +16,10 @@
     "original_qty": 128,
     "pending_orders": {},
     "created_at": "2026-03-31T12:35:35.367983",
-    "max_pnl_seen": 17.338235294117652,
+    "max_pnl_seen": 25.244117647058832,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.78,
+    "last_evaluated_price": 4.125,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
