@@ -16025,6 +16025,76 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         resp['executed_qty'] = signal['qty']
                     else:
                         resp = {'broker': broker_name, 'result': resp, 'executed_qty': signal['qty']}
+
+                bracket_succeeded = False
+                if hasattr(result, 'success'):
+                    bracket_succeeded = result.success
+                elif isinstance(resp, dict):
+                    bracket_succeeded = resp.get('success') or bool(resp.get('orderId'))
+
+                if bracket_succeeded:
+                    try:
+                        bracket_placed_id = None
+                        if hasattr(result, 'order_id'):
+                            bracket_placed_id = result.order_id
+                        elif isinstance(resp, dict):
+                            bracket_placed_id = resp.get('orderId') or resp.get('order_id')
+                        from gui_app.discord_notifier import notify_order_placed
+                        notify_order_placed(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            quantity=signal.get('qty', 1),
+                            price=signal.get('price') or 0,
+                            order_id=bracket_placed_id,
+                            strike=signal.get('strike'),
+                            expiry=signal.get('expiry'),
+                            opt_type=signal.get('opt_type')
+                        )
+                    except Exception as notify_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send bracket order notification: {notify_err}", flush=True)
+
+                    if action == 'BTO':
+                        try:
+                            from src.risk.position_monitor import notify_order_placed as _notify_fill_watch_brk
+                            _fw_brk_oid = ''
+                            if hasattr(result, 'order_id'):
+                                _fw_brk_oid = str(result.order_id or '')
+                            elif isinstance(resp, dict):
+                                _fw_brk_oid = str(resp.get('orderId') or resp.get('order_id') or '')
+                            _notify_fill_watch_brk(broker_name, order_id=_fw_brk_oid, symbol=signal.get('symbol', ''))
+                        except Exception as _fw_brk_err:
+                            _original_print(f"[FILL_WATCH] Warning: Could not activate bracket fill watch: {_fw_brk_err}", flush=True)
+
+                        try:
+                            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                            pnl_svc = get_daily_pnl_service()
+                            pnl_svc.record_bto_trade(broker_name)
+                            async def _post_bracket_bto_pnl_async(bn=broker_name, bi=broker_instance):
+                                try:
+                                    await asyncio.sleep(8)
+                                    if hasattr(bi, '_is_in_429_backoff') and bi._is_in_429_backoff() > 0:
+                                        _original_print(f"[DAILY_PNL] Post-BTO refresh skipped for {bn} — in 429 backoff")
+                                        return
+                                    pnl_svc_inner = get_daily_pnl_service()
+                                    ai = None
+                                    if hasattr(bi, 'get_account_info'):
+                                        ai = await asyncio.wait_for(bi.get_account_info(), timeout=10)
+                                    if ai:
+                                        pv = float(ai.get('portfolio_value', 0) or ai.get('totalAccountValue', 0) or ai.get('netLiquidation', 0) or 0)
+                                        if pv > 0:
+                                            _original_print(f"[DAILY_PNL] Post-BTO refresh for {bn} (equity=${pv:,.2f})")
+                                            pnl_svc_inner.update_broker_pnl(bn, pv)
+                                except Exception as ex:
+                                    _original_print(f"[DAILY_PNL] Post-BTO refresh error: {ex}")
+                            try:
+                                loop = asyncio.get_running_loop()
+                                loop.create_task(_post_bracket_bto_pnl_async())
+                            except RuntimeError:
+                                _original_print(f"[DAILY_PNL] Post-BTO skipped: no running event loop")
+                        except ImportError:
+                            pass
+
             elif signal['asset'] == 'option':
                 broker_upper = broker_name.upper()
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL', 'TRADING212'])

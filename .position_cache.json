@@ -19,7 +19,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": 25.734556484226104,
     "giveback_guard_active": false,
-    "last_evaluated_price": 24.43,
+    "last_evaluated_price": 23.77,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
@@ -29,9 +29,9 @@
     "source_order_id": null,
     "source_trade_id": null,
     "seed_time": null,
-    "ema_no_trend_count": 0,
-    "ema_last_cross_state": "above",
-    "ema_last_eval_candle_ts": 1774968660.0,
-    "ema_post_entry_candles": 3
+    "ema_no_trend_count": 1,
+    "ema_last_cross_state": "below",
+    "ema_last_eval_candle_ts": 1774969200.0,
+    "ema_post_entry_candles": 4
   }
 }
