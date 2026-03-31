@@ -9724,25 +9724,27 @@ def register_routes(app):
 
             if _bot_instance and hasattr(_bot_instance, 'guilds'):
                 try:
+                    from .database import get_channels as db_get_channels
+                    db_channels = db_get_channels()
+                    monitored_ids = set()
+                    for dbc in db_channels:
+                        dc_id = dbc.get('discord_channel_id')
+                        if dc_id:
+                            monitored_ids.add(str(dc_id))
+
                     for guild in _bot_instance.guilds:
-                        me = getattr(guild, 'me', None)
-                        if not me:
-                            continue
                         for ch in guild.text_channels:
-                            try:
-                                perms = ch.permissions_for(me)
-                                can_send = getattr(perms, 'send_messages', False)
-                                can_view = getattr(perms, 'view_channel', getattr(perms, 'read_messages', False))
-                                if can_send and can_view:
-                                    channels.append({
-                                        'id': f"dc_{ch.id}",
-                                        'name': f"#{ch.name}",
-                                        'server': guild.name,
-                                        'type': 'discord',
-                                        'writable': True
-                                    })
-                            except Exception:
-                                pass
+                            if str(ch.id) not in monitored_ids:
+                                continue
+                            db_ch = next((dbc for dbc in db_channels if str(dbc.get('discord_channel_id')) == str(ch.id)), None)
+                            ch_name = db_ch.get('name', f"#{ch.name}") if db_ch else f"#{ch.name}"
+                            channels.append({
+                                'id': f"dc_{ch.id}",
+                                'name': ch_name,
+                                'server': guild.name,
+                                'type': 'discord',
+                                'writable': True
+                            })
                 except Exception as e:
                     print(f"[SEND_CHANNELS] Discord channels error: {e}")
 
