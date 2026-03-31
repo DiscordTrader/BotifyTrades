@@ -3688,6 +3688,7 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
     
     query = '''
         SELECT t.id, t.symbol, t.strike, t.expiry, t.call_put, t.direction, t.quantity,
+               t.original_quantity,
                t.intended_price, t.executed_price, t.current_price, t.pnl, t.pnl_percent, 
                t.status, t.broker, t.asset_type, t.option_id, t.executed_at, t.closed_at, 
                t.channel_id, t.message_id, t.source, t.risk_trigger, t.origin_trade_id,
@@ -3740,7 +3741,8 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
         bto_broker_fill = bto.get('broker_fill_price')
         entry_price = float(bto_broker_fill) if bto_broker_fill and float(bto_broker_fill) > 0 else float(bto.get('executed_price') or bto.get('intended_price') or 0)
         current_price = float(bto.get('current_price') or 0) or entry_price
-        bto_qty = int(bto.get('quantity') or 0)
+        bto_orig_qty = int(bto.get('original_quantity') or 0)
+        bto_qty = bto_orig_qty if bto_orig_qty > int(bto.get('quantity') or 0) else int(bto.get('quantity') or 0)
         
         desc_parts = [bto['symbol']]
         if bto.get('strike'):
