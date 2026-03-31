@@ -187,10 +187,20 @@
             <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
                 <span class="qt-label">Qty:</span>
                 <input type="number" class="qt-qty-input" id="qt-qty" value="1" min="1" max="999" style="width: 50px;">
-                <span class="qt-label">Channel:</span>
-                <select class="qt-select" id="qt-webhook-channel" style="min-width: 120px; font-size: 11px;">
-                    <option value="">None</option>
-                </select>
+                <span class="qt-label">Channels:</span>
+                <div id="qt-channel-picker" style="position:relative; display:inline-block;">
+                    <button type="button" id="qt-channel-btn" onclick="qtToggleChannelPicker()" style="background:#1C2333; color:#E6EDF3; border:1px solid #30363D; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer; min-width:120px; text-align:left; display:flex; align-items:center; gap:4px;">
+                        <span id="qt-channel-label">None selected</span>
+                        <span style="margin-left:auto; font-size:9px;">&#x25BC;</span>
+                    </button>
+                    <div id="qt-channel-dropdown" style="display:none; position:absolute; top:100%; right:0; z-index:1000; background:#1C2333; border:1px solid #30363D; border-radius:8px; min-width:280px; max-height:320px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,0.5); margin-top:4px;">
+                        <div style="padding:6px 10px; border-bottom:1px solid #30363D; display:flex; gap:6px;">
+                            <button onclick="qtSelectAllChannels()" style="flex:1; background:#238636; color:#fff; border:none; border-radius:4px; padding:3px 6px; font-size:10px; cursor:pointer;">All</button>
+                            <button onclick="qtDeselectAllChannels()" style="flex:1; background:#30363D; color:#E6EDF3; border:none; border-radius:4px; padding:3px 6px; font-size:10px; cursor:pointer;">None</button>
+                        </div>
+                        <div id="qt-channel-list" style="padding:4px 0;"></div>
+                    </div>
+                </div>
             </div>
         </div>
         <div id="qt-chain-container">
@@ -2212,7 +2222,6 @@ function showToast(message, type = 'info') {
 
 // ============ QUICK TRADE PANEL ============
 let qtChainData = null;
-let qtWebhookChannels = [];
 let qtRefreshTimer = null;
 let qtSelectedPrice = {};
 
@@ -2414,7 +2423,7 @@ async function qtExecute(idx, optType, side, expectedStrike) {
     const price = selected ? selected.price : ((opt.mid||0) > 0 ? opt.mid : ((opt.ask||0) > 0 ? opt.ask : (opt.bid||0)));
     const qty = parseInt(document.getElementById('qt-qty').value) || 1;
     const broker = document.getElementById('qt-broker').value;
-    const trackingChannel = document.getElementById('qt-webhook-channel').value;
+    const trackingChannels = qtGetSelectedChannels();
     const symbol = qtChainData.symbol;
     const expiry = qtChainData.expiry;
     const strikeD = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
@@ -2443,13 +2452,13 @@ async function qtExecute(idx, optType, side, expectedStrike) {
                 price: price,
                 option_id: opt.option_id || '',
                 broker: broker,
-                tracking_channel_id: trackingChannel || null
+                tracking_channel_id: trackingChannels.length > 0 ? trackingChannels[0] : null
             })
         });
         const result = await r.json();
         if (result.success) {
             showToast(`${actionLabel} submitted: ${qty}x ${symbol} $${strikeD}${optType[0]} @ $${price.toFixed(2)} — order pending fill`, 'success');
-            if (trackingChannel && !result.webhook_sent) {
+            if (trackingChannels.length > 0 && !result.webhook_sent) {
                 qtSendWebhookForOrder(actionLabel, symbol, s.strike, optType, expiry, price, qty);
             }
         } else {
@@ -2479,7 +2488,12 @@ async function qtSendWebhook(action) {
 }
 
 async function qtSendWebhookForOrder(action, symbol, strike, optType, expiry, price, qty) {
-    const channelId = document.getElementById('qt-webhook-channel').value;
+    const selectedTargets = qtGetSelectedChannels();
+    if (selectedTargets.length === 0) {
+        showToast('No channels selected — select channels to send signal', 'warning');
+        return;
+    }
+
     let expiryFormatted = expiry;
     if (expiry && expiry.includes('-')) {
         const parts = expiry.split('-');
@@ -2489,17 +2503,18 @@ async function qtSendWebhookForOrder(action, symbol, strike, optType, expiry, pr
     const signal = `${action} ${qty} ${symbol} ${strikeD}${optType[0].toLowerCase()} ${expiryFormatted} @ ${price.toFixed(2)}`;
 
     try {
-        const payload = { signal: signal };
-        if (channelId) payload.channel_id = channelId;
-        const r = await fetch('/api/discord/send-signal', {
+        const r = await fetch('/api/discord/send-signal-multi', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ signal: signal, targets: selectedTargets })
         });
         const result = await r.json();
         if (result.success) {
-            showToast(`Signal sent: ${signal}`, 'success');
+            const msg = result.failed > 0
+                ? `Signal sent to ${result.sent}/${result.sent + result.failed} channels: ${signal}`
+                : `Signal sent to ${result.sent} channel(s): ${signal}`;
+            showToast(msg, result.failed > 0 ? 'warning' : 'success');
         } else {
             showToast(result.error || 'Failed to send signal', 'error');
         }
@@ -2921,27 +2936,107 @@ async function qtStreamingStockPoll() {
     } catch (e) { /* silent */ }
 }
 
-async function qtLoadWebhookChannels() {
-    const sel = document.getElementById('qt-webhook-channel');
-    sel.innerHTML = '<option value="">None (use global webhook)</option>';
+let qtAllSendChannels = [];
+
+async function qtLoadSendChannels() {
+    const listEl = document.getElementById('qt-channel-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<div style="padding:8px 12px; color:#6E7681; font-size:11px;">Loading...</div>';
     try {
-        const r = await fetch('/api/webhook/channels', { credentials: 'include' });
+        const r = await fetch('/api/discord/send-channels', { credentials: 'include' });
         const data = await r.json();
-        if (data.success && data.channels && data.channels.length > 0) {
-            qtWebhookChannels = data.channels;
-            data.channels.forEach(ch => {
-                if (!ch.enabled) return;
-                const opt = document.createElement('option');
-                opt.value = ch.id;
-                opt.textContent = ch.name || `Channel ${ch.id}`;
-                sel.appendChild(opt);
-            });
+        if (!data.success || !data.channels || data.channels.length === 0) {
+            listEl.innerHTML = '<div style="padding:8px 12px; color:#6E7681; font-size:11px;">No channels available</div>';
+            return;
         }
+        qtAllSendChannels = data.channels;
+        listEl.innerHTML = '';
+        let lastType = '';
+        data.channels.forEach(ch => {
+            if (ch.type !== lastType) {
+                const headerDiv = document.createElement('div');
+                headerDiv.style.cssText = 'padding:4px 12px; font-size:10px; color:#8B949E; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; background:#161B22; border-top:1px solid #21262D;';
+                headerDiv.textContent = (ch.type === 'webhook' ? '\uD83D\uDD17 Webhook Channels' : '\uD83D\uDCAC Discord Channels');
+                listEl.appendChild(headerDiv);
+                lastType = ch.type;
+            }
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex; align-items:center; padding:5px 12px; cursor:pointer; gap:8px; font-size:11px; color:#E6EDF3;';
+            label.onmouseover = function() { this.style.background = '#21262D'; };
+            label.onmouseout = function() { this.style.background = 'transparent'; };
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'qt-ch-cb';
+            cb.value = ch.id;
+            cb.style.cssText = 'accent-color:#238636; cursor:pointer;';
+            cb.onchange = qtUpdateChannelLabel;
+            label.appendChild(cb);
+            const nameSpan = document.createElement('span');
+            nameSpan.style.cssText = 'flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+            nameSpan.textContent = ch.name + (ch.server ? ' ' + ch.server : '');
+            label.appendChild(nameSpan);
+            const badge = document.createElement('span');
+            badge.style.cssText = 'font-size:9px; padding:1px 5px; border-radius:3px; background:' + (ch.type === 'webhook' ? '#1f3a1f' : '#1a2744') + '; color:' + (ch.type === 'webhook' ? '#3fb950' : '#58a6ff') + ';';
+            badge.textContent = ch.type === 'webhook' ? 'WH' : 'DC';
+            label.appendChild(badge);
+            listEl.appendChild(label);
+        });
     } catch (e) {
-        console.log('[QT] Webhook channels load skipped:', e.message);
+        console.log('[QT] Send channels load error:', e.message);
+        listEl.innerHTML = '<div style="padding:8px 12px; color:#6E7681; font-size:11px;">Failed to load channels</div>';
     }
 }
 
-qtLoadWebhookChannels();
+function qtToggleChannelPicker() {
+    const dd = document.getElementById('qt-channel-dropdown');
+    if (dd.style.display === 'none') {
+        dd.style.display = 'block';
+        document.addEventListener('click', qtCloseChannelPicker, true);
+    } else {
+        dd.style.display = 'none';
+        document.removeEventListener('click', qtCloseChannelPicker, true);
+    }
+}
+
+function qtCloseChannelPicker(e) {
+    const picker = document.getElementById('qt-channel-picker');
+    if (picker && !picker.contains(e.target)) {
+        document.getElementById('qt-channel-dropdown').style.display = 'none';
+        document.removeEventListener('click', qtCloseChannelPicker, true);
+    }
+}
+
+function qtGetSelectedChannels() {
+    const cbs = document.querySelectorAll('.qt-ch-cb:checked');
+    return Array.from(cbs).map(cb => cb.value);
+}
+
+function qtUpdateChannelLabel() {
+    const selected = qtGetSelectedChannels();
+    const label = document.getElementById('qt-channel-label');
+    if (selected.length === 0) {
+        label.textContent = 'None selected';
+        label.style.color = '#6E7681';
+    } else if (selected.length === 1) {
+        const ch = qtAllSendChannels.find(c => c.id === selected[0]);
+        label.textContent = ch ? ch.name : '1 selected';
+        label.style.color = '#E6EDF3';
+    } else {
+        label.textContent = `${selected.length} channels`;
+        label.style.color = '#58a6ff';
+    }
+}
+
+function qtSelectAllChannels() {
+    document.querySelectorAll('.qt-ch-cb').forEach(cb => cb.checked = true);
+    qtUpdateChannelLabel();
+}
+
+function qtDeselectAllChannels() {
+    document.querySelectorAll('.qt-ch-cb').forEach(cb => cb.checked = false);
+    qtUpdateChannelLabel();
+}
+
+qtLoadSendChannels();
 </script>
 {% endblock %}

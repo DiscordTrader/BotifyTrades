@@ -9703,6 +9703,140 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/discord/send-channels', methods=['GET'])
+    def api_list_send_channels():
+        try:
+            channels = []
+
+            try:
+                from . import webhook_service
+                wh_channels = webhook_service.get_webhook_channels()
+                for ch in wh_channels:
+                    if ch.get('enabled', 1):
+                        channels.append({
+                            'id': f"wh_{ch['id']}",
+                            'name': ch.get('name', f"Webhook {ch['id']}"),
+                            'type': 'webhook',
+                            'writable': True
+                        })
+            except Exception as e:
+                print(f"[SEND_CHANNELS] Webhook channels error: {e}")
+
+            if _bot_instance and hasattr(_bot_instance, 'guilds'):
+                try:
+                    for guild in _bot_instance.guilds:
+                        me = getattr(guild, 'me', None)
+                        if not me:
+                            continue
+                        for ch in guild.text_channels:
+                            try:
+                                perms = ch.permissions_for(me)
+                                can_send = getattr(perms, 'send_messages', False)
+                                can_view = getattr(perms, 'view_channel', getattr(perms, 'read_messages', False))
+                                if can_send and can_view:
+                                    channels.append({
+                                        'id': f"dc_{ch.id}",
+                                        'name': f"#{ch.name}",
+                                        'server': guild.name,
+                                        'type': 'discord',
+                                        'writable': True
+                                    })
+                            except Exception:
+                                pass
+                except Exception as e:
+                    print(f"[SEND_CHANNELS] Discord channels error: {e}")
+
+            return jsonify({'success': True, 'channels': channels})
+        except Exception as e:
+            print(f"[API] Error listing send channels: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/discord/send-signal-multi', methods=['POST'])
+    def api_send_discord_signal_multi():
+        try:
+            import requests as http_requests
+            data = request.json
+            signal = data.get('signal', '').strip()
+            target_ids = data.get('targets', [])
+
+            if not signal:
+                return jsonify({'success': False, 'error': 'Signal message is required'}), 400
+            if not target_ids:
+                return jsonify({'success': False, 'error': 'No channels selected'}), 400
+
+            skip_tag = data.get('no_qt_tag', False)
+            tagged_signal = signal if skip_tag else f"[QT] {signal}"
+
+            results = []
+            for tid in target_ids:
+                tid = str(tid)
+                try:
+                    if tid.startswith('wh_'):
+                        wh_id = int(tid[3:])
+                        from . import webhook_service
+                        channel = webhook_service.get_webhook_channel(wh_id)
+                        if not channel or not channel.get('webhook_url'):
+                            results.append({'id': tid, 'ok': False, 'error': 'Channel not found'})
+                            continue
+                        if not channel.get('enabled', 1):
+                            results.append({'id': tid, 'ok': False, 'error': 'Channel disabled'})
+                            continue
+                        bot_name = channel.get('bot_name', 'BotifyTrades')
+                        payload = {"content": tagged_signal, "username": bot_name}
+                        resp = http_requests.post(channel['webhook_url'], json=payload, timeout=5)
+                        if resp.status_code in [200, 204]:
+                            results.append({'id': tid, 'ok': True, 'name': channel.get('name')})
+                            print(f"[DISCORD] Signal sent to webhook '{channel.get('name')}': {tagged_signal}")
+                        else:
+                            results.append({'id': tid, 'ok': False, 'error': f'HTTP {resp.status_code}'})
+
+                    elif tid.startswith('dc_'):
+                        dc_id = tid[3:]
+                        if not _bot_instance:
+                            results.append({'id': tid, 'ok': False, 'error': 'Discord bot not connected'})
+                            continue
+                        dc_channel = _bot_instance.get_channel(int(dc_id))
+                        if not dc_channel:
+                            results.append({'id': tid, 'ok': False, 'error': 'Channel not accessible'})
+                            continue
+                        guild = getattr(dc_channel, 'guild', None)
+                        me = getattr(guild, 'me', None) if guild else None
+                        if me:
+                            try:
+                                perms = dc_channel.permissions_for(me)
+                                if not getattr(perms, 'send_messages', False):
+                                    results.append({'id': tid, 'ok': False, 'error': 'No write permission'})
+                                    continue
+                            except Exception:
+                                pass
+                        loop = get_webull_loop()
+                        if not loop or loop.is_closed():
+                            results.append({'id': tid, 'ok': False, 'error': 'Event loop unavailable'})
+                            continue
+                        import asyncio
+                        future = asyncio.run_coroutine_threadsafe(dc_channel.send(tagged_signal), loop)
+                        future.result(timeout=5)
+                        results.append({'id': tid, 'ok': True, 'name': f"#{dc_channel.name}"})
+                        print(f"[DISCORD] Signal sent to #{dc_channel.name}: {tagged_signal}")
+                    else:
+                        results.append({'id': tid, 'ok': False, 'error': 'Unknown channel type'})
+                except Exception as e:
+                    results.append({'id': tid, 'ok': False, 'error': str(e)})
+
+            sent = sum(1 for r in results if r.get('ok'))
+            failed = len(results) - sent
+            return jsonify({
+                'success': sent > 0,
+                'sent': sent,
+                'failed': failed,
+                'results': results
+            })
+        except Exception as e:
+            print(f"[API] Error sending multi-signal: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/settings/test_webhook', methods=['POST'])
     def api_test_webhook():
         """Test Discord webhook and return channel information"""
