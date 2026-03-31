@@ -11516,6 +11516,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # Use the is_sir_goldman and sir_goldman_parsed variables from there
                 
                 is_phoenix_registry = False
+                is_protrader_conditional = False
                 _phoenix_registry_result = None
                 try:
                     from src.services.signal_format_registry import parse_with_registry
@@ -11523,11 +11524,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'stock':
                         if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
                             is_phoenix_registry = True
+                    if _phoenix_registry_result and (_phoenix_registry_result.get('_conditional_order') or _phoenix_registry_result.get('_protrader_cancel') or _phoenix_registry_result.get('_protrader_exit') or _phoenix_registry_result.get('action') in ('SL_UPDATE', 'TARGET_UPDATE', 'CANCEL')):
+                        is_protrader_conditional = True
                 except Exception:
                     pass
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman or is_phoenix_registry:
-                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman}, phoenix_registry={is_phoenix_registry})")
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman or is_phoenix_registry or is_protrader_conditional:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman}, phoenix_registry={is_phoenix_registry}, protrader_cond={is_protrader_conditional})")
                     
                     # === SIGNAL ROUTING ENGINE: Forward BTO via routing engine (creates position for risk monitoring) ===
                     if is_signal_routing_source and signal_routing_config and signal_routing_config.enable_forwarding:
