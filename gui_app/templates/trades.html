@@ -2682,41 +2682,47 @@ function qtApplySSETicks(ticks) {
         }
 
         if (cTick) {
-            anyUpdated = true;
             const cBid = cTick.b || 0, cAsk = cTick.a || 0;
-            const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cTick.l || 0);
-            const vals = [cBid, cMid, cAsk];
-            [0, 1, 2].forEach(i => {
-                const newText = '$' + vals[i].toFixed(2);
-                if (prices[i].textContent !== newText) {
-                    const prevKey = `c_${idx}_${i}`;
-                    const prev = qtPrevPrices[prevKey] || 0;
-                    qtPrevPrices[prevKey] = vals[i];
-                    prices[i].textContent = newText;
-                    if (prev > 0) qtFlashPrice(prices[i], vals[i] >= prev ? 'up' : 'down');
-                }
-            });
-            s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
-            if (cTick.l > 0) s.call.last = cTick.l;
+            if (cBid <= 0 && cAsk <= 0 && s.call.bid > 0) {
+            } else {
+                anyUpdated = true;
+                const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cTick.l || 0);
+                const vals = [cBid, cMid, cAsk];
+                [0, 1, 2].forEach(i => {
+                    const newText = '$' + vals[i].toFixed(2);
+                    if (prices[i].textContent !== newText) {
+                        const prevKey = `c_${idx}_${i}`;
+                        const prev = qtPrevPrices[prevKey] || 0;
+                        qtPrevPrices[prevKey] = vals[i];
+                        prices[i].textContent = newText;
+                        if (prev > 0) qtFlashPrice(prices[i], vals[i] >= prev ? 'up' : 'down');
+                    }
+                });
+                s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
+                if (cTick.l > 0) s.call.last = cTick.l;
+            }
         }
 
         if (pTick) {
-            anyUpdated = true;
             const pBid = pTick.b || 0, pAsk = pTick.a || 0;
-            const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pTick.l || 0);
-            const vals = [pBid, pMid, pAsk];
-            [0, 1, 2].forEach(i => {
-                const newText = '$' + vals[i].toFixed(2);
-                if (prices[i + 3].textContent !== newText) {
-                    const prevKey = `p_${idx}_${i}`;
-                    const prev = qtPrevPrices[prevKey] || 0;
-                    qtPrevPrices[prevKey] = vals[i];
-                    prices[i + 3].textContent = newText;
-                    if (prev > 0) qtFlashPrice(prices[i + 3], vals[i] >= prev ? 'up' : 'down');
-                }
-            });
-            s.put.bid = pBid; s.put.ask = pAsk; s.put.mid = pMid;
-            if (pTick.l > 0) s.put.last = pTick.l;
+            if (pBid <= 0 && pAsk <= 0 && s.put.bid > 0) {
+            } else {
+                anyUpdated = true;
+                const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pTick.l || 0);
+                const vals = [pBid, pMid, pAsk];
+                [0, 1, 2].forEach(i => {
+                    const newText = '$' + vals[i].toFixed(2);
+                    if (prices[i + 3].textContent !== newText) {
+                        const prevKey = `p_${idx}_${i}`;
+                        const prev = qtPrevPrices[prevKey] || 0;
+                        qtPrevPrices[prevKey] = vals[i];
+                        prices[i + 3].textContent = newText;
+                        if (prev > 0) qtFlashPrice(prices[i + 3], vals[i] >= prev ? 'up' : 'down');
+                    }
+                });
+                s.put.bid = pBid; s.put.ask = pAsk; s.put.mid = pMid;
+                if (pTick.l > 0) s.put.last = pTick.l;
+            }
         }
     });
 
@@ -2783,34 +2789,40 @@ async function qtStreamQuotePollFallback() {
             if (cQuote && (cQuote.bid > 0 || cQuote.ask > 0 || cQuote.last > 0)) {
                 if (cQuote.streaming) anyStreaming = true;
                 const cBid = cQuote.bid || 0, cAsk = cQuote.ask || 0;
-                const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cQuote.last || 0);
-                [cBid, cMid, cAsk].forEach((v, i) => {
-                    const newText = '$' + v.toFixed(2);
-                    if (prices[i].textContent !== newText) {
-                        const prevKey = `c_${idx}_${i}`;
-                        const prev = qtPrevPrices[prevKey] || 0;
-                        qtPrevPrices[prevKey] = v;
-                        prices[i].textContent = newText;
-                        if (prev > 0) qtFlashPrice(prices[i], v >= prev ? 'up' : 'down');
-                    }
-                });
-                s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
+                if (cBid <= 0 && cAsk <= 0 && s.call.bid > 0) {
+                } else {
+                    const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cQuote.last || 0);
+                    [cBid, cMid, cAsk].forEach((v, i) => {
+                        const newText = '$' + v.toFixed(2);
+                        if (prices[i].textContent !== newText) {
+                            const prevKey = `c_${idx}_${i}`;
+                            const prev = qtPrevPrices[prevKey] || 0;
+                            qtPrevPrices[prevKey] = v;
+                            prices[i].textContent = newText;
+                            if (prev > 0) qtFlashPrice(prices[i], v >= prev ? 'up' : 'down');
+                        }
+                    });
+                    s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
+                }
             }
             if (pQuote && (pQuote.bid > 0 || pQuote.ask > 0 || pQuote.last > 0)) {
                 if (pQuote.streaming) anyStreaming = true;
                 const pBid = pQuote.bid || 0, pAsk = pQuote.ask || 0;
-                const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pQuote.last || 0);
-                [pBid, pMid, pAsk].forEach((v, i) => {
-                    const newText = '$' + v.toFixed(2);
-                    if (prices[i + 3].textContent !== newText) {
-                        const prevKey = `p_${idx}_${i}`;
-                        const prev = qtPrevPrices[prevKey] || 0;
-                        qtPrevPrices[prevKey] = v;
-                        prices[i + 3].textContent = newText;
-                        if (prev > 0) qtFlashPrice(prices[i + 3], v >= prev ? 'up' : 'down');
-                    }
-                });
-                s.put.bid = pBid; s.put.ask = pAsk; s.put.mid = pMid;
+                if (pBid <= 0 && pAsk <= 0 && s.put.bid > 0) {
+                } else {
+                    const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pQuote.last || 0);
+                    [pBid, pMid, pAsk].forEach((v, i) => {
+                        const newText = '$' + v.toFixed(2);
+                        if (prices[i + 3].textContent !== newText) {
+                            const prevKey = `p_${idx}_${i}`;
+                            const prev = qtPrevPrices[prevKey] || 0;
+                            qtPrevPrices[prevKey] = v;
+                            prices[i + 3].textContent = newText;
+                            if (prev > 0) qtFlashPrice(prices[i + 3], v >= prev ? 'up' : 'down');
+                        }
+                    });
+                    s.put.bid = pBid; s.put.ask = pAsk; s.put.mid = pMid;
+                }
             }
         });
 

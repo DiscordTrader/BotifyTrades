@@ -10600,6 +10600,9 @@ def register_routes(app):
                     }
                 })
             
+            import sys
+            print(f"[CHAIN_OVERLAY] Starting overlay for {symbol} ({len(strikes_data)} strikes)", flush=True)
+            sys.stdout.flush()
             try:
                 hubs = []
                 try:
@@ -11010,6 +11013,10 @@ def register_routes(app):
                     last = float(quote_obj.get('last', 0) or 0)
 
             if bid <= 0 and ask <= 0 and last <= 0:
+                return
+
+            is_option_sym = '_' in symbol_upper or bool(re.match(r'^[A-Z]+\s+\d{6}[CP]\d{8}$', symbol_upper))
+            if is_option_sym and bid <= 0 and ask <= 0:
                 return
 
             with _chain_sse_lock:
