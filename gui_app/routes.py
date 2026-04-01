@@ -10601,34 +10601,49 @@ def register_routes(app):
                 })
             
             try:
-                hub = None
-                if 'SCHWAB' in broker:
-                    from src.services.schwab_data_hub import get_schwab_data_hub
-                    hub = get_schwab_data_hub()
-                elif 'WEBULL' in broker:
+                hubs = []
+                try:
                     from src.services.webull_data_hub import get_webull_data_hub
-                    hub = get_webull_data_hub()
-                if hub:
-                    for sd in strikes_data:
-                        for side_key, opt_type in [('call', 'C'), ('put', 'P')]:
-                            opt = sd.get(side_key, {})
-                            oid = opt.get('option_id', '')
-                            if not oid:
-                                continue
-                            if 'SCHWAB' in broker:
-                                hub_key = oid
-                            else:
-                                strike_val = sd['strike']
-                                strike_str = str(int(strike_val)) if strike_val == int(strike_val) else str(strike_val)
-                                hub_key = f"{symbol}_{strike_str}_{opt_type}"
-                            existing = hub.get_quote(hub_key, max_age=30)
-                            if existing and existing.bid > 0:
-                                opt['bid'] = existing.bid
-                                opt['ask'] = existing.ask
-                                if existing.last > 0:
-                                    opt['last'] = existing.last
-                                opt['mid'] = round((existing.bid + existing.ask) / 2, 2) if existing.bid > 0 and existing.ask > 0 else (existing.last or opt.get('mid', 0))
-                            else:
+                    wh = get_webull_data_hub()
+                    if wh:
+                        hubs.append(('webull', wh))
+                except Exception:
+                    pass
+                try:
+                    from src.services.schwab_data_hub import get_schwab_data_hub
+                    sh = get_schwab_data_hub()
+                    if sh:
+                        hubs.append(('schwab', sh))
+                except Exception:
+                    pass
+                hub_overlay_count = 0
+                for sd in strikes_data:
+                    for side_key, opt_type in [('call', 'C'), ('put', 'P')]:
+                        opt = sd.get(side_key, {})
+                        oid = opt.get('option_id', '')
+                        if not oid:
+                            continue
+                        strike_val = sd['strike']
+                        strike_str = str(int(strike_val)) if strike_val == int(strike_val) else str(strike_val)
+                        best_quote = None
+                        best_age = 999
+                        for hub_name, hub in hubs:
+                            for try_key in [oid, f"{symbol}_{strike_str}_{opt_type}"]:
+                                q = hub.get_quote(try_key, max_age=30)
+                                if q and q.bid > 0:
+                                    age = time.time() - q.timestamp
+                                    if age < best_age:
+                                        best_quote = q
+                                        best_age = age
+                        if best_quote:
+                            opt['bid'] = best_quote.bid
+                            opt['ask'] = best_quote.ask
+                            if best_quote.last > 0:
+                                opt['last'] = best_quote.last
+                            opt['mid'] = round((best_quote.bid + best_quote.ask) / 2, 2) if best_quote.bid > 0 and best_quote.ask > 0 else (best_quote.last or opt.get('mid', 0))
+                            hub_overlay_count += 1
+                        else:
+                            for hub_name, hub in hubs:
                                 seed = {}
                                 if opt.get('bid', 0) > 0:
                                     seed['bid'] = opt['bid']
@@ -10637,7 +10652,11 @@ def register_routes(app):
                                 if opt.get('last', 0) > 0:
                                     seed['last'] = opt['last']
                                 if seed:
-                                    hub.update_quote(hub_key, seed, source="rest_chain")
+                                    for try_key in [oid, f"{symbol}_{strike_str}_{opt_type}"]:
+                                        hub.update_quote(try_key, seed, source="rest_chain")
+                                break
+                if hub_overlay_count > 0:
+                    print(f"[CHAIN_OVERLAY] ✓ Overlaid {hub_overlay_count} streaming quotes onto {symbol} chain", flush=True)
             except Exception:
                 pass
 
@@ -10718,6 +10737,28 @@ def register_routes(app):
                         'hub_type': hub_type,
                         'subscribed_at': time.time()
                     }
+
+                try:
+                    schwab_broker_cross = None
+                    if _bot_instance:
+                        schwab_broker_cross = getattr(_bot_instance, 'schwab_broker', None)
+                    schwab_stream_cross = getattr(schwab_broker_cross, '_streaming_client', None) if schwab_broker_cross else None
+                    if schwab_stream_cross and schwab_stream_cross.is_connected():
+                        occ_symbols_cross = []
+                        for c in contracts:
+                            occ = c.get('occ_symbol', '') or c.get('option_id', '')
+                            if occ and len(occ) > 5:
+                                occ_symbols_cross.append(occ)
+                        if occ_symbols_cross:
+                            loop = get_webull_loop()
+                            if loop and not loop.is_closed():
+                                future = asyncio.run_coroutine_threadsafe(
+                                    schwab_stream_cross.subscribe_options(occ_symbols_cross), loop
+                                )
+                                future.result(timeout=5)
+                                print(f"[OPTIONS_STREAM] ✓ Cross-sub Schwab: {len(occ_symbols_cross)} options alongside Webull", flush=True)
+                except Exception as e:
+                    print(f"[OPTIONS_STREAM] Cross-sub Schwab failed: {e}", flush=True)
 
             elif broker == 'SCHWAB':
                 from src.services.schwab_data_hub import get_schwab_data_hub
@@ -10801,55 +10842,59 @@ def register_routes(app):
                 return jsonify({'error': 'Symbol required'}), 400
 
             quotes = {}
-            hub = None
             streaming = False
 
-            if broker in ('WEBULL',):
+            all_hubs = []
+            try:
                 from src.services.webull_data_hub import get_webull_data_hub
-                hub = get_webull_data_hub()
-                streaming = hub.is_streaming()
-            elif broker == 'SCHWAB':
+                wh = get_webull_data_hub()
+                if wh:
+                    all_hubs.append(('webull', wh))
+                    if wh.is_streaming():
+                        streaming = True
+            except Exception:
+                pass
+            try:
                 from src.services.schwab_data_hub import get_schwab_data_hub
-                hub = get_schwab_data_hub()
-                streaming = hub.is_streaming() if hasattr(hub, 'is_streaming') else False
+                sh = get_schwab_data_hub()
+                if sh:
+                    all_hubs.append(('schwab', sh))
+                    if hasattr(sh, 'is_streaming') and sh.is_streaming():
+                        streaming = True
+            except Exception:
+                pass
 
-            if not hub:
+            if not all_hubs:
                 return jsonify({'quotes': {}, 'streaming': False})
 
             symbol_prefix_underscore = symbol + '_'
             symbol_prefix_space = symbol.ljust(6)
 
-            hub_quote_count = len(hub._quotes) if hasattr(hub, '_quotes') else -1
-
-            with hub._quotes_lock:
-                now = time.time()
-                for key, quote in hub._quotes.items():
-                    if key.startswith(symbol_prefix_underscore) or key.startswith(symbol_prefix_space) or key == symbol:
-                        age = now - quote.timestamp
-                        if age < 120:
-                            q_data = {
-                                'bid': quote.bid,
-                                'ask': quote.ask,
-                                'last': quote.last,
-                                'volume': getattr(quote, 'volume', 0),
-                                'age_ms': int(age * 1000),
-                                'streaming': age < 30
-                            }
-                            quotes[key] = q_data
-                            norm = _TRAILING_ZERO_RE.sub(r'_\1_\2', key)
-                            if norm != key:
-                                quotes[norm] = q_data
-
-            if not hasattr(api_get_option_stream_quotes, '_debug_count'):
-                api_get_option_stream_quotes._debug_count = 0
-            api_get_option_stream_quotes._debug_count += 1
-            if api_get_option_stream_quotes._debug_count <= 10:
-                hub_id = id(hub)
-                hub_keys_sample = list(hub._quotes.keys())[:3] if hasattr(hub, '_quotes') else []
-                print(f"[STREAM_QUOTES_DEBUG] call#{api_get_option_stream_quotes._debug_count} broker={broker} symbol={symbol} hub_id={hub_id} hub_quotes={hub_quote_count} matched={len(quotes)} prefix_us={repr(symbol_prefix_underscore)} prefix_sp={repr(symbol_prefix_space)} hub_keys_sample={hub_keys_sample} streaming={streaming}")
-                if quotes:
-                    for k, v in list(quotes.items())[:3]:
-                        print(f"[STREAM_QUOTES_DEBUG]   key={repr(k)} bid={v['bid']:.2f} ask={v['ask']:.2f} last={v['last']:.2f} age={v['age_ms']}ms streaming={v['streaming']}")
+            now = time.time()
+            for hub_name, hub in all_hubs:
+                if not hasattr(hub, '_quotes') or not hasattr(hub, '_quotes_lock'):
+                    continue
+                with hub._quotes_lock:
+                    for key, quote in hub._quotes.items():
+                        if key.startswith(symbol_prefix_underscore) or key.startswith(symbol_prefix_space) or key == symbol:
+                            age = now - quote.timestamp
+                            if age < 120:
+                                q_data = {
+                                    'bid': quote.bid,
+                                    'ask': quote.ask,
+                                    'last': quote.last,
+                                    'volume': getattr(quote, 'volume', 0),
+                                    'age_ms': int(age * 1000),
+                                    'streaming': age < 30
+                                }
+                                existing = quotes.get(key)
+                                if not existing or existing['age_ms'] > q_data['age_ms']:
+                                    quotes[key] = q_data
+                                norm = _TRAILING_ZERO_RE.sub(r'_\1_\2', key)
+                                if norm != key:
+                                    existing_norm = quotes.get(norm)
+                                    if not existing_norm or existing_norm['age_ms'] > q_data['age_ms']:
+                                        quotes[norm] = q_data
 
             return jsonify({
                 'quotes': quotes,
