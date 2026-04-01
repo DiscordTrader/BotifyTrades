@@ -253,7 +253,7 @@ _api_cache: Dict[str, tuple] = {}  # {key: (value, timestamp)}
 
 # Option chain cache to avoid re-fetching for same symbol/expiry
 _option_chain_cache: Dict[str, tuple] = {}  # {symbol_expiry: (chain_data, timestamp)}
-_CHAIN_CACHE_TTL = 10  # Cache for 10 seconds (options move fast)
+_CHAIN_CACHE_TTL = 3  # Cache for 3 seconds (options move fast)
 _TRAILING_ZERO_RE = re.compile(r'_(\d+)\.0_([CP])$')
 
 _standalone_webull_broker = None
@@ -10621,18 +10621,23 @@ def register_routes(app):
                                 strike_val = sd['strike']
                                 strike_str = str(int(strike_val)) if strike_val == int(strike_val) else str(strike_val)
                                 hub_key = f"{symbol}_{strike_str}_{opt_type}"
-                            existing = hub.get_quote(hub_key)
+                            existing = hub.get_quote(hub_key, max_age=30)
                             if existing and existing.bid > 0:
-                                continue
-                            seed = {}
-                            if opt.get('bid', 0) > 0:
-                                seed['bid'] = opt['bid']
-                            if opt.get('ask', 0) > 0:
-                                seed['ask'] = opt['ask']
-                            if opt.get('last', 0) > 0:
-                                seed['last'] = opt['last']
-                            if seed:
-                                hub.update_quote(hub_key, seed, source="rest_chain")
+                                opt['bid'] = existing.bid
+                                opt['ask'] = existing.ask
+                                if existing.last > 0:
+                                    opt['last'] = existing.last
+                                opt['mid'] = round((existing.bid + existing.ask) / 2, 2) if existing.bid > 0 and existing.ask > 0 else (existing.last or opt.get('mid', 0))
+                            else:
+                                seed = {}
+                                if opt.get('bid', 0) > 0:
+                                    seed['bid'] = opt['bid']
+                                if opt.get('ask', 0) > 0:
+                                    seed['ask'] = opt['ask']
+                                if opt.get('last', 0) > 0:
+                                    seed['last'] = opt['last']
+                                if seed:
+                                    hub.update_quote(hub_key, seed, source="rest_chain")
             except Exception:
                 pass
 
