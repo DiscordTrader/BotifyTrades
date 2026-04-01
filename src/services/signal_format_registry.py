@@ -2678,8 +2678,12 @@ class SignalFormatRegistry:
                           stop_loss: Optional[float], targets: list, shares: Optional[int],
                           is_breakout: bool = False) -> Dict:
         """Build a conditional order result dict for protrader signals."""
-        trigger_price = entry_high
-        trigger_type = 'over' if is_breakout else 'under'
+        if is_breakout:
+            trigger_price = entry_high
+            trigger_type = 'over'
+        else:
+            trigger_price = entry_low if entry_low else entry_high
+            trigger_type = 'over'
 
         result = {
             'format': 'PROTRADER',
