@@ -36,3 +36,9 @@ id = "aZVjS822ubBs4LnEfbE1V"
 uri = "file://attached_assets/trade_analysis_report_2026-03-30.md"
 type = "text"
 title = "Trade Analysis Report — March 30, 2026"
+
+[[outputs]]
+id = "wqRFFtTooQFRVlz1rkcl_"
+uri = "file://docs/DEPLOYMENT_PLAN.md"
+type = "text"
+title = "BotifyTrades Deployment Plan — Docker + Cloudflare Tunnel + Flask Auth"
