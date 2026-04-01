@@ -12923,6 +12923,41 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[HENGY] ⚠️ Routing error: {hengy_route_err}")
                             traceback.print_exc()
                 
+                try:
+                    from src.services.signal_format_registry import parse_with_registry
+                    _reg_result = parse_with_registry(combined_content)
+                    if _reg_result and _reg_result.get('_conditional_order'):
+                        _reg_fmt = _reg_result.get('format', 'REGISTRY')
+                        print(f"[{_reg_fmt}] ✓ Detected conditional stock signal: {_reg_result.get('symbol')} trigger={_reg_result.get('trigger_type')} @ ${_reg_result.get('trigger_price')}")
+                        if not execute_enabled:
+                            print(f"[{_reg_fmt}] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                        else:
+                            try:
+                                from src.services.conditional_orders.router import conditional_order_router
+                                if conditional_order_router.is_enabled():
+                                    _reg_result['message_id'] = str(message.id)
+                                    _reg_result['author_id'] = str(message.author.id)
+                                    _reg_result['author_name'] = str(message.author)
+                                    cond_brokers = self._get_channel_brokers(channel_info)
+                                    if cond_brokers:
+                                        for cond_broker in cond_brokers:
+                                            order_id = conditional_order_router.create_order(str(message.channel.id), _reg_result, cond_broker)
+                                            if order_id:
+                                                print(f"[{_reg_fmt}] ✓ Created conditional order #{order_id} [{cond_broker}] - monitoring started")
+                                            else:
+                                                print(f"[{_reg_fmt}] ⚠️ Failed to create conditional order [{cond_broker}]")
+                                    else:
+                                        print(f"[{_reg_fmt}] ❌ No broker configured for channel {message.channel.id}")
+                                else:
+                                    print(f"[{_reg_fmt}] ⚠️ Conditional order service disabled")
+                            except ImportError as e:
+                                print(f"[{_reg_fmt}] ⚠️ Conditional order service not available: {e}")
+                            except Exception as e:
+                                print(f"[{_reg_fmt}] ❌ Error creating conditional order: {e}")
+                        return
+                except Exception as reg_err:
+                    print(f"[REGISTRY] Error in non-mapped channel registry check: {reg_err}")
+
                 if execute_enabled:
                     try:
                         from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal

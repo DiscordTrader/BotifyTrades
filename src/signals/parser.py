@@ -898,6 +898,11 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     if re.search(r'\bWATCHING\s+[A-Z]+\s+OVER\b', text_upper):
         return False
     
+    # Exclude protrader structured format — these have their own parser in the format registry
+    # Examples: "Ticker: CYCN\nEntry range: 3.2-3.30\nSL below 3.00"
+    if re.search(r'Ticker\s*:\s*\$?[A-Z]{1,5}\s*\n\s*Ent(?:e|r)y\s+range\s*:', text, re.IGNORECASE):
+        return False
+    
     # Exclude market commentary patterns — these describe price action, not trade signals
     # Examples: "$QQQ under 605 can see $602.50 can see $599"
     #           "SPY over 500 looking for 510 next"
@@ -917,6 +922,15 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     
     if not (has_over_trigger or has_under_trigger):
         return False
+    
+    # Validate the matched symbol is not a trade keyword (SL, PT, TP, etc.)
+    # These are stop-loss/profit-target prefixes, not ticker symbols
+    trade_keywords = {'SL', 'PT', 'TP', 'BE', 'STOP', 'LOSS', 'TRAIL', 'TARG'}
+    trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(text) or CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text)
+    if trigger_match:
+        matched_symbol = trigger_match.group(1).upper()
+        if matched_symbol in trade_keywords:
+            return False
     
     # If require_sl_pt is False, allow trigger-only signals (SL/PT can come in follow-up)
     if not require_sl_pt:
