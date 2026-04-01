@@ -120,7 +120,7 @@ def _launch_wizard_process_target():
     log_to_file("[Process] Process function exiting")
 
 # Public routes that don't require authentication
-PUBLIC_ROUTES = ['/login', '/architecture', '/static', '/signup', '/user/login', '/google_login', '/consent', '/api/consent']
+PUBLIC_ROUTES = ['/login', '/architecture', '/static', '/signup', '/user/login', '/google_login', '/consent', '/api/consent', '/privacy-policy']
 
 # Rate limiting for login attempts (brute force protection)
 _login_attempts: Dict[str, list] = {}  # {ip: [timestamp1, timestamp2, ...]}
@@ -205,7 +205,7 @@ def check_consent_accepted():
     try:
         consent_accepted = db.get_setting('user_consent_accepted', 'false')
         consent_version = db.get_setting('user_consent_version', None)
-        return consent_accepted.lower() == 'true' and consent_version == '1.0'
+        return consent_accepted.lower() == 'true' and consent_version == '3.0'
     except:
         return False
 
@@ -922,7 +922,7 @@ def register_routes(app):
         if request.path.startswith('/public'):
             return None
         # Allow public pages (setup wizard, login, forgot password, reset password, signup, google auth)
-        public_routes = ['/login', '/setup', '/forgot-password', '/local-reset', '/architecture', '/signup', '/user/login', '/google_login', '/consent', '/schwab/callback', '/api/schwab/callback']
+        public_routes = ['/login', '/setup', '/forgot-password', '/local-reset', '/architecture', '/signup', '/user/login', '/google_login', '/consent', '/schwab/callback', '/api/schwab/callback', '/privacy-policy']
         if any(request.path == route or request.path.startswith(route + '/') for route in public_routes):
             return None
         if request.path.startswith('/reset-password'):
@@ -1061,7 +1061,7 @@ def register_routes(app):
         if check_consent_accepted():
             return redirect(url_for('index'))
         next_url = request.args.get('next', '/')
-        return render_template('consent.html', version='1.0', next_url=next_url)
+        return render_template('consent.html', version='3.0', next_url=next_url)
     
     @app.route('/consent/declined')
     def consent_declined():
@@ -1118,10 +1118,10 @@ def register_routes(app):
             timestamp = datetime.now().isoformat()
             
             db.save_setting('user_consent_accepted', 'true')
-            db.save_setting('user_consent_version', '1.0')
+            db.save_setting('user_consent_version', '3.0')
             db.save_setting('user_consent_timestamp', timestamp)
             
-            print(f"[CONSENT] User accepted agreement v1.0 at {timestamp}")
+            print(f"[CONSENT] User accepted agreement v3.0 at {timestamp}")
             return jsonify({'success': True, 'message': 'Agreement accepted'})
         except Exception as e:
             print(f"[CONSENT] Error saving consent: {e}")
@@ -1135,16 +1135,20 @@ def register_routes(app):
             version = db.get_setting('user_consent_version', None)
             timestamp = db.get_setting('user_consent_timestamp', None)
             
-            is_accepted = accepted.lower() == 'true' and version == '1.0'
+            is_accepted = accepted.lower() == 'true' and version == '3.0'
             
             return jsonify({
                 'accepted': is_accepted,
                 'version': version,
                 'accepted_at': timestamp,
-                'current_version': '1.0'
+                'current_version': '3.0'
             })
         except Exception as e:
             return jsonify({'accepted': False, 'error': str(e)})
+    
+    @app.route('/privacy-policy')
+    def privacy_policy():
+        return render_template('privacy-policy.html')
     
     @app.route('/forgot-password', methods=['GET', 'POST'])
     def forgot_password():
