@@ -2879,37 +2879,53 @@ function qtStartAutoRefresh() {
                     }).catch(() => {});
                 }
             } else {
-                data.strikes.forEach((s, idx) => {
-                    if (!qtChainData.strikes[idx]) return;
-                    qtChainData.strikes[idx].call.volume = s.call.volume;
-                    qtChainData.strikes[idx].call.oi = s.call.oi;
-                    qtChainData.strikes[idx].call.iv = s.call.iv;
-                    qtChainData.strikes[idx].call.delta = s.call.delta;
-                    qtChainData.strikes[idx].put.volume = s.put.volume;
-                    qtChainData.strikes[idx].put.oi = s.put.oi;
-                    qtChainData.strikes[idx].put.iv = s.put.iv;
-                    qtChainData.strikes[idx].put.delta = s.put.delta;
-                    if (!qtChainData.strikes[idx].call.option_id && s.call.option_id)
-                        qtChainData.strikes[idx].call.option_id = s.call.option_id;
-                    if (!qtChainData.strikes[idx].put.option_id && s.put.option_id)
-                        qtChainData.strikes[idx].put.option_id = s.put.option_id;
-                    if (s.call.bid > 0) {
-                        qtChainData.strikes[idx].call.bid = s.call.bid;
-                        qtChainData.strikes[idx].call.ask = s.call.ask;
-                        qtChainData.strikes[idx].call.mid = s.call.mid;
+                const oldStrikes = qtChainData.strikes.map(st => st.strike);
+                const newStrikes = data.strikes.map(st => st.strike);
+                const strikesShifted = oldStrikes.length !== newStrikes.length || oldStrikes.some((v, i) => v !== newStrikes[i]);
+
+                if (strikesShifted) {
+                    qtChainData = data;
+                    qtRenderChain(data);
+                    qtSubscribeStream();
+                    if (qtSSEClientId) {
+                        const keys = qtBuildWatchedKeys();
+                        fetch('/api/options/chain-stream/update-keys', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ client_id: qtSSEClientId, keys: keys, symbol: symbol })
+                        }).catch(() => {});
                     }
-                    if (s.put.bid > 0) {
-                        qtChainData.strikes[idx].put.bid = s.put.bid;
-                        qtChainData.strikes[idx].put.ask = s.put.ask;
-                        qtChainData.strikes[idx].put.mid = s.put.mid;
-                    }
-                });
+                } else {
+                    const existingMap = {};
+                    qtChainData.strikes.forEach((st, i) => { existingMap[st.strike] = i; });
+                    data.strikes.forEach(s => {
+                        const ei = existingMap[s.strike];
+                        if (ei === undefined) return;
+                        const existing = qtChainData.strikes[ei];
+                        existing.call.volume = s.call.volume;
+                        existing.call.oi = s.call.oi;
+                        existing.call.iv = s.call.iv;
+                        existing.call.delta = s.call.delta;
+                        existing.put.volume = s.put.volume;
+                        existing.put.oi = s.put.oi;
+                        existing.put.iv = s.put.iv;
+                        existing.put.delta = s.put.delta;
+                        if (!existing.call.option_id && s.call.option_id)
+                            existing.call.option_id = s.call.option_id;
+                        if (!existing.put.option_id && s.put.option_id)
+                            existing.put.option_id = s.put.option_id;
+                    });
+                }
                 if (data.stock_price > 0) qtChainData.stock_price = data.stock_price;
             }
             if (!qtStreamSubscribed || !qtStreamingActive) {
                 const rows = document.querySelectorAll('.qt-chain tbody tr');
-                data.strikes.forEach((s, idx) => {
-                    const row = rows[idx];
+                const currentStrikes = qtChainData.strikes;
+                data.strikes.forEach(s => {
+                    const rowIdx = currentStrikes.findIndex(cs => cs.strike === s.strike);
+                    if (rowIdx < 0) return;
+                    const row = rows[rowIdx];
                     if (!row) return;
                     const prices = row.querySelectorAll('.qt-price');
                     if (prices.length >= 6) {
@@ -2918,7 +2934,7 @@ function qtStartAutoRefresh() {
                             if (newVals[i] <= 0) return;
                             const newText = '$' + newVals[i].toFixed(2);
                             if (el.textContent !== newText) {
-                                const prevKey = `rest_${idx}_${i}`;
+                                const prevKey = `rest_${rowIdx}_${i}`;
                                 const prev = qtPrevPrices[prevKey] || 0;
                                 qtPrevPrices[prevKey] = newVals[i];
                                 el.textContent = newText;
