@@ -148,7 +148,7 @@ class DailyPnLLimitService:
             pre_market_snap = sod_cache.get_snapshot(normalized, snapshot_type='pre_market')
             if pre_market_snap:
                 pre_market_equity = pre_market_snap.get('portfolio_value', 0)
-                if pre_market_equity > sod_equity > 0:
+                if pre_market_equity > 0:
                     sod_equity = pre_market_equity
 
         current_val = float(current_portfolio_value or 0)
@@ -172,6 +172,7 @@ class DailyPnLLimitService:
             preserved_trade_count = state.get('daily_trade_count', 0)
 
             if existing_lock != 'none' and state.get('trading_date') == today:
+                state['sod_equity'] = sod_equity
                 state['current_equity'] = current_val
                 state['daily_pnl'] = daily_pnl
                 state['daily_pnl_pct'] = daily_pnl_pct
