@@ -2779,8 +2779,8 @@ async function qtStreamQuotePollFallback() {
             const prices = row.querySelectorAll('.qt-price');
             if (prices.length < 6) return;
 
-            if (cQuote && cQuote.streaming) {
-                anyStreaming = true;
+            if (cQuote && (cQuote.bid > 0 || cQuote.ask > 0 || cQuote.last > 0)) {
+                if (cQuote.streaming) anyStreaming = true;
                 const cBid = cQuote.bid || 0, cAsk = cQuote.ask || 0;
                 const cMid = (cBid > 0 && cAsk > 0) ? Math.round((cBid + cAsk) / 2 * 100) / 100 : (cQuote.last || 0);
                 [cBid, cMid, cAsk].forEach((v, i) => {
@@ -2795,8 +2795,8 @@ async function qtStreamQuotePollFallback() {
                 });
                 s.call.bid = cBid; s.call.ask = cAsk; s.call.mid = cMid;
             }
-            if (pQuote && pQuote.streaming) {
-                anyStreaming = true;
+            if (pQuote && (pQuote.bid > 0 || pQuote.ask > 0 || pQuote.last > 0)) {
+                if (pQuote.streaming) anyStreaming = true;
                 const pBid = pQuote.bid || 0, pAsk = pQuote.ask || 0;
                 const pMid = (pBid > 0 && pAsk > 0) ? Math.round((pBid + pAsk) / 2 * 100) / 100 : (pQuote.last || 0);
                 [pBid, pMid, pAsk].forEach((v, i) => {
@@ -2841,7 +2841,7 @@ function qtStartAutoRefresh() {
     qtSSEFallbackTimer = setInterval(qtStreamQuotePollFallback, 500);
     console.log('[QT] Poll-based streaming started (500ms)');
 
-    setTimeout(() => { qtConnectSSE(); }, 2000);
+    setTimeout(() => { qtConnectSSE(); }, 500);
 
     qtRefreshTimer = setInterval(async () => {
         if (!qtChainData) return;
@@ -2904,7 +2904,7 @@ function qtStartAutoRefresh() {
                 document.getElementById('qt-stock-price').innerHTML = `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`;
             }
         } catch (e) { /* silent */ }
-    }, 30000);
+    }, 10000);
 
     qtStreamingTimer = setInterval(() => {
         qtStreamingStockPoll();

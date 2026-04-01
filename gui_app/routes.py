@@ -10828,7 +10828,7 @@ def register_routes(app):
                                 'last': quote.last,
                                 'volume': getattr(quote, 'volume', 0),
                                 'age_ms': int(age * 1000),
-                                'streaming': age < 5
+                                'streaming': age < 30
                             }
                             quotes[key] = q_data
                             norm = _TRAILING_ZERO_RE.sub(r'_\1_\2', key)
