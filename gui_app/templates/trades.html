@@ -2883,7 +2883,7 @@ function qtStartAutoRefresh() {
                 });
                 if (data.stock_price > 0) qtChainData.stock_price = data.stock_price;
             }
-            if (!qtStreamingActive) {
+            {
                 const rows = document.querySelectorAll('.qt-chain tbody tr');
                 data.strikes.forEach((s, idx) => {
                     const row = rows[idx];
@@ -2894,17 +2894,21 @@ function qtStartAutoRefresh() {
                         prices.forEach((el, i) => {
                             const newText = '$' + newVals[i].toFixed(2);
                             if (el.textContent !== newText) {
+                                const prevKey = `rest_${idx}_${i}`;
+                                const prev = qtPrevPrices[prevKey] || 0;
+                                qtPrevPrices[prevKey] = newVals[i];
                                 el.textContent = newText;
+                                if (prev > 0 && newVals[i] !== prev) qtFlashPrice(el, newVals[i] >= prev ? 'up' : 'down');
                             }
                         });
                     }
                 });
             }
-            if (data.stock_price > 0 && !qtLastStreamPrice) {
+            if (data.stock_price > 0) {
                 document.getElementById('qt-stock-price').innerHTML = `<span class="qt-price-badge stock">$${data.stock_price.toFixed(2)}</span>`;
             }
         } catch (e) { /* silent */ }
-    }, 10000);
+    }, 5000);
 
     qtStreamingTimer = setInterval(() => {
         qtStreamingStockPoll();
