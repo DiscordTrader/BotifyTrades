@@ -10658,8 +10658,10 @@ def register_routes(app):
                     print(f"[CHAIN_OVERLAY] ✓ Overlaid {hub_overlay_count} streaming quotes onto {symbol} chain", flush=True)
                 else:
                     print(f"[CHAIN_OVERLAY] ⚠️ No hub quotes found for {symbol} {expiry} (hubs={len(hubs)}, occ_date={occ_date_str})", flush=True)
-            except Exception:
-                pass
+            except Exception as overlay_err:
+                import traceback
+                print(f"[CHAIN_OVERLAY] ❌ Error: {overlay_err}", flush=True)
+                traceback.print_exc()
 
             return jsonify({
                 'success': True,
@@ -10871,6 +10873,23 @@ def register_routes(app):
             symbol_prefix_underscore = symbol + '_'
             symbol_prefix_space = symbol.ljust(6)
 
+            import re
+            _occ_pattern = re.compile(r'^([A-Z]+)\s+(\d{6})([CP])(\d{8})$')
+
+            def _occ_to_underscore(occ_key):
+                m = _occ_pattern.match(occ_key)
+                if not m:
+                    return None
+                sym = m.group(1)
+                opt_type = m.group(3)
+                strike_raw = int(m.group(4))
+                strike_val = strike_raw / 1000.0
+                if strike_val == int(strike_val):
+                    strike_str = str(int(strike_val))
+                else:
+                    strike_str = f"{strike_val:.2f}".rstrip('0').rstrip('.')
+                return f"{sym}_{strike_str}_{opt_type}"
+
             now = time.time()
             for hub_name, hub in all_hubs:
                 if not hasattr(hub, '_quotes') or not hasattr(hub, '_quotes_lock'):
@@ -10896,6 +10915,11 @@ def register_routes(app):
                                     existing_norm = quotes.get(norm)
                                     if not existing_norm or existing_norm['age_ms'] > q_data['age_ms']:
                                         quotes[norm] = q_data
+                                us_key = _occ_to_underscore(key)
+                                if us_key:
+                                    existing_us = quotes.get(us_key)
+                                    if not existing_us or existing_us['age_ms'] > q_data['age_ms']:
+                                        quotes[us_key] = q_data
 
             return jsonify({
                 'quotes': quotes,
@@ -10949,12 +10973,24 @@ def register_routes(app):
                 for cid, client in list(_chain_sse_clients.items()):
                     watched = client.get('watched_keys', set())
                     symbol_base = client.get('symbol', '')
-                    if symbol_upper in watched or symbol_upper == symbol_base:
+                    occ_us = None
+                    import re as _re_sse
+                    _occ_m = _re_sse.match(r'^([A-Z]+)\s+(\d{6})([CP])(\d{8})$', symbol_upper)
+                    if _occ_m:
+                        _sym = _occ_m.group(1)
+                        _ot = _occ_m.group(3)
+                        _sr = int(_occ_m.group(4))
+                        _sv = _sr / 1000.0
+                        _ss = str(int(_sv)) if _sv == int(_sv) else f"{_sv:.2f}".rstrip('0').rstrip('.')
+                        occ_us = f"{_sym}_{_ss}_{_ot}"
+                    match_keys = watched | ({occ_us} if occ_us else set())
+                    if symbol_upper in match_keys or (occ_us and occ_us in watched) or symbol_upper == symbol_base:
                         norm_key = _TRAILING_ZERO_RE.sub(r'_\1_\2', symbol_upper)
                         mid = round((bid + ask) / 2, 4) if bid > 0 and ask > 0 else 0
                         tick = {
-                            'key': symbol_upper,
+                            'key': occ_us if occ_us else symbol_upper,
                             'norm': norm_key if norm_key != symbol_upper else None,
+                            'occ': symbol_upper if occ_us else None,
                             'bid': bid,
                             'ask': ask,
                             'mid': mid,
