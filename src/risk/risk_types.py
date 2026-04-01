@@ -190,6 +190,16 @@ class ExitDecision:
         )
     
     @classmethod
+    def dynamic_sl(cls, reason: str, qty: int, channel_name: str = "Global") -> 'ExitDecision':
+        return cls(
+            should_exit=True,
+            reason=f"DYNAMIC SL [{channel_name}] {reason}",
+            exit_qty=qty,
+            is_partial=False,
+            risk_trigger='dynamic_sl'
+        )
+
+    @classmethod
     def profit_target(cls, reason: str, qty: int, channel_name: str = "Global", 
                       tier: Optional[int] = None, is_partial: bool = False) -> 'ExitDecision':
         """Factory for profit target exit."""

@@ -1091,3 +1091,75 @@ def notify_trailing_stop_triggered(
         broker=broker,
         details=details
     )
+
+
+def notify_dynamic_sl_triggered(
+    symbol: str,
+    broker: str,
+    entry_price: float,
+    exit_price: float,
+    dynamic_sl_price: float,
+    pnl_percent: float,
+    quantity: int,
+    channel: Optional[str] = None
+):
+    broker_label = broker.upper() if broker else 'Unknown'
+    pnl_sign = '+' if pnl_percent >= 0 else ''
+    title = f"[{broker_label}] DYNAMIC SL: {symbol}"
+    message = f"**{broker_label}** Dynamic Stop Loss triggered at **${exit_price:.2f}** (SL was ${dynamic_sl_price:.2f}, P&L: {pnl_sign}{pnl_percent:.1f}%)"
+
+    details = {
+        'Entry': f"${entry_price:.2f}",
+        'Exit': f"${exit_price:.2f}",
+        'Dynamic SL': f"${dynamic_sl_price:.2f}",
+        'P&L': f"{pnl_sign}{pnl_percent:.1f}%",
+        'Qty Sold': quantity
+    }
+    if channel:
+        details['Channel'] = channel
+
+    return send_critical_alert(
+        alert_type="dynamic_sl",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_ema_exit_triggered(
+    symbol: str,
+    broker: str,
+    exit_type: str,
+    pnl_percent: float,
+    exit_price: float,
+    quantity: int,
+    reason: str = '',
+    channel: Optional[str] = None
+):
+    broker_label = broker.upper() if broker else 'Unknown'
+    pnl_sign = '+' if pnl_percent >= 0 else ''
+    type_label = "EMA No-Trend Exit" if 'no_trend' in exit_type else "EMA Exit"
+    title = f"[{broker_label}] {type_label.upper()}: {symbol}"
+    message = f"**{broker_label}** {type_label} triggered at **{pnl_sign}{pnl_percent:.1f}%**"
+
+    details = {
+        'Type': type_label,
+        'Exit Price': f"${exit_price:.2f}",
+        'P&L': f"{pnl_sign}{pnl_percent:.1f}%",
+        'Qty Sold': quantity
+    }
+    if reason:
+        details['Reason'] = reason
+    if channel:
+        details['Channel'] = channel
+
+    return send_critical_alert(
+        alert_type="ema_exit",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )

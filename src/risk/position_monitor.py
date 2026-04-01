@@ -3707,7 +3707,7 @@ class RiskManager:
             if action.action_type == ActionType.SELL_ALL:
                 channel_name = channel_settings.channel_name
                 if 'Dynamic SL' in action.reason:
-                    return ExitDecision.stop_loss(action.reason, action.qty, channel_name)
+                    return ExitDecision.dynamic_sl(action.reason, action.qty, channel_name)
                 elif 'Giveback' in action.reason:
                     return ExitDecision(
                         should_exit=True,
@@ -3885,15 +3885,46 @@ class RiskManager:
         pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price and entry_price > 0 else 0.0
         cache: Optional[PositionCacheEntry] = self.cache.get(pos_key) if hasattr(self.cache, 'get') else None
         
-        is_stop_exit = 'STOP LOSS' in decision.reason and 'TRAILING' not in decision.reason
-        is_trailing_exit = 'TRAILING STOP' in decision.reason or 'TRAILING' in decision.reason
-        is_profit_exit = 'TARGET' in decision.reason or 'PROFIT' in decision.reason
-        is_giveback_exit = 'GIVEBACK' in decision.reason
+        trigger = decision.risk_trigger or ''
+        is_dynamic_sl = trigger == 'dynamic_sl' or (trigger == 'stop_loss' and 'Dynamic SL' in decision.reason)
+        is_stop_exit = trigger == 'stop_loss' and not is_dynamic_sl
+        is_trailing_exit = trigger == 'trailing_stop' or trigger == 'early_trailing'
+        is_profit_exit = trigger == 'profit_target'
+        is_giveback_exit = trigger == 'giveback_guard'
+        is_ema_exit = trigger in ('ema_exit', 'ema_no_trend')
+        
+        if not trigger:
+            if 'STOP LOSS' in decision.reason and 'TRAILING' not in decision.reason:
+                is_stop_exit = not is_dynamic_sl
+            elif 'TRAILING' in decision.reason:
+                is_trailing_exit = True
+            elif 'TARGET' in decision.reason or 'PROFIT' in decision.reason:
+                is_profit_exit = True
+            elif 'GIVEBACK' in decision.reason:
+                is_giveback_exit = True
+            elif 'EMA' in decision.reason:
+                is_ema_exit = True
         
         exit_qty = int(decision.exit_qty) if decision.exit_qty else 0
         
-        # Send notification for stop loss triggers
-        if is_stop_exit:
+        if is_dynamic_sl:
+            try:
+                from gui_app.discord_notifier import notify_dynamic_sl_triggered
+                dsl_price = cache.dynamic_sl_price if cache and hasattr(cache, 'dynamic_sl_price') and cache.dynamic_sl_price else 0
+                notify_dynamic_sl_triggered(
+                    symbol=position.symbol,
+                    broker=position.broker,
+                    entry_price=entry_price,
+                    exit_price=current_price,
+                    dynamic_sl_price=dsl_price,
+                    pnl_percent=pnl_pct,
+                    quantity=exit_qty,
+                    channel=channel_settings.channel_name if channel_settings else None
+                )
+            except Exception as notify_err:
+                print(f"[NOTIFY] Warning: Could not send dynamic SL notification: {notify_err}")
+        
+        elif is_stop_exit:
             try:
                 from gui_app.discord_notifier import notify_stop_loss_triggered
                 notify_stop_loss_triggered(
@@ -3908,11 +3939,10 @@ class RiskManager:
             except Exception as notify_err:
                 print(f"[NOTIFY] Warning: Could not send stop loss notification: {notify_err}")
         
-        # Send notification for trailing stop triggers
-        if is_trailing_exit:
+        elif is_trailing_exit:
             try:
                 from gui_app.discord_notifier import notify_trailing_stop_triggered
-                trail_type = "early" if "EARLY" in decision.reason else "standard"
+                trail_type = "early" if trigger == 'early_trailing' or "EARLY" in decision.reason else "standard"
                 notify_trailing_stop_triggered(
                     symbol=position.symbol,
                     broker=position.broker,
@@ -3925,8 +3955,7 @@ class RiskManager:
             except Exception as notify_err:
                 print(f"[NOTIFY] Warning: Could not send trailing stop notification: {notify_err}")
         
-        # Send notification for giveback guard triggers
-        if is_giveback_exit:
+        elif is_giveback_exit:
             try:
                 from gui_app.discord_notifier import notify_giveback_guard_triggered
                 max_profit_seen = cache.max_pnl_seen if cache and hasattr(cache, 'max_pnl_seen') else pnl_pct
@@ -3944,16 +3973,31 @@ class RiskManager:
             except Exception as notify_err:
                 print(f"[NOTIFY] Warning: Could not send giveback guard notification: {notify_err}")
         
-        # Send notification for profit target hits
-        if is_profit_exit and pnl_pct > 0:
+        elif is_ema_exit:
+            try:
+                from gui_app.discord_notifier import notify_ema_exit_triggered
+                notify_ema_exit_triggered(
+                    symbol=position.symbol,
+                    broker=position.broker,
+                    exit_type=trigger or 'ema_exit',
+                    pnl_percent=pnl_pct,
+                    exit_price=current_price,
+                    quantity=exit_qty,
+                    reason=decision.reason,
+                    channel=channel_settings.channel_name if channel_settings else None
+                )
+            except Exception as notify_err:
+                print(f"[NOTIFY] Warning: Could not send EMA exit notification: {notify_err}")
+        
+        elif is_profit_exit and pnl_pct > 0:
             try:
                 from gui_app.discord_notifier import notify_profit_target_hit
                 tier = 1
-                if 'TARGET 2' in decision.reason or 'TARGET2' in decision.reason:
+                if 'TARGET 2' in decision.reason or 'TARGET2' in decision.reason or 'TIER 2' in decision.reason:
                     tier = 2
-                elif 'TARGET 3' in decision.reason or 'TARGET3' in decision.reason:
+                elif 'TARGET 3' in decision.reason or 'TARGET3' in decision.reason or 'TIER 3' in decision.reason:
                     tier = 3
-                elif 'TARGET 4' in decision.reason or 'TARGET4' in decision.reason:
+                elif 'TARGET 4' in decision.reason or 'TARGET4' in decision.reason or 'TIER 4' in decision.reason:
                     tier = 4
                 notify_profit_target_hit(
                     symbol=position.symbol,
@@ -3969,14 +4013,20 @@ class RiskManager:
         
         try:
             from gui_app.database import record_order_event
-            if is_stop_exit:
+            if is_dynamic_sl:
+                evt_type = 'DYNAMIC_SL'
+                evt_severity = 'warning'
+            elif is_stop_exit:
                 evt_type = 'STOP_LOSS'
                 evt_severity = 'critical'
             elif is_trailing_exit:
-                evt_type = 'EARLY_TRAILING' if 'EARLY' in decision.reason else 'TRAILING_STOP'
+                evt_type = 'EARLY_TRAILING' if trigger == 'early_trailing' or 'EARLY' in decision.reason else 'TRAILING_STOP'
                 evt_severity = 'warning'
             elif is_giveback_exit:
                 evt_type = 'GIVEBACK_GUARD'
+                evt_severity = 'warning'
+            elif is_ema_exit:
+                evt_type = 'EMA_EXIT' if trigger != 'ema_no_trend' else 'EMA_NO_TREND'
                 evt_severity = 'warning'
             elif is_profit_exit:
                 evt_type = 'PROFIT_TARGET'
