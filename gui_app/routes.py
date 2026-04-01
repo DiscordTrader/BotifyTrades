@@ -10624,21 +10624,23 @@ def register_routes(app):
                     occ_date_str = exp_dt.strftime('%y%m%d')
                 except Exception:
                     pass
+                hub_quote_counts = {}
                 for sd in strikes_data:
                     for side_key, opt_type in [('call', 'C'), ('put', 'P')]:
                         opt = sd.get(side_key, {})
                         oid = opt.get('option_id', '')
-                        if not oid:
-                            continue
                         strike_val = sd['strike']
                         strike_str = str(int(strike_val)) if strike_val == int(strike_val) else str(strike_val)
-                        try_keys = [oid, f"{symbol}_{strike_str}_{opt_type}"]
+                        try_keys = [f"{symbol}_{strike_str}_{opt_type}"]
+                        if oid:
+                            try_keys.insert(0, oid)
                         if occ_date_str:
                             occ_strike = str(int(float(strike_val) * 1000)).zfill(8)
                             occ_key = f"{symbol.ljust(6)}{occ_date_str}{opt_type}{occ_strike}"
                             try_keys.append(occ_key)
                         best_quote = None
                         best_age = 999
+                        best_hub = None
                         for hub_name, hub in hubs:
                             for try_key in try_keys:
                                 q = hub.get_quote(try_key, max_age=30)
@@ -10647,6 +10649,7 @@ def register_routes(app):
                                     if age < best_age:
                                         best_quote = q
                                         best_age = age
+                                        best_hub = hub_name
                         if best_quote:
                             opt['bid'] = best_quote.bid
                             opt['ask'] = best_quote.ask
@@ -10654,10 +10657,13 @@ def register_routes(app):
                                 opt['last'] = best_quote.last
                             opt['mid'] = round((best_quote.bid + best_quote.ask) / 2, 2) if best_quote.bid > 0 and best_quote.ask > 0 else (best_quote.last or opt.get('mid', 0))
                             hub_overlay_count += 1
+                            hub_quote_counts[best_hub] = hub_quote_counts.get(best_hub, 0) + 1
                 if hub_overlay_count > 0:
-                    print(f"[CHAIN_OVERLAY] ✓ Overlaid {hub_overlay_count} streaming quotes onto {symbol} chain", flush=True)
+                    src_str = ', '.join(f"{h}={c}" for h, c in hub_quote_counts.items())
+                    print(f"[CHAIN_OVERLAY] ✓ Overlaid {hub_overlay_count} quotes onto {symbol} chain ({src_str})", flush=True)
                 else:
-                    print(f"[CHAIN_OVERLAY] ⚠️ No hub quotes found for {symbol} {expiry} (hubs={len(hubs)}, occ_date={occ_date_str})", flush=True)
+                    hub_sizes = {h: len(getattr(hub, '_quotes', {})) for h, hub in hubs}
+                    print(f"[CHAIN_OVERLAY] ⚠️ No hub quotes for {symbol} {expiry} (hubs={hub_sizes}, occ={occ_date_str}, strikes={len(strikes_data)})", flush=True)
             except Exception as overlay_err:
                 import traceback
                 print(f"[CHAIN_OVERLAY] ❌ Error: {overlay_err}", flush=True)
