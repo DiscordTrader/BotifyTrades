@@ -3436,8 +3436,9 @@ class WebullBroker:
     
     def _get_current_stock_quote(self, wb, symbol: str) -> Optional[float]:
         """
-        Fetch current stock quote (mark price preferred, fallback to last)
-        Returns None if no quote available
+        Fetch current stock quote (mark price preferred, fallback to last).
+        Checks Webull hub → Webull REST → Schwab hub → IBKR hub.
+        Returns None if no quote available.
         """
         try:
             try:
@@ -3458,24 +3459,56 @@ class WebullBroker:
                 pass
 
             quote = wb.get_quote(stock=symbol)
-            if not quote:
-                print(f"[SLIPPAGE] ⚠️  No quote data available for stock {symbol}")
-                return None
-            
-            # Try mark price (mid of bid/ask) first
-            ask = float(quote.get('askPrice', 0))
-            bid = float(quote.get('bidPrice', 0))
-            if ask > 0 and bid > 0:
-                mark_price = (ask + bid) / 2
-                print(f"[SLIPPAGE] Current mark price: ${mark_price:.2f} (bid: ${bid:.2f}, ask: ${ask:.2f})")
-                return mark_price
-            
-            # Fallback to last trade price
-            last = float(quote.get('last', 0))
-            if last > 0:
-                print(f"[SLIPPAGE] Current last price: ${last:.2f}")
-                return last
-            
+            if quote:
+                ask = float(quote.get('askPrice', 0))
+                bid = float(quote.get('bidPrice', 0))
+                if ask > 0 and bid > 0:
+                    mark_price = (ask + bid) / 2
+                    print(f"[SLIPPAGE] Current mark price: ${mark_price:.2f} (bid: ${bid:.2f}, ask: ${ask:.2f})")
+                    return mark_price
+                last = float(quote.get('last', 0))
+                if last > 0:
+                    print(f"[SLIPPAGE] Current last price: ${last:.2f}")
+                    return last
+
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub
+                _schwab_hub = get_schwab_data_hub()
+                if _schwab_hub and _schwab_hub.is_streaming():
+                    _sq = _schwab_hub.get_quote_detailed(symbol)
+                    if _sq:
+                        _sb = float(_sq.get('bid', 0) or 0)
+                        _sa = float(_sq.get('ask', 0) or 0)
+                        _sl = float(_sq.get('last', 0) or _sq.get('price', 0) or 0)
+                        if _sb > 0 and _sa > 0:
+                            _sm = (_sb + _sa) / 2
+                            print(f"[SLIPPAGE] Cross-hub Schwab price: ${_sm:.4f} (bid: ${_sb:.4f}, ask: ${_sa:.4f})")
+                            return _sm
+                        elif _sl > 0:
+                            print(f"[SLIPPAGE] Cross-hub Schwab last: ${_sl:.4f}")
+                            return _sl
+            except Exception:
+                pass
+
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                _ibkr_hub = get_ibkr_data_hub()
+                if _ibkr_hub and _ibkr_hub.is_streaming():
+                    _iq = _ibkr_hub.get_quote_detailed(symbol)
+                    if _iq:
+                        _ib = float(_iq.get('bid', 0) or 0)
+                        _ia = float(_iq.get('ask', 0) or 0)
+                        _il = float(_iq.get('last', 0) or _iq.get('price', 0) or 0)
+                        if _ib > 0 and _ia > 0:
+                            _im = (_ib + _ia) / 2
+                            print(f"[SLIPPAGE] Cross-hub IBKR price: ${_im:.4f} (bid: ${_ib:.4f}, ask: ${_ia:.4f})")
+                            return _im
+                        elif _il > 0:
+                            print(f"[SLIPPAGE] Cross-hub IBKR last: ${_il:.4f}")
+                            return _il
+            except Exception:
+                pass
+
             print(f"[SLIPPAGE] ⚠️  No valid price data for {symbol}")
             return None
             
@@ -4951,6 +4984,13 @@ class WebullBroker:
                                 _ext_price = _wdh.get_quote_price(base_sym)
                         except Exception:
                             pass
+                    _ext_source = 'quote'
+                    if not _ext_price or _ext_price <= 0:
+                        _fallback_stk = kwargs.get('_signal_price_fallback')
+                        if _fallback_stk and _fallback_stk > 0:
+                            _ext_price = _fallback_stk
+                            _ext_source = 'signal_fallback'
+                            print(f"[WEBULL] 💡 Using signal fallback price ${_fallback_stk:.4f} for MKT→LMT conversion (Webull quote unavailable)")
                     if _ext_price and _ext_price > 0:
                         _is_penny = _ext_price < 1.0
                         _sell_offset = 0.92 if _is_penny else 0.97
@@ -4961,7 +5001,7 @@ class WebullBroker:
                             _ext_price = round(_ext_price * _buy_offset, 4)
                         effective_price = _ext_price
                         is_market_order = False
-                        print(f"[WEBULL] ⚠️ Extended hours — converting MKT to LMT @ ${_ext_price:.4f} for {side} {adjusted_qty} {base_sym}")
+                        print(f"[WEBULL] ⚠️ Extended hours — converting MKT to LMT @ ${_ext_price:.4f} for {side} {adjusted_qty} {base_sym} (source: {_ext_source})")
                     else:
                         print(f"[WEBULL] ⚠️ Extended hours but no quote — attempting MKT anyway for {side} {adjusted_qty} {base_sym}")
 
@@ -16634,15 +16674,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
                 # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
                 use_market_order = signal.get('_use_market_order', False)
+                _stock_signal_fallback = signal.get('price')
                 if use_market_order:
                     if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
                         stock_order_price = signal['_limit_price']
                         _original_print(f"[{broker_name}] 🛡️ Market mode + LIMIT CAP: using limit order @ ${stock_order_price:.4f} (hard ceiling overrides market)", flush=True)
                     else:
                         stock_order_price = None
-                        _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')})", flush=True)
+                        _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')}, fallback=${_stock_signal_fallback})", flush=True)
                 else:
-                    # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
                     stock_order_price = signal.get('price')
                     if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
                         stock_order_price = signal['_limit_price']
@@ -16737,14 +16777,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _stk_kwargs['channel_id'] = signal.get('channel_id')
                     if signal.get('_sizing_mode') in ('start_of_day', 'pre_market'):
                         _stk_kwargs['_sizing_mode'] = signal['_sizing_mode']
+                    if 'WEBULL' in broker_upper and _stock_signal_fallback:
+                        _stk_kwargs['_signal_price_fallback'] = _stock_signal_fallback
                     result = await broker_instance.place_stock_order(**_stk_kwargs)
                 else:
-                    result = await broker_instance.place_stock_order(
-                        symbol=signal['symbol'],
-                        action=signal['action'],
-                        quantity=signal['qty'],
-                        price=stock_order_price
-                    )
+                    if 'WEBULL' in broker_upper and _stock_signal_fallback:
+                        result = await broker_instance.place_stock_order(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            quantity=signal['qty'],
+                            price=stock_order_price,
+                            _signal_price_fallback=_stock_signal_fallback
+                        )
+                    else:
+                        result = await broker_instance.place_stock_order(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            quantity=signal['qty'],
+                            price=stock_order_price
+                        )
                 
                 _t_post_stk_order = _t.monotonic()
                 _stk_api_ms = (_t_post_stk_order - _t_pre_stk_order) * 1000
@@ -18802,12 +18853,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             use_market_order = signal.get('_use_market_order', False)
                             stock_price = None if use_market_order else signal.get('price')
+                            _worker_stk_fallback = signal.get('price')
                             if use_market_order:
-                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')})", flush=True)
+                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')}, fallback=${_worker_stk_fallback})", flush=True)
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_stock_order()...", flush=True)
                             is_webull_broker = broker_name_used and 'WEBULL' in broker_name_used.upper()
                             if is_webull_broker:
-                                resp = await live_broker.place_stock_order(
+                                _wb_stk_kwargs = dict(
                                     action=signal['action'],
                                     qty=signal['qty'],
                                     symbol=signal['symbol'],
@@ -18815,6 +18867,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     channel_id=signal.get('channel_id'),
                                     force_market=use_market_order
                                 )
+                                if _worker_stk_fallback:
+                                    _wb_stk_kwargs['_signal_price_fallback'] = _worker_stk_fallback
+                                resp = await live_broker.place_stock_order(**_wb_stk_kwargs)
                             else:
                                 resp = await live_broker.place_stock_order(
                                     symbol=signal['symbol'],
