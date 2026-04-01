@@ -10608,8 +10608,7 @@ def register_routes(app):
                 elif 'WEBULL' in broker:
                     from src.services.webull_data_hub import get_webull_data_hub
                     hub = get_webull_data_hub()
-                hub_is_streaming = hub and hasattr(hub, 'is_streaming') and hub.is_streaming()
-                if hub and not hub_is_streaming:
+                if hub:
                     for sd in strikes_data:
                         for side_key, opt_type in [('call', 'C'), ('put', 'P')]:
                             opt = sd.get(side_key, {})
@@ -10619,20 +10618,19 @@ def register_routes(app):
                             if 'SCHWAB' in broker:
                                 hub_key = oid
                             else:
-                                hub_key = f"{symbol}_{sd['strike']}_{opt_type}"
+                                strike_val = sd['strike']
+                                strike_str = str(int(strike_val)) if strike_val == int(strike_val) else str(strike_val)
+                                hub_key = f"{symbol}_{strike_str}_{opt_type}"
                             existing = hub.get_quote(hub_key)
-                            if existing:
+                            if existing and existing.bid > 0:
                                 continue
                             seed = {}
                             if opt.get('bid', 0) > 0:
                                 seed['bid'] = opt['bid']
-                                seed['BID_PRICE'] = opt['bid']
                             if opt.get('ask', 0) > 0:
                                 seed['ask'] = opt['ask']
-                                seed['ASK_PRICE'] = opt['ask']
                             if opt.get('last', 0) > 0:
                                 seed['last'] = opt['last']
-                                seed['LAST_PRICE'] = opt['last']
                             if seed:
                                 hub.update_quote(hub_key, seed, source="rest_chain")
             except Exception:
@@ -10694,10 +10692,15 @@ def register_routes(app):
                     if not option_id or option_id == '0':
                         continue
 
-                    stream_key = f"{symbol}_{strike}_{opt_type}"
+                    try:
+                        strike_f = float(strike)
+                        strike_str = str(int(strike_f)) if strike_f == int(strike_f) else str(strike_f)
+                    except (ValueError, TypeError):
+                        strike_str = str(strike)
+                    stream_key = f"{symbol}_{strike_str}_{opt_type}"
 
                     if streaming_client and streaming_client.is_connected():
-                        streaming_client.subscribe_symbol(stream_key, option_id)
+                        streaming_client.subscribe_symbol(stream_key, option_id, is_option=True)
                         subscribed.append(stream_key)
                     else:
                         hub.register_ticker_id(stream_key, option_id)

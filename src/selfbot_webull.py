@@ -5729,9 +5729,10 @@ class WebullBroker:
                         seen_put_strikes.add(put_opt['strike'])
                         puts.append(put_opt)
                 
-                print(f"[Webull] Option chain for {symbol} {expiration_date}: {len(calls)} calls, {len(puts)} puts")
+                calls_with_bids = sum(1 for c in calls if c.get('bid', 0) > 0)
+                puts_with_bids = sum(1 for p in puts if p.get('bid', 0) > 0)
+                print(f"[Webull] Option chain for {symbol} {expiration_date}: {len(calls)} calls, {len(puts)} puts (with bid: {calls_with_bids}C/{puts_with_bids}P, needs_live={needs_live_quotes})")
                 
-                # If chain data is missing bid/ask, fetch live quotes for ATM options
                 if needs_live_quotes and (calls or puts):
                     
                     # Get stock price to determine ATM range
@@ -5786,9 +5787,13 @@ class WebullBroker:
                                             opt['last'] = live_data['last']
                                         opt['needs_live_quote'] = False
                                         live_quote_count += 1
-                                except:
+                                except Exception as lqe:
                                     pass
                         
+                        if live_quote_count > 0:
+                            print(f"[Webull] Live quote enrichment: {live_quote_count}/{len(all_atm_opts)} options got bid/ask for {symbol}")
+                        else:
+                            print(f"[Webull] ⚠️ Live quote enrichment failed: 0/{len(all_atm_opts)} options for {symbol}")
                 
                 # Get stock price
                 stock_price = None
