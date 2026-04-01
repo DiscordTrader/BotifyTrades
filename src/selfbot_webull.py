@@ -14821,7 +14821,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['author'] = author_name
                         print(f"[DATABASE] ✓ Added channel_record_id={opt['channel_record_id']} for paper trade tracking")
                     
-                    if opt.get('action', '').upper() in ('BTO', 'BTC'):
+                    _opt_paper_action = opt.get('action', '').upper()
+                    if _opt_paper_action in ('STC', 'SELL'):
+                        _opt_paper_exit_mode = opt.get('_exit_strategy_mode', 'signal')
+                        if not _opt_paper_exit_mode or _opt_paper_exit_mode == 'signal':
+                            try:
+                                _opt_paper_exit_mode = db.get_effective_exit_strategy_mode(str(message.channel.id))
+                            except Exception:
+                                pass
+                        if _opt_paper_exit_mode == 'risk':
+                            _original_print(f"[EXIT MODE] ⛔ BLOCKED: Options paper STC for {opt.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)", flush=True)
+                            return
+                    
+                    if _opt_paper_action in ('BTO', 'BTC'):
                         try:
                             from gui_app.database import is_circuit_breaker_tripped
                             circuit_status = is_circuit_breaker_tripped()
@@ -15422,7 +15434,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         stk['author'] = author_name
                         print(f"[DATABASE] ✓ Added channel_record_id={stk['channel_record_id']} for paper trade tracking")
                     
-                    if stk.get('action', '').upper() in ('BTO', 'BTC'):
+                    _stk_paper_action = stk.get('action', '').upper()
+                    if _stk_paper_action in ('STC', 'SELL'):
+                        _stk_paper_exit_mode = stk.get('_exit_strategy_mode') or ch_exit_mode
+                        if _stk_paper_exit_mode == 'risk':
+                            print(f"[EXIT MODE] ⛔ BLOCKED: Stock paper STC for {stk.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                            return
+                    
+                    if _stk_paper_action in ('BTO', 'BTC'):
                         try:
                             from gui_app.database import is_circuit_breaker_tripped
                             circuit_status = is_circuit_breaker_tripped()
@@ -17101,8 +17120,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if signal.get('_conditional_order') and signal.get('market') == 'INDIA':
                         await self._route_telegram_conditional_order(signal)
                     else:
-                        await self.order_queue.put(signal)
-                        _original_print(f"[TELEGRAM BRIDGE] ✓ Signal forwarded to order queue", flush=True)
+                        _tb_action = signal.get('action', '').upper()
+                        _tb_exit_mode = signal.get('_exit_strategy_mode', '')
+                        if _tb_action in ('STC', 'SELL') and _tb_exit_mode == 'risk':
+                            _original_print(f"[EXIT MODE] ⛔ BLOCKED: Telegram bridge STC for {signal.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)", flush=True)
+                        else:
+                            await self.order_queue.put(signal)
+                            _original_print(f"[TELEGRAM BRIDGE] ✓ Signal forwarded to order queue", flush=True)
                     
                 except std_queue.Empty:
                     pass
