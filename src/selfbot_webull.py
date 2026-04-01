@@ -10559,20 +10559,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if sl_type == 'percent':
                                 sl_pct = order['stop_loss_value']
                                 signal['stop_loss_pct'] = sl_pct
-                                # Calculate actual stop loss price from percentage
                                 sl_price = triggered_price * (1 - sl_pct / 100)
-                                signal['stop_loss_price'] = round(sl_price, 2)
-                                print(f"[CONDITIONAL] Using signal SL: {sl_pct}% = ${signal['stop_loss_price']:.2f} (entry: ${triggered_price:.2f})", flush=True)
+                                _sl_dec = 4 if triggered_price < 1.0 else 2
+                                signal['stop_loss_price'] = round(sl_price, _sl_dec)
+                                print(f"[CONDITIONAL] Using signal SL: {sl_pct}% = ${signal['stop_loss_price']:.{_sl_dec}f} (entry: ${triggered_price:.{_sl_dec}f})", flush=True)
                             else:
                                 signal['stop_loss_price'] = order['stop_loss_value']
                                 print(f"[CONDITIONAL] Using signal SL: ${order['stop_loss_value']}", flush=True)
                         elif channel_settings and channel_settings.get('stop_loss_pct'):
                             ch_sl_pct = channel_settings['stop_loss_pct']
                             signal['stop_loss_pct'] = ch_sl_pct
-                            # Calculate actual stop loss price from channel percentage
                             ch_sl_price = triggered_price * (1 - ch_sl_pct / 100)
-                            signal['stop_loss_price'] = round(ch_sl_price, 2)
-                            print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.2f}", flush=True)
+                            _ch_sl_dec = 4 if triggered_price < 1.0 else 2
+                            signal['stop_loss_price'] = round(ch_sl_price, _ch_sl_dec)
+                            print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.{_ch_sl_dec}f}", flush=True)
                         
                         # Profit Targets: Signal prices first, then channel percentage settings
                         if has_signal_targets:
@@ -10599,8 +10599,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 are_prices = True
                                                 break
                                     
+                                    _pt_dec = 4 if triggered_price < 1.0 else 2
                                     if are_prices:
-                                        targets_as_prices = [round(float(t), 2) for t in targets]
+                                        targets_as_prices = [round(float(t), _pt_dec) for t in targets]
                                         targets_as_pcts = [round(((t - triggered_price) / triggered_price) * 100, 2) for t in targets]
                                         signal['profit_target_pct'] = targets_as_pcts[0] if targets_as_pcts else 0
                                         signal['profit_targets_pct'] = targets_as_pcts
@@ -10609,7 +10610,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         sys.stderr.write(f"[CONDITIONAL EXEC] Signal targets are PRICES: ${targets_as_prices} ({targets_as_pcts}%)\n")
                                         sys.stderr.flush()
                                     else:
-                                        targets_as_prices = [round(triggered_price * (1 + pct / 100), 2) for pct in targets]
+                                        targets_as_prices = [round(triggered_price * (1 + pct / 100), _pt_dec) for pct in targets]
                                         signal['profit_target_pct'] = targets[0]
                                         signal['profit_targets_pct'] = targets
                                         signal['profit_target_price'] = targets_as_prices[0]
@@ -10623,8 +10624,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if pct:
                                     channel_targets_pct.append(pct)
                             if channel_targets_pct:
-                                # Convert percentage targets to actual prices
-                                channel_targets_price = [round(triggered_price * (1 + pct / 100), 2) for pct in channel_targets_pct]
+                                _ch_pt_dec = 4 if triggered_price < 1.0 else 2
+                                channel_targets_price = [round(triggered_price * (1 + pct / 100), _ch_pt_dec) for pct in channel_targets_pct]
                                 signal['profit_target_pct'] = channel_targets_pct[0]
                                 signal['profit_targets_pct'] = channel_targets_pct
                                 signal['profit_target_price'] = channel_targets_price[0]

@@ -3996,7 +3996,8 @@ class RiskManager:
             hub_ask = hub_quotes['ask']
             hub_mid = hub_quotes['mid']
             hub_src = hub_quotes['source']
-            is_penny_stock = position.asset == 'stock' and position.current_price < 1.0
+            _penny_ref_price = hub_bid if hub_bid > 0 else (hub_mid if hub_mid > 0 else position.current_price)
+            is_penny_stock = position.asset == 'stock' and _penny_ref_price < 1.0
             if hub_bid > 0 or hub_ask > 0:
                 last_price = stc_signal['price']
                 spread_pct = 0
@@ -4270,12 +4271,24 @@ class RiskManager:
                         option_kwargs['price'] = stc_signal['price']
                 result = await broker_instance.place_option_order(**option_kwargs)
             else:
-                result = await broker_instance.place_stock_order(
-                    symbol=stc_signal['symbol'],
-                    quantity=stc_signal['qty'],
-                    price=order_price,
-                    action='STC',
-                )
+                _stk_exit_kwargs = {
+                    'symbol': stc_signal['symbol'],
+                    'quantity': stc_signal['qty'],
+                    'price': order_price,
+                    'action': 'STC',
+                }
+                if 'WEBULL' in broker_upper and stc_signal.get('price'):
+                    import inspect
+                    _stk_sig = inspect.signature(broker_instance.place_stock_order)
+                    _accepts_kwargs = any(
+                        p.kind == inspect.Parameter.VAR_KEYWORD
+                        for p in _stk_sig.parameters.values()
+                    )
+                    if _accepts_kwargs:
+                        _stk_exit_kwargs['_signal_price_fallback'] = stc_signal['price']
+                        if stc_signal.get('_use_market_order'):
+                            _stk_exit_kwargs['force_market'] = True
+                result = await broker_instance.place_stock_order(**_stk_exit_kwargs)
             
             order_id = None
             if isinstance(result, dict):
