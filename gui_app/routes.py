@@ -10693,7 +10693,8 @@ def register_routes(app):
             symbol = data.get('symbol', '').upper()
             broker = data.get('broker', 'WEBULL').upper()
             contracts = data.get('contracts', [])
-            print(f"[OPTIONS_STREAM] symbol={symbol} broker={broker} contracts={len(contracts)}", flush=True)
+            expiry_raw = data.get('expiry', '')
+            print(f"[OPTIONS_STREAM] symbol={symbol} broker={broker} contracts={len(contracts)} expiry={expiry_raw}", flush=True)
             sys.stdout.flush()
 
             if not symbol or not contracts:
@@ -10748,18 +10749,36 @@ def register_routes(app):
                     schwab_stream_cross = getattr(schwab_broker_cross, '_streaming_client', None) if schwab_broker_cross else None
                     if schwab_stream_cross and schwab_stream_cross.is_connected():
                         occ_symbols_cross = []
-                        for c in contracts:
-                            occ = c.get('occ_symbol', '') or c.get('option_id', '')
-                            if occ and len(occ) > 5:
-                                occ_symbols_cross.append(occ)
-                        if occ_symbols_cross:
-                            loop = get_webull_loop()
-                            if loop and not loop.is_closed():
-                                future = asyncio.run_coroutine_threadsafe(
-                                    schwab_stream_cross.subscribe_options(occ_symbols_cross), loop
-                                )
-                                future.result(timeout=5)
-                                print(f"[OPTIONS_STREAM] ✓ Cross-sub Schwab: {len(occ_symbols_cross)} options alongside Webull", flush=True)
+                        occ_date_cross = ''
+                        if expiry_raw:
+                            try:
+                                from datetime import datetime as _dt_cross
+                                exp_dt_cross = _dt_cross.strptime(expiry_raw, '%Y-%m-%d')
+                                occ_date_cross = exp_dt_cross.strftime('%y%m%d')
+                            except Exception:
+                                pass
+                        if occ_date_cross:
+                            for c in contracts:
+                                try:
+                                    strike_f = float(c.get('strike', 0))
+                                    opt_type = c.get('type', '').upper()
+                                    if opt_type not in ('C', 'P'):
+                                        continue
+                                    occ_strike = str(int(strike_f * 1000)).zfill(8)
+                                    occ_key = f"{symbol.ljust(6)}{occ_date_cross}{opt_type}{occ_strike}"
+                                    occ_symbols_cross.append(occ_key)
+                                except (ValueError, TypeError):
+                                    continue
+                            if occ_symbols_cross:
+                                loop = get_webull_loop()
+                                if loop and not loop.is_closed():
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        schwab_stream_cross.subscribe_options(occ_symbols_cross), loop
+                                    )
+                                    future.result(timeout=5)
+                                    print(f"[OPTIONS_STREAM] ✓ Cross-sub Schwab: {len(occ_symbols_cross)} OCC options (e.g. {occ_symbols_cross[0]})", flush=True)
+                        else:
+                            print(f"[OPTIONS_STREAM] ⚠️ Cross-sub Schwab skipped: no expiry date for OCC key building", flush=True)
                 except Exception as e:
                     print(f"[OPTIONS_STREAM] Cross-sub Schwab failed: {e}", flush=True)
 
@@ -10780,9 +10799,27 @@ def register_routes(app):
                 streaming_client = getattr(schwab_broker, '_streaming_client', None) if schwab_broker else None
                 print(f"[OPTIONS_STREAM] Schwab subscribe: broker={'found' if schwab_broker else 'NOT FOUND'}, streaming_client={'found' if streaming_client else 'NOT FOUND'}, connected={streaming_client.is_connected() if streaming_client else 'N/A'}", flush=True)
 
+                occ_date_schwab = ''
+                if expiry_raw:
+                    try:
+                        from datetime import datetime as _dt_schwab
+                        exp_dt_schwab = _dt_schwab.strptime(expiry_raw, '%Y-%m-%d')
+                        occ_date_schwab = exp_dt_schwab.strftime('%y%m%d')
+                    except Exception:
+                        pass
+
                 option_symbols = []
                 for c in contracts:
-                    occ_symbol = c.get('occ_symbol', '') or c.get('option_id', '') or c.get('symbol', '')
+                    occ_symbol = c.get('occ_symbol', '')
+                    if not occ_symbol and occ_date_schwab:
+                        try:
+                            strike_f = float(c.get('strike', 0))
+                            opt_type = c.get('type', '').upper()
+                            if opt_type in ('C', 'P'):
+                                occ_strike = str(int(strike_f * 1000)).zfill(8)
+                                occ_symbol = f"{symbol.ljust(6)}{occ_date_schwab}{opt_type}{occ_strike}"
+                        except (ValueError, TypeError):
+                            pass
                     if occ_symbol and len(occ_symbol) > 5:
                         option_symbols.append(occ_symbol)
                         subscribed.append(occ_symbol)

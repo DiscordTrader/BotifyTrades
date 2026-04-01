@@ -171,16 +171,17 @@ class WebullDataHub:
         self._last_quote_ts = time.time()
         self._emit('quote_updated', {'symbol': symbol.upper(), 'quote': existing})
 
-    def get_quote(self, symbol: str) -> Optional[WebullQuoteData]:
+    def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[WebullQuoteData]:
+        threshold = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
         with self._quotes_lock:
             quote = self._quotes.get(symbol.upper())
-            if quote and (time.time() - quote.timestamp) < self.QUOTE_STALE_THRESHOLD:
+            if quote and (time.time() - quote.timestamp) < threshold:
                 return quote
         resolved = self.get_symbol_by_ticker_id(symbol)
         if resolved:
             with self._quotes_lock:
                 quote = self._quotes.get(resolved.upper())
-                if quote and (time.time() - quote.timestamp) < self.QUOTE_STALE_THRESHOLD:
+                if quote and (time.time() - quote.timestamp) < threshold:
                     return quote
         return None
 

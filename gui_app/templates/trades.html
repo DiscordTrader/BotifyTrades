@@ -2560,11 +2560,12 @@ async function qtSubscribeStream() {
     });
     if (contracts.length === 0) return;
     try {
+        const expiry = qtChainData.expiry || '';
         const r = await fetch('/api/options/subscribe-stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ symbol, broker, contracts })
+            body: JSON.stringify({ symbol, broker, contracts, expiry })
         });
         const data = await r.json();
         if (data.success && data.subscribed > 0) {

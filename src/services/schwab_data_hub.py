@@ -64,6 +64,7 @@ class SchwabDataHub:
         self._initialized = True
 
         self._quotes: Dict[str, QuoteData] = {}
+        self._quotes_lock = threading.Lock()
 
         self._positions: List[Dict[str, Any]] = []
         self._positions_detailed: List[Dict[str, Any]] = []
@@ -121,49 +122,51 @@ class SchwabDataHub:
                 print(f"[SCHWAB_HUB] Event handler error ({event}): {e}")
 
     def update_quote(self, symbol: str, quote_data: Dict[str, Any], source: str = "stream"):
-        existing = self._quotes.get(symbol)
-        if existing is None:
-            existing = QuoteData(symbol=symbol)
-            self._quotes[symbol] = existing
+        with self._quotes_lock:
+            existing = self._quotes.get(symbol)
+            if existing is None:
+                existing = QuoteData(symbol=symbol)
+                self._quotes[symbol] = existing
 
-        if 'bid' in quote_data or 'BID_PRICE' in quote_data:
-            existing.bid = float(quote_data.get('bid', quote_data.get('BID_PRICE', existing.bid)) or 0)
-        if 'ask' in quote_data or 'ASK_PRICE' in quote_data:
-            existing.ask = float(quote_data.get('ask', quote_data.get('ASK_PRICE', existing.ask)) or 0)
-        if 'last' in quote_data or 'LAST_PRICE' in quote_data:
-            existing.last = float(quote_data.get('last', quote_data.get('LAST_PRICE', existing.last)) or 0)
-        if 'volume' in quote_data or 'TOTAL_VOLUME' in quote_data:
-            existing.volume = int(quote_data.get('volume', quote_data.get('TOTAL_VOLUME', existing.volume)) or 0)
-        if 'high' in quote_data or 'HIGH_PRICE' in quote_data:
-            existing.high = float(quote_data.get('high', quote_data.get('HIGH_PRICE', existing.high)) or 0)
-        if 'low' in quote_data or 'LOW_PRICE' in quote_data:
-            existing.low = float(quote_data.get('low', quote_data.get('LOW_PRICE', existing.low)) or 0)
+            if 'bid' in quote_data or 'BID_PRICE' in quote_data:
+                existing.bid = float(quote_data.get('bid', quote_data.get('BID_PRICE', existing.bid)) or 0)
+            if 'ask' in quote_data or 'ASK_PRICE' in quote_data:
+                existing.ask = float(quote_data.get('ask', quote_data.get('ASK_PRICE', existing.ask)) or 0)
+            if 'last' in quote_data or 'LAST_PRICE' in quote_data:
+                existing.last = float(quote_data.get('last', quote_data.get('LAST_PRICE', existing.last)) or 0)
+            if 'volume' in quote_data or 'TOTAL_VOLUME' in quote_data:
+                existing.volume = int(quote_data.get('volume', quote_data.get('TOTAL_VOLUME', existing.volume)) or 0)
+            if 'high' in quote_data or 'HIGH_PRICE' in quote_data:
+                existing.high = float(quote_data.get('high', quote_data.get('HIGH_PRICE', existing.high)) or 0)
+            if 'low' in quote_data or 'LOW_PRICE' in quote_data:
+                existing.low = float(quote_data.get('low', quote_data.get('LOW_PRICE', existing.low)) or 0)
 
-        if 'DELTA' in quote_data:
-            existing.delta = float(quote_data.get('DELTA', 0) or 0)
-        if 'GAMMA' in quote_data:
-            existing.gamma = float(quote_data.get('GAMMA', 0) or 0)
-        if 'THETA' in quote_data:
-            existing.theta = float(quote_data.get('THETA', 0) or 0)
-        if 'VEGA' in quote_data:
-            existing.vega = float(quote_data.get('VEGA', 0) or 0)
-        if 'OPEN_INTEREST' in quote_data:
-            existing.open_interest = int(quote_data.get('OPEN_INTEREST', 0) or 0)
-        if 'VOLATILITY' in quote_data:
-            existing.implied_volatility = float(quote_data.get('VOLATILITY', 0) or 0)
+            if 'DELTA' in quote_data:
+                existing.delta = float(quote_data.get('DELTA', 0) or 0)
+            if 'GAMMA' in quote_data:
+                existing.gamma = float(quote_data.get('GAMMA', 0) or 0)
+            if 'THETA' in quote_data:
+                existing.theta = float(quote_data.get('THETA', 0) or 0)
+            if 'VEGA' in quote_data:
+                existing.vega = float(quote_data.get('VEGA', 0) or 0)
+            if 'OPEN_INTEREST' in quote_data:
+                existing.open_interest = int(quote_data.get('OPEN_INTEREST', 0) or 0)
+            if 'VOLATILITY' in quote_data:
+                existing.implied_volatility = float(quote_data.get('VOLATILITY', 0) or 0)
 
-        existing.timestamp = time.time()
-        existing.source = source
+            existing.timestamp = time.time()
+            existing.source = source
 
         self._last_quote_ts = existing.timestamp
         self._emit('quote_updated', {'symbol': symbol, 'quote': existing})
 
     def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[QuoteData]:
-        quote = self._quotes.get(symbol)
-        threshold = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
-        if quote and (time.time() - quote.timestamp) < threshold:
-            return quote
-        return None
+        with self._quotes_lock:
+            quote = self._quotes.get(symbol)
+            threshold = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
+            if quote and (time.time() - quote.timestamp) < threshold:
+                return quote
+            return None
 
     def get_quote_price(self, symbol: str) -> Optional[float]:
         quote = self.get_quote(symbol)
