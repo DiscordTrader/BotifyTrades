@@ -2412,28 +2412,42 @@ class BaseConditionalOrderService(ABC):
             from src.services.daily_pnl_limit_service import get_daily_pnl_service
             pnl_service = get_daily_pnl_service()
             broker_primary = order.get('broker_primary', '')
+            trigger_type = order.get('trigger_type', 'over')
+            is_sell_order = trigger_type.upper() in ('UNDER', 'BELOW', 'PRICE_BELOW', 'STC', 'SELL')
             if broker_primary:
                 pnl_check = pnl_service.check_broker_locked(broker_primary)
                 if pnl_check.get('locked'):
                     lock_type = pnl_check.get('lock_type', 'unknown')
                     pnl = pnl_check.get('daily_pnl', 0)
                     pnl_pct = pnl_check.get('daily_pnl_pct', 0)
-                    if lock_type == 'trades':
+                    if lock_type == 'trades' and is_sell_order:
+                        self._log(f"✅ EXEMPT #{order_id} {symbol}: Sell/exit order bypasses daily trade limit")
+                    elif lock_type == 'trades':
                         tc = pnl_check.get('daily_trade_count', 0)
                         tl = pnl_check.get('daily_trade_limit', 0)
                         block_detail = f"Daily trade limit reached ({tc}/{tl})"
+                        self._log(f"⛔ BLOCKED #{order_id} {symbol}: {block_detail}")
+                        update_conditional_order_status(
+                            order_id,
+                            'PENDING_MONITOR',
+                            event='DAILY_PNL_BLOCK',
+                            details=block_detail
+                        )
+                        self._executing_orders.discard(order_id)
+                        self._execution_locks.pop(order_id, None)
+                        return
                     else:
                         block_detail = f"Daily P&L {lock_type} limit reached: ${pnl:+,.2f} ({pnl_pct:+.1f}%)"
-                    self._log(f"⛔ BLOCKED #{order_id} {symbol}: {block_detail}")
-                    update_conditional_order_status(
-                        order_id,
-                        'PENDING_MONITOR',
-                        event='DAILY_PNL_BLOCK',
-                        details=block_detail
-                    )
-                    self._executing_orders.discard(order_id)
-                    self._execution_locks.pop(order_id, None)
-                    return
+                        self._log(f"⛔ BLOCKED #{order_id} {symbol}: {block_detail}")
+                        update_conditional_order_status(
+                            order_id,
+                            'PENDING_MONITOR',
+                            event='DAILY_PNL_BLOCK',
+                            details=block_detail
+                        )
+                        self._executing_orders.discard(order_id)
+                        self._execution_locks.pop(order_id, None)
+                        return
         except ImportError:
             pass
         except Exception as dpnl_err:
