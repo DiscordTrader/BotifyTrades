@@ -30,7 +30,8 @@ from .risk_engine import (
     TradeState, 
     RiskAction, 
     ActionType,
-    DYNAMIC_SL_PROFILES
+    DYNAMIC_SL_PROFILES,
+    calculate_dynamic_sl
 )
 
 import threading
@@ -3462,7 +3463,10 @@ class RiskManager:
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
             if not _is_repair_cycle:
-                return decision
+                if channel_settings and channel_settings.escalation_only_mode and decision.risk_trigger == 'profit_target':
+                    pass
+                else:
+                    return decision
         
         if channel_settings:
             decision = evaluate_channel_stop_loss(position, cache, channel_settings)
@@ -3623,6 +3627,31 @@ class RiskManager:
         if updated_state.highest_price > cache.highest_price:
             cache.highest_price = updated_state.highest_price
         
+        if channel_settings.escalation_only_mode and channel_settings.has_tiered_targets:
+            current_pnl = updated_state.pnl_pct
+            tier_thresholds = {
+                1: channel_settings.profit_target_1_pct,
+                2: channel_settings.profit_target_2_pct,
+                3: channel_settings.profit_target_3_pct,
+                4: channel_settings.profit_target_4_pct
+            }
+            for tier in [1, 2, 3, 4]:
+                threshold = tier_thresholds.get(tier, 0)
+                if threshold <= 0:
+                    continue
+                tier_attr = f'tier{tier}_hit'
+                if not getattr(cache, tier_attr, False) and current_pnl >= threshold:
+                    setattr(cache, tier_attr, True)
+                    print(f"[RISK] ESCALATION ONLY: T{tier} hit ({current_pnl:.1f}% >= {threshold}%) — tier marked for SL escalation, NO partial sell")
+
+            if cache.tier1_hit or cache.tier2_hit or cache.tier3_hit or cache.tier4_hit:
+                pts_hit = {1: cache.tier1_hit, 2: cache.tier2_hit, 3: cache.tier3_hit, 4: cache.tier4_hit}
+                current_px = position.current_price if hasattr(position, 'current_price') else None
+                new_dynamic_sl = calculate_dynamic_sl(cache.entry_price, pts_hit, channel_settings.dynamic_sl_profile, current_price=current_px)
+                if new_dynamic_sl and (cache.dynamic_sl_price is None or new_dynamic_sl > cache.dynamic_sl_price):
+                    cache.dynamic_sl_price = new_dynamic_sl
+                    print(f"[RISK] Dynamic SL escalated to ${new_dynamic_sl:.2f} after PT tier hit (escalation_only)")
+
         new_tier_hits = (cache.tier1_hit, cache.tier2_hit, cache.tier3_hit, cache.tier4_hit)
         if new_tier_hits != old_tier_hits:
             for i, (old_h, new_h) in enumerate(zip(old_tier_hits, new_tier_hits), 1):

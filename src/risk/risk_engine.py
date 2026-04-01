@@ -148,20 +148,20 @@ DYNAMIC_SL_PROFILES = {
     'conservative': {
         'pt1_sl_pct': 0,
         'pt2_sl_pct': 3,
-        'pt3_sl_pct': 10,
-        'pt4_sl_pct': 20
+        'pt3_sl_pct': 8,
+        'pt4_sl_pct': 15
     },
     'standard': {
         'pt1_sl_pct': 0,
         'pt2_sl_pct': 5,
-        'pt3_sl_pct': 15,
-        'pt4_sl_pct': 25
+        'pt3_sl_pct': 10,
+        'pt4_sl_pct': 17
     },
     'aggressive': {
         'pt1_sl_pct': -2,
         'pt2_sl_pct': 0,
-        'pt3_sl_pct': 10,
-        'pt4_sl_pct': 20
+        'pt3_sl_pct': 8,
+        'pt4_sl_pct': 15
     }
 }
 
@@ -169,11 +169,13 @@ DYNAMIC_SL_PROFILES = {
 def calculate_dynamic_sl(
     entry_price: float,
     pts_hit: Dict[int, bool],
-    profile: str = 'standard'
+    profile: str = 'standard',
+    current_price: float = None
 ) -> Optional[float]:
     """
     Calculate dynamic stop loss based on PT hits.
     Returns new SL price or None if no escalation.
+    Safety: SL is capped below current_price to prevent immediate trigger.
     """
     profile_config = DYNAMIC_SL_PROFILES.get(profile, DYNAMIC_SL_PROFILES['standard'])
     
@@ -187,7 +189,22 @@ def calculate_dynamic_sl(
         return None
     
     sl_pct = profile_config.get(f'pt{highest_tier_hit}_sl_pct', 0)
-    return entry_price * (1 + sl_pct / 100)
+    sl_price = entry_price * (1 + sl_pct / 100)
+    
+    if current_price is not None and sl_price >= current_price:
+        buffer_pct = 0.02
+        capped_sl = current_price * (1 - buffer_pct)
+        if capped_sl > entry_price:
+            import logging
+            logging.getLogger('risk').warning(
+                f"[DYN-SL] Capped SL from ${sl_price:.2f} (+{sl_pct}%) to ${capped_sl:.2f} "
+                f"(current=${current_price:.2f}, entry=${entry_price:.2f}) — SL must stay below current price"
+            )
+            sl_price = capped_sl
+        else:
+            sl_price = entry_price
+    
+    return sl_price
 
 
 def calculate_auto_tier_quantities(
@@ -274,7 +291,7 @@ def evaluate_exit_actions(
     
     if config.enable_dynamic_sl and state.pts_hit_count > 0:
         pts_hit = {1: state.pt1_hit, 2: state.pt2_hit, 3: state.pt3_hit, 4: state.pt4_hit}
-        new_dynamic_sl = calculate_dynamic_sl(state.entry_price, pts_hit, config.dynamic_sl_profile)
+        new_dynamic_sl = calculate_dynamic_sl(state.entry_price, pts_hit, config.dynamic_sl_profile, current_price=state.current_price)
         
         if new_dynamic_sl:
             if state.dynamic_sl_price is None or new_dynamic_sl > state.dynamic_sl_price:
