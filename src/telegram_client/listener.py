@@ -504,11 +504,16 @@ class TelegramListener:
                     print(f"[TELEGRAM] Error saving signal for tracking: {e}")
             
             if execute_enabled:
-                queued = await self._submit_signal_to_queue(signal)
-                if queued:
-                    print(f"[TELEGRAM] Signal queued for execution")
+                _tg_action = signal.get('action', '').upper()
+                _tg_exit_mode = signal.get('_exit_strategy_mode', 'signal')
+                if _tg_action in ('STC', 'SELL') and _tg_exit_mode == 'risk':
+                    print(f"[EXIT MODE] ⛔ BLOCKED: Telegram STC signal for {signal.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
                 else:
-                    print(f"[TELEGRAM] Warning: Could not queue signal (no queue configured)")
+                    queued = await self._submit_signal_to_queue(signal)
+                    if queued:
+                        print(f"[TELEGRAM] Signal queued for execution")
+                    else:
+                        print(f"[TELEGRAM] Warning: Could not queue signal (no queue configured)")
             
             if self._signal_callback:
                 try:

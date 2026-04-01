@@ -11634,84 +11634,89 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 import traceback
                                 traceback.print_exc()
                         elif routing_parsed and routing_parsed.get('action') == 'STC':
-                            # STC signals: forward via routing engine (only if open position exists)
+                            _rt_exit_mode = 'signal'
                             try:
-                                from src.services.position_ledger import get_position_ledger, ExitReason
-                                
-                                routing_engine = get_signal_routing_engine()
-                                ledger = get_position_ledger()
-                                
-                                symbol = routing_parsed.get('symbol', '')
-                                strike = float(routing_parsed.get('strike', 0) or 0)
-                                opt_type = routing_parsed.get('opt_type', 'C')
-                                expiry = routing_parsed.get('expiry', '')
-                                exit_price = float(routing_parsed.get('price', 0) or 0)
-                                is_full_exit = routing_parsed.get('is_full_exit', False)
-                                is_trim = routing_parsed.get('is_trim', False)
-                                
-                                # Handle Sir Goldman EXIT/TRIM without symbol - find most recent open position
-                                if not symbol:
-                                    open_positions = ledger.get_open_positions(channel_id=str(signal_routing_config.id))
-                                    if open_positions:
-                                        # Get most recent open position (sorted by entry_time desc)
-                                        most_recent = sorted(open_positions, key=lambda p: p.entry_time or '', reverse=True)[0]
-                                        symbol = most_recent.symbol
-                                        strike = most_recent.strike
-                                        opt_type = most_recent.option_type
-                                        expiry = most_recent.expiry or ''
-                                        is_full_exit = not is_trim  # TRIM = partial, EXIT = full
-                                        print(f"[SIGNAL_ROUTING] ✓ Resolved STC to most recent position: {symbol} {strike}{opt_type}")
-                                    else:
-                                        print(f"[SIGNAL_ROUTING] ⏭️ STC skipped - no symbol and no open positions for routing config {signal_routing_config.id}")
-                                
-                                if symbol:
-                                    # Build option key to find matching position
-                                    option_key = f"{symbol}_{expiry}_{strike}_{opt_type}"
+                                _rt_ch_id = str(message.channel.id) if hasattr(message, 'channel') else ''
+                                if _rt_ch_id:
+                                    _rt_exit_mode = db.get_effective_exit_strategy_mode(_rt_ch_id)
+                            except Exception:
+                                pass
+                            if _rt_exit_mode == 'risk':
+                                print(f"[EXIT MODE] ⛔ BLOCKED: Routing STC signal for {routing_parsed.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                            else:
+                                try:
+                                    from src.services.position_ledger import get_position_ledger, ExitReason
                                     
-                                    # Find open position for this routing config
-                                    open_positions = ledger.get_open_positions(channel_id=str(signal_routing_config.id))
-                                    matching_position = None
-                                    for pos in open_positions:
-                                        if (pos.symbol == symbol and 
-                                            abs(pos.strike - strike) < 0.01 and 
-                                            pos.option_type == opt_type):
-                                            matching_position = pos
-                                            break
+                                    routing_engine = get_signal_routing_engine()
+                                    ledger = get_position_ledger()
                                     
-                                    if matching_position and matching_position.remaining_qty > 0:
-                                        stc_signal_meta = {
-                                            'is_full_exit': is_full_exit,
-                                            'is_trim': is_trim,
-                                            'qty': int(routing_parsed.get('qty', 0) or 0),
-                                            'trim_percentage': routing_parsed.get('trim_percentage') or routing_parsed.get('trim_percent'),
-                                            '_phoenix_exit': routing_parsed.get('_phoenix_exit', False),
-                                            '_phoenix_trim': routing_parsed.get('_phoenix_trim', False),
-                                            '_bishop_trim_percent': routing_parsed.get('_bishop_trim_percent', False),
-                                        }
-                                        exit_qty = routing_engine.resolve_signal_exit_qty(
-                                            matching_position, stc_signal_meta, signal_routing_config
-                                        )
-                                        actual_price = exit_price if exit_price > 0 else (matching_position.current_price or matching_position.entry_price)
-                                        
-                                        success = await routing_engine.post_stc_signal(
-                                            config=signal_routing_config,
-                                            position=matching_position,
-                                            exit_qty=exit_qty,
-                                            exit_price=actual_price,
-                                            exit_reason=ExitReason.SIGNAL,
-                                            pnl_pct=0.0,
-                                            trim_percent=stc_signal_meta.get('trim_percentage')
-                                        )
-                                        if success:
-                                            print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type} qty={exit_qty} (remaining={matching_position.remaining_qty})")
+                                    symbol = routing_parsed.get('symbol', '')
+                                    strike = float(routing_parsed.get('strike', 0) or 0)
+                                    opt_type = routing_parsed.get('opt_type', 'C')
+                                    expiry = routing_parsed.get('expiry', '')
+                                    exit_price = float(routing_parsed.get('price', 0) or 0)
+                                    is_full_exit = routing_parsed.get('is_full_exit', False)
+                                    is_trim = routing_parsed.get('is_trim', False)
+                                    
+                                    if not symbol:
+                                        open_positions = ledger.get_open_positions(channel_id=str(signal_routing_config.id))
+                                        if open_positions:
+                                            most_recent = sorted(open_positions, key=lambda p: p.entry_time or '', reverse=True)[0]
+                                            symbol = most_recent.symbol
+                                            strike = most_recent.strike
+                                            opt_type = most_recent.option_type
+                                            expiry = most_recent.expiry or ''
+                                            is_full_exit = not is_trim
+                                            print(f"[SIGNAL_ROUTING] ✓ Resolved STC to most recent position: {symbol} {strike}{opt_type}")
                                         else:
-                                            print(f"[SIGNAL_ROUTING] ⚠️ STC forward failed for {symbol}")
-                                    else:
-                                        print(f"[SIGNAL_ROUTING] ⏭️ STC skipped - no open position for {symbol} {strike}{opt_type} {expiry}")
-                            except Exception as route_err:
-                                print(f"[SIGNAL_ROUTING] ❌ STC forward error: {route_err}")
-                                import traceback
-                                traceback.print_exc()
+                                            print(f"[SIGNAL_ROUTING] ⏭️ STC skipped - no symbol and no open positions for routing config {signal_routing_config.id}")
+                                    
+                                    if symbol:
+                                        option_key = f"{symbol}_{expiry}_{strike}_{opt_type}"
+                                        
+                                        open_positions = ledger.get_open_positions(channel_id=str(signal_routing_config.id))
+                                        matching_position = None
+                                        for pos in open_positions:
+                                            if (pos.symbol == symbol and 
+                                                abs(pos.strike - strike) < 0.01 and 
+                                                pos.option_type == opt_type):
+                                                matching_position = pos
+                                                break
+                                        
+                                        if matching_position and matching_position.remaining_qty > 0:
+                                            stc_signal_meta = {
+                                                'is_full_exit': is_full_exit,
+                                                'is_trim': is_trim,
+                                                'qty': int(routing_parsed.get('qty', 0) or 0),
+                                                'trim_percentage': routing_parsed.get('trim_percentage') or routing_parsed.get('trim_percent'),
+                                                '_phoenix_exit': routing_parsed.get('_phoenix_exit', False),
+                                                '_phoenix_trim': routing_parsed.get('_phoenix_trim', False),
+                                                '_bishop_trim_percent': routing_parsed.get('_bishop_trim_percent', False),
+                                            }
+                                            exit_qty = routing_engine.resolve_signal_exit_qty(
+                                                matching_position, stc_signal_meta, signal_routing_config
+                                            )
+                                            actual_price = exit_price if exit_price > 0 else (matching_position.current_price or matching_position.entry_price)
+                                            
+                                            success = await routing_engine.post_stc_signal(
+                                                config=signal_routing_config,
+                                                position=matching_position,
+                                                exit_qty=exit_qty,
+                                                exit_price=actual_price,
+                                                exit_reason=ExitReason.SIGNAL,
+                                                pnl_pct=0.0,
+                                                trim_percent=stc_signal_meta.get('trim_percentage')
+                                            )
+                                            if success:
+                                                print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type} qty={exit_qty} (remaining={matching_position.remaining_qty})")
+                                            else:
+                                                print(f"[SIGNAL_ROUTING] ⚠️ STC forward failed for {symbol}")
+                                        else:
+                                            print(f"[SIGNAL_ROUTING] ⏭️ STC skipped - no open position for {symbol} {strike}{opt_type} {expiry}")
+                                except Exception as route_err:
+                                    print(f"[SIGNAL_ROUTING] ❌ STC forward error: {route_err}")
+                                    import traceback
+                                    traceback.print_exc()
                         # Skip regular channel_mappings forwarding for signal routing sources
                         should_forward = False
                     
@@ -12566,6 +12571,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         from src.signals.parser import is_partial_exit_signal, parse_partial_exit_signal
                         
                         if is_partial_exit_signal(message.content):
+                            _pe_exit_mode = 'signal'
+                            try:
+                                _pe_exit_mode = db.get_effective_exit_strategy_mode(str(message.channel.id))
+                            except Exception:
+                                pass
+                            if _pe_exit_mode == 'risk':
+                                print(f"[EXIT MODE] ⛔ BLOCKED: Partial exit signal — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                                return
+                            
                             parsed_partial = parse_partial_exit_signal(message.content)
                             if parsed_partial:
                                 symbol = parsed_partial.get('symbol')
@@ -13501,6 +13515,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 sell_pct = registry_result.get('sell_pct', 100)
                 print(f"[PROTRADER EXIT] ✓ Exit signal for {exit_sym} ({sell_pct}%)")
                 channel_id_str = str(message.channel.id)
+                _pt_exit_mode = 'signal'
+                try:
+                    _pt_exit_mode = db.get_effective_exit_strategy_mode(channel_id_str)
+                except Exception:
+                    pass
+                if _pt_exit_mode == 'risk':
+                    print(f"[EXIT MODE] ⛔ BLOCKED: Protrader exit for {exit_sym} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                    return
                 try:
                     conn = db.get_connection()
                     cursor = conn.cursor()
@@ -13540,6 +13562,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 channel_id_str = str(message.channel.id)
                 sl_type = registry_result.get('sl_update_type', 'price')
                 print(f"[PHOENIX SL] ✓ SL update signal: type={sl_type}, symbol={sl_symbol}")
+                _sl_exit_mode = 'signal'
+                try:
+                    _sl_exit_mode = db.get_effective_exit_strategy_mode(channel_id_str)
+                except Exception:
+                    pass
+                if _sl_exit_mode == 'risk':
+                    print(f"[EXIT MODE] ⛔ BLOCKED: SL update from trader signal for {sl_symbol} — exit_strategy_mode='risk' (risk engine manages SL, trader signals ignored)")
+                    return
                 try:
                     conn = db.get_connection()
                     cursor = conn.cursor()
@@ -13593,6 +13623,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 tgt_tier = registry_result.get('target_tier', 1)
                 tgt_price = registry_result.get('target_price')
                 print(f"[PHOENIX TGT] ✓ Target update: tier={tgt_tier}, symbol={tgt_symbol}, price=${tgt_price}")
+                _tgt_exit_mode = 'signal'
+                try:
+                    _tgt_exit_mode = db.get_effective_exit_strategy_mode(channel_id_str)
+                except Exception:
+                    pass
+                if _tgt_exit_mode == 'risk':
+                    print(f"[EXIT MODE] ⛔ BLOCKED: Target update from trader signal for {tgt_symbol} — exit_strategy_mode='risk' (risk engine manages targets, trader signals ignored)")
+                    return
                 try:
                     conn = db.get_connection()
                     cursor = conn.cursor()
@@ -14684,6 +14722,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 _original_print(f"[FLOW] A: Past NDX reject check for {opt.get('symbol')}", flush=True)
                 
+                _opt_action_upper = opt.get('action', '').upper()
+                if _opt_action_upper in ('STC', 'SELL'):
+                    _opt_exit_mode = opt.get('_exit_strategy_mode', 'signal')
+                    if not _opt_exit_mode or _opt_exit_mode == 'signal':
+                        try:
+                            _opt_exit_mode = db.get_effective_exit_strategy_mode(str(message.channel.id))
+                        except Exception:
+                            pass
+                    if _opt_exit_mode == 'risk':
+                        _original_print(f"[EXIT MODE] ⛔ BLOCKED: Options STC signal for {opt.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)", flush=True)
+                        return
+                
                 _pre_q_sync = getattr(self, '_sync_service', None)
                 if _pre_q_sync:
                     _pre_q_sync.pause_for_order()
@@ -14900,6 +14950,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             # Check if this is an STC that should close an option position (Bullwinkle format)
             if stk['action'] == 'STC' and normalized_content != message.content:
+                _bw_exit_mode = 'signal'
+                try:
+                    _bw_exit_mode = db.get_effective_exit_strategy_mode(str(message.channel.id))
+                except Exception:
+                    pass
+                if _bw_exit_mode == 'risk':
+                    print(f"[EXIT MODE] ⛔ BLOCKED: Bullwinkle STC for {stk.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                    return
                 # This was normalized from Bullwinkle format - look for matching option position
                 try:
                     from gui_app.database import get_connection
@@ -15289,6 +15347,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             import traceback
                             traceback.print_exc()
                 
+                _stk_action_upper = stk.get('action', '').upper()
+                if _stk_action_upper in ('STC', 'SELL'):
+                    _stk_exit_mode = stk.get('_exit_strategy_mode') or ch_exit_mode
+                    if _stk_exit_mode == 'risk':
+                        print(f"[EXIT MODE] ⛔ BLOCKED: Stock STC signal for {stk.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                        return
+                
                 _pre_q_sync = getattr(self, '_sync_service', None)
                 if _pre_q_sync:
                     _pre_q_sync.pause_for_order()
@@ -15432,6 +15497,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 from src.signals.parser import is_partial_exit_signal, parse_partial_exit_signal
                 
                 if is_partial_exit_signal(message.content):
+                    _pe2_exit_mode = 'signal'
+                    try:
+                        _pe2_exit_mode = db.get_effective_exit_strategy_mode(str(message.channel.id))
+                    except Exception:
+                        pass
+                    if _pe2_exit_mode == 'risk':
+                        print(f"[EXIT MODE] ⛔ BLOCKED: Partial exit signal — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
+                        return
+                    
                     parsed_partial = parse_partial_exit_signal(message.content)
                     if parsed_partial:
                         symbol = parsed_partial.get('symbol')
