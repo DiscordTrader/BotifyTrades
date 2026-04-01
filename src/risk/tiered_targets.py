@@ -245,15 +245,26 @@ def get_trim_order_price(
     
     offset_mode = getattr(channel_settings, 'trim_limit_offset_mode', 'dollar')
     
+    _is_penny = current_price < 1.0
+    _precision = 4 if _is_penny else 2
+
     if offset_mode == 'percent':
         pct = getattr(channel_settings, 'trim_limit_offset_pct', 2.0)
         if is_sell:
             limit_price = current_price * (1 - pct / 100)
         else:
             limit_price = current_price * (1 + pct / 100)
-        return round(limit_price, 2)
+        return round(limit_price, _precision)
     else:
         offset = channel_settings.trim_limit_offset
+        if _is_penny:
+            if is_sell:
+                _penny_limit = round(current_price - offset, _precision)
+                if _penny_limit <= 0:
+                    _penny_limit = round(current_price * 0.92, _precision)
+                return _penny_limit
+            else:
+                return round(current_price + offset, _precision)
         if is_sell:
             base_price = current_price - offset
             cents = int((base_price * 100) % 10)

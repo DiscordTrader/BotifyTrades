@@ -4002,11 +4002,36 @@ class RiskManager:
                 spread_pct = 0
                 if hub_bid > 0 and hub_ask > 0:
                     spread_pct = (hub_ask - hub_bid) / hub_bid * 100
-                if is_penny_stock and hub_bid > 0:
-                    stc_signal['price'] = hub_bid
-                    print(f"[RISK] 💰 Penny stock exit: bid ${hub_bid:.4f} "
-                          f"(ask ${hub_ask:.4f}, mid ${hub_mid:.4f}, last ${last_price:.4f}, spread {spread_pct:.1f}%) "
-                          f"via {hub_src}")
+                if is_penny_stock and (hub_bid > 0 or hub_mid > 0):
+                    _penny_retry = 0
+                    _penny_cache = self.cache.get(pos_key)
+                    if _penny_cache:
+                        _penny_retry = _penny_cache.exit_retry_count
+                    _penny_is_sl = (is_stop_exit or is_trailing_exit or is_giveback_exit)
+                    _penny_spread_ok = spread_pct < 8
+                    if _penny_is_sl:
+                        if hub_bid > 0:
+                            stc_signal['price'] = hub_bid
+                            print(f"[RISK] 💰 Penny stock SL exit: bid ${hub_bid:.4f} "
+                                  f"(ask ${hub_ask:.4f}, mid ${hub_mid:.4f}, last ${last_price:.4f}, spread {spread_pct:.1f}%) "
+                                  f"via {hub_src}")
+                        elif hub_mid > 0:
+                            stc_signal['price'] = hub_mid
+                            print(f"[RISK] 💰 Penny stock SL exit: mid ${hub_mid:.4f} (no bid, last ${last_price:.4f}) via {hub_src}")
+                    elif _penny_retry == 0 and hub_mid > 0 and _penny_spread_ok:
+                        stc_signal['price'] = hub_mid
+                        print(f"[RISK] 💰 Penny stock exit (try #1 mid): ${hub_mid:.4f} "
+                              f"(bid ${hub_bid:.4f}, ask ${hub_ask:.4f}, last ${last_price:.4f}, spread {spread_pct:.1f}%) "
+                              f"via {hub_src}")
+                    elif hub_bid > 0:
+                        stc_signal['price'] = hub_bid
+                        _retry_label = f"try #{_penny_retry + 1} bid" if _penny_retry > 0 else "wide-spread bid"
+                        print(f"[RISK] 💰 Penny stock exit ({_retry_label}): ${hub_bid:.4f} "
+                              f"(ask ${hub_ask:.4f}, mid ${hub_mid:.4f}, last ${last_price:.4f}, spread {spread_pct:.1f}%) "
+                              f"via {hub_src}")
+                    elif hub_mid > 0:
+                        stc_signal['price'] = hub_mid
+                        print(f"[RISK] 💰 Penny stock exit (mid-only): ${hub_mid:.4f} (last ${last_price:.4f}) via {hub_src}")
                 elif is_stop_exit or is_trailing_exit or is_giveback_exit:
                     if hub_bid > 0:
                         stc_signal['price'] = hub_bid
@@ -4091,10 +4116,11 @@ class RiskManager:
                 sl_offset = channel_settings.sl_limit_offset if channel_settings.sl_limit_offset is not None else 0.03
                 if sl_offset > 0:
                     original_price = stc_signal['price']
-                    offset_price = round(original_price * (1 - sl_offset), 2)
+                    _sl_precision = 4 if is_penny_stock else 2
+                    offset_price = round(original_price * (1 - sl_offset), _sl_precision)
                     stc_signal['price'] = offset_price
                     stc_signal['_sl_limit_offset_applied'] = True
-                    print(f"[RISK] 📊 SL Limit Offset: trigger ${original_price:.2f} → limit ${offset_price:.2f} ({sl_offset*100:.1f}% below)")
+                    print(f"[RISK] 📊 SL Limit Offset: trigger ${original_price:.4f} → limit ${offset_price:.4f} ({sl_offset*100:.1f}% below)")
             
             is_pt_exit = decision.risk_trigger == 'profit_target'
             if is_pt_exit and channel_settings and not use_market:
@@ -4115,8 +4141,7 @@ class RiskManager:
                         print(f"[RISK] 📊 Trim Limit Order: market ${original_price:.2f} → limit ${trim_price:.2f} ({offset_display} offset)")
             
             if not use_market and is_penny_stock:
-                use_market = True
-                print(f"[RISK] 📊 Penny stock (${position.current_price:.4f}) — forcing market order for fast exit")
+                print(f"[RISK] 📊 Penny stock (${position.current_price:.4f}) — using limit order per channel settings")
 
             if not use_market and 'TRADING212' in position.broker.upper():
                 if is_sl_type_exit or decision.risk_trigger in ('ema_exit', 'ema_no_trend', 'profit_target'):
@@ -4301,7 +4326,8 @@ class RiskManager:
             ask = float(data.get('ask', 0) or 0)
             last = float(data.get('last', 0) or data.get('price', 0) or 0)
             if bid > 0 or ask > 0:
-                mid = round((bid + ask) / 2, 2) if bid > 0 and ask > 0 else 0
+                _mid_precision = 4 if (bid > 0 and bid < 1.0) or (ask > 0 and ask < 1.0) else 2
+                mid = round((bid + ask) / 2, _mid_precision) if bid > 0 and ask > 0 else 0
                 return {'bid': bid, 'ask': ask, 'mid': mid, 'last': last, 'source': source_name}
             return None
 
