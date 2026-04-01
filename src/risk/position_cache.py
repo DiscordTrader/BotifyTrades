@@ -405,7 +405,24 @@ class PositionCache:
             broker_entry_price = position.avg_cost
             if broker_entry_price > 0 and abs(cached_entry.entry_price - broker_entry_price) > 0.001:
                 old_price = cached_entry.entry_price
-                if cached_entry.closing or cached_entry.giveback_guard_active or cached_entry.early_trailing_active:
+                is_trade_rollover = False
+                pct_diff = abs(broker_entry_price - old_price) / old_price if old_price > 0 else 1.0
+                if pct_diff >= self.ENTRY_PRICE_CHANGE_TOLERANCE:
+                    current_trade_id = self._trade_id_map.get(pos_key)
+                    if current_trade_id:
+                        try:
+                            from gui_app.database import get_db
+                            db = get_db()
+                            cursor = db.execute("SELECT status FROM trades WHERE id = ?", (current_trade_id,))
+                            row = cursor.fetchone()
+                            if row and row[0] in ('CLOSED', 'CANCELLED', 'CANCELED', 'EXPIRED', 'REJECTED'):
+                                is_trade_rollover = True
+                                print(f"[RISK] 🔄 Trade rollover detected: {pos_key} trade #{current_trade_id} is {row[0]}, "
+                                      f"price ${old_price:.2f} → ${broker_entry_price:.2f} — resetting all risk state")
+                                del self._trade_id_map[pos_key]
+                        except Exception as e:
+                            print(f"[RISK] ⚠️ Could not check trade status for rollover: {e}")
+                if is_trade_rollover or cached_entry.closing or cached_entry.giveback_guard_active or cached_entry.early_trailing_active:
                     print(f"[RISK] ♻️  New position detected at same key {pos_key}: ${old_price:.2f} → ${broker_entry_price:.2f}")
                     print(f"[RISK]   Resetting stale risk state (giveback={cached_entry.giveback_guard_active}, "
                           f"max_pnl={cached_entry.max_pnl_seen:.1f}%, early_trail={cached_entry.early_trailing_active}, "
@@ -712,16 +729,17 @@ class PositionCache:
                         except Exception as e:
                             print(f"[RISK] Warning: Could not persist tier hit: {e}")
     
-    def add_pending_order(self, position_key: str, order_id: str, tier: int, qty: int) -> bool:
+    def add_pending_order(self, position_key: str, order_id: str, tier: int, qty: int, trade_id: int = None) -> bool:
         """Track a pending risk order awaiting fill confirmation."""
         entry = self._cache.get(position_key)
         if not entry:
-            # Create minimal entry if position not in cache yet (edge case)
             print(f"[RISK] ⚠️ Creating cache entry for pending order: {position_key}")
             entry = PositionCacheEntry(entry_price=0, highest_price=0)
             self._cache[position_key] = entry
-        entry.add_pending_order(order_id, tier, qty)
-        print(f"[RISK] 📋 Pending order tracked: {position_key} tier={tier} order={order_id} qty={qty}")
+        if trade_id is None:
+            trade_id = self._trade_id_map.get(position_key)
+        entry.add_pending_order(order_id, tier, qty, trade_id=trade_id)
+        print(f"[RISK] 📋 Pending order tracked: {position_key} tier={tier} order={order_id} qty={qty} trade_id={trade_id}")
         return True
     
     def has_pending_order_for_tier(self, position_key: str, tier: int) -> bool:
@@ -739,6 +757,14 @@ class PositionCache:
         
         order_data = entry.pending_orders.get(order_id)
         if not order_data:
+            return False
+        
+        stored_trade_id = order_data.get('trade_id')
+        current_trade_id = self._trade_id_map.get(position_key)
+        if stored_trade_id and current_trade_id and stored_trade_id != current_trade_id:
+            print(f"[RISK] ⚠️ Rejected stale fill for {position_key}: order {order_id} belongs to "
+                  f"trade #{stored_trade_id}, current trade is #{current_trade_id}")
+            entry.remove_pending_order(order_id)
             return False
         
         tier = order_data.get('tier', 0)
@@ -1058,6 +1084,17 @@ class PositionCache:
         except Exception:
             pass
     
+    def has_any_pending_orders(self) -> bool:
+        """Check if any cache entry has pending risk orders."""
+        for entry in self._cache.values():
+            if entry.pending_orders:
+                return True
+        return False
+
+    def get_all_keys(self) -> list:
+        """Get all position keys in the cache."""
+        return list(self._cache.keys())
+
     def cleanup_stale(self, active_keys: set) -> int:
         """Remove cache entries not in active positions. Returns count removed."""
         with self._cache_lock:
@@ -1067,6 +1104,8 @@ class PositionCache:
                 old_trade_id = self._trade_id_map.pop(key, None)
                 if old_trade_id:
                     print(f"[RISK] ✓ Cleaned stale trade_id mapping: {key} (trade #{old_trade_id})")
+                self._last_entry_prices.pop(key, None)
+                self._locked_entry_prices.pop(key, None)
         for key in stale:
             try:
                 from src.risk.position_monitor import risk_manager_instance

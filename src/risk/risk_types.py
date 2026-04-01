@@ -384,7 +384,7 @@ class PositionCacheEntry:
                 return True
         return False
     
-    def add_pending_order(self, order_id: str, tier: int, qty_expected: int) -> None:
+    def add_pending_order(self, order_id: str, tier: int, qty_expected: int, trade_id: int = None) -> None:
         """Track a new pending risk order."""
         self.pending_orders[order_id] = {
             'order_id': order_id,
@@ -392,7 +392,8 @@ class PositionCacheEntry:
             'qty_expected': qty_expected,
             'qty_filled': 0,
             'status': 'pending',
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'trade_id': trade_id
         }
     
     def update_pending_order(self, order_id: str, status: str, qty_filled: int = 0) -> Optional[int]:

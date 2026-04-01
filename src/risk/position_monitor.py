@@ -2278,16 +2278,47 @@ class RiskManager:
         
         if not hasattr(self, '_stale_cleanup_counter'):
             self._stale_cleanup_counter = 0
+        if not hasattr(self, '_zero_position_cleanup_count'):
+            self._zero_position_cleanup_count = 0
         self._stale_cleanup_counter += 1
-        if self._stale_cleanup_counter >= 20 and broker_position_keys:
+        if self._stale_cleanup_counter >= 20:
             self._stale_cleanup_counter = 0
-            stale_count = self.cache.cleanup_stale(broker_position_keys)
-            if stale_count > 0:
-                print(f"[RISK] 🧹 Periodic cleanup: removed {stale_count} stale cache entries")
-            if hasattr(self, '_auto_imported_keys'):
-                stale_imports = self._auto_imported_keys - broker_position_keys
-                if stale_imports:
-                    self._auto_imported_keys -= stale_imports
+            if broker_position_keys:
+                self._zero_position_cleanup_count = 0
+                stale_count = self.cache.cleanup_stale(broker_position_keys)
+                if stale_count > 0:
+                    print(f"[RISK] 🧹 Periodic cleanup: removed {stale_count} stale cache entries")
+                if hasattr(self, '_auto_imported_keys'):
+                    stale_imports = self._auto_imported_keys - broker_position_keys
+                    if stale_imports:
+                        self._auto_imported_keys -= stale_imports
+            elif len(self.cache) > 0:
+                self._zero_position_cleanup_count += 1
+                if self._zero_position_cleanup_count >= 3:
+                    _safe_to_clean = True
+                    try:
+                        from src.risk.exit_lease_manager import get_exit_lease_manager
+                        lease_mgr = get_exit_lease_manager()
+                        has_active_lease = any(lease_mgr.is_active(k) for k in self.cache.get_all_keys())
+                        if has_active_lease:
+                            _safe_to_clean = False
+                            print(f"[RISK] ⏳ Zero-position cleanup deferred — active exit lease(s) detected")
+                    except Exception:
+                        pass
+                    if _safe_to_clean and self.cache.has_any_pending_orders():
+                        _safe_to_clean = False
+                        print(f"[RISK] ⏳ Zero-position cleanup deferred — pending risk orders exist")
+                    if _safe_to_clean and self._has_active_fill_watches():
+                        _safe_to_clean = False
+                        print(f"[RISK] ⏳ Zero-position cleanup deferred — active fill watches")
+                    if _safe_to_clean:
+                        stale_count = self.cache.cleanup_stale(set())
+                        if stale_count > 0:
+                            print(f"[RISK] 🧹 Zero-position cleanup: removed {stale_count} orphaned cache entries "
+                                  f"(0 broker positions for {self._zero_position_cleanup_count} cleanup windows)")
+                        self._zero_position_cleanup_count = 0
+                        if hasattr(self, '_auto_imported_keys'):
+                            self._auto_imported_keys.clear()
         
         import time as _save_t
         if not hasattr(self, '_last_cache_save_ts'):
