@@ -2258,6 +2258,12 @@ class BaseConditionalOrderService(ABC):
         if triggered:
             if order_id in self._executing_orders:
                 return
+            if not hasattr(self, '_block_cooldowns'):
+                self._block_cooldowns = {}
+            import time as _time
+            cooldown_until = self._block_cooldowns.get(order_id, 0)
+            if _time.monotonic() < cooldown_until:
+                return
             self._executing_orders.add(order_id)
             self._log(f"TRIGGERED #{order_id} {symbol}")
             try:
@@ -2402,6 +2408,10 @@ class BaseConditionalOrderService(ABC):
                     event='CIRCUIT_BREAKER_BLOCK',
                     details=cb_reason
                 )
+                import time as _time
+                if not hasattr(self, '_block_cooldowns'):
+                    self._block_cooldowns = {}
+                self._block_cooldowns[order_id] = _time.monotonic() + 60
                 self._executing_orders.discard(order_id)
                 self._execution_locks.pop(order_id, None)
                 return
@@ -2433,6 +2443,10 @@ class BaseConditionalOrderService(ABC):
                             event='DAILY_PNL_BLOCK',
                             details=block_detail
                         )
+                        import time as _time
+                        if not hasattr(self, '_block_cooldowns'):
+                            self._block_cooldowns = {}
+                        self._block_cooldowns[order_id] = _time.monotonic() + 60
                         self._executing_orders.discard(order_id)
                         self._execution_locks.pop(order_id, None)
                         return
@@ -2445,6 +2459,10 @@ class BaseConditionalOrderService(ABC):
                             event='DAILY_PNL_BLOCK',
                             details=block_detail
                         )
+                        import time as _time
+                        if not hasattr(self, '_block_cooldowns'):
+                            self._block_cooldowns = {}
+                        self._block_cooldowns[order_id] = _time.monotonic() + 60
                         self._executing_orders.discard(order_id)
                         self._execution_locks.pop(order_id, None)
                         return
