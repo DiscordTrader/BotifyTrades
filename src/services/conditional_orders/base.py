@@ -2436,19 +2436,31 @@ class BaseConditionalOrderService(ABC):
                         tc = pnl_check.get('daily_trade_count', 0)
                         tl = pnl_check.get('daily_trade_limit', 0)
                         block_detail = f"Daily trade limit reached ({tc}/{tl})"
-                        self._log(f"⛔ BLOCKED #{order_id} {symbol}: {block_detail}")
+                        self._log(f"⛔ CANCELLED #{order_id} {symbol}: {block_detail} — order cancelled")
                         update_conditional_order_status(
                             order_id,
-                            'PENDING_MONITOR',
-                            event='DAILY_PNL_BLOCK',
+                            'CANCELLED',
+                            event='DAILY_TRADE_LIMIT',
                             details=block_detail
                         )
-                        import time as _time
-                        if not hasattr(self, '_block_cooldowns'):
-                            self._block_cooldowns = {}
-                        self._block_cooldowns[order_id] = _time.monotonic() + 60
+                        if order_id in self.monitors:
+                            try:
+                                await self.monitors[order_id].stop()
+                            except Exception:
+                                pass
+                            self.monitors.pop(order_id, None)
+                        if order_id in self.monitor_tasks:
+                            self.monitor_tasks[order_id].cancel()
+                            self.monitor_tasks.pop(order_id, None)
+                        self.pending_orders.pop(order_id, None)
+                        self._price_reset_needed.pop(order_id, None)
                         self._executing_orders.discard(order_id)
                         self._execution_locks.pop(order_id, None)
+                        try:
+                            from src.services.conditional_orders.notifications import notify_conditional_cancelled
+                            notify_conditional_cancelled(symbol=symbol, broker=broker_primary, order_id=order_id)
+                        except Exception:
+                            pass
                         return
                     else:
                         block_detail = f"Daily P&L {lock_type} limit reached: ${pnl:+,.2f} ({pnl_pct:+.1f}%)"
