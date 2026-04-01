@@ -10617,6 +10617,13 @@ def register_routes(app):
                 except Exception:
                     pass
                 hub_overlay_count = 0
+                occ_date_str = ''
+                try:
+                    from datetime import datetime as _dt
+                    exp_dt = _dt.strptime(expiry, '%Y-%m-%d')
+                    occ_date_str = exp_dt.strftime('%y%m%d')
+                except Exception:
+                    pass
                 for sd in strikes_data:
                     for side_key, opt_type in [('call', 'C'), ('put', 'P')]:
                         opt = sd.get(side_key, {})
@@ -10625,10 +10632,15 @@ def register_routes(app):
                             continue
                         strike_val = sd['strike']
                         strike_str = str(int(strike_val)) if strike_val == int(strike_val) else str(strike_val)
+                        try_keys = [oid, f"{symbol}_{strike_str}_{opt_type}"]
+                        if occ_date_str:
+                            occ_strike = str(int(float(strike_val) * 1000)).zfill(8)
+                            occ_key = f"{symbol.ljust(6)}{occ_date_str}{opt_type}{occ_strike}"
+                            try_keys.append(occ_key)
                         best_quote = None
                         best_age = 999
                         for hub_name, hub in hubs:
-                            for try_key in [oid, f"{symbol}_{strike_str}_{opt_type}"]:
+                            for try_key in try_keys:
                                 q = hub.get_quote(try_key, max_age=30)
                                 if q and q.bid > 0:
                                     age = time.time() - q.timestamp
@@ -10642,21 +10654,10 @@ def register_routes(app):
                                 opt['last'] = best_quote.last
                             opt['mid'] = round((best_quote.bid + best_quote.ask) / 2, 2) if best_quote.bid > 0 and best_quote.ask > 0 else (best_quote.last or opt.get('mid', 0))
                             hub_overlay_count += 1
-                        else:
-                            for hub_name, hub in hubs:
-                                seed = {}
-                                if opt.get('bid', 0) > 0:
-                                    seed['bid'] = opt['bid']
-                                if opt.get('ask', 0) > 0:
-                                    seed['ask'] = opt['ask']
-                                if opt.get('last', 0) > 0:
-                                    seed['last'] = opt['last']
-                                if seed:
-                                    for try_key in [oid, f"{symbol}_{strike_str}_{opt_type}"]:
-                                        hub.update_quote(try_key, seed, source="rest_chain")
-                                break
                 if hub_overlay_count > 0:
                     print(f"[CHAIN_OVERLAY] ✓ Overlaid {hub_overlay_count} streaming quotes onto {symbol} chain", flush=True)
+                else:
+                    print(f"[CHAIN_OVERLAY] ⚠️ No hub quotes found for {symbol} {expiry} (hubs={len(hubs)}, occ_date={occ_date_str})", flush=True)
             except Exception:
                 pass
 
