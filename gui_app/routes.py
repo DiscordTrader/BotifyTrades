@@ -1833,7 +1833,11 @@ def register_routes(app):
     @app.route('/pnl')
     def pnl_tracker():
         """Comprehensive PNL tracking page"""
-        return render_template('pnl_tracker.html')
+        response = make_response(render_template('pnl_tracker.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     
     @app.route('/options')
     def options():
