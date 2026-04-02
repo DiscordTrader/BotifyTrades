@@ -471,19 +471,58 @@ async function loadUsers() {
     }
 }
 
-// Load detailed PNL data
-async function loadPNLData() {
+let _lastPNLHash = '';
+let _isBackgroundRefresh = false;
+
+function _getExpandedIndices() {
+    const expanded = new Set();
+    document.querySelectorAll('.closures-detail.expanded').forEach(el => {
+        const m = el.id.match(/closures-(\d+)/);
+        if (m) expanded.add(parseInt(m[1]));
+    });
+    return expanded;
+}
+
+function _getLotIdForIndex(idx) {
+    return positionsData && positionsData[idx] ? positionsData[idx].lot_id : null;
+}
+
+function _getExpandedLotIds() {
+    const expanded = _getExpandedIndices();
+    const lotIds = new Set();
+    expanded.forEach(idx => {
+        const lid = _getLotIdForIndex(idx);
+        if (lid != null) lotIds.add(lid);
+    });
+    return lotIds;
+}
+
+function _restoreExpandedLotIds(lotIds) {
+    if (!positionsData || lotIds.size === 0) return;
+    positionsData.forEach((pos, idx) => {
+        if (lotIds.has(pos.lot_id)) {
+            const el = document.getElementById(`closures-${idx}`);
+            const icon = document.getElementById(`expand-${idx}`);
+            if (el) el.classList.add('expanded');
+            if (icon) icon.classList.add('expanded');
+        }
+    });
+}
+
+async function loadPNLData(background = false) {
     const channelId = document.getElementById('channelFilter').value;
     const userFilter = document.getElementById('userFilter').value;
     const statusFilter = document.getElementById('statusFilter').value;
     const { startDate, endDate } = getDateRange();
     const loading = document.getElementById('loading');
     const container = document.getElementById('pnl-container');
-    
-    loading.style.display = 'block';
-    container.innerHTML = '';
+
+    if (!background) {
+        loading.style.display = 'block';
+        container.innerHTML = '';
+    }
     updateDateRangeDisplay();
-    
+
     try {
         let url = '/api/pnl/detailed?';
         const params = [];
@@ -494,23 +533,42 @@ async function loadPNLData() {
         if (endDate) params.push(`end_date=${endDate}`);
         params.push(`market=US`);
         url += params.join('&');
-        
+
         const response = await fetch(url);
         const data = await response.json();
-        
+
         if (!data.success) {
             throw new Error(data.error || 'Failed to load PNL data');
         }
-        
+
+        const newHash = JSON.stringify(data.positions.map(p => ({
+            id: p.lot_id, s: p.status, pnl: p.total_pnl, cq: p.total_closed_qty, cl: p.closures.length
+        })));
+
+        if (background && newHash === _lastPNLHash) {
+            return;
+        }
+
+        const expandedLotIds = _getExpandedLotIds();
+
+        _lastPNLHash = newHash;
         positionsData = data.positions;
         renderPNLData(positionsData);
         updateSummaryStats(positionsData);
-        
+
+        if (background && expandedLotIds.size > 0) {
+            _restoreExpandedLotIds(expandedLotIds);
+        }
+
     } catch (error) {
         console.error('Error loading PNL data:', error);
-        container.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>Error loading PNL data: ${error.message}</p></div>`;
+        if (!background) {
+            container.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>Error loading PNL data: ${error.message}</p></div>`;
+        }
     } finally {
-        loading.style.display = 'none';
+        if (!background) {
+            loading.style.display = 'none';
+        }
     }
 }
 
@@ -815,8 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('endDate').value = today;
     document.getElementById('startDate').value = thirtyDaysAgo;
     
-    // Auto-refresh every 30 seconds
-    setInterval(loadPNLData, 30000);
+    setInterval(() => loadPNLData(true), 30000);
 });
 
 // Filter change event listeners
