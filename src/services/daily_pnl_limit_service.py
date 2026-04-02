@@ -341,6 +341,37 @@ class DailyPnLLimitService:
         else:
             print(f"[DAILY P&L] {normalized}: Trade {new_count} recorded (no limit set)")
 
+    def decrement_bto_trade(self, broker_name, reason=''):
+        normalized = _normalize(broker_name)
+        settings = self._get_settings()
+        trade_limit = self._get_trade_limit_for_broker(settings, normalized)
+        today = self._today_str()
+        unlocked = False
+
+        with self._lock:
+            state = self._states.get(normalized)
+            if not state or state.get('trading_date') != today:
+                return
+            current_count = state.get('daily_trade_count', 0)
+            if current_count <= 0:
+                return
+            new_count = current_count - 1
+            state['daily_trade_count'] = new_count
+
+            if state.get('lock_type') == 'trades' and trade_limit > 0 and new_count < trade_limit:
+                state['lock_type'] = 'none'
+                state['locked_at'] = None
+                unlocked = True
+
+            self._states[normalized] = state
+            self._persist_state(normalized, dict(state))
+
+        reason_str = f" ({reason})" if reason else ""
+        if unlocked:
+            print(f"[DAILY P&L] 🔓 {normalized} UNLOCKED — trade count decremented to {new_count}/{trade_limit}{reason_str}")
+        else:
+            print(f"[DAILY P&L] {normalized}: Trade count decremented to {new_count}/{trade_limit}{reason_str}")
+
     def check_broker_locked(self, broker_name) -> dict:
         normalized = _normalize(broker_name)
         settings = self._get_settings()

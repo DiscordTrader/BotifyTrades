@@ -1714,6 +1714,14 @@ class BrokerSyncService:
                     if schwab_desc:
                         update_kwargs['rejection_reason'] = schwab_desc
                     self.db.update_trade(trade_id, **update_kwargs)
+
+                    trade_direction = (trade.get('direction') or '').upper()
+                    if trade_direction == 'BTO':
+                        try:
+                            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+                            get_daily_pnl_service().decrement_bto_trade(broker_name, reason=f"order rejected #{trade_id} {symbol}")
+                        except Exception as dec_err:
+                            print(f"[SYNC] Warning: Could not decrement trade count: {dec_err}")
                     
                     # Send cancellation notification (not failure - order was cancelled, not rejected)
                     try:
