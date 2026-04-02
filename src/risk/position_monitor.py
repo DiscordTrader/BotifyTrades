@@ -1062,26 +1062,57 @@ class RiskDBAdapter:
             inherited_channel_id = None
             try:
                 from gui_app.database import get_trades
-                recent_closed = get_trades(status='CLOSED', limit=50)
-                for rc in recent_closed:
-                    if ((rc.get('symbol') or '').upper() == position.symbol.upper() and
-                        (rc.get('broker') or '').upper() == position.broker.upper() and
-                        rc.get('channel_id')):
-                        closed_at = rc.get('closed_at')
-                        if closed_at:
-                            try:
-                                closed_time = datetime.fromisoformat(str(closed_at).replace('Z', '+00:00'))
-                                if hasattr(closed_time, 'timestamp'):
-                                    elapsed = (datetime.now() - closed_time.replace(tzinfo=None)).total_seconds()
-                                else:
-                                    elapsed = 0
-                                if 0 <= elapsed < 300:
-                                    inherited_channel_id = rc['channel_id']
-                                    print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
-                                          f"recently-closed trade #{rc.get('id')} for {position.symbol}")
-                                    break
-                            except Exception:
-                                pass
+                open_trades = get_trades(status='OPEN', limit=500)
+                pending_trades = get_trades(status='PENDING', limit=500)
+                for ot in (open_trades + pending_trades):
+                    if ((ot.get('symbol') or '').upper() == position.symbol.upper() and
+                        (ot.get('broker') or '').upper() == position.broker.upper() and
+                        ot.get('channel_id')):
+                        if position.asset == 'option':
+                            _ot_strike = str(ot.get('strike') or '').rstrip('0').rstrip('.')
+                            _pos_strike = str(position.strike or '').rstrip('0').rstrip('.')
+                            _ot_cp = (ot.get('call_put') or '').upper()[:1]
+                            _pos_cp = (call_put or '').upper()[:1]
+                            if (_ot_strike == _pos_strike and
+                                str(ot.get('expiry') or '') == str(position.expiry or '') and
+                                _ot_cp == _pos_cp):
+                                inherited_channel_id = ot['channel_id']
+                                print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
+                                      f"existing trade #{ot.get('id')} for {position.symbol}")
+                                break
+                        else:
+                            inherited_channel_id = ot['channel_id']
+                            print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
+                                  f"existing trade #{ot.get('id')} for {position.symbol}")
+                            break
+                if not inherited_channel_id:
+                    recent_closed = get_trades(status='CLOSED', limit=50)
+                    for rc in recent_closed:
+                        if ((rc.get('symbol') or '').upper() == position.symbol.upper() and
+                            (rc.get('broker') or '').upper() == position.broker.upper() and
+                            rc.get('channel_id')):
+                            if position.asset == 'option':
+                                _rc_strike = str(rc.get('strike') or '').rstrip('0').rstrip('.')
+                                _rc_cp = (rc.get('call_put') or '').upper()[:1]
+                                if (_rc_strike != _pos_strike or
+                                    str(rc.get('expiry') or '') != str(position.expiry or '') or
+                                    _rc_cp != _pos_cp):
+                                    continue
+                            closed_at = rc.get('closed_at')
+                            if closed_at:
+                                try:
+                                    closed_time = datetime.fromisoformat(str(closed_at).replace('Z', '+00:00'))
+                                    if hasattr(closed_time, 'timestamp'):
+                                        elapsed = (datetime.now() - closed_time.replace(tzinfo=None)).total_seconds()
+                                    else:
+                                        elapsed = 0
+                                    if 0 <= elapsed < 3600:
+                                        inherited_channel_id = rc['channel_id']
+                                        print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
+                                              f"recently-closed trade #{rc.get('id')} for {position.symbol}")
+                                        break
+                                except Exception:
+                                    pass
             except Exception:
                 pass
 
@@ -1750,6 +1781,10 @@ class RiskManager:
         if risk_restored > 0:
             print(f"[RISK] ✓ Restored full risk state (tier hits, dynamic SL, giveback) for {risk_restored} positions")
         
+        trade_mappings = self.cache.populate_trade_id_mappings()
+        if trade_mappings > 0:
+            print(f"[RISK] ✓ Pre-loaded {trade_mappings} trade→position mappings at startup")
+        
         self._load_db_price_targets()
         
         reconciled = self._reconcile_conditional_orders()
@@ -2007,6 +2042,19 @@ class RiskManager:
                     print("[RISK] ⚠️ First sync timed out after 30s — proceeding with caution")
             self._first_sync_completed = True
             self._permanent_failure_keys = self._load_permanent_failures()
+        
+        if not hasattr(self, '_last_trade_mapping_refresh'):
+            self._last_trade_mapping_refresh = 0
+        import time as _tmr_time
+        _tmr_now = _tmr_time.time()
+        if (_tmr_now - self._last_trade_mapping_refresh) > 30:
+            self._last_trade_mapping_refresh = _tmr_now
+            try:
+                _new_mappings = self.cache.populate_trade_id_mappings()
+                if _new_mappings > 0:
+                    print(f"[RISK] ✓ Refreshed trade mappings: {_new_mappings} new mapping(s)")
+            except Exception:
+                pass
         
         check_and_process_invalidation_request()
         
