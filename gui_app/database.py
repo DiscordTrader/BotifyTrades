@@ -4851,6 +4851,16 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
         
         actual_close_qty = min(close_qty, lot['remaining_qty'])
         
+        cursor.execute('''
+            SELECT id FROM lot_closures 
+            WHERE lot_id = ? AND closed_qty = ? AND close_price = ? AND exit_reason = ?
+            AND closed_at > datetime('now', '-60 seconds')
+        ''', (lot_id, actual_close_qty, close_price, exit_reason))
+        if cursor.fetchone():
+            print(f"[LOT_MATCHER] ⚠️ Duplicate closure blocked: lot #{lot_id} qty={actual_close_qty} @${close_price} reason={exit_reason}")
+            conn.rollback()
+            return None
+        
         entry_price = lot['entry_fill_price'] if lot['entry_fill_price'] is not None else lot['open_price']
         cost_basis = entry_price * actual_close_qty
         if lot['asset_type'] == 'option':

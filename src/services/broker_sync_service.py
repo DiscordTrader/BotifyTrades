@@ -1407,6 +1407,17 @@ class BrokerSyncService:
                             else:
                                 print(f"[SYNC] ⚠️ Skipping legacy lot fallback for {trade_symbol}: no channel_id")
                         
+                        if not lot_row and trade_id:
+                            cursor.execute('''
+                                SELECT id, executed_symbol, executed_strike, open_price
+                                FROM signal_lots
+                                WHERE trade_id = ?
+                                LIMIT 1
+                            ''', (trade_id,))
+                            lot_row = cursor.fetchone()
+                            if lot_row:
+                                print(f"[SYNC] Found lot #{lot_row['id']} via trade_id={trade_id} (any status)")
+                        
                         if lot_row:
                             old_price = lot_row['open_price']
                             cursor.execute('''
@@ -1414,6 +1425,17 @@ class BrokerSyncService:
                             ''', (fill_price, lot_row['id']))
                             conn.commit()
                             print(f"[SYNC] ✓ Updated lot #{lot_row['id']} open_price: ${old_price} → ${fill_price} (NDX→QQQ fill)")
+                            try:
+                                from gui_app.database import update_lot_entry_fill
+                                update_lot_entry_fill(
+                                    lot_id=lot_row['id'],
+                                    fill_price=fill_price,
+                                    broker=broker_name,
+                                    order_id=db_order_id,
+                                    filled_at=datetime.now().isoformat()
+                                )
+                            except Exception as fill_err:
+                                print(f"[SYNC] ⚠️ Could not record entry fill for lot #{lot_row['id']}: {fill_err}")
                     except Exception as lot_err:
                         print(f"[SYNC] Warning: Could not update lot price: {lot_err}")
                 
