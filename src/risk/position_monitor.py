@@ -3478,18 +3478,40 @@ class RiskManager:
         if tracker and not _is_repair_cycle:
             import time as _st
             change_age = _st.time() - tracker['last_changed']
-            if change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD:
-                session = self._get_market_session()
+            session = self._get_market_session()
+            _effective_threshold = self._STALENESS_EXIT_BLOCK_THRESHOLD
+            if session == 'extended':
+                _effective_threshold = 300
+            if change_age > _effective_threshold:
                 if session in ('regular', 'extended'):
                     if not hasattr(self, '_staleness_block_logged'):
                         self._staleness_block_logged = {}
-                    _sbl_key = f"{_repair_key}_{int(change_age)//10}"
+                    _sbl_key = f"{_repair_key}_{int(change_age)//30}"
                     if _sbl_key not in self._staleness_block_logged:
                         self._staleness_block_logged[_sbl_key] = True
                         print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
-                              f"{change_age:.0f}s (>{self._STALENESS_EXIT_BLOCK_THRESHOLD}s) — "
+                              f"{change_age:.0f}s (>{_effective_threshold}s) — "
                               f"blocking exit until fresh price arrives")
                     return ExitDecision.no_exit()
+            elif change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD and session == 'extended':
+                _rest_price = None
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    _hub = get_webull_data_hub()
+                    if _hub:
+                        _rest_price = _hub.get_quote_price(position.symbol)
+                except Exception:
+                    pass
+                if _rest_price and abs(_rest_price - position.current_price) / max(position.current_price, 0.001) < 0.02:
+                    if not hasattr(self, '_ext_hours_staleness_bypass_logged'):
+                        self._ext_hours_staleness_bypass_logged = set()
+                    if pos_key not in self._ext_hours_staleness_bypass_logged:
+                        self._ext_hours_staleness_bypass_logged.add(pos_key)
+                        print(f"[RISK] ✓ EXTENDED HOURS: {position.symbol} price ${position.current_price:.4f} "
+                              f"confirmed by REST (${_rest_price:.4f}) — allowing exit evaluation "
+                              f"despite {change_age:.0f}s staleness")
+                else:
+                    pass
 
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
