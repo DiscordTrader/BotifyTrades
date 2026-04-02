@@ -3474,25 +3474,20 @@ class RiskManager:
             else:
                 del self._price_unverified[_repair_key]
 
+        _staleness_is_blocking = False
+        _staleness_change_age = 0
         tracker = self._stuck_price_tracker.get(_repair_key)
         if tracker and not _is_repair_cycle:
             import time as _st
             change_age = _st.time() - tracker['last_changed']
+            _staleness_change_age = change_age
             session = self._get_market_session()
             _effective_threshold = self._STALENESS_EXIT_BLOCK_THRESHOLD
             if session == 'extended':
                 _effective_threshold = 300
             if change_age > _effective_threshold:
                 if session in ('regular', 'extended'):
-                    if not hasattr(self, '_staleness_block_logged'):
-                        self._staleness_block_logged = {}
-                    _sbl_key = f"{_repair_key}_{int(change_age)//30}"
-                    if _sbl_key not in self._staleness_block_logged:
-                        self._staleness_block_logged[_sbl_key] = True
-                        print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
-                              f"{change_age:.0f}s (>{_effective_threshold}s) — "
-                              f"blocking exit until fresh price arrives")
-                    return ExitDecision.no_exit()
+                    _staleness_is_blocking = True
             elif change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD and session == 'extended':
                 _rest_price = None
                 try:
@@ -3510,21 +3505,43 @@ class RiskManager:
                         print(f"[RISK] ✓ EXTENDED HOURS: {position.symbol} price ${position.current_price:.4f} "
                               f"confirmed by REST (${_rest_price:.4f}) — allowing exit evaluation "
                               f"despite {change_age:.0f}s staleness")
-                else:
-                    pass
 
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
             if not _is_repair_cycle:
                 if channel_settings and channel_settings.escalation_only_mode and decision.risk_trigger == 'profit_target':
                     pass
+                elif _staleness_is_blocking and decision.risk_trigger in ('stop_loss', 'stop_loss_price'):
+                    if not hasattr(self, '_staleness_block_logged'):
+                        self._staleness_block_logged = {}
+                    _sbl_key = f"{_repair_key}_{int(_staleness_change_age)//30}"
+                    if _sbl_key not in self._staleness_block_logged:
+                        self._staleness_block_logged[_sbl_key] = True
+                        print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
+                              f"{_staleness_change_age:.0f}s — blocking STOP LOSS exit "
+                              f"until fresh price arrives (profit targets still allowed)")
+                    return ExitDecision.no_exit()
                 else:
+                    if _staleness_is_blocking and decision.risk_trigger == 'profit_target':
+                        print(f"[RISK] ✓ STALENESS BYPASS: {position.symbol} profit target hit "
+                              f"— allowing exit despite {_staleness_change_age:.0f}s stale price "
+                              f"(selling at stale HIGH is favorable)")
                     return decision
         
         if channel_settings:
             decision = evaluate_channel_stop_loss(position, cache, channel_settings)
             if decision.should_exit:
                 if not _is_repair_cycle:
+                    if _staleness_is_blocking:
+                        if not hasattr(self, '_staleness_block_logged'):
+                            self._staleness_block_logged = {}
+                        _sbl_key = f"{_repair_key}_csl_{int(_staleness_change_age)//30}"
+                        if _sbl_key not in self._staleness_block_logged:
+                            self._staleness_block_logged[_sbl_key] = True
+                            print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
+                                  f"{_staleness_change_age:.0f}s — blocking channel STOP LOSS exit "
+                                  f"until fresh price arrives")
+                        return ExitDecision.no_exit()
                     return decision
         
         if _is_repair_cycle:
@@ -3561,6 +3578,18 @@ class RiskManager:
         if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled or channel_settings.enable_early_trailing):
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
             if engine_decision and engine_decision.should_exit:
+                _trigger = getattr(engine_decision, 'risk_trigger', '') or ''
+                _is_sl_type = any(k in _trigger.lower() for k in ('stop', 'sl', 'giveback', 'ema_cross', 'ema_exit', 'ema_no_trend', 'early_trailing', 'trailing'))
+                if _staleness_is_blocking and _is_sl_type:
+                    if not hasattr(self, '_staleness_block_logged'):
+                        self._staleness_block_logged = {}
+                    _sbl_key = f"{_repair_key}_enh_{int(_staleness_change_age)//30}"
+                    if _sbl_key not in self._staleness_block_logged:
+                        self._staleness_block_logged[_sbl_key] = True
+                        print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
+                              f"{_staleness_change_age:.0f}s — blocking enhanced risk exit ({_trigger}) "
+                              f"until fresh price arrives")
+                    return ExitDecision.no_exit()
                 return engine_decision
         
         trailing_pct, activation_pct, stop_pct = get_effective_trailing_settings(
@@ -3580,11 +3609,35 @@ class RiskManager:
         if should_activate:
             self.cache.activate_trailing_stop(position.position_key)
         if decision.should_exit:
+            if _staleness_is_blocking:
+                if not hasattr(self, '_staleness_block_logged'):
+                    self._staleness_block_logged = {}
+                _sbl_key = f"{_repair_key}_trail_{int(_staleness_change_age)//30}"
+                if _sbl_key not in self._staleness_block_logged:
+                    self._staleness_block_logged[_sbl_key] = True
+                    print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
+                          f"{_staleness_change_age:.0f}s — blocking trailing stop exit "
+                          f"until fresh price arrives")
+                return ExitDecision.no_exit()
             return decision
         
         if not channel_settings:
             decision = evaluate_global_risk(position, cache, risk_settings)
             if decision.should_exit:
+                _glob_trigger = getattr(decision, 'risk_trigger', '') or ''
+                if _staleness_is_blocking and _glob_trigger != 'profit_target':
+                    if not hasattr(self, '_staleness_block_logged'):
+                        self._staleness_block_logged = {}
+                    _sbl_key = f"{_repair_key}_glob_{int(_staleness_change_age)//30}"
+                    if _sbl_key not in self._staleness_block_logged:
+                        self._staleness_block_logged[_sbl_key] = True
+                        print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price unchanged for "
+                              f"{_staleness_change_age:.0f}s — blocking global risk exit ({_glob_trigger}) "
+                              f"until fresh price arrives")
+                    return ExitDecision.no_exit()
+                if _staleness_is_blocking and _glob_trigger == 'profit_target':
+                    print(f"[RISK] ✓ STALENESS BYPASS: {position.symbol} global profit target hit "
+                          f"— allowing exit despite {_staleness_change_age:.0f}s stale price")
                 return decision
         
         return ExitDecision.no_exit()
