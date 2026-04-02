@@ -471,44 +471,6 @@ async function loadUsers() {
     }
 }
 
-let _lastPNLHash = '';
-let _isBackgroundRefresh = false;
-
-function _getExpandedIndices() {
-    const expanded = new Set();
-    document.querySelectorAll('.closures-detail.expanded').forEach(el => {
-        const m = el.id.match(/closures-(\d+)/);
-        if (m) expanded.add(parseInt(m[1]));
-    });
-    return expanded;
-}
-
-function _getLotIdForIndex(idx) {
-    return positionsData && positionsData[idx] ? positionsData[idx].lot_id : null;
-}
-
-function _getExpandedLotIds() {
-    const expanded = _getExpandedIndices();
-    const lotIds = new Set();
-    expanded.forEach(idx => {
-        const lid = _getLotIdForIndex(idx);
-        if (lid != null) lotIds.add(lid);
-    });
-    return lotIds;
-}
-
-function _restoreExpandedLotIds(lotIds) {
-    if (!positionsData || lotIds.size === 0) return;
-    positionsData.forEach((pos, idx) => {
-        if (lotIds.has(pos.lot_id)) {
-            const el = document.getElementById(`closures-${idx}`);
-            const icon = document.getElementById(`expand-${idx}`);
-            if (el) el.classList.add('expanded');
-            if (icon) icon.classList.add('expanded');
-        }
-    });
-}
-
 async function loadPNLData(background = false) {
     const channelId = document.getElementById('channelFilter').value;
     const userFilter = document.getElementById('userFilter').value;
@@ -541,24 +503,14 @@ async function loadPNLData(background = false) {
             throw new Error(data.error || 'Failed to load PNL data');
         }
 
-        const newHash = JSON.stringify(data.positions.map(p => ({
-            id: p.lot_id, s: p.status, pnl: p.total_pnl, cq: p.total_closed_qty, cl: p.closures.length
-        })));
-
-        if (background && newHash === _lastPNLHash) {
-            return;
-        }
-
-        const expandedLotIds = _getExpandedLotIds();
-
-        _lastPNLHash = newHash;
         positionsData = data.positions;
-        renderPNLData(positionsData);
-        updateSummaryStats(positionsData);
 
-        if (background && expandedLotIds.size > 0) {
-            _restoreExpandedLotIds(expandedLotIds);
+        if (background) {
+            _updateCardsInPlace(positionsData);
+        } else {
+            renderPNLData(positionsData);
         }
+        updateSummaryStats(positionsData);
 
     } catch (error) {
         console.error('Error loading PNL data:', error);
@@ -570,6 +522,31 @@ async function loadPNLData(background = false) {
             loading.style.display = 'none';
         }
     }
+}
+
+function _updateCardsInPlace(positions) {
+    const cards = document.querySelectorAll('.position-card');
+    if (cards.length !== positions.length) {
+        return;
+    }
+    positions.forEach((pos, index) => {
+        const card = cards[index];
+        if (!card) return;
+        const vals = card.querySelectorAll('.position-header .col .value');
+        if (vals.length >= 5) {
+            const profitTextClass = pos.total_pnl > 0 ? 'profit-text' : (pos.total_pnl < 0 ? 'loss-text' : 'neutral-text');
+            vals[3].textContent = `$${pos.total_pnl.toFixed(2)}`;
+            vals[3].className = `value ${profitTextClass}`;
+            vals[4].textContent = `${pos.avg_pnl_percent.toFixed(1)}%`;
+            vals[4].className = `value ${profitTextClass}`;
+            vals[2].textContent = `${pos.total_closed_qty} / ${pos.bto_qty}`;
+        }
+        const statusBadge = card.querySelector('.status-badge');
+        if (statusBadge) {
+            statusBadge.textContent = pos.status;
+            statusBadge.className = `status-badge status-${pos.status.toLowerCase()}`;
+        }
+    });
 }
 
 // Render PNL data
