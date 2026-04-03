@@ -199,7 +199,9 @@ class SchwabTokenManager:
             
             headers = {
                 'Authorization': f'Basic {credentials}',
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'BotifyTrades/3.0 (OAuth Client)',
+                'Accept': 'application/json'
             }
             
             data = {
@@ -793,7 +795,9 @@ def exchange_code_for_tokens(
         
         headers = {
             'Authorization': f'Basic {credentials}',
-            'Content-Type': 'application/x-www-form-urlencoded'
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'BotifyTrades/3.0 (OAuth Client)',
+            'Accept': 'application/json'
         }
         
         data = {
