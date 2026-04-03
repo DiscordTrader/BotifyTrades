@@ -185,7 +185,7 @@ class SchwabTokenManager:
             return False
         
         try:
-            import httpx
+            import requests as req_lib
             import base64
             
             creds = get_schwab_credentials()
@@ -200,8 +200,12 @@ class SchwabTokenManager:
             headers = {
                 'Authorization': f'Basic {credentials}',
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'BotifyTrades/3.0 (OAuth Client)',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Connection': 'keep-alive',
+                'Cache-Control': 'no-cache'
             }
             
             data = {
@@ -212,35 +216,35 @@ class SchwabTokenManager:
             
             print("[SCHWAB TOKEN] Sending refresh token request...")
             
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    'https://api.schwabapi.com/v1/oauth/token',
-                    headers=headers,
-                    data=data
+            response = req_lib.post(
+                'https://api.schwabapi.com/v1/oauth/token',
+                headers=headers,
+                data=data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                token_data = response.json()
+                
+                self.save_tokens(
+                    access_token=token_data.get('access_token'),
+                    refresh_token=token_data.get('refresh_token'),
+                    expires_in=token_data.get('expires_in', 1800)
                 )
                 
-                if response.status_code == 200:
-                    token_data = response.json()
-                    
-                    self.save_tokens(
-                        access_token=token_data.get('access_token'),
-                        refresh_token=token_data.get('refresh_token'),
-                        expires_in=token_data.get('expires_in', 1800)
-                    )
-                    
-                    print("[SCHWAB TOKEN] Token refresh successful!")
-                    self._refresh_failures = 0
-                    return True
-                else:
-                    self._refresh_failures += 1
-                    print(f"[SCHWAB TOKEN] Refresh failed: {response.status_code}")
-                    print(f"[SCHWAB TOKEN] Response: {response.text}")
-                    
-                    if response.status_code == 400 and ('invalid_grant' in response.text or 'refresh_token_authentication_error' in response.text or 'unsupported_token_type' in response.text):
-                        self._token_dead = True
-                        print("[SCHWAB TOKEN] ❌ Refresh token expired or revoked. Re-authentication required via Settings → Brokers.")
-                    
-                    return False
+                print("[SCHWAB TOKEN] Token refresh successful!")
+                self._refresh_failures = 0
+                return True
+            else:
+                self._refresh_failures += 1
+                print(f"[SCHWAB TOKEN] Refresh failed: {response.status_code}")
+                print(f"[SCHWAB TOKEN] Response: {response.text}")
+                
+                if response.status_code == 400 and ('invalid_grant' in response.text or 'refresh_token_authentication_error' in response.text or 'unsupported_token_type' in response.text):
+                    self._token_dead = True
+                    print("[SCHWAB TOKEN] ❌ Refresh token expired or revoked. Re-authentication required via Settings → Brokers.")
+                
+                return False
                     
         except Exception as e:
             self._refresh_failures += 1
@@ -778,10 +782,9 @@ def exchange_code_for_tokens(
     _last_exchange_error = None
     
     try:
-        import httpx
+        import requests as req_lib
         import base64
         
-        # Use override redirect_uri if provided (for automatic callback)
         redirect_uri = redirect_uri_override or creds.get('redirect_uri')
         
         print(f"[SCHWAB AUTH] Exchanging code (first 20 chars): {code[:20]}...")
@@ -796,8 +799,12 @@ def exchange_code_for_tokens(
         headers = {
             'Authorization': f'Basic {credentials}',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'BotifyTrades/3.0 (OAuth Client)',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache'
         }
         
         data = {
@@ -807,76 +814,70 @@ def exchange_code_for_tokens(
             'client_id': creds['client_id']
         }
         
-        # Add PKCE verifier if present
         if pkce_verifier:
             data['code_verifier'] = pkce_verifier
         
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                'https://api.schwabapi.com/v1/oauth/token',
-                headers=headers,
-                data=data
+        response = req_lib.post(
+            'https://api.schwabapi.com/v1/oauth/token',
+            headers=headers,
+            data=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            token_data = response.json()
+            
+            token_manager = get_token_manager()
+            token_manager.save_tokens(
+                access_token=token_data.get('access_token'),
+                refresh_token=token_data.get('refresh_token'),
+                expires_in=token_data.get('expires_in', 1800)
             )
             
-            if response.status_code == 200:
-                token_data = response.json()
-                
-                # Use token manager to save and manage tokens
-                token_manager = get_token_manager()
-                token_manager.save_tokens(
-                    access_token=token_data.get('access_token'),
+            try:
+                from .schwab_token_storage import get_secure_storage
+                storage = get_secure_storage()
+                storage.save_refresh_token(
                     refresh_token=token_data.get('refresh_token'),
-                    expires_in=token_data.get('expires_in', 1800)
+                    account_id=account_id,
+                    metadata={
+                        'scope': token_data.get('scope', 'readonly'),
+                        'expires_in': token_data.get('expires_in', 1800)
+                    }
                 )
-                
-                # Also save to secure storage if available
+            except ImportError:
+                pass
+            
+            token_manager.start_auto_refresh()
+            
+            try:
+                from gui_app.routes import _bot_instance
+                if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                    if hasattr(_bot_instance.schwab_broker, 'reset_token_auth'):
+                        _bot_instance.schwab_broker.reset_token_auth()
+                        print(f"[SCHWAB AUTH] Broker backoff state reset")
+            except Exception:
+                pass
+            
+            print(f"[SCHWAB AUTH] Tokens saved successfully, auto-refresh started")
+            return True
+        else:
+            error_msg = f"HTTP {response.status_code}: {response.text}"
+            print(f"[SCHWAB AUTH] Token exchange failed: {error_msg}")
+            _last_exchange_error = error_msg
+            
+            if response.status_code == 400:
                 try:
-                    from .schwab_token_storage import get_secure_storage
-                    storage = get_secure_storage()
-                    storage.save_refresh_token(
-                        refresh_token=token_data.get('refresh_token'),
-                        account_id=account_id,
-                        metadata={
-                            'scope': token_data.get('scope', 'readonly'),
-                            'expires_in': token_data.get('expires_in', 1800)
-                        }
-                    )
-                except ImportError:
-                    pass  # Secure storage not available
-                
-                # Start auto-refresh thread
-                token_manager.start_auto_refresh()
-                
-                # Reset broker backoff state so it retries immediately
-                try:
-                    from gui_app.routes import _bot_instance
-                    if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
-                        if hasattr(_bot_instance.schwab_broker, 'reset_token_auth'):
-                            _bot_instance.schwab_broker.reset_token_auth()
-                            print(f"[SCHWAB AUTH] Broker backoff state reset")
+                    error_data = response.json()
+                    error_code = error_data.get('error', '')
+                    if error_code == 'invalid_grant':
+                        _last_exchange_error = "Authorization code expired or already used. Please try again."
+                    elif error_code == 'invalid_request':
+                        _last_exchange_error = "Invalid request. Check redirect_uri matches exactly."
                 except Exception:
                     pass
-                
-                print(f"[SCHWAB AUTH] Tokens saved successfully, auto-refresh started")
-                return True
-            else:
-                error_msg = f"HTTP {response.status_code}: {response.text}"
-                print(f"[SCHWAB AUTH] Token exchange failed: {error_msg}")
-                _last_exchange_error = error_msg
-                
-                # Parse specific error codes
-                if response.status_code == 400:
-                    try:
-                        error_data = response.json()
-                        error_code = error_data.get('error', '')
-                        if error_code == 'invalid_grant':
-                            _last_exchange_error = "Authorization code expired or already used. Please try again."
-                        elif error_code == 'invalid_request':
-                            _last_exchange_error = "Invalid request. Check redirect_uri matches exactly."
-                    except Exception:
-                        pass
-                
-                return False
+            
+            return False
                 
     except Exception as e:
         print(f"[SCHWAB AUTH] Error exchanging code: {e}")
