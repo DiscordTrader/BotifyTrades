@@ -19,8 +19,6 @@ BotifyTrades is a production-grade, cross-platform automated trading bot designe
 ### UI/UX Decisions
 The web control panel, built with Flask, provides real-time dashboards for broker status, live positions, P&L, and risk statuses. It includes detailed trade monitoring, performance analytics, intuitive settings, and visual feedback mechanisms like streaming indicators. A redesigned performance dashboard offers a calendar view with key metrics, daily P&L, trade counts, and cumulative P&L charts.
 
-**Settings Page Tab Navigation**: The Admin Settings page uses a 4-tab layout (General, Brokers, Risk & Trading, Services) implemented via `data-settings-tab` attributes on each `.settings-card` inside `#settings-grid`. The `switchSettingsTab()` JS function shows/hides cards by matching their attribute to the active tab. Tab state persists in localStorage (`botify_settings_tab`). All existing DOM IDs and JS event listeners are preserved — cards are hidden with `display:none` (elements remain in DOM for JS access). The Setup Wizard card is intentionally outside the grid and always visible.
-
 ### Technical Implementations
 - **Signal Sources**: Integrates with Discord and Telegram, using a 5-tier parsing system (dedicated parsers, regex, AI fallback) for robust signal detection, deduplication, and follow-up updates.
 - **Risk Management Engine**: A multi-layered system with global and per-channel settings, configurable Stop Loss, Trailing Stop, four Profit Targets, Dynamic SL Escalation, Max Profit Giveback Guard, EMA-5 Candlestick Risk Engine, and a "Leave Runner" feature. Risk states are persistent and exit pricing prioritizes streaming hub bid/ask.

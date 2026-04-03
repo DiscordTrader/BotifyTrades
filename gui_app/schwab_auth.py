@@ -343,29 +343,6 @@ def get_schwab_credentials():
     return None
 
 
-_schwab_api_blocked_cache = {'blocked': None, 'checked_at': 0}
-
-def _is_schwab_api_blocked():
-    """Quick preflight check if Schwab API is reachable from this server. Cached for 5 minutes."""
-    import time
-    now = time.time()
-    if _schwab_api_blocked_cache['blocked'] is not None and (now - _schwab_api_blocked_cache['checked_at']) < 300:
-        return _schwab_api_blocked_cache['blocked']
-    
-    try:
-        import httpx
-        with httpx.Client(timeout=5.0) as client:
-            r = client.get('https://api.schwabapi.com/v1/')
-            blocked = r.status_code == 403 and 'Access Denied' in r.text
-            _schwab_api_blocked_cache['blocked'] = blocked
-            _schwab_api_blocked_cache['checked_at'] = now
-            if blocked:
-                print("[SCHWAB AUTH] Preflight check: Schwab API is BLOCKED from this server IP")
-            return blocked
-    except Exception:
-        return False
-
-
 def get_default_redirect_uri():
     """Get the default redirect URI based on environment"""
     if os.environ.get("REPLIT_DEV_DOMAIN"):
@@ -495,16 +472,7 @@ def schwab_auth_url():
         print(f"[SCHWAB AUTH] Redirect URI: {redirect_uri}")
         print(f"[SCHWAB AUTH] State: {state[:12]}...")
 
-        api_blocked = _is_schwab_api_blocked()
-        if api_blocked:
-            print(f"[SCHWAB AUTH] WARNING: Schwab API blocked from this server - token exchange will fail")
-
-        return jsonify({
-            'success': True, 
-            'auth_url': auth_url, 
-            'state': state,
-            'api_blocked': api_blocked
-        })
+        return jsonify({'success': True, 'auth_url': auth_url, 'state': state})
 
     except Exception as e:
         print(f"[SCHWAB AUTH] Error generating auth URL: {e}")
@@ -705,15 +673,6 @@ def schwab_callback():
         pkce_verifier = (state_data or {}).get('pkce_verifier')
         print(f"[SCHWAB CALLBACK] Using redirect_uri: {redirect_uri}")
 
-        if _is_schwab_api_blocked():
-            print(f"[SCHWAB CALLBACK] Schwab API blocked from this server IP - directing user to token import")
-            return _render_callback_result_page(
-                False,
-                "Schwab's firewall is blocking connections from this server. "
-                "Use the 'Direct Token Import' section in Settings → Brokers → Schwab to connect instead. "
-                "Download the helper script, run it on your PC, and paste the tokens."
-            )
-
         success = exchange_code_for_tokens(code, creds, pkce_verifier=pkce_verifier, redirect_uri_override=redirect_uri)
 
         if success:
@@ -724,10 +683,7 @@ def schwab_callback():
         else:
             last_error = get_last_exchange_error()
             print(f"[SCHWAB CALLBACK] ✗ Token exchange failed: {last_error}")
-            error_msg = last_error or 'Unknown error'
-            if '403' in str(error_msg) or 'Access Denied' in str(error_msg):
-                error_msg += " — Schwab's firewall is blocking this server. Use 'Direct Token Import' in Settings instead."
-            return _render_callback_result_page(False, f"Token exchange failed: {error_msg}")
+            return _render_callback_result_page(False, f"Token exchange failed: {last_error or 'Unknown error'}")
 
     except Exception as e:
         print(f"[SCHWAB AUTH] Callback error: {e}")
@@ -823,6 +779,7 @@ def exchange_code_for_tokens(
         import httpx
         import base64
         
+        # Use override redirect_uri if provided (for automatic callback)
         redirect_uri = redirect_uri_override or creds.get('redirect_uri')
         
         print(f"[SCHWAB AUTH] Exchanging code (first 20 chars): {code[:20]}...")
@@ -846,6 +803,7 @@ def exchange_code_for_tokens(
             'client_id': creds['client_id']
         }
         
+        # Add PKCE verifier if present
         if pkce_verifier:
             data['code_verifier'] = pkce_verifier
         
@@ -859,6 +817,7 @@ def exchange_code_for_tokens(
             if response.status_code == 200:
                 token_data = response.json()
                 
+                # Use token manager to save and manage tokens
                 token_manager = get_token_manager()
                 token_manager.save_tokens(
                     access_token=token_data.get('access_token'),
@@ -866,6 +825,7 @@ def exchange_code_for_tokens(
                     expires_in=token_data.get('expires_in', 1800)
                 )
                 
+                # Also save to secure storage if available
                 try:
                     from .schwab_token_storage import get_secure_storage
                     storage = get_secure_storage()
@@ -878,10 +838,12 @@ def exchange_code_for_tokens(
                         }
                     )
                 except ImportError:
-                    pass
+                    pass  # Secure storage not available
                 
+                # Start auto-refresh thread
                 token_manager.start_auto_refresh()
                 
+                # Reset broker backoff state so it retries immediately
                 try:
                     from gui_app.routes import _bot_instance
                     if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
@@ -898,6 +860,7 @@ def exchange_code_for_tokens(
                 print(f"[SCHWAB AUTH] Token exchange failed: {error_msg}")
                 _last_exchange_error = error_msg
                 
+                # Parse specific error codes
                 if response.status_code == 400:
                     try:
                         error_data = response.json()
@@ -1130,155 +1093,6 @@ def schwab_manual_code():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
-
-
-@schwab_auth.route("/schwab/import-tokens", methods=['POST'])
-def schwab_import_tokens():
-    """
-    Import tokens obtained externally (e.g., from local PC token exchange).
-    Bypasses the server-to-server token exchange that gets blocked by Schwab's WAF.
-    """
-    try:
-        data = request.get_json() or {}
-        access_token = data.get('access_token', '').strip()
-        refresh_token = data.get('refresh_token', '').strip()
-        
-        if not access_token or not refresh_token:
-            return jsonify({'success': False, 'error': 'Both access_token and refresh_token are required'})
-        
-        token_manager = get_token_manager()
-        token_manager.save_tokens(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_in=1800
-        )
-        
-        try:
-            from .schwab_token_storage import get_secure_storage
-            storage = get_secure_storage()
-            storage.save_refresh_token(
-                refresh_token=refresh_token,
-                account_id='',
-                metadata={'scope': 'readonly', 'expires_in': 1800}
-            )
-        except ImportError:
-            pass
-        
-        token_manager.start_auto_refresh()
-        
-        try:
-            from gui_app.routes import _bot_instance
-            if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
-                if hasattr(_bot_instance.schwab_broker, 'reset_token_auth'):
-                    _bot_instance.schwab_broker.reset_token_auth()
-        except Exception:
-            pass
-        
-        db.update_broker_connection_status('SCHWAB', True)
-        
-        creds = get_schwab_credentials()
-        if creds:
-            _hot_connect_schwab_broker(creds)
-        
-        print(f"[SCHWAB AUTH] Tokens imported successfully via direct paste")
-        return jsonify({'success': True, 'message': 'Tokens imported successfully! Schwab is now connected.'})
-        
-    except Exception as e:
-        print(f"[SCHWAB AUTH] Token import error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)})
-
-
-@schwab_auth.route("/schwab/helper-script")
-def schwab_helper_script():
-    """Serve a downloadable Python script for local token exchange."""
-    creds = get_schwab_credentials()
-    redirect_uri = creds.get('redirect_uri', 'https://127.0.0.1') if creds else 'https://127.0.0.1'
-    
-    script = f'''#!/usr/bin/env python3
-"""
-Schwab Token Exchange Helper
-Run this on your LOCAL PC (not on Replit) to exchange your auth code for tokens.
-Then paste the tokens back into BotifyTrades Settings.
-
-Requirements: pip install requests
-"""
-import requests, base64, json, sys, urllib.parse, getpass
-
-print("=" * 60)
-print("  Schwab Token Exchange Helper")
-print("=" * 60)
-print()
-
-CLIENT_ID = input("Enter your Schwab Client ID (App Key): ").strip()
-CLIENT_SECRET = getpass.getpass("Enter your Schwab Client Secret: ").strip()
-REDIRECT_URI = "{redirect_uri}"
-
-if not CLIENT_ID or not CLIENT_SECRET:
-    print("ERROR: Client ID and Secret are required")
-    sys.exit(1)
-
-print()
-print("Paste the FULL URL from your browser after Schwab redirects you.")
-print("It looks like: https://127.0.0.1/?code=C0.xxxx...")
-print()
-
-url_input = input("Paste URL here: ").strip()
-
-if "code=" in url_input:
-    parsed = urllib.parse.urlparse(url_input)
-    params = urllib.parse.parse_qs(parsed.query)
-    code = params.get("code", [""])[0]
-else:
-    code = url_input
-
-if not code:
-    print("ERROR: Could not extract authorization code")
-    sys.exit(1)
-
-code = urllib.parse.unquote(code)
-print(f"\\nExtracted code: {{code[:30]}}...")
-
-credentials = base64.b64encode(f"{{CLIENT_ID}}:{{CLIENT_SECRET}}".encode()).decode()
-
-response = requests.post(
-    "https://api.schwabapi.com/v1/oauth/token",
-    headers={{
-        "Authorization": f"Basic {{credentials}}",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }},
-    data={{
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": REDIRECT_URI,
-        "client_id": CLIENT_ID,
-    }},
-    timeout=30,
-)
-
-if response.status_code == 200:
-    tokens = response.json()
-    print("\\n" + "=" * 60)
-    print("  SUCCESS! Copy the JSON below into BotifyTrades")
-    print("=" * 60)
-    output = {{
-        "access_token": tokens.get("access_token", ""),
-        "refresh_token": tokens.get("refresh_token", ""),
-    }}
-    print(json.dumps(output))
-    print("\\n" + "=" * 60)
-    print("Paste the JSON line above into the Direct Token Import field in Settings.")
-else:
-    print(f"\\nERROR: HTTP {{response.status_code}}")
-    print(response.text)
-'''
-    from flask import Response
-    return Response(
-        script,
-        mimetype='text/plain',
-        headers={'Content-Disposition': 'attachment; filename=schwab_token_helper.py'}
-    )
 
 
 def _migrate_schwab_dry_run():

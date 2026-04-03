@@ -34,121 +34,6 @@
     letter-spacing: 0.5px;
 }
 
-.settings-tabs {
-    display: flex;
-    gap: 4px;
-    padding: 4px;
-    background: rgba(0, 20, 40, 0.6);
-    border: 1px solid rgba(0, 212, 255, 0.15);
-    border-radius: 14px;
-    margin-bottom: 28px;
-    backdrop-filter: blur(12px);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-.settings-tab {
-    flex: 1;
-    min-width: 140px;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 10px;
-    background: transparent;
-    color: #8899a6;
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    white-space: nowrap;
-    position: relative;
-}
-
-.settings-tab:hover {
-    color: #c0d0e0;
-    background: rgba(0, 212, 255, 0.06);
-}
-
-.settings-tab.active {
-    background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 128, 255, 0.12));
-    color: #00d4ff;
-    box-shadow: 0 2px 12px rgba(0, 212, 255, 0.15), inset 0 1px 0 rgba(0, 212, 255, 0.2);
-    border: 1px solid rgba(0, 212, 255, 0.25);
-}
-
-.settings-tab .tab-icon {
-    font-size: 16px;
-}
-
-.settings-tab .tab-count {
-    font-size: 10px;
-    padding: 2px 7px;
-    border-radius: 10px;
-    background: rgba(0, 212, 255, 0.12);
-    color: #00d4ff;
-    font-weight: 700;
-    min-width: 18px;
-    text-align: center;
-}
-
-.settings-tab.active .tab-count {
-    background: rgba(0, 212, 255, 0.25);
-}
-
-.tab-panel {
-    display: none;
-    animation: tabFadeIn 0.3s ease;
-}
-
-.tab-panel.active {
-    display: block;
-}
-
-@keyframes tabFadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.tab-section-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid rgba(0, 212, 255, 0.12);
-}
-
-.tab-section-header .section-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    flex-shrink: 0;
-}
-
-.tab-section-header .section-title {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 15px;
-    font-weight: 700;
-    color: #e2e8f0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.tab-section-header .section-subtitle {
-    font-size: 12px;
-    color: #64748b;
-    margin-top: 2px;
-}
-
 .collapsible-header {
     cursor: pointer;
     display: flex;
@@ -456,22 +341,6 @@ input:checked + .slider:before {
 <!-- Global Status Message -->
 <div id="save-message" class="message" style="margin-bottom: 24px;"></div>
 
-<!-- Tab Navigation -->
-<div class="settings-tabs" role="tablist">
-    <button class="settings-tab active" onclick="switchSettingsTab('general')" role="tab" aria-selected="true" data-tab="general">
-        <span class="tab-icon">⚡</span> General
-    </button>
-    <button class="settings-tab" onclick="switchSettingsTab('brokers')" role="tab" aria-selected="false" data-tab="brokers">
-        <span class="tab-icon">🏦</span> Brokers
-    </button>
-    <button class="settings-tab" onclick="switchSettingsTab('risk')" role="tab" aria-selected="false" data-tab="risk">
-        <span class="tab-icon">🛡️</span> Risk & Trading
-    </button>
-    <button class="settings-tab" onclick="switchSettingsTab('services')" role="tab" aria-selected="false" data-tab="services">
-        <span class="tab-icon">🔧</span> Services
-    </button>
-</div>
-
 <!-- Broker Connection Status Banner -->
 <div class="broker-status-banner" id="broker-status-banner" style="margin-bottom: 24px; padding: 16px; background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(124, 58, 237, 0.1)); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px;">
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
@@ -704,10 +573,10 @@ input:checked + .slider:before {
 </style>
 
 <!-- Settings Grid -->
-<div class="settings-grid" id="settings-grid">
+<div class="settings-grid">
     
     <!-- License Status -->
-    <div class="settings-card" id="license-card" data-settings-tab="general">
+    <div class="settings-card" id="license-card">
         <h3>🔐 License Status</h3>
         <p class="description">Your BotifyTrades license information</p>
         <div id="license-status" class="connection-status disconnected">
@@ -730,7 +599,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Discord Configuration with Connect -->
-    <div class="settings-card" data-settings-tab="general">
+    <div class="settings-card">
         <h3>🔑 Discord</h3>
         <p class="description">Connect your Discord account to monitor trading signals</p>
         <div id="discord-connection-status" class="connection-status disconnected">
@@ -750,7 +619,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Alpaca Paper Trading with Connect -->
-    <div class="settings-card" data-settings-tab="brokers">
+    <div class="settings-card">
         <h3>💹 Alpaca Paper Trading</h3>
         <p class="description">Commission-free paper trading for testing strategies</p>
         <div id="alpaca-paper-connection-status" class="connection-status disconnected">
@@ -774,7 +643,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Alpaca Live Trading with Connect -->
-    <div class="settings-card" data-settings-tab="brokers">
+    <div class="settings-card">
         <h3>📈 Alpaca Live Trading</h3>
         <p class="description">Real money trading with Alpaca (use with caution)</p>
         <div id="alpaca-live-connection-status" class="connection-status disconnected">
@@ -798,7 +667,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Tastytrade Paper Trading with Connect -->
-    <div class="settings-card" data-settings-tab="brokers">
+    <div class="settings-card">
         <h3>🍒 Tastytrade Paper Trading</h3>
         <p class="description">Options-focused trading platform sandbox for testing</p>
         <div id="tastytrade-paper-connection-status" class="connection-status disconnected">
@@ -847,7 +716,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Tastytrade Live Trading with Connect -->
-    <div class="settings-card" data-settings-tab="brokers">
+    <div class="settings-card">
         <h3>🍒 Tastytrade Live Trading</h3>
         <p class="description">Real money trading with Tastytrade (use with caution)</p>
         <div id="tastytrade-live-connection-status" class="connection-status disconnected">
@@ -896,7 +765,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Robinhood LIVE Trading (NO PAPER MODE) -->
-    <div class="settings-card" data-settings-tab="brokers" style="background: linear-gradient(135deg, #1a2f1a 0%, #0d1f0d 100%); border-color: rgba(0, 200, 83, 0.4);">
+    <div class="settings-card" style="background: linear-gradient(135deg, #1a2f1a 0%, #0d1f0d 100%); border-color: rgba(0, 200, 83, 0.4);">
         <h3 style="color: #00c853;">🪶 Robinhood (LIVE Only)</h3>
         <p class="description">Connect your Robinhood account for stock and options trading</p>
         
@@ -957,7 +826,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Trading 212 -->
-    <div class="settings-card" data-settings-tab="brokers" style="background: linear-gradient(135deg, #0a1a3d 0%, #0d2654 100%); border-color: rgba(0, 163, 255, 0.4);">
+    <div class="settings-card" style="background: linear-gradient(135deg, #0a1a3d 0%, #0d2654 100%); border-color: rgba(0, 163, 255, 0.4);">
         <h3 style="color: #00A3FF;">📊 Trading 212</h3>
         <p class="description">UK/EU stock trading via Trading 212 API (stocks only, no options)</p>
         
@@ -992,7 +861,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Charles Schwab OAuth Integration -->
-    <div class="settings-card" data-settings-tab="brokers" style="background: linear-gradient(135deg, #0a1628 0%, #1a2d47 100%); border-color: rgba(0, 123, 255, 0.4);">
+    <div class="settings-card" style="background: linear-gradient(135deg, #0a1628 0%, #1a2d47 100%); border-color: rgba(0, 123, 255, 0.4);">
         <h3 style="color: #0078d7;">🏦 Charles Schwab</h3>
         <p class="description">Connect your Schwab account via OAuth for stock and options trading</p>
         
@@ -1050,34 +919,16 @@ input:checked + .slider:before {
             </p>
             <div style="display: flex; gap: 8px;">
                 <input type="text" id="schwab-manual-code" placeholder="Paste full URL: https://127.0.0.1/?code=C0.xxx..." style="flex: 1;">
-                <button id="submit-schwab-code" class="btn" style="background: linear-gradient(135deg, #00c853 0%, #00a844 100%); white-space: nowrap;">Submit Code</button>
+                <button id="submit-schwab-code" class="btn" style="background: linear-gradient(135deg, #00c853 0%, #00a844 100%); white-space: nowrap;">✅ Submit Code</button>
             </div>
             <p id="schwab-manual-code-msg" style="margin-top: 8px; font-size: 12px;"></p>
-        </div>
-        
-        <!-- Direct Token Import (WAF Bypass) -->
-        <div id="schwab-token-import-section" class="form-group" style="margin-top: 16px; padding: 16px; background: rgba(255, 170, 0, 0.08); border-radius: 8px; border: 1px dashed rgba(255, 170, 0, 0.4);">
-            <label style="color: #ffaa00; font-weight: 600;">Direct Token Import (Recommended for Replit)</label>
-            <p class="help-text" style="margin: 8px 0 4px 0;">
-                Schwab's firewall blocks token exchange from cloud servers. Use this workaround:
-            </p>
-            <ol class="help-text" style="margin: 4px 0 12px 16px; line-height: 1.8; font-size: 12px;">
-                <li><a href="/schwab/helper-script" download style="color: #00d4ff;">Download the helper script</a> and run it on your PC: <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px;">python schwab_token_helper.py</code></li>
-                <li>Complete Schwab login in your browser, then paste the redirect URL into the script</li>
-                <li>Copy the JSON output from the script and paste it below</li>
-            </ol>
-            <div style="display: flex; gap: 8px;">
-                <input type="text" id="schwab-token-json" placeholder='Paste JSON: {"access_token":"...","refresh_token":"..."}' style="flex: 1; font-family: monospace; font-size: 11px;">
-                <button id="submit-schwab-tokens" class="btn" style="background: linear-gradient(135deg, #ffaa00 0%, #ff8800 100%); color: #000; font-weight: 600; white-space: nowrap;">Import Tokens</button>
-            </div>
-            <p id="schwab-token-import-msg" style="margin-top: 8px; font-size: 12px;"></p>
         </div>
         
         <div id="schwab-account-info" class="account-info" style="display: none;"></div>
     </div>
     
     <!-- Clear Stale Trades - Data Management -->
-    <div class="settings-card" data-settings-tab="brokers" style="background: linear-gradient(135deg, #2a1f0d 0%, #3d2a0f 100%); border-color: rgba(255, 170, 0, 0.3);">
+    <div class="settings-card" style="background: linear-gradient(135deg, #2a1f0d 0%, #3d2a0f 100%); border-color: rgba(255, 170, 0, 0.3);">
         <h3 style="color: #ffaa00;">🧹 Clear Stale Trades</h3>
         <p class="description">Use this when you switch broker API keys. Clears old open/pending trades from the database that belong to a previous account.</p>
         <div id="stale-trades-info" style="margin-bottom: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px;">
@@ -1091,7 +942,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Webull Broker with Connect -->
-    <div class="settings-card" data-settings-tab="brokers">
+    <div class="settings-card">
         <h3>💼 Webull Broker</h3>
         <p class="description">Connect Webull for options and stock trading</p>
         <div id="webull-connection-status" class="connection-status disconnected">
@@ -1201,7 +1052,7 @@ input:checked + .slider:before {
     </div>
     
     <!-- Interactive Brokers with Connect -->
-    <div class="settings-card" data-settings-tab="brokers">
+    <div class="settings-card">
         <h3>🏦 Interactive Brokers</h3>
         <p class="description">Connect to TWS/Gateway for institutional trading</p>
         <div id="ibkr-connection-status" class="connection-status disconnected">
@@ -1248,7 +1099,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Discord Notifications -->
-    <div class="settings-card" data-settings-tab="general">
+    <div class="settings-card">
         <h3>📢 Trade Notifications</h3>
         <p class="description">Post trade signals to Discord webhook</p>
         <div class="form-group">
@@ -1279,7 +1130,7 @@ input:checked + .slider:before {
 
 
     <!-- API Keys -->
-    <div class="settings-card" data-settings-tab="general">
+    <div class="settings-card">
         <h3>🤖 AI & Market Data APIs</h3>
         <p class="description">External API credentials for analysis & data</p>
         
@@ -1316,7 +1167,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Price Slippage Protection -->
-    <div class="settings-card" data-settings-tab="risk">
+    <div class="settings-card">
         <h3>🛡️ Slippage Protection</h3>
         <p class="description">Protect against bad fills with price limits</p>
         <div class="form-group">
@@ -1344,7 +1195,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Risk Management -->
-    <div class="settings-card" data-settings-tab="risk">
+    <div class="settings-card">
         <h3>📊 Risk Management</h3>
         <p class="description">Position monitoring & automated exits</p>
         <div class="form-group">
@@ -1391,7 +1242,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- AI Analysis Settings -->
-    <div class="settings-card" data-settings-tab="general">
+    <div class="settings-card">
         <h3>🧠 AI Analysis</h3>
         <p class="description">Post-trade analysis & market sentiment</p>
         <div class="form-group">
@@ -1429,7 +1280,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Trading Settings -->
-    <div class="settings-card" data-settings-tab="risk">
+    <div class="settings-card">
         <h3>💰 Trading Limits</h3>
         <p class="description">Position sizing and trading constraints</p>
         <div class="form-group">
@@ -1476,7 +1327,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Advanced Settings -->
-    <div class="settings-card" data-settings-tab="services">
+    <div class="settings-card">
         <h3>🔧 Advanced Settings</h3>
         <p class="description">Debugging and diagnostic options</p>
         <div class="form-group">
@@ -1496,7 +1347,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Discord Bot Settings (Collapsible) -->
-    <div class="settings-card" data-settings-tab="services">
+    <div class="settings-card">
         <h3 class="collapsible-header" onclick="toggleSection('discord-settings-content')">
             ⚙️ Discord Bot Settings
             <span class="collapse-icon" id="discord-settings-icon">▼</span>
@@ -1557,7 +1408,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Trade Notification Settings -->
-    <div class="settings-card" data-settings-tab="services">
+    <div class="settings-card">
         <h3>📢 Trade Notifications</h3>
         <p class="description">Configure where trade execution notifications are posted</p>
         <div class="form-group">
@@ -1583,7 +1434,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Background Services Settings -->
-    <div class="settings-card" data-settings-tab="services">
+    <div class="settings-card">
         <h3>⚙️ Background Services</h3>
         <p class="description">Control background services that poll broker APIs. Disable to reduce API usage and prevent rate limiting.</p>
         <div class="form-group">
@@ -1615,7 +1466,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Trade Monitor Settings -->
-    <div class="settings-card" data-settings-tab="services">
+    <div class="settings-card">
         <h3>📡 Trade Monitor (Broker Sync)</h3>
         <p class="description">Automatically detect trades from your broker (Webull mobile, desktop) and post them as BTO/STC signals to Discord</p>
         <div class="form-group">
@@ -1694,7 +1545,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Conditional Orders Settings -->
-    <div class="settings-card" data-settings-tab="risk">
+    <div class="settings-card">
         <h3>⏳ Conditional Orders</h3>
         <p class="description">Monitor price conditions and execute orders when triggered. Supports signals like "AAPL over 150 SL 5% PT 160"</p>
         <div class="form-group">
@@ -1757,7 +1608,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Global Risk Management (OMS/RMS) — Separate Card -->
-    <div class="settings-card" data-settings-tab="risk">
+    <div class="settings-card">
         <h3>🛡️ Global Risk Management</h3>
         <p class="description">Control how exits are managed, set position limits, and configure safety guardrails. Per-channel settings can override these defaults.</p>
 
@@ -1846,7 +1697,7 @@ input:checked + .slider:before {
     </div>
 
     <!-- Daily P&L Limits (Per-Broker) — Separate Card -->
-    <div class="settings-card" data-settings-tab="risk">
+    <div class="settings-card">
         <h3>📊 Daily P&L Limits</h3>
         <p class="description">Automatically pause new entries (BTO) when a broker's daily P&L exceeds these limits. STC exits always pass. Enforced per-broker using start-of-day equity snapshots.</p>
 
@@ -1913,37 +1764,6 @@ input:checked + .slider:before {
 </div>
 
 <script>
-// ========== TAB SWITCHING ==========
-function switchSettingsTab(tabName) {
-    const grid = document.getElementById('settings-grid');
-    if (!grid) return;
-    const allCards = grid.querySelectorAll('.settings-card[data-settings-tab]');
-    const tabs = document.querySelectorAll('.settings-tab');
-    
-    tabs.forEach(tab => {
-        tab.classList.toggle('active', tab.getAttribute('data-tab') === tabName);
-        tab.setAttribute('aria-selected', tab.getAttribute('data-tab') === tabName ? 'true' : 'false');
-    });
-    
-    allCards.forEach(card => {
-        if (card.getAttribute('data-settings-tab') === tabName) {
-            card.style.display = '';
-            card.style.animation = 'tabFadeIn 0.3s ease';
-        } else {
-            card.style.display = 'none';
-            card.style.animation = '';
-        }
-    });
-    
-    localStorage.setItem('botify_settings_tab', tabName);
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const validTabs = ['general', 'brokers', 'risk', 'services'];
-    const savedTab = localStorage.getItem('botify_settings_tab');
-    switchSettingsTab(validTabs.includes(savedTab) ? savedTab : 'general');
-});
-
 // ========== TOAST NOTIFICATIONS ==========
 function showToast(message, type = 'info') {
     let toast = document.getElementById('toast-notification');
@@ -2837,17 +2657,6 @@ document.getElementById('connect-schwab').addEventListener('click', async () => 
             return;
         }
 
-        if (data.api_blocked) {
-            msg.innerHTML = '⚠️ Schwab\'s firewall is blocking this server. The login popup will open but token exchange will fail. Use the <strong>Direct Token Import</strong> section below instead — download the helper script and run it on your PC.';
-            msg.className = 'message error';
-            msg.style.color = '#ffaa00';
-            connectBtn.disabled = false;
-            connectBtn.textContent = '🔗 Connect with Schwab';
-            const importSection = document.getElementById('schwab-token-import-section');
-            if (importSection) importSection.style.border = '2px solid #ffaa00';
-            return;
-        }
-
         _schwabOAuthPopup = window.open(
             data.auth_url,
             'schwab_oauth',
@@ -3113,59 +2922,6 @@ document.getElementById('submit-schwab-code').addEventListener('click', async ()
         }
     } catch (error) {
         msgEl.textContent = '❌ Error: ' + error.message;
-        msgEl.style.color = '#ff5252';
-    }
-});
-
-document.getElementById('submit-schwab-tokens').addEventListener('click', async () => {
-    const jsonInput = document.getElementById('schwab-token-json');
-    const msgEl = document.getElementById('schwab-token-import-msg');
-    const raw = jsonInput.value.trim();
-    
-    if (!raw) {
-        msgEl.textContent = 'Please paste the JSON from the helper script';
-        msgEl.style.color = '#ff5252';
-        return;
-    }
-    
-    let tokens;
-    try {
-        tokens = JSON.parse(raw);
-    } catch (e) {
-        msgEl.textContent = 'Invalid JSON format. Paste the exact output from the helper script.';
-        msgEl.style.color = '#ff5252';
-        return;
-    }
-    
-    if (!tokens.access_token || !tokens.refresh_token) {
-        msgEl.textContent = 'JSON must contain access_token and refresh_token fields';
-        msgEl.style.color = '#ff5252';
-        return;
-    }
-    
-    msgEl.textContent = 'Importing tokens...';
-    msgEl.style.color = '#00d4ff';
-    
-    try {
-        const response = await fetch('/schwab/import-tokens', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(tokens)
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            msgEl.textContent = result.message;
-            msgEl.style.color = '#00c853';
-            jsonInput.value = '';
-            loadSchwabStatus();
-        } else {
-            msgEl.textContent = (result.error || 'Failed to import tokens');
-            msgEl.style.color = '#ff5252';
-        }
-    } catch (error) {
-        msgEl.textContent = 'Error: ' + error.message;
         msgEl.style.color = '#ff5252';
     }
 });
