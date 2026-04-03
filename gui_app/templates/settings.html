@@ -1050,9 +1050,27 @@ input:checked + .slider:before {
             </p>
             <div style="display: flex; gap: 8px;">
                 <input type="text" id="schwab-manual-code" placeholder="Paste full URL: https://127.0.0.1/?code=C0.xxx..." style="flex: 1;">
-                <button id="submit-schwab-code" class="btn" style="background: linear-gradient(135deg, #00c853 0%, #00a844 100%); white-space: nowrap;">✅ Submit Code</button>
+                <button id="submit-schwab-code" class="btn" style="background: linear-gradient(135deg, #00c853 0%, #00a844 100%); white-space: nowrap;">Submit Code</button>
             </div>
             <p id="schwab-manual-code-msg" style="margin-top: 8px; font-size: 12px;"></p>
+        </div>
+        
+        <!-- Direct Token Import (WAF Bypass) -->
+        <div id="schwab-token-import-section" class="form-group" style="margin-top: 16px; padding: 16px; background: rgba(255, 170, 0, 0.08); border-radius: 8px; border: 1px dashed rgba(255, 170, 0, 0.4);">
+            <label style="color: #ffaa00; font-weight: 600;">Direct Token Import (Recommended for Replit)</label>
+            <p class="help-text" style="margin: 8px 0 4px 0;">
+                Schwab's firewall blocks token exchange from cloud servers. Use this workaround:
+            </p>
+            <ol class="help-text" style="margin: 4px 0 12px 16px; line-height: 1.8; font-size: 12px;">
+                <li><a href="/schwab/helper-script" download style="color: #00d4ff;">Download the helper script</a> and run it on your PC: <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px;">python schwab_token_helper.py</code></li>
+                <li>Complete Schwab login in your browser, then paste the redirect URL into the script</li>
+                <li>Copy the JSON output from the script and paste it below</li>
+            </ol>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="schwab-token-json" placeholder='Paste JSON: {"access_token":"...","refresh_token":"..."}' style="flex: 1; font-family: monospace; font-size: 11px;">
+                <button id="submit-schwab-tokens" class="btn" style="background: linear-gradient(135deg, #ffaa00 0%, #ff8800 100%); color: #000; font-weight: 600; white-space: nowrap;">Import Tokens</button>
+            </div>
+            <p id="schwab-token-import-msg" style="margin-top: 8px; font-size: 12px;"></p>
         </div>
         
         <div id="schwab-account-info" class="account-info" style="display: none;"></div>
@@ -3084,6 +3102,59 @@ document.getElementById('submit-schwab-code').addEventListener('click', async ()
         }
     } catch (error) {
         msgEl.textContent = '❌ Error: ' + error.message;
+        msgEl.style.color = '#ff5252';
+    }
+});
+
+document.getElementById('submit-schwab-tokens').addEventListener('click', async () => {
+    const jsonInput = document.getElementById('schwab-token-json');
+    const msgEl = document.getElementById('schwab-token-import-msg');
+    const raw = jsonInput.value.trim();
+    
+    if (!raw) {
+        msgEl.textContent = 'Please paste the JSON from the helper script';
+        msgEl.style.color = '#ff5252';
+        return;
+    }
+    
+    let tokens;
+    try {
+        tokens = JSON.parse(raw);
+    } catch (e) {
+        msgEl.textContent = 'Invalid JSON format. Paste the exact output from the helper script.';
+        msgEl.style.color = '#ff5252';
+        return;
+    }
+    
+    if (!tokens.access_token || !tokens.refresh_token) {
+        msgEl.textContent = 'JSON must contain access_token and refresh_token fields';
+        msgEl.style.color = '#ff5252';
+        return;
+    }
+    
+    msgEl.textContent = 'Importing tokens...';
+    msgEl.style.color = '#00d4ff';
+    
+    try {
+        const response = await fetch('/schwab/import-tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tokens)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            msgEl.textContent = result.message;
+            msgEl.style.color = '#00c853';
+            jsonInput.value = '';
+            loadSchwabStatus();
+        } else {
+            msgEl.textContent = (result.error || 'Failed to import tokens');
+            msgEl.style.color = '#ff5252';
+        }
+    } catch (error) {
+        msgEl.textContent = 'Error: ' + error.message;
         msgEl.style.color = '#ff5252';
     }
 });
