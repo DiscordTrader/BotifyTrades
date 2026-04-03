@@ -2837,6 +2837,17 @@ document.getElementById('connect-schwab').addEventListener('click', async () => 
             return;
         }
 
+        if (data.api_blocked) {
+            msg.innerHTML = '⚠️ Schwab\'s firewall is blocking this server. The login popup will open but token exchange will fail. Use the <strong>Direct Token Import</strong> section below instead — download the helper script and run it on your PC.';
+            msg.className = 'message error';
+            msg.style.color = '#ffaa00';
+            connectBtn.disabled = false;
+            connectBtn.textContent = '🔗 Connect with Schwab';
+            const importSection = document.getElementById('schwab-token-import-section');
+            if (importSection) importSection.style.border = '2px solid #ffaa00';
+            return;
+        }
+
         _schwabOAuthPopup = window.open(
             data.auth_url,
             'schwab_oauth',
