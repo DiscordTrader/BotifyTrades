@@ -1415,6 +1415,9 @@ class RiskManager:
         self._interval_extremes = {}
         self._interval_extremes_lock = _threading.Lock()
 
+        self._broker_ops_queues = {}
+        self._broker_ops_workers = {}
+
         self._fill_watch_orders = {}
         self._fill_watch_lock = _threading.Lock()
         self._FILL_WATCH_TIMEOUT = 30
@@ -3675,11 +3678,10 @@ class RiskManager:
                     _tier_hit = getattr(decision, 'tier_hit', None) or getattr(decision, 'tier', None)
                     _broker_manages_pt = _tier_hit and cache.broker_orders_placed and cache.broker_pt_order_id
                     if _broker_manages_pt:
-                        try:
-                            import asyncio
-                            asyncio.ensure_future(self._place_next_pt_bracket(position, cache, channel_settings, _tier_hit))
-                        except Exception as e:
-                            print(f"[RISK] ⚠️ Progressive bracket cascade failed (non-blocking): {e}")
+                        pos_key = position.position_key
+                        _t = _tier_hit
+                        self._enqueue_broker_op(pos_key, f'PLACE_PT{_t+1}', 20,
+                            lambda _p=position, _c=cache, _cs=channel_settings, _th=_t: self._place_next_pt_bracket(_p, _c, _cs, _th))
                         if decision.is_partial:
                             print(f"[RISK] 📋 BROKER-MANAGED PT{_tier_hit}: Suppressing local partial sell — broker PT order handles execution")
                         else:
@@ -3877,16 +3879,6 @@ class RiskManager:
             for i, (old_h, new_h) in enumerate(zip(old_tier_hits, new_tier_hits), 1):
                 if new_h and not old_h:
                     print(f"[RISK] PT{i} HIT for {position.position_key} (pnl={position.pct_change:.1f}%)")
-                    if cache.broker_orders_placed:
-                        try:
-                            import asyncio
-                            loop = asyncio.get_event_loop()
-                            if loop.is_running():
-                                asyncio.ensure_future(self._place_next_pt_bracket(position, cache, channel_settings, i))
-                            else:
-                                loop.run_until_complete(self._place_next_pt_bracket(position, cache, channel_settings, i))
-                        except Exception as e:
-                            print(f"[RISK] ⚠️ Progressive bracket cascade failed (non-blocking): {e}")
         
         persist_updates = {}
         if updated_state.max_pnl_seen > old_max_pnl:
@@ -3930,15 +3922,10 @@ class RiskManager:
                 if cache.dynamic_sl_price is None or action.new_stop_price > cache.dynamic_sl_price:
                     cache.dynamic_sl_price = action.new_stop_price
                     print(f"[RISK] Dynamic SL escalated to ${action.new_stop_price:.2f} ({action.reason})")
-                    try:
-                        import asyncio
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.ensure_future(self._sync_stop_to_broker(position, cache, action.new_stop_price))
-                        else:
-                            loop.run_until_complete(self._sync_stop_to_broker(position, cache, action.new_stop_price))
-                    except Exception as e:
-                        print(f"[RISK] ⚠️ Broker stop sync failed (non-blocking): {e}")
+                    pos_key = position.position_key
+                    _new_sp = action.new_stop_price
+                    self._enqueue_broker_op(pos_key, 'SYNC_STOP', 10,
+                        lambda _p=position, _c=cache, _sp=_new_sp: self._sync_stop_to_broker(_p, _c, _sp))
             
             elif action.action_type == ActionType.ACTIVATE_GIVEBACK:
                 cache.giveback_guard_active = True
@@ -3997,6 +3984,44 @@ class RiskManager:
             cache.ema_last_cross_state = updated_state.ema_cross_state
 
         return None
+
+    def _enqueue_broker_op(self, pos_key: str, op_type: str, priority: int, coro_factory):
+        import asyncio
+        if pos_key not in self._broker_ops_queues:
+            self._broker_ops_queues[pos_key] = asyncio.PriorityQueue()
+
+        queue = self._broker_ops_queues[pos_key]
+        queue.put_nowait((priority, id(coro_factory), op_type, coro_factory))
+
+        existing = self._broker_ops_workers.get(pos_key)
+        if existing is None or existing.done():
+            self._broker_ops_workers[pos_key] = asyncio.ensure_future(self._broker_ops_worker(pos_key))
+
+    async def _broker_ops_worker(self, pos_key: str):
+        import asyncio
+        queue = self._broker_ops_queues.get(pos_key)
+        if not queue:
+            return
+
+        while True:
+            await asyncio.sleep(0)
+            if queue.empty():
+                break
+
+            try:
+                priority, _id, op_type, coro_factory = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+            try:
+                coro = coro_factory()
+                await coro
+            except Exception as e:
+                print(f"[RISK] ⚠️ Broker op '{op_type}' failed for {pos_key}: {e}")
+            finally:
+                queue.task_done()
+
+            await asyncio.sleep(0)
 
     async def _place_initial_broker_bracket(self, position, cache, channel_settings):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
@@ -4136,9 +4161,6 @@ class RiskManager:
                 print(f"[RISK] ⚠️ Alpaca initial bracket error: {e}")
 
     async def _place_next_pt_bracket(self, position, cache, channel_settings, completed_tier: int):
-        if cache.broker_pt_tier >= completed_tier + 1:
-            return
-
         if not hasattr(self, '_broker_stop_locks'):
             self._broker_stop_locks = {}
         pos_key = getattr(position, 'position_key', '') or f"{position.broker}_{position.symbol}"
@@ -4146,13 +4168,14 @@ class RiskManager:
             import asyncio
             self._broker_stop_locks[pos_key] = asyncio.Lock()
         async with self._broker_stop_locks[pos_key]:
+            if cache.broker_pt_tier >= completed_tier + 1:
+                return
+            if cache.closing:
+                print(f"[RISK] ⏭️ Skipping PT cascade — position is closing")
+                return
             await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier)
 
     async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int):
-        if cache.closing:
-            print(f"[RISK] ⏭️ Skipping PT cascade — position is closing")
-            return
-
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         if broker_name not in ('SCHWAB', 'ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE'):
             return
