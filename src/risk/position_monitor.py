@@ -3987,7 +3987,7 @@ class RiskManager:
             return
         
         if decision.is_partial:
-            _tier = getattr(decision, 'tier', None)
+            _tier = getattr(decision, 'tier_hit', None) or getattr(decision, 'tier', None)
             if _tier:
                 _flight_key = f"{pos_key}_T{_tier}"
                 import time as _pf
