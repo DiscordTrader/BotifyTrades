@@ -4175,7 +4175,7 @@ class RiskManager:
                 return
             await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier)
 
-    async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int):
+    async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int, _retry_count: int = 0):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         if broker_name not in ('SCHWAB', 'ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE'):
             return
@@ -4254,8 +4254,16 @@ class RiskManager:
                 else:
                     msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
                     print(f"[RISK] ⚠️ Schwab PT{next_tier} order failed: {msg}")
+                    if _retry_count < 2:
+                        import asyncio
+                        await asyncio.sleep(1)
+                        return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
             except Exception as e:
                 print(f"[RISK] ⚠️ Schwab PT{next_tier} bracket error: {e}")
+                if _retry_count < 2:
+                    import asyncio
+                    await asyncio.sleep(1)
+                    return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
 
         elif broker_name in ('ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE') and self.alpaca_broker:
             try:
@@ -4284,8 +4292,18 @@ class RiskManager:
                         cache.broker_pt_order_id = str(pt_order.id)
                         cache.broker_pt_tier = next_tier
                         print(f"[RISK] ✅ Broker PT{next_tier} placed: Alpaca limit #{pt_order.id} at ${next_pt_price:.2f} (qty={next_qty})")
+                    else:
+                        print(f"[RISK] ⚠️ Alpaca PT{next_tier} order returned no ID")
+                        if _retry_count < 2:
+                            import asyncio
+                            await asyncio.sleep(1)
+                            return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
             except Exception as e:
                 print(f"[RISK] ⚠️ Alpaca PT{next_tier} bracket error: {e}")
+                if _retry_count < 2:
+                    import asyncio
+                    await asyncio.sleep(1)
+                    return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
 
     async def _cancel_broker_bracket_orders(self, position, cache):
         if not hasattr(self, '_broker_stop_locks'):
