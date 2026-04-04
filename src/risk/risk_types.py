@@ -309,6 +309,9 @@ class PositionCacheEntry:
     manual_pt_targets: Optional[list] = None  # PT targets override from follow-up
     
     broker_stop_order_id: Optional[str] = None
+    broker_pt_order_id: Optional[str] = None
+    broker_pt_tier: int = 0
+    broker_orders_placed: bool = False
     
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
@@ -357,7 +360,10 @@ class PositionCacheEntry:
             'ema_last_cross_state': self.ema_last_cross_state,
             'ema_last_eval_candle_ts': self.ema_last_eval_candle_ts,
             'ema_post_entry_candles': self.ema_post_entry_candles,
-            'broker_stop_order_id': self.broker_stop_order_id
+            'broker_stop_order_id': self.broker_stop_order_id,
+            'broker_pt_order_id': self.broker_pt_order_id,
+            'broker_pt_tier': self.broker_pt_tier,
+            'broker_orders_placed': self.broker_orders_placed
         }
     
     @classmethod
