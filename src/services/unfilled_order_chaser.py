@@ -680,26 +680,28 @@ class UnfilledOrderChaser:
                 if order.order_id in self._tracked_orders:
                     del self._tracked_orders[order.order_id]
             if order.position_key and order.is_risk_order:
-                try:
-                    from src.risk.exit_lease_manager import get_exit_lease_manager
-                    get_exit_lease_manager().force_release(order.position_key)
-                    print(f"[ORDER_CHASER] ✓ Released exit lease for {order.position_key}")
-                except Exception:
-                    pass
-                try:
-                    bot = self.broker_manager
-                    rm = None
-                    if bot:
-                        rm = getattr(bot, 'risk_manager', None) or getattr(bot, '_risk_manager', None)
-                    if rm:
-                        rm.cache.record_exit_failure(order.position_key, "Order chaser max attempts exhausted", is_stop_loss=True)
-                        print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
-                        pos_cache = rm.cache.get(order.position_key)
-                        if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == order.order_id:
-                            pos_cache.broker_pt_order_id = None
-                            print(f"[ORDER_CHASER] ✓ Cleared stale broker_pt_order_id for {order.position_key}")
-                except Exception:
-                    pass
+                market_sent = await self._attempt_market_fallback(order)
+                if not market_sent:
+                    try:
+                        from src.risk.exit_lease_manager import get_exit_lease_manager
+                        get_exit_lease_manager().force_release(order.position_key)
+                        print(f"[ORDER_CHASER] ✓ Released exit lease for {order.position_key}")
+                    except Exception:
+                        pass
+                    try:
+                        bot = self.broker_manager
+                        rm = None
+                        if bot:
+                            rm = getattr(bot, 'risk_manager', None) or getattr(bot, '_risk_manager', None)
+                        if rm:
+                            rm.cache.record_exit_failure(order.position_key, "Order chaser max attempts exhausted", is_stop_loss=True)
+                            print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
+                            pos_cache = rm.cache.get(order.position_key)
+                            if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == order.order_id:
+                                pos_cache.broker_pt_order_id = None
+                                print(f"[ORDER_CHASER] ✓ Cleared stale broker_pt_order_id for {order.position_key}")
+                    except Exception:
+                        pass
             elif order.position_key and not order.is_risk_order:
                 print(f"[ORDER_CHASER] ⚠️ Signal STC chase failed for {order.symbol} — no risk lease to release")
             _fail_source = "risk" if order.is_risk_order else "signal"
@@ -1216,6 +1218,75 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] Error placing replacement order: {e}")
             return None
     
+    async def _attempt_market_fallback(self, order: TrackedExitOrder) -> bool:
+        try:
+            broker = self._get_broker(order.broker_id)
+            if not broker:
+                print(f"[ORDER_CHASER] ❌ Market fallback: broker {order.broker_id} not available")
+                return False
+
+            qty = int(order.quantity)
+            if qty <= 0:
+                return False
+
+            print(f"[ORDER_CHASER] 🚨 MARKET FALLBACK: Placing market STC for {order.symbol} qty={qty} after all chase attempts exhausted")
+
+            if order.asset_type == 'option':
+                if not order.call_put:
+                    print(f"[ORDER_CHASER] ❌ Market fallback: call_put is None for {order.symbol}")
+                    return False
+                result = await broker.place_option_order(
+                    symbol=order.symbol,
+                    quantity=qty,
+                    price=0,
+                    action=order.action,
+                    strike=order.strike,
+                    expiry=order.expiry,
+                    option_type=order.call_put
+                )
+            else:
+                result = await broker.place_stock_order(
+                    symbol=order.symbol,
+                    quantity=qty,
+                    price=0,
+                    action=order.action
+                )
+
+            mkt_order_id = self._extract_order_id(result)
+            if mkt_order_id:
+                print(f"[ORDER_CHASER] ✅ Market fallback order placed: {mkt_order_id} for {order.symbol}")
+                self._sync_broker_pt_order_id(order.position_key, order.order_id, mkt_order_id)
+                try:
+                    from gui_app.database import record_order_event
+                    record_order_event('CHASER_MARKET_FALLBACK', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=qty, price=0, order_id=mkt_order_id, reason=f"Market fallback after {order.chase_attempts} chase attempts", severity='warning', source='order_chaser', position_key=order.position_key)
+                except Exception:
+                    pass
+                async with self._lock:
+                    new_tracked = TrackedExitOrder(
+                        order_id=mkt_order_id,
+                        broker_id=order.broker_id,
+                        symbol=order.symbol,
+                        asset_type=order.asset_type,
+                        quantity=qty,
+                        original_price=0,
+                        action=order.action,
+                        placed_at=datetime.now(),
+                        position_key=order.position_key,
+                        strike=order.strike,
+                        expiry=order.expiry,
+                        call_put=order.call_put,
+                        chase_attempts=0,
+                        is_risk_order=order.is_risk_order
+                    )
+                    self._tracked_orders[mkt_order_id] = new_tracked
+                return True
+            else:
+                print(f"[ORDER_CHASER] ❌ Market fallback failed for {order.symbol} — no order ID returned")
+                return False
+        except Exception as e:
+            print(f"[ORDER_CHASER] ❌ Market fallback error for {order.symbol}: {e}")
+            return False
+
     async def _check_and_chase_entry_orders(self):
         """Check all tracked entry orders and chase stale ones"""
         if not self._is_market_active():
