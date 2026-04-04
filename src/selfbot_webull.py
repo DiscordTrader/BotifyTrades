@@ -438,9 +438,13 @@ config_paths = [
 config_found = False
 for config_path in config_paths:
     if config_path.exists():
-        cfg.read(str(config_path))
-        config_found = True
-        break
+        try:
+            cfg.read(str(config_path))
+            config_found = True
+            break
+        except (configparser.MissingSectionHeaderError, configparser.ParsingError) as _cfg_err:
+            print(f"[CONFIG] ⚠️ config.ini at {config_path} is malformed ({_cfg_err.__class__.__name__}) — skipping, will use GUI/database settings")
+            continue
 
 # If no config.ini found, create empty sections with defaults
 # This allows the app to start and be configured via GUI
