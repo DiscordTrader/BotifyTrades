@@ -308,6 +308,8 @@ class PositionCacheEntry:
     manual_sl_pct: Optional[float] = None  # Percentage SL override (e.g., "SL 11%")
     manual_pt_targets: Optional[list] = None  # PT targets override from follow-up
     
+    broker_stop_order_id: Optional[str] = None
+    
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
     
@@ -354,7 +356,8 @@ class PositionCacheEntry:
             'ema_no_trend_count': self.ema_no_trend_count,
             'ema_last_cross_state': self.ema_last_cross_state,
             'ema_last_eval_candle_ts': self.ema_last_eval_candle_ts,
-            'ema_post_entry_candles': self.ema_post_entry_candles
+            'ema_post_entry_candles': self.ema_post_entry_candles,
+            'broker_stop_order_id': self.broker_stop_order_id
         }
     
     @classmethod

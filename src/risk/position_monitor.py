@@ -1412,6 +1412,8 @@ class RiskManager:
         self._last_positions_snapshot = []
         self._tick_eval_count = 0
         self._tick_eval_total_latency_ms = 0.0
+        self._interval_extremes = {}
+        self._interval_extremes_lock = _threading.Lock()
 
         self._fill_watch_orders = {}
         self._fill_watch_lock = _threading.Lock()
@@ -1596,8 +1598,8 @@ class RiskManager:
             if not data or not isinstance(data, dict):
                 return
             symbol = data.get('symbol', '')
+            q = data.get('quote')
             if not symbol:
-                q = data.get('quote')
                 if q:
                     symbol = getattr(q, 'symbol', '') if hasattr(q, 'symbol') else (q.get('symbol', '') if isinstance(q, dict) else '')
             if not symbol:
@@ -1611,6 +1613,26 @@ class RiskManager:
             with self._dirty_lock:
                 if symbol not in self._dirty_symbols or tick_ts < self._dirty_symbols[symbol]:
                     self._dirty_symbols[symbol] = tick_ts
+            tick_price = 0.0
+            if q:
+                if hasattr(q, 'last') and q.last and q.last > 0:
+                    tick_price = float(q.last)
+                elif hasattr(q, 'mark') and q.mark and q.mark > 0:
+                    tick_price = float(q.mark)
+                elif isinstance(q, dict):
+                    tick_price = float(q.get('last', 0) or q.get('mark', 0) or q.get('price', 0) or 0)
+            if not tick_price:
+                tick_price = float(data.get('price', 0) or data.get('last', 0) or 0)
+            if tick_price > 0:
+                with self._interval_extremes_lock:
+                    ext = self._interval_extremes.get(symbol)
+                    if ext is None:
+                        self._interval_extremes[symbol] = {'high': tick_price, 'low': tick_price}
+                    else:
+                        if tick_price > ext['high']:
+                            ext['high'] = tick_price
+                        if tick_price < ext['low']:
+                            ext['low'] = tick_price
             try:
                 self.loop.call_soon_threadsafe(self._price_wake_event.set)
             except RuntimeError:
@@ -1716,12 +1738,25 @@ class RiskManager:
             if not dirty:
                 return
 
+            with self._interval_extremes_lock:
+                interval_snapshot = dict(self._interval_extremes)
+                self._interval_extremes.clear()
+
             dirty_symbol_names = set(dirty.keys())
             earliest_tick = min(dirty.values())
 
             positions = self._last_positions_snapshot
             if not positions:
                 return
+
+            for pos in positions:
+                sym = pos.symbol.upper()
+                ext = interval_snapshot.get(sym)
+                if not ext and hasattr(pos, 'raw_symbol') and pos.raw_symbol:
+                    ext = interval_snapshot.get(pos.raw_symbol.upper())
+                if ext:
+                    pos._interval_high = ext['high']
+                    pos._interval_low = ext['low']
 
             self._update_prices_from_hub(positions)
 
@@ -3735,6 +3770,8 @@ class RiskManager:
             remaining_qty=int(position.quantity)
         )
         state.copy_from_cache(cache)
+        state.interval_high = getattr(position, '_interval_high', None)
+        state.interval_low = getattr(position, '_interval_low', None)
 
         if channel_settings.ema_risk_enabled and position_snapshot:
             try:
@@ -3862,6 +3899,15 @@ class RiskManager:
                 if cache.dynamic_sl_price is None or action.new_stop_price > cache.dynamic_sl_price:
                     cache.dynamic_sl_price = action.new_stop_price
                     print(f"[RISK] Dynamic SL escalated to ${action.new_stop_price:.2f} ({action.reason})")
+                    try:
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.ensure_future(self._sync_stop_to_broker(position, cache, action.new_stop_price))
+                        else:
+                            loop.run_until_complete(self._sync_stop_to_broker(position, cache, action.new_stop_price))
+                    except Exception as e:
+                        print(f"[RISK] ⚠️ Broker stop sync failed (non-blocking): {e}")
             
             elif action.action_type == ActionType.ACTIVATE_GIVEBACK:
                 cache.giveback_guard_active = True
@@ -3920,7 +3966,106 @@ class RiskManager:
             cache.ema_last_cross_state = updated_state.ema_cross_state
 
         return None
-    
+
+    async def _sync_stop_to_broker(self, position, cache, new_stop_price: float):
+        if not hasattr(self, '_broker_stop_locks'):
+            self._broker_stop_locks = {}
+        pos_key = getattr(position, 'position_key', '') or f"{position.broker}_{position.symbol}"
+        if pos_key not in self._broker_stop_locks:
+            import asyncio
+            self._broker_stop_locks[pos_key] = asyncio.Lock()
+
+        async with self._broker_stop_locks[pos_key]:
+            if cache.dynamic_sl_price and new_stop_price < cache.dynamic_sl_price:
+                print(f"[RISK] ⚠️ Broker stop sync skipped: requested ${new_stop_price:.2f} < current dynamic SL ${cache.dynamic_sl_price:.2f}")
+                return
+            await self._sync_stop_to_broker_inner(position, cache, new_stop_price)
+
+    async def _sync_stop_to_broker_inner(self, position, cache, new_stop_price: float):
+        broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
+        symbol = getattr(cache, 'raw_symbol', None) or getattr(position, 'raw_symbol', None) or position.symbol
+        qty = int(position.quantity)
+        asset_type = getattr(position, 'asset', 'stock')
+
+        if broker_name == 'SCHWAB' and self.schwab_broker:
+            try:
+                if not self.schwab_broker.is_authenticated():
+                    print(f"[RISK] ⚠️ Schwab not authenticated, skip broker stop sync")
+                    return
+
+                if cache.broker_stop_order_id:
+                    cancel_result = await self.schwab_broker.cancel_order(cache.broker_stop_order_id)
+                    if cancel_result.get('success'):
+                        print(f"[RISK] 🔄 Cancelled old broker stop #{cache.broker_stop_order_id}")
+                        cache.broker_stop_order_id = None
+                    else:
+                        print(f"[RISK] ⚠️ Cancel old stop failed: {cancel_result.get('message', '')} — skipping new stop to avoid duplicates")
+                        return
+
+                result = await self.schwab_broker.place_stop_order(
+                    symbol=symbol,
+                    quantity=qty,
+                    stop_price=new_stop_price,
+                    side='sell',
+                    asset_type='OPTION' if asset_type.lower() in ('option', 'options') else 'EQUITY',
+                    duration='GOOD_TILL_CANCEL'
+                )
+
+                if result and result.success and result.order_id:
+                    cache.broker_stop_order_id = str(result.order_id)
+                    print(f"[RISK] ✅ Broker stop synced: Schwab stop #{result.order_id} at ${new_stop_price:.2f}")
+                else:
+                    msg = getattr(result, 'message', 'unknown') if result else 'no result'
+                    print(f"[RISK] ⚠️ Schwab stop order failed: {msg}")
+            except Exception as e:
+                print(f"[RISK] ⚠️ Schwab broker stop sync error: {e}")
+
+        elif broker_name in ('ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE') and self.alpaca_broker:
+            try:
+                if not getattr(self.alpaca_broker, 'connected', False):
+                    print(f"[RISK] ⚠️ Alpaca not connected, skip broker stop sync")
+                    return
+
+                if cache.broker_stop_order_id and hasattr(self.alpaca_broker, 'cancel_order'):
+                    try:
+                        await self.alpaca_broker.cancel_order(cache.broker_stop_order_id)
+                        print(f"[RISK] 🔄 Cancelled old Alpaca stop #{cache.broker_stop_order_id}")
+                    except Exception:
+                        pass
+
+                if hasattr(self.alpaca_broker, 'place_stop_order'):
+                    result = await self.alpaca_broker.place_stop_order(
+                        symbol=symbol,
+                        quantity=qty,
+                        stop_price=new_stop_price,
+                        side='sell'
+                    )
+                    if result and getattr(result, 'order_id', None):
+                        cache.broker_stop_order_id = str(result.order_id)
+                        print(f"[RISK] ✅ Broker stop synced: Alpaca stop #{result.order_id} at ${new_stop_price:.2f}")
+                    else:
+                        print(f"[RISK] ⚠️ Alpaca stop order returned no order_id")
+                elif hasattr(self.alpaca_broker, 'trading_client'):
+                    from alpaca.trading.requests import StopOrderRequest
+                    from alpaca.trading.enums import OrderSide, TimeInForce
+                    req = StopOrderRequest(
+                        symbol=symbol,
+                        qty=qty,
+                        side=OrderSide.SELL,
+                        stop_price=new_stop_price,
+                        time_in_force=TimeInForce.GTC
+                    )
+                    order = self.alpaca_broker.trading_client.submit_order(req)
+                    if order and order.id:
+                        cache.broker_stop_order_id = str(order.id)
+                        print(f"[RISK] ✅ Broker stop synced: Alpaca stop #{order.id} at ${new_stop_price:.2f}")
+                    else:
+                        print(f"[RISK] ⚠️ Alpaca stop order returned no ID")
+            except Exception as e:
+                print(f"[RISK] ⚠️ Alpaca broker stop sync error: {e}")
+        else:
+            pass
+
     async def _execute_exit(
         self,
         position: PositionSnapshot,
@@ -4354,16 +4499,32 @@ class RiskManager:
             # OR if sl_order_mode is 'market' for stop loss exits
             use_market = self.cache.should_use_market_order(pos_key)
             
-            # Check if stop loss should use market order immediately
-            # Use risk_trigger for accurate detection (stop_loss, trailing_stop, early_trailing, giveback_guard)
             sl_triggers = ('stop_loss', 'trailing_stop', 'early_trailing', 'giveback_guard', 'dynamic_sl')
             is_sl_type_exit = decision.risk_trigger in sl_triggers
             if is_sl_type_exit and channel_settings and channel_settings.sl_order_mode == 'market':
                 use_market = True
                 print(f"[RISK] 📊 SL Market Order mode enabled - using market order for {decision.risk_trigger}")
-            
-            # Apply SL limit offset for limit orders on SL-type exits
-            # This sets the limit price lower than trigger price to improve fill probability
+
+            _emergency_triggers = ('stop_loss', 'dynamic_sl')
+            if not use_market and is_sl_type_exit and decision.risk_trigger in _emergency_triggers:
+                use_market = True
+                print(f"[RISK] 📊 TIERED URGENCY: {decision.risk_trigger} → auto market order (critical SL exit)")
+
+            if not use_market and is_sl_type_exit and decision.risk_trigger in ('trailing_stop', 'early_trailing', 'giveback_guard'):
+                stc_signal['_aggressive_chase'] = True
+                stc_signal['_chase_max_attempts'] = 1
+                stc_signal['_chase_timeout'] = 1
+                print(f"[RISK] 📊 TIERED URGENCY: {decision.risk_trigger} → aggressive chase (1 attempt, 1s)")
+
+            if not use_market and is_sl_type_exit and cache and cache.entry_price > 0:
+                _raw_pnl = ((position.current_price - cache.entry_price) / cache.entry_price) * 100
+                if _raw_pnl < 0:
+                    _loss_pct = abs(_raw_pnl)
+                    _configured_sl = channel_settings.stop_loss_pct if channel_settings and channel_settings.stop_loss_pct > 0 else 15.0
+                    if _loss_pct >= _configured_sl * 2:
+                        use_market = True
+                        print(f"[RISK] 📊 EMERGENCY OVERRIDE: loss {_loss_pct:.1f}% >= 2x SL {_configured_sl}% → immediate market order")
+
             if is_sl_type_exit and channel_settings and channel_settings.sl_order_mode == 'limit' and not use_market:
                 sl_offset = channel_settings.sl_limit_offset if channel_settings.sl_limit_offset is not None else 0.03
                 if sl_offset > 0:

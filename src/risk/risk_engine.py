@@ -100,6 +100,9 @@ class TradeState:
     
     last_evaluated_price: Optional[float] = None
 
+    interval_high: Optional[float] = None
+    interval_low: Optional[float] = None
+
     # EMA Risk state
     ema_value: Optional[float] = None
     ema_cross_state: str = 'seeding'
@@ -264,26 +267,38 @@ def evaluate_exit_actions(
     
     ema_candle_ts = state.ema_last_candle.get('timestamp', 0) if state.ema_last_candle else 0
     has_new_ema_candle = (ema_candle_ts > 0 and ema_candle_ts != state.ema_last_eval_candle_ts)
-    if state.last_evaluated_price == state.current_price and not has_new_ema_candle:
+    has_interval_extremes = (state.interval_high is not None or state.interval_low is not None)
+    if state.last_evaluated_price == state.current_price and not has_new_ema_candle and not has_interval_extremes:
         return actions, state
     
     state.last_evaluated_price = state.current_price
     
-    pnl_pct = state.pnl_pct
-    
+    if state.interval_high and state.interval_high > state.highest_price:
+        state.highest_price = state.interval_high
     if state.current_price > state.highest_price:
         state.highest_price = state.current_price
-    
+
+    effective_low = state.current_price
+    if state.interval_low and state.interval_low > 0 and state.interval_low < effective_low:
+        effective_low = state.interval_low
+
+    pnl_pct = state.pnl_pct
+
+    interval_high_pnl = ((state.interval_high - state.entry_price) / state.entry_price * 100) if (state.interval_high and state.entry_price > 0) else pnl_pct
+    if interval_high_pnl > state.max_pnl_seen:
+        state.max_pnl_seen = interval_high_pnl
     if pnl_pct > state.max_pnl_seen:
         state.max_pnl_seen = pnl_pct
     
     if verbose:
         print(f"[RISK ENGINE] Evaluating: price=${state.current_price:.2f}, pnl={pnl_pct:.1f}%, max_pnl={state.max_pnl_seen:.1f}%")
     
-    if config.stop_loss_pct > 0 and pnl_pct <= -config.stop_loss_pct:
+    low_pnl_pct = ((effective_low - state.entry_price) / state.entry_price * 100) if state.entry_price > 0 else pnl_pct
+    if config.stop_loss_pct > 0 and (pnl_pct <= -config.stop_loss_pct or low_pnl_pct <= -config.stop_loss_pct):
+        _sl_pnl = min(pnl_pct, low_pnl_pct)
         actions.append(RiskAction(
             action_type=ActionType.SELL_ALL,
-            reason=f"Hard SL hit ({pnl_pct:.1f}% <= -{config.stop_loss_pct}%)",
+            reason=f"Hard SL hit ({_sl_pnl:.1f}% <= -{config.stop_loss_pct}%)",
             qty=state.remaining_qty,
             priority=1
         ))
@@ -303,10 +318,10 @@ def evaluate_exit_actions(
                     priority=2
                 ))
             
-            if state.current_price <= state.dynamic_sl_price:
+            if effective_low <= state.dynamic_sl_price:
                 actions.append(RiskAction(
                     action_type=ActionType.SELL_ALL,
-                    reason=f"Dynamic SL triggered (${state.current_price:.2f} <= ${state.dynamic_sl_price:.2f})",
+                    reason=f"Dynamic SL triggered (${effective_low:.2f} <= ${state.dynamic_sl_price:.2f})",
                     qty=state.remaining_qty,
                     priority=2
                 ))
@@ -458,7 +473,7 @@ def evaluate_exit_actions(
                 ))
         else:
             # Check if early stop hit
-            if state.early_stop_price and state.current_price <= state.early_stop_price:
+            if state.early_stop_price and effective_low <= state.early_stop_price:
                 steps_desc = f"+{state.early_steps_locked * step_pct:.1f}%" if state.early_steps_locked > 0 else "breakeven"
                 actions.append(RiskAction(
                     action_type=ActionType.SELL_ALL,
@@ -543,10 +558,10 @@ def evaluate_exit_actions(
                     priority=5
                 ))
             
-            if state.current_price <= state.trailing_stop_price:
+            if effective_low <= state.trailing_stop_price:
                 actions.append(RiskAction(
                     action_type=ActionType.SELL_ALL,
-                    reason=f"Trailing stop hit (${state.current_price:.2f} <= ${state.trailing_stop_price:.2f})",
+                    reason=f"Trailing stop hit (${effective_low:.2f} <= ${state.trailing_stop_price:.2f})",
                     qty=state.remaining_qty,
                     priority=5
                 ))
