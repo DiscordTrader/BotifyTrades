@@ -48,3 +48,9 @@ id = "DU_S-TEQ2DJM4SyIJaqec"
 uri = "file://.local/architecture_review_improvements.md"
 type = "text"
 title = "Risk Architecture Review: Current vs Improved (Detailed Breakdown)"
+
+[[outputs]]
+id = "n2UPbUA4qEQxPhgEMCxdd"
+uri = "file://.local/COCP_SL_gap_investigation.md"
+type = "text"
+title = "COCP SL Gap Investigation: -10% SL triggered at -13.37%"
