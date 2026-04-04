@@ -680,7 +680,12 @@ class UnfilledOrderChaser:
                 if order.order_id in self._tracked_orders:
                     del self._tracked_orders[order.order_id]
             if order.position_key and order.is_risk_order:
-                market_sent = await self._attempt_market_fallback(order)
+                already_market = (order.original_price is not None and float(order.original_price) == 0)
+                if already_market:
+                    print(f"[ORDER_CHASER] ⚠️ Market order already placed for {order.symbol} — skipping duplicate market fallback")
+                    market_sent = False
+                else:
+                    market_sent = await self._attempt_market_fallback(order)
                 if not market_sent:
                     try:
                         from src.risk.exit_lease_manager import get_exit_lease_manager
@@ -812,13 +817,19 @@ class UnfilledOrderChaser:
                 await self.mark_filled(order.order_id)
                 return
 
-            mid_price = _to_price(await self._get_mid_price(broker, order))
-            if not mid_price or mid_price <= 0:
+            chase_price = await self._get_mid_price(broker, order)
+            if chase_price is None:
                 print(f"[ORDER_CHASER] ⚠️ Could not get exit price for {order.symbol} — keeping existing order alive")
                 order.status = OrderChaseStatus.PENDING
                 return
-            
-            print(f"[ORDER_CHASER]   Exit Price (bid): ${mid_price:.2f}")
+
+            is_market = (chase_price == 0)
+            mid_price = chase_price
+
+            if is_market:
+                print(f"[ORDER_CHASER]   Strategy: MARKET ORDER (attempt {order.chase_attempts})")
+            else:
+                print(f"[ORDER_CHASER]   Exit Price: ${mid_price:.2f} (attempt {order.chase_attempts})")
 
             cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
             if not cancel_ok:
@@ -831,16 +842,20 @@ class UnfilledOrderChaser:
             await asyncio.sleep(0.5)
             
             replace_qty = remaining_qty
-            new_order_id = await self._place_replacement_order(broker, order, mid_price, quantity_override=replace_qty)
+            if is_market:
+                new_order_id = await self._place_market_replacement(broker, order, quantity_override=replace_qty)
+            else:
+                new_order_id = await self._place_replacement_order(broker, order, mid_price, quantity_override=replace_qty)
             
             if new_order_id:
-                print(f"[ORDER_CHASER] ✓ Placed replacement order: {new_order_id} @ ${mid_price:.2f} qty={replace_qty}")
+                _price_str = "MKT" if is_market else f"${mid_price:.2f}"
+                print(f"[ORDER_CHASER] ✓ Placed replacement order: {new_order_id} @ {_price_str} qty={replace_qty}")
                 order.replacement_order_id = new_order_id
                 order.status = OrderChaseStatus.REPLACED
                 try:
                     from gui_app.database import record_order_event
                     _orig_p = f"${order.original_price:.2f}" if order.original_price is not None else "MKT"
-                    record_order_event('CHASER_REPLACED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=new_order_id, reason=f"Stale order replaced: {_orig_p} → ${mid_price:.2f} (attempt {order.chase_attempts}, qty {replace_qty}/{int(order.quantity)})", severity='warning', source='order_chaser', position_key=order.position_key)
+                    record_order_event('CHASER_REPLACED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=replace_qty, price=mid_price, order_id=new_order_id, reason=f"Stale order replaced: {_orig_p} → {_price_str} (attempt {order.chase_attempts}, qty {replace_qty}/{int(order.quantity)})", severity='warning', source='order_chaser', position_key=order.position_key)
                 except Exception:
                     pass
                 
@@ -863,16 +878,20 @@ class UnfilledOrderChaser:
                         strike=order.strike,
                         expiry=order.expiry,
                         call_put=order.call_put,
-                        chase_attempts=order.chase_attempts,
+                        chase_attempts=self.max_chase_attempts if is_market else order.chase_attempts,
                         is_risk_order=order.is_risk_order
                     )
                     self._tracked_orders[new_order_id] = new_tracked
             else:
-                print(f"[ORDER_CHASER] ❌ Failed to place replacement exit order — immediate retry at same price")
+                _retry_price_str = "MKT" if is_market else f"${mid_price:.2f}"
+                print(f"[ORDER_CHASER] ❌ Failed to place replacement exit order — immediate retry at {_retry_price_str}")
                 await asyncio.sleep(0.5)
-                retry_order_id = await self._place_replacement_order(broker, order, mid_price, quantity_override=replace_qty)
+                if is_market:
+                    retry_order_id = await self._place_market_replacement(broker, order, quantity_override=replace_qty)
+                else:
+                    retry_order_id = await self._place_replacement_order(broker, order, mid_price, quantity_override=replace_qty)
                 if retry_order_id:
-                    print(f"[ORDER_CHASER] ✓ Retry succeeded: {retry_order_id} @ ${mid_price:.2f}")
+                    print(f"[ORDER_CHASER] ✓ Retry succeeded: {retry_order_id} @ {_retry_price_str}")
                     order.replacement_order_id = retry_order_id
                     order.status = OrderChaseStatus.REPLACED
                     self._sync_broker_pt_order_id(order.position_key, order.order_id, retry_order_id)
@@ -892,7 +911,7 @@ class UnfilledOrderChaser:
                             strike=order.strike,
                             expiry=order.expiry,
                             call_put=order.call_put,
-                            chase_attempts=order.chase_attempts,
+                            chase_attempts=self.max_chase_attempts if is_market else order.chase_attempts,
                             is_risk_order=order.is_risk_order
                         )
                         self._tracked_orders[retry_order_id] = new_tracked
@@ -1088,81 +1107,95 @@ class UnfilledOrderChaser:
             pass
         return None
 
-    async def _get_mid_price(self, broker, order: TrackedExitOrder) -> Optional[float]:
-        """Get exit price for STC orders — uses BID for fast fills.
-        
-        Exit orders are sells: hitting the bid fills instantly.
-        Streaming hubs are checked first (zero API cost), then REST fallback.
-        """
+    async def _get_exit_bid_ask(self, broker, order: TrackedExitOrder) -> dict:
+        result = {'bid': None, 'ask': None, 'last': None}
         try:
             if order.asset_type == 'option':
                 if not (order.strike and order.expiry and order.call_put):
-                    print(f"[ORDER_CHASER] ⚠️ Exit option order missing fields: strike={order.strike}, expiry={order.expiry}, call_put={order.call_put} — cannot get option price")
-                    return None
+                    return result
                 hub_data = self._check_streaming_hubs_option(order.symbol, order.strike, order.expiry, order.call_put)
                 if hub_data:
-                    bid = _to_price(hub_data.get('bid')) or 0
-                    ask = _to_price(hub_data.get('ask')) or 0
-                    last = _to_price(hub_data.get('last')) or 0
-                    if bid > 0:
-                        print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}, last ${last:.2f}) — fills instantly")
-                        return bid
-                    elif last > 0:
-                        return last
+                    result['bid'] = _to_price(hub_data.get('bid')) or None
+                    result['ask'] = _to_price(hub_data.get('ask')) or None
+                    result['last'] = _to_price(hub_data.get('last')) or None
+                    if result['bid'] and result['bid'] > 0:
+                        return result
                 quote = await self._safe_get_option_quote(broker, order.symbol, order.strike, order.expiry, order.call_put)
                 if quote:
-                    bid = _to_price(quote.get('bid')) or 0
-                    ask = _to_price(quote.get('ask')) or 0
-                    if bid > 0:
-                        print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} (ask ${ask:.2f}) via REST — fills instantly")
-                        return bid
-                    last = _to_price(quote.get('last'))
-                    if last and last > 0:
-                        return last
-                return None
+                    result['bid'] = _to_price(quote.get('bid')) or result['bid']
+                    result['ask'] = _to_price(quote.get('ask')) or result['ask']
+                    result['last'] = _to_price(quote.get('last')) or result['last']
             else:
                 hub_data = self._check_streaming_hubs_stock(order.symbol)
                 if hub_data:
-                    bid = _to_price(hub_data.get('bid')) or 0
-                    last = _to_price(hub_data.get('last')) or 0
-                    if bid > 0:
-                        print(f"[ORDER_CHASER] 💰 Exit price: BID ${bid:.2f} — fills instantly")
-                        return bid
-                    elif last > 0:
-                        return last
+                    result['bid'] = _to_price(hub_data.get('bid')) or None
+                    result['ask'] = _to_price(hub_data.get('ask')) or None
+                    result['last'] = _to_price(hub_data.get('last')) or None
+                    if result['bid'] and result['bid'] > 0:
+                        return result
 
+                quote_data = None
                 if hasattr(broker, 'get_quote_with_bid_ask'):
                     method = broker.get_quote_with_bid_ask
-                    result = method(order.symbol)
-                    if inspect.iscoroutine(result):
-                        quote = await result
+                    r = method(order.symbol)
+                    if inspect.iscoroutine(r):
+                        quote_data = await r
                     else:
-                        quote = result
-                    if quote and isinstance(quote, dict):
-                        bid = _to_price(quote.get('bid'))
-                        if bid and bid > 0:
-                            return bid
-                        return _to_price(quote.get('last')) or _to_price(quote.get('mid'))
-                
-                if hasattr(broker, 'get_quote'):
+                        quote_data = r
+                elif hasattr(broker, 'get_quote'):
                     method = broker.get_quote
-                    result = method(order.symbol)
-                    if inspect.iscoroutine(result):
-                        price = await result
+                    r = method(order.symbol)
+                    if inspect.iscoroutine(r):
+                        quote_data = await r
                     else:
-                        price = result
-                    if isinstance(price, dict):
-                        bid_val = _to_price(price.get('bid'))
-                        if bid_val and bid_val > 0:
-                            return bid_val
-                        price = (price.get('last') or
-                                 price.get('price') or price.get('latestPrice'))
-                    return _to_price(price)
-            
-            return None
+                        quote_data = r
+
+                if quote_data and isinstance(quote_data, dict):
+                    result['bid'] = _to_price(quote_data.get('bid')) or result['bid']
+                    result['ask'] = _to_price(quote_data.get('ask')) or result['ask']
+                    result['last'] = _to_price(quote_data.get('last') or quote_data.get('price') or quote_data.get('latestPrice')) or result['last']
+                elif quote_data is not None:
+                    scalar = _to_price(quote_data)
+                    if scalar and scalar > 0:
+                        result['last'] = scalar
         except Exception as e:
-            print(f"[ORDER_CHASER] Error getting exit price: {e}")
+            print(f"[ORDER_CHASER] Error getting bid/ask: {e}")
+        return result
+
+    def _calc_chase_price(self, chase_attempt: int, bid: float, ask: float, last: float) -> tuple:
+        if chase_attempt <= 1:
+            if bid and bid > 0 and ask and ask > 0:
+                mid = round((bid + ask) / 2, 2)
+                return mid, 'MID'
+            elif last and last > 0:
+                return last, 'LAST'
+            elif bid and bid > 0:
+                return bid, 'BID'
+            return None, None
+        elif chase_attempt == 2:
+            if bid and bid > 0:
+                return bid, 'BID'
+            elif last and last > 0:
+                return last, 'LAST'
+            return None, None
+        else:
+            return 0, 'MARKET'
+
+    async def _get_mid_price(self, broker, order: TrackedExitOrder) -> Optional[float]:
+        ba = await self._get_exit_bid_ask(broker, order)
+        bid = ba.get('bid') or 0
+        ask = ba.get('ask') or 0
+        last = ba.get('last') or 0
+
+        price, label = self._calc_chase_price(order.chase_attempts, bid, ask, last)
+        if price is None:
+            print(f"[ORDER_CHASER] ⚠️ No price available for {order.symbol}")
             return None
+        if label == 'MARKET':
+            print(f"[ORDER_CHASER] 🚨 Chase attempt {order.chase_attempts}: MARKET ORDER for {order.symbol}")
+            return 0
+        print(f"[ORDER_CHASER] 💰 Chase attempt {order.chase_attempts}: {label} ${price:.2f} for {order.symbol} (bid=${bid:.2f}, ask=${ask:.2f})")
+        return price
     
     def _extract_order_id(self, result) -> Optional[str]:
         if not result:
@@ -1218,6 +1251,41 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] Error placing replacement order: {e}")
             return None
     
+    async def _place_market_replacement(
+        self,
+        broker,
+        order: TrackedExitOrder,
+        quantity_override: Optional[int] = None
+    ) -> Optional[str]:
+        try:
+            qty = quantity_override if quantity_override is not None else int(order.quantity)
+            if qty <= 0:
+                return None
+            if order.asset_type == 'option':
+                if not order.call_put:
+                    print(f"[ORDER_CHASER] ❌ Cannot place market exit — call_put is None for {order.symbol}")
+                    return None
+                result = await broker.place_option_order(
+                    symbol=order.symbol,
+                    quantity=qty,
+                    price=0,
+                    action=order.action,
+                    strike=order.strike,
+                    expiry=order.expiry,
+                    option_type=order.call_put
+                )
+            else:
+                result = await broker.place_stock_order(
+                    symbol=order.symbol,
+                    quantity=qty,
+                    price=0,
+                    action=order.action
+                )
+            return self._extract_order_id(result)
+        except Exception as e:
+            print(f"[ORDER_CHASER] Error placing market replacement: {e}")
+            return None
+
     async def _attempt_market_fallback(self, order: TrackedExitOrder) -> bool:
         try:
             broker = self._get_broker(order.broker_id)
