@@ -4065,128 +4065,135 @@ class RiskManager:
             cache.broker_orders_placed = True
             return
 
-        qty = int(position.quantity)
-        symbol = getattr(cache, 'raw_symbol', None) or getattr(position, 'raw_symbol', None) or position.symbol
-        asset_type = getattr(position, 'asset', 'stock')
-        is_option = asset_type.lower() in ('option', 'options')
+        pos_key = cache.position_key if hasattr(cache, 'position_key') else f"{position.symbol}_{position.broker}"
+        if not hasattr(self, '_broker_stop_locks'):
+            self._broker_stop_locks = {}
+        if pos_key not in self._broker_stop_locks:
+            import asyncio as _aio
+            self._broker_stop_locks[pos_key] = _aio.Lock()
+        async with self._broker_stop_locks[pos_key]:
+            qty = int(position.quantity)
+            symbol = getattr(cache, 'raw_symbol', None) or getattr(position, 'raw_symbol', None) or position.symbol
+            asset_type = getattr(position, 'asset', 'stock')
+            is_option = asset_type.lower() in ('option', 'options')
 
-        sl_price = round(entry_price * (1 - sl_pct / 100), 4) if sl_pct > 0 else None
-        pt1_price = round(entry_price * (1 + pt1_pct / 100), 4) if pt1_pct > 0 else None
+            sl_price = round(entry_price * (1 - sl_pct / 100), 4) if sl_pct > 0 else None
+            pt1_price = round(entry_price * (1 + pt1_pct / 100), 4) if pt1_pct > 0 else None
 
-        from src.risk.risk_engine import calculate_auto_tier_quantities
-        enabled_tiers = []
-        for tier, attr in [(1, 'profit_target_1_pct'), (2, 'profit_target_2_pct'),
-                           (3, 'profit_target_3_pct'), (4, 'profit_target_4_pct')]:
-            pct = getattr(channel_settings, attr, 0) or 0
-            if pct > 0:
-                enabled_tiers.append(tier)
+            from src.risk.risk_engine import calculate_auto_tier_quantities
+            enabled_tiers = []
+            for tier, attr in [(1, 'profit_target_1_pct'), (2, 'profit_target_2_pct'),
+                               (3, 'profit_target_3_pct'), (4, 'profit_target_4_pct')]:
+                pct = getattr(channel_settings, attr, 0) or 0
+                if pct > 0:
+                    enabled_tiers.append(tier)
 
-        leave_runner = channel_settings.leave_runner_pct if channel_settings.leave_runner_enabled else 0
-        escalation_only = getattr(channel_settings, 'escalation_only_mode', False)
-        tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
-        pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
+            leave_runner = channel_settings.leave_runner_pct if channel_settings.leave_runner_enabled else 0
+            escalation_only = getattr(channel_settings, 'escalation_only_mode', False)
+            tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
+            pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
 
-        _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
-        _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
-        print(f"[RISK] 📋 PROGRESSIVE BRACKET: {position.symbol} entry=${entry_price:.2f} "
-              f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty})")
+            _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
+            _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
+            print(f"[RISK] 📋 PROGRESSIVE BRACKET: {position.symbol} entry=${entry_price:.2f} "
+                  f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty})")
 
-        if broker_name == 'SCHWAB' and self.schwab_broker:
-            try:
-                if not self.schwab_broker.is_authenticated():
-                    print(f"[RISK] ⚠️ Schwab not authenticated, skip initial bracket")
-                    return
+            if broker_name == 'SCHWAB' and self.schwab_broker:
+                try:
+                    if not self.schwab_broker.is_authenticated():
+                        print(f"[RISK] ⚠️ Schwab not authenticated, skip initial bracket")
+                        return
 
-                _asset_type = 'OPTION' if is_option else 'EQUITY'
-
-                if sl_price and sl_price > 0:
-                    sl_result = await self.schwab_broker.place_stop_order(
-                        symbol=symbol,
-                        quantity=qty,
-                        stop_price=sl_price,
-                        side='sell_to_close' if is_option else 'sell',
-                        asset_type=_asset_type,
-                        duration='GOOD_TILL_CANCEL'
-                    )
-                    if sl_result and sl_result.success and sl_result.order_id:
-                        cache.broker_stop_order_id = str(sl_result.order_id)
-                        print(f"[RISK] ✅ Broker SL placed: Schwab stop #{sl_result.order_id} at ${sl_price:.2f} (full qty={qty})")
-                    else:
-                        msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
-                        print(f"[RISK] ⚠️ Schwab SL order failed: {msg}")
-
-                if pt1_price and pt1_price > 0 and pt1_qty > 0:
-                    pt_result = await self.schwab_broker.place_option_order(
-                        symbol=position.symbol,
-                        strike=position.strike,
-                        expiry=position.expiry,
-                        option_type=position.direction or 'C',
-                        action='STC',
-                        quantity=pt1_qty,
-                        price=pt1_price
-                    ) if is_option else await self.schwab_broker.place_stock_order(
-                        symbol=symbol,
-                        action='STC',
-                        quantity=pt1_qty,
-                        price=pt1_price
-                    )
-                    if pt_result and pt_result.success and pt_result.order_id:
-                        cache.broker_pt_order_id = str(pt_result.order_id)
-                        cache.broker_pt_tier = 1
-                        print(f"[RISK] ✅ Broker PT1 placed: Schwab limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
-                        await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
-                    else:
-                        msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
-                        print(f"[RISK] ⚠️ Schwab PT1 order failed: {msg}")
-
-                if cache.broker_stop_order_id or cache.broker_pt_order_id:
-                    cache.broker_orders_placed = True
-
-            except Exception as e:
-                print(f"[RISK] ⚠️ Schwab initial bracket error: {e}")
-
-        elif broker_name in ('ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE') and self.alpaca_broker:
-            try:
-                if not getattr(self.alpaca_broker, 'connected', False):
-                    print(f"[RISK] ⚠️ Alpaca not connected, skip initial bracket")
-                    return
-
-                if hasattr(self.alpaca_broker, 'trading_client'):
-                    from alpaca.trading.requests import StopOrderRequest, LimitOrderRequest
-                    from alpaca.trading.enums import OrderSide, TimeInForce
+                    _asset_type = 'OPTION' if is_option else 'EQUITY'
 
                     if sl_price and sl_price > 0:
-                        sl_req = StopOrderRequest(
+                        sl_result = await self.schwab_broker.place_stop_order(
                             symbol=symbol,
-                            qty=qty,
-                            side=OrderSide.SELL,
+                            quantity=qty,
                             stop_price=sl_price,
-                            time_in_force=TimeInForce.GTC
+                            side='sell_to_close' if is_option else 'sell',
+                            asset_type=_asset_type,
+                            duration='GOOD_TILL_CANCEL'
                         )
-                        sl_order = self.alpaca_broker.trading_client.submit_order(sl_req)
-                        if sl_order and sl_order.id:
-                            cache.broker_stop_order_id = str(sl_order.id)
-                            print(f"[RISK] ✅ Broker SL placed: Alpaca stop #{sl_order.id} at ${sl_price:.2f} (qty={qty})")
+                        if sl_result and sl_result.success and sl_result.order_id:
+                            cache.broker_stop_order_id = str(sl_result.order_id)
+                            print(f"[RISK] ✅ Broker SL placed: Schwab stop #{sl_result.order_id} at ${sl_price:.2f} (full qty={qty})")
+                        else:
+                            msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                            print(f"[RISK] ⚠️ Schwab SL order failed: {msg}")
 
                     if pt1_price and pt1_price > 0 and pt1_qty > 0:
-                        pt_req = LimitOrderRequest(
+                        pt_result = await self.schwab_broker.place_option_order(
+                            symbol=position.symbol,
+                            strike=position.strike,
+                            expiry=position.expiry,
+                            option_type=position.direction or 'C',
+                            action='STC',
+                            quantity=pt1_qty,
+                            price=pt1_price
+                        ) if is_option else await self.schwab_broker.place_stock_order(
                             symbol=symbol,
-                            qty=pt1_qty,
-                            side=OrderSide.SELL,
-                            limit_price=pt1_price,
-                            time_in_force=TimeInForce.GTC
+                            action='STC',
+                            quantity=pt1_qty,
+                            price=pt1_price
                         )
-                        pt_order = self.alpaca_broker.trading_client.submit_order(pt_req)
-                        if pt_order and pt_order.id:
-                            cache.broker_pt_order_id = str(pt_order.id)
+                        if pt_result and pt_result.success and pt_result.order_id:
+                            cache.broker_pt_order_id = str(pt_result.order_id)
                             cache.broker_pt_tier = 1
-                            print(f"[RISK] ✅ Broker PT1 placed: Alpaca limit #{pt_order.id} at ${pt1_price:.2f} (qty={pt1_qty})")
-                            await self._register_pt_with_chaser(str(pt_order.id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                            print(f"[RISK] ✅ Broker PT1 placed: Schwab limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                        else:
+                            msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                            print(f"[RISK] ⚠️ Schwab PT1 order failed: {msg}")
 
                     if cache.broker_stop_order_id or cache.broker_pt_order_id:
                         cache.broker_orders_placed = True
-            except Exception as e:
-                print(f"[RISK] ⚠️ Alpaca initial bracket error: {e}")
+
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Schwab initial bracket error: {e}")
+
+            elif broker_name in ('ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE') and self.alpaca_broker:
+                try:
+                    if not getattr(self.alpaca_broker, 'connected', False):
+                        print(f"[RISK] ⚠️ Alpaca not connected, skip initial bracket")
+                        return
+
+                    if hasattr(self.alpaca_broker, 'trading_client'):
+                        from alpaca.trading.requests import StopOrderRequest, LimitOrderRequest
+                        from alpaca.trading.enums import OrderSide, TimeInForce
+
+                        if sl_price and sl_price > 0:
+                            sl_req = StopOrderRequest(
+                                symbol=symbol,
+                                qty=qty,
+                                side=OrderSide.SELL,
+                                stop_price=sl_price,
+                                time_in_force=TimeInForce.GTC
+                            )
+                            sl_order = self.alpaca_broker.trading_client.submit_order(sl_req)
+                            if sl_order and sl_order.id:
+                                cache.broker_stop_order_id = str(sl_order.id)
+                                print(f"[RISK] ✅ Broker SL placed: Alpaca stop #{sl_order.id} at ${sl_price:.2f} (qty={qty})")
+
+                        if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                            pt_req = LimitOrderRequest(
+                                symbol=symbol,
+                                qty=pt1_qty,
+                                side=OrderSide.SELL,
+                                limit_price=pt1_price,
+                                time_in_force=TimeInForce.GTC
+                            )
+                            pt_order = self.alpaca_broker.trading_client.submit_order(pt_req)
+                            if pt_order and pt_order.id:
+                                cache.broker_pt_order_id = str(pt_order.id)
+                                cache.broker_pt_tier = 1
+                                print(f"[RISK] ✅ Broker PT1 placed: Alpaca limit #{pt_order.id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                                await self._register_pt_with_chaser(str(pt_order.id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+
+                        if cache.broker_stop_order_id or cache.broker_pt_order_id:
+                            cache.broker_orders_placed = True
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Alpaca initial bracket error: {e}")
 
     async def _place_next_pt_bracket(self, position, cache, channel_settings, completed_tier: int):
         if not hasattr(self, '_broker_stop_locks'):
@@ -4786,7 +4793,7 @@ class RiskManager:
                 if not arbiter_result.get('approved'):
                     print(f"[RISK] Exit rejected by arbiter: {arbiter_result.get('reason')}")
                     if not decision.is_partial:
-                        self.cache.clear_closing(pos_key)
+                        self.cache.reset_closing(pos_key)
                         from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE as _OWN_ARB
                         get_exit_lease_manager().release(pos_key, _OWN_ARB)
                     return
@@ -4799,7 +4806,7 @@ class RiskManager:
             stc_signal = self._build_stc_signal(position, decision)
             if stc_signal is None:
                 if not decision.is_partial:
-                    self.cache.clear_closing(pos_key)
+                    self.cache.reset_closing(pos_key)
                     from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE as _OWN
                     get_exit_lease_manager().release(pos_key, _OWN)
                 return

@@ -264,26 +264,24 @@ class AlpacaBroker(BrokerInterface):
         try:
             side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
             
-            if price is not None:
+            if price is not None and price > 0:
                 price = round(price, 4) if price < 1.0 else round(price, 2)
             if stop_price is not None:
                 stop_price = round(stop_price, 4) if stop_price < 1.0 else round(stop_price, 2)
             
-            # Check extended hours setting (only applies to LIMIT orders, not STOP or MARKET)
-            extended_hours = self._get_extended_hours_enabled() if price is not None and stop_price is None else False
+            is_market = (price is None or price <= 0)
             
-            # Create order request
+            extended_hours = self._get_extended_hours_enabled() if not is_market and stop_price is None else False
+            
             if stop_price is not None:
-                # Stop order (for stop loss) - does NOT support extended hours
                 order_data = StopOrderRequest(
                     symbol=symbol,
                     qty=quantity,
                     side=side,
-                    time_in_force=TimeInForce.GTC,  # Good till cancelled for stop orders
+                    time_in_force=TimeInForce.GTC,
                     stop_price=stop_price
                 )
-            elif price is None:
-                # Market order - does NOT support extended hours on Alpaca
+            elif is_market:
                 order_data = MarketOrderRequest(
                     symbol=symbol,
                     qty=quantity,

@@ -1343,7 +1343,7 @@ class UnfilledOrderChaser:
                         strike=order.strike,
                         expiry=order.expiry,
                         call_put=order.call_put,
-                        chase_attempts=0,
+                        chase_attempts=self.max_chase_attempts,
                         is_risk_order=order.is_risk_order
                     )
                     self._tracked_orders[mkt_order_id] = new_tracked
