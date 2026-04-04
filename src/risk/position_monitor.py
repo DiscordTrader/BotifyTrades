@@ -3673,17 +3673,19 @@ class RiskManager:
                 if decision.should_exit:
                     decision.reason = format_tier_reason(decision, channel_settings.channel_name)
                     _tier_hit = getattr(decision, 'tier_hit', None) or getattr(decision, 'tier', None)
-                    if _tier_hit and cache.broker_orders_placed:
+                    _broker_manages_pt = _tier_hit and cache.broker_orders_placed and cache.broker_pt_order_id
+                    if _broker_manages_pt:
                         try:
                             import asyncio
-                            loop = asyncio.get_event_loop()
-                            if loop.is_running():
-                                asyncio.ensure_future(self._place_next_pt_bracket(position, cache, channel_settings, _tier_hit))
-                            else:
-                                loop.run_until_complete(self._place_next_pt_bracket(position, cache, channel_settings, _tier_hit))
+                            asyncio.ensure_future(self._place_next_pt_bracket(position, cache, channel_settings, _tier_hit))
                         except Exception as e:
                             print(f"[RISK] ⚠️ Progressive bracket cascade failed (non-blocking): {e}")
-                    return decision
+                        if decision.is_partial:
+                            print(f"[RISK] 📋 BROKER-MANAGED PT{_tier_hit}: Suppressing local partial sell — broker PT order handles execution")
+                        else:
+                            return decision
+                    else:
+                        return decision
         
         if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled or channel_settings.enable_early_trailing):
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
@@ -4147,6 +4149,10 @@ class RiskManager:
             await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier)
 
     async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int):
+        if cache.closing:
+            print(f"[RISK] ⏭️ Skipping PT cascade — position is closing")
+            return
+
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         if broker_name not in ('SCHWAB', 'ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE'):
             return
@@ -4311,6 +4317,10 @@ class RiskManager:
             await self._sync_stop_to_broker_inner(position, cache, new_stop_price)
 
     async def _sync_stop_to_broker_inner(self, position, cache, new_stop_price: float):
+        if cache.closing:
+            print(f"[RISK] ⏭️ Skipping broker stop sync — position is closing")
+            return
+
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         symbol = getattr(cache, 'raw_symbol', None) or getattr(position, 'raw_symbol', None) or position.symbol
         qty = int(position.quantity)

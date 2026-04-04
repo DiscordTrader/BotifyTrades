@@ -11755,6 +11755,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             )
                                             if success:
                                                 print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type} qty={exit_qty} (remaining={matching_position.remaining_qty})")
+                                                if is_full_exit:
+                                                    try:
+                                                        from src.risk.position_monitor import get_position_monitor
+                                                        _pm = get_position_monitor()
+                                                        if _pm and hasattr(_pm, 'cache'):
+                                                            for _bk in list(_pm.cache.get_all_keys()):
+                                                                if symbol in _bk:
+                                                                    _ce = _pm.cache.get(_bk)
+                                                                    if _ce and _ce.broker_orders_placed and (_ce.broker_stop_order_id or _ce.broker_pt_order_id):
+                                                                        print(f"[SIGNAL_ROUTING] 🧹 Signal STC full exit — cancelling bracket orders for {_bk}")
+                                                                        import asyncio
+                                                                        asyncio.ensure_future(_pm._cancel_broker_bracket_orders(matching_position, _ce))
+                                                    except Exception as _be:
+                                                        print(f"[SIGNAL_ROUTING] ⚠️ Bracket cleanup on STC failed: {_be}")
                                             else:
                                                 print(f"[SIGNAL_ROUTING] ⚠️ STC forward failed for {symbol}")
                                         else:
@@ -15342,7 +15356,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # When signal doesn't include SL/PT but channel has them configured, compute dollar prices
                 # SKIP bracket auto-generation for 'signal' exit mode — exits should only happen via STC signals
                 ch_exit_mode = channel_info.get('exit_strategy_mode', 'signal') if channel_info else 'signal'
-                if channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode != 'signal':
+                if channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode not in ('signal', 'risk'):
                     entry_price = float(stk['price'])
                     
                     if not stk.get('stop_loss_price'):
@@ -15361,6 +15375,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[BRACKET AUTO] ✓ Channel PT1 {ch_pt_pct}% → ${pt_price:.2f} (entry: ${entry_price:.2f})")
                 elif channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode == 'signal':
                     print(f"[BRACKET AUTO] ⏭ Skipped bracket auto-generation — exit_strategy_mode='signal' (exits via STC signals only)")
+                elif channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode == 'risk':
+                    print(f"[BRACKET AUTO] ⏭ Skipped bracket auto-generation — exit_strategy_mode='risk' (progressive brackets placed by risk engine after fill)")
                 
                 stk['_exit_strategy_mode'] = ch_exit_mode
                 
@@ -16153,7 +16169,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 signal['action'] == 'BTO' and
                 (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
                 hasattr(broker_instance, 'place_bracket_order') and
-                _sig_exit_mode != 'signal'
+                _sig_exit_mode not in ('signal', 'risk')
             )
             
             if _sig_exit_mode == 'signal' and (signal.get('stop_loss_price') or signal.get('profit_target_price')):
