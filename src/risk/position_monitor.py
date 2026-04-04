@@ -4023,6 +4023,32 @@ class RiskManager:
 
             await asyncio.sleep(0)
 
+    async def _register_pt_with_chaser(self, order_id: str, broker_name: str, position, cache, qty, price, is_option: bool):
+        try:
+            from src.services.unfilled_order_chaser import get_order_chaser
+            chaser = get_order_chaser()
+            if not chaser:
+                return
+            pos_key = getattr(position, 'position_key', '') or f"{position.broker}_{position.symbol}"
+            asset_type = getattr(position, 'asset', 'stock')
+            await chaser.track_exit_order(
+                order_id=order_id,
+                broker_id=broker_name,
+                symbol=position.symbol,
+                asset_type=asset_type,
+                quantity=qty,
+                price=price,
+                action='STC',
+                position_key=pos_key,
+                strike=getattr(position, 'strike', None),
+                expiry=getattr(position, 'expiry', None),
+                call_put=getattr(position, 'direction', None),
+                is_risk_order=True
+            )
+            print(f"[RISK] 📋 Registered PT order {order_id} with order chaser for {pos_key}")
+        except Exception as e:
+            print(f"[RISK] ⚠️ Could not register PT with chaser: {e}")
+
     async def _place_initial_broker_bracket(self, position, cache, channel_settings):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         if broker_name not in ('SCHWAB', 'ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE'):
@@ -4108,6 +4134,7 @@ class RiskManager:
                         cache.broker_pt_order_id = str(pt_result.order_id)
                         cache.broker_pt_tier = 1
                         print(f"[RISK] ✅ Broker PT1 placed: Schwab limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                        await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
                     else:
                         msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
                         print(f"[RISK] ⚠️ Schwab PT1 order failed: {msg}")
@@ -4154,6 +4181,7 @@ class RiskManager:
                             cache.broker_pt_order_id = str(pt_order.id)
                             cache.broker_pt_tier = 1
                             print(f"[RISK] ✅ Broker PT1 placed: Alpaca limit #{pt_order.id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            await self._register_pt_with_chaser(str(pt_order.id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
 
                     if cache.broker_stop_order_id or cache.broker_pt_order_id:
                         cache.broker_orders_placed = True
@@ -4251,6 +4279,7 @@ class RiskManager:
                     cache.broker_pt_order_id = str(pt_result.order_id)
                     cache.broker_pt_tier = next_tier
                     print(f"[RISK] ✅ Broker PT{next_tier} placed: Schwab limit #{pt_result.order_id} at ${next_pt_price:.2f} (qty={next_qty})")
+                    await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, next_qty, next_pt_price, is_option)
                 else:
                     msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
                     print(f"[RISK] ⚠️ Schwab PT{next_tier} order failed: {msg}")
@@ -4292,6 +4321,7 @@ class RiskManager:
                         cache.broker_pt_order_id = str(pt_order.id)
                         cache.broker_pt_tier = next_tier
                         print(f"[RISK] ✅ Broker PT{next_tier} placed: Alpaca limit #{pt_order.id} at ${next_pt_price:.2f} (qty={next_qty})")
+                        await self._register_pt_with_chaser(str(pt_order.id), broker_name, position, cache, next_qty, next_pt_price, is_option)
                     else:
                         print(f"[RISK] ⚠️ Alpaca PT{next_tier} order returned no ID")
                         if _retry_count < 2:

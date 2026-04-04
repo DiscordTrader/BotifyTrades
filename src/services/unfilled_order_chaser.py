@@ -180,6 +180,20 @@ class UnfilledOrderChaser:
         
         print(f"[ORDER_CHASER] Initialized (timeout={chase_timeout_seconds}s, max_attempts={max_chase_attempts}, cancel_on_fail={cancel_entry_on_max_attempts})")
 
+    def _sync_broker_pt_order_id(self, position_key: str, old_order_id: str, new_order_id: str):
+        try:
+            bot = self.broker_manager
+            rm = None
+            if bot:
+                rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
+            if rm and hasattr(rm, 'cache'):
+                pos_cache = rm.cache.get(position_key)
+                if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == old_order_id:
+                    pos_cache.broker_pt_order_id = new_order_id
+                    print(f"[ORDER_CHASER] ✓ Synced broker_pt_order_id: {old_order_id} → {new_order_id} for {position_key}")
+        except Exception as e:
+            print(f"[ORDER_CHASER] ⚠️ Could not sync broker_pt_order_id: {e}")
+
     def _get_remaining_qty(self, pending_orders: list, order_id: str, original_qty: int) -> int:
         """Extract remaining unfilled quantity from pending order data.
         Returns original_qty if no partial fill info is available (safe default)."""
@@ -680,6 +694,10 @@ class UnfilledOrderChaser:
                     if rm:
                         rm.cache.record_exit_failure(order.position_key, "Order chaser max attempts exhausted", is_stop_loss=True)
                         print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
+                        pos_cache = rm.cache.get(order.position_key)
+                        if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == order.order_id:
+                            pos_cache.broker_pt_order_id = None
+                            print(f"[ORDER_CHASER] ✓ Cleared stale broker_pt_order_id for {order.position_key}")
                 except Exception:
                     pass
             elif order.position_key and not order.is_risk_order:
@@ -765,6 +783,10 @@ class UnfilledOrderChaser:
                             if rm and hasattr(rm, 'cache'):
                                 rm.cache.record_exit_failure(order.position_key, f"Exchange rejected order {order.order_id}", is_stop_loss=True)
                                 print(f"[ORDER_CHASER] ✓ Recorded exit failure for {order.position_key} — risk engine will retry")
+                                pos_cache = rm.cache.get(order.position_key)
+                                if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == order.order_id:
+                                    pos_cache.broker_pt_order_id = None
+                                    print(f"[ORDER_CHASER] ✓ Cleared stale broker_pt_order_id for {order.position_key}")
                         except Exception as e:
                             print(f"[ORDER_CHASER] ⚠️ Could not clear exit lock after rejection: {e}")
                     return
@@ -820,6 +842,8 @@ class UnfilledOrderChaser:
                 except Exception:
                     pass
                 
+                self._sync_broker_pt_order_id(order.position_key, order.order_id, new_order_id)
+
                 async with self._lock:
                     if order.order_id in self._tracked_orders:
                         del self._tracked_orders[order.order_id]
@@ -849,6 +873,7 @@ class UnfilledOrderChaser:
                     print(f"[ORDER_CHASER] ✓ Retry succeeded: {retry_order_id} @ ${mid_price:.2f}")
                     order.replacement_order_id = retry_order_id
                     order.status = OrderChaseStatus.REPLACED
+                    self._sync_broker_pt_order_id(order.position_key, order.order_id, retry_order_id)
                     async with self._lock:
                         if order.order_id in self._tracked_orders:
                             del self._tracked_orders[order.order_id]
