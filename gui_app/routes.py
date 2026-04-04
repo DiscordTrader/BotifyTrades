@@ -6123,14 +6123,26 @@ def register_routes(app):
             _gui_pos_key = None
             try:
                 from src.risk.exit_lease_manager import get_exit_lease_manager
+                import time as _gui_time
                 _rm = getattr(_bot_instance, '_risk_manager', None) or getattr(_bot_instance, 'risk_manager', None)
                 if _rm and hasattr(_rm, 'cache'):
+                    _broker_lower = broker.lower()
+                    _symbol_lower = symbol.lower()
                     for _pk in _rm.cache.positions:
-                        _pc = _rm.cache.get(_pk)
-                        if _pc and symbol in _pk and broker.lower() in _pk.lower():
+                        _pk_lower = _pk.lower()
+                        _pk_parts = _pk_lower.split('_')
+                        _pk_sym = _pk_parts[-1] if len(_pk_parts) >= 2 else ''
+                        _pk_broker = _pk_parts[0] if len(_pk_parts) >= 2 else ''
+                        if _pk_sym == _symbol_lower and _broker_lower.startswith(_pk_broker):
                             _gui_pos_key = _pk
                             break
+                    if not _gui_pos_key:
+                        for _pk in _rm.cache.positions:
+                            if _symbol_lower in _pk.lower() and _broker_lower in _pk.lower():
+                                _gui_pos_key = _pk
+                                break
                 if _gui_pos_key:
+                    print(f"[API] Matched risk cache key: {_gui_pos_key}")
                     _lease_mgr = get_exit_lease_manager()
                     _lease_ok = _lease_mgr.acquire(_gui_pos_key, 'GUI_MANUAL')
                     if not _lease_ok:
@@ -6141,17 +6153,24 @@ def register_routes(app):
                     if _rm and hasattr(_rm, 'cache'):
                         _pc = _rm.cache.get(_gui_pos_key)
                         if _pc:
-                            _pc.closing = True
-                            _pc._closing_since = __import__('time').time()
-                    if _rm and hasattr(_rm, '_cancel_broker_bracket_orders'):
+                            _rm.cache.mark_closing(_gui_pos_key)
+                    if _rm and hasattr(_rm, '_cancel_broker_bracket_orders_inner'):
                         try:
                             import asyncio
-                            _cancel_fut = asyncio.run_coroutine_threadsafe(
-                                _rm._cancel_broker_bracket_orders(_gui_pos_key, _rm.cache.get(_gui_pos_key), broker),
-                                _bot_instance.loop
-                            )
-                            _cancel_fut.result(timeout=5)
-                            print(f"[API] ✓ Cancelled bracket orders for {_gui_pos_key}")
+                            _pc = _rm.cache.get(_gui_pos_key)
+                            if _pc and (getattr(_pc, 'broker_stop_order_id', None) or getattr(_pc, 'broker_pt_order_id', None)):
+                                class _FakePos:
+                                    pass
+                                _fp = _FakePos()
+                                _fp.broker = broker
+                                _fp.symbol = symbol
+                                _fp.position_key = _gui_pos_key
+                                _cancel_fut = asyncio.run_coroutine_threadsafe(
+                                    _rm._cancel_broker_bracket_orders(_fp, _pc),
+                                    _bot_instance.loop
+                                )
+                                _cancel_fut.result(timeout=5)
+                                print(f"[API] ✓ Cancelled bracket orders for {_gui_pos_key}")
                         except Exception as _ce:
                             print(f"[API] ⚠️ Could not cancel bracket orders: {_ce}")
             except Exception as _lease_err:
