@@ -1122,6 +1122,101 @@
             </div>
         </div>
     </div>
+
+    <div class="help-card">
+        <h3>Ticker Filter</h3>
+        <p>Controls which tickers a channel can trade. Found on each channel's settings panel (funnel icon).</p>
+
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Filter Mode</div>
+                <div class="setting-explain"><strong>Off</strong>: Trade all tickers from this channel. <strong>Allow List</strong>: Only trade tickers you specify. <strong>Block List</strong>: Trade everything except tickers you specify.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Ticker List</div>
+                <div class="setting-explain">Comma-separated list of tickers. For options, the <strong>underlying symbol</strong> is matched (e.g., entering "SPY" blocks all SPY options). Case-insensitive.</div>
+            </div>
+        </div>
+
+        <div class="example-box">
+            <div class="ex-title">Example</div>
+            <p>A signal provider is great at SPY and QQQ calls but loses money on individual stocks.</p>
+            <p><strong>Filter Mode:</strong> Allow List &middot; <strong>Tickers:</strong> SPY, QQQ</p>
+            <p>Now only SPY and QQQ signals from this channel will be executed. All other tickers (AAPL, TSLA, etc.) are silently skipped.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Quick Presets</h3>
+        <p>The risk management panel includes 4 one-click presets that pre-fill all risk settings for common trading styles. Click a preset and then customize any individual values before saving.</p>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0;">
+            <div style="padding: 14px; background: rgba(30,41,59,0.5); border-radius: 8px; border: 1px solid var(--help-card-border); text-align: center;">
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px;">Scalp</div>
+                <div style="font-size: 0.78rem; color: var(--help-muted);">SL 15%, PT1 10%, PT2 20%. Early trail 5%/3%. Giveback 30%. Market orders. Risk mode. No runner.</div>
+            </div>
+            <div style="padding: 14px; background: rgba(30,41,59,0.5); border-radius: 8px; border: 1px solid var(--help-card-border); text-align: center;">
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px;">Swing</div>
+                <div style="font-size: 0.78rem; color: var(--help-muted);">SL 25%, PT1-4 at 15/30/50/75%. Trail 15%@30%. Dynamic SL + EMA + Giveback 35%. 25% runner. Hybrid mode.</div>
+            </div>
+            <div style="padding: 14px; background: rgba(30,41,59,0.5); border-radius: 8px; border: 1px solid var(--help-card-border); text-align: center;">
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px;">Momentum</div>
+                <div style="font-size: 0.78rem; color: var(--help-muted);">SL 20%, PT1-4 at 20/40/60/100%. Early trail 8%/5%. Dynamic SL aggressive + escalation only. 30% runner. Risk mode.</div>
+            </div>
+            <div style="padding: 14px; background: rgba(30,41,59,0.5); border-radius: 8px; border: 1px solid var(--help-card-border); text-align: center;">
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--help-text); margin-bottom: 4px;">Trend</div>
+                <div style="font-size: 0.78rem; color: var(--help-muted);">SL 30%, PT1-4 at 25/50/100/150%. Trail 20%@40%. Dynamic SL + EMA (5-period, 5-min). Giveback 40%. 30% runner. Hybrid mode.</div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">Presets are starting points</div>
+            <p>Clicking a preset fills in all the risk fields but does <strong>not</strong> save automatically. Review and adjust the values to match your risk tolerance, then click Save.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Trade Summary</h3>
+        <p>Found in the <strong>Advanced</strong> tab of the risk management panel. When enabled, the bot posts a summary message to the signal's Discord channel whenever a position is closed (STC).</p>
+
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Trade Summary</div>
+                <div class="setting-explain">When ON, posts a formatted P&amp;L summary embed to the Discord channel showing entry/exit price, quantity, profit/loss amount, and percentage. Useful for tracking performance and sharing results.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Trim &amp; Stop Loss Order Types</h3>
+        <p>Controls how the bot places exit orders when profit targets or stop losses trigger. Found in the <strong>Targets &amp; SL</strong> tab of the risk management panel.</p>
+
+        <div class="settings-grid">
+            <div class="setting-row">
+                <div class="setting-name">Trim Order Type</div>
+                <div class="setting-explain"><strong>Market</strong>: Sells immediately at whatever the market price is. Guarantees a fill but may get a slightly worse price. <strong>Limit</strong>: Places the sell at a specific price with an offset you configure.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Trim Limit Offset</div>
+                <div class="setting-explain">When Trim Order Type is Limit, this controls how far below the target price the limit order is placed. Choose <strong>Dollar</strong> (e.g., $0.05 below) or <strong>Percent</strong> (e.g., 2% below). A small offset helps ensure the limit order fills while still getting close to the target price.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Stop Loss Order Type</div>
+                <div class="setting-explain"><strong>Limit</strong>: Places a limit sell at the SL price plus an offset. May not fill in a fast crash. <strong>Market</strong>: Guarantees exit but at whatever price is available. <em>Market is recommended</em> for stop losses to ensure you always get out.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">SL Limit Offset %</div>
+                <div class="setting-explain">When SL Order Type is Limit, the limit price is set this % below the stop loss trigger price. E.g., SL triggers at $9.00 with 3% offset = limit sell at $8.73. Wider offset increases fill probability in fast drops but accepts a worse price.</div>
+            </div>
+        </div>
+
+        <div class="example-box">
+            <div class="ex-title">Example</div>
+            <p>Entry at $10.00, Stop Loss at 10% ($9.00), SL Order Type: Limit, Offset: 3%</p>
+            <p>When price drops to $9.00, the bot places a <strong>limit sell at $8.73</strong> (3% below $9.00). If the price is between $8.73 and $9.00, the order fills. If price crashes below $8.73 instantly, the limit order may not fill.</p>
+            <p style="color: var(--help-warn); font-weight: 600; margin-top: 6px;">For fast-moving options, use Market SL orders to guarantee exits.</p>
+        </div>
+    </div>
 </div>
 
 <!-- ========== SECTION 5: EXECUTION ========== -->
@@ -1310,6 +1405,12 @@
             <p><strong>PT4 (+100% = $20.00)</strong>: Sell remaining 25% &rarr; Sell 2 contracts, keep 2 runners</p>
             <p style="color: var(--help-accent); font-weight: 600; margin-top: 8px;">Result: Locked in profits at each level while keeping "runners" for further upside.</p>
         </div>
+
+        <div class="info-box">
+            <div class="info-title">Custom Trim Quantities</div>
+            <p>By default, the bot auto-calculates how many contracts to sell at each tier (divides evenly). You can override this by specifying exact quantities for P1-P4 Qty. Leave empty for auto-calculation.</p>
+            <p style="margin-top: 6px;"><strong>Example:</strong> 10 contracts with P1 Qty=1, P2 Qty=2, P3 Qty=3, P4 Qty=4 &mdash; sells 1 at PT1, 2 at PT2, 3 at PT3, 4 at PT4. If the total exceeds your position, the bot caps at available quantity.</p>
+        </div>
     </div>
 
     <div class="help-card">
@@ -1383,14 +1484,14 @@
                 <div style="text-align: center; padding: 14px 8px; background: rgba(59, 130, 246, 0.2); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
                     <div style="font-size: 0.8rem; color: var(--help-info); font-weight: 600;">PT3 Hit (+50%)</div>
                     <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 6px 0;">$15.00</div>
-                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $12.50</div>
-                    <div style="font-size: 0.7rem; color: var(--help-success);">+25% profit locked</div>
+                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $11.00</div>
+                    <div style="font-size: 0.7rem; color: var(--help-success);">+10% profit locked</div>
                 </div>
                 <div style="text-align: center; padding: 14px 8px; background: rgba(59, 130, 246, 0.25); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
                     <div style="font-size: 0.8rem; color: var(--help-info); font-weight: 600;">PT4 Hit (+100%)</div>
                     <div style="font-size: 1.1rem; color: var(--help-text); font-weight: 700; margin: 6px 0;">$20.00</div>
-                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $15.00</div>
-                    <div style="font-size: 0.7rem; color: var(--help-success);">+50% profit locked</div>
+                    <div style="font-size: 0.75rem; color: #f59e0b;">SL moves to $11.70</div>
+                    <div style="font-size: 0.7rem; color: var(--help-success);">+17% profit locked</div>
                 </div>
             </div>
         </div>
@@ -1651,15 +1752,15 @@
                     </tr>
                     <tr>
                         <td>PT3 Hit</td>
+                        <td>SL &rarr; Entry + 8%</td>
                         <td>SL &rarr; Entry + 10%</td>
-                        <td>SL &rarr; Entry + 15%</td>
-                        <td>SL &rarr; Entry + 10%</td>
+                        <td>SL &rarr; Entry + 8%</td>
                     </tr>
                     <tr>
                         <td>PT4 Hit</td>
-                        <td>SL &rarr; Entry + 20%</td>
-                        <td>SL &rarr; Entry + 25%</td>
-                        <td>SL &rarr; Entry + 20%</td>
+                        <td>SL &rarr; Entry + 15%</td>
+                        <td>SL &rarr; Entry + 17%</td>
+                        <td>SL &rarr; Entry + 15%</td>
                     </tr>
                 </tbody>
             </table>
@@ -1669,19 +1770,19 @@
             <div style="padding: 16px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 10px;">
                 <div style="font-weight: 700; color: #93c5fd; font-size: 0.9rem; margin-bottom: 8px;">Conservative</div>
                 <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
-                    Keeps stops close to entry until deep profits are reached. Best for <strong>volatile assets</strong> that often retrace before continuing higher. Gives maximum room for the trade to work.
+                    Keeps stops close to entry until deep profits are reached. PT1 moves SL to breakeven, PT2 to +3%, PT3 to +8%, PT4 to +15%. Best for <strong>volatile assets</strong> that often retrace before continuing higher.
                 </div>
             </div>
             <div style="padding: 16px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 10px;">
                 <div style="font-weight: 700; color: #6ee7b7; font-size: 0.9rem; margin-bottom: 8px;">Standard</div>
                 <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
-                    Balanced approach. Locks breakeven at PT1, then escalates with meaningful profit protection at each tier. <strong>Recommended for most traders.</strong>
+                    Balanced approach. PT1 locks breakeven, PT2 moves SL to +5%, PT3 to +10%, PT4 to +17%. <strong>Recommended for most traders.</strong>
                 </div>
             </div>
             <div style="padding: 16px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px;">
                 <div style="font-weight: 700; color: #fca5a5; font-size: 0.9rem; margin-bottom: 8px;">Aggressive</div>
                 <div style="font-size: 0.82rem; color: var(--help-muted); line-height: 1.6;">
-                    Allows a small loss even after PT1 hit (-2% below entry). Gets to breakeven only at PT2. Best for <strong>scalping strategies</strong> where you want the most room for momentum to build.
+                    Allows a small loss even after PT1 hit (-2% below entry). PT2 moves SL to breakeven, PT3 to +8%, PT4 to +15%. Best for <strong>scalping strategies</strong> where you want the most room for momentum to build.
                 </div>
             </div>
         </div>
@@ -1690,8 +1791,8 @@
             <div class="ex-title">Standard Profile Example: Entry at $10.00</div>
             <p><strong>PT1 hits (+10% = $11.00)</strong> &rarr; SL moves from $9.00 to $10.00 (breakeven locked)</p>
             <p><strong>PT2 hits (+25% = $12.50)</strong> &rarr; SL moves up to $10.50 (+5% guaranteed)</p>
-            <p><strong>PT3 hits (+50% = $15.00)</strong> &rarr; SL moves up to $11.50 (+15% guaranteed)</p>
-            <p><strong>Price reverses and drops to $11.50</strong> &rarr; Dynamic SL triggers &rarr; EXIT with +15% profit</p>
+            <p><strong>PT3 hits (+50% = $15.00)</strong> &rarr; SL moves up to $11.00 (+10% guaranteed)</p>
+            <p><strong>Price reverses and drops to $11.00</strong> &rarr; Dynamic SL triggers &rarr; EXIT with +10% profit</p>
             <p style="color: var(--help-accent); margin-top: 8px; font-weight: 600;">Without Dynamic SL, the position might have dropped all the way back to the original $9.00 stop loss = -10% loss.</p>
         </div>
 
@@ -1821,15 +1922,35 @@
             </div>
             <div class="setting-row">
                 <div class="setting-name">EMA Period</div>
-                <div class="setting-explain">Number of candles used to calculate the EMA. Lower = more sensitive (faster exits). Default: 5 candles. Common values: 3 (aggressive), 5 (standard), 9 (conservative).</div>
+                <div class="setting-explain">Number of candles used to calculate the EMA. Lower = more sensitive (faster exits). Default: 5 candles. Options: 3 (Fast), 5 (Standard), 8 (Moderate), 13 (Slow), 21 (Very Slow).</div>
             </div>
             <div class="setting-row">
-                <div class="setting-name">EMA Timeframe</div>
-                <div class="setting-explain">Candle size used for EMA calculation. Options: 1-minute, 5-minute, 15-minute. Smaller timeframes react faster to reversals.</div>
+                <div class="setting-name">Candle Timeframe</div>
+                <div class="setting-explain">Candle size used for EMA calculation. Options: 1-minute, 2-minute, 3-minute, 5-minute. Smaller timeframes react faster to reversals. Default: 5 minutes.</div>
             </div>
             <div class="setting-row">
-                <div class="setting-name">EMA Escalation</div>
+                <div class="setting-name">Buffer %</div>
+                <div class="setting-explain">A small buffer zone around the EMA line. Price must cross the EMA by at least this percentage before an exit is considered. Prevents false triggers from tiny EMA touches. Default: 0.1%. Higher values (e.g., 0.5%) give more room but delay exits.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Exit on Cross</div>
+                <div class="setting-explain">When ON, the bot exits the position (full or partial if Leave Runner is enabled) when price closes a candle below the EMA line (plus buffer). This is the primary EMA exit trigger. When OFF, EMA data is still collected but no exit action is taken.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Stop Escalation</div>
                 <div class="setting-explain">Instead of exiting immediately on an EMA cross, the bot first <strong>tightens the stop loss to near the EMA level</strong> (with a small buffer). Only exits if that tightened stop is then hit. Gives the trade one more chance to recover above the EMA.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">No-Trend Candles</div>
+                <div class="setting-explain">Number of consecutive candles that must close below the EMA before an exit triggers. Default: 3. Higher values require stronger confirmation of trend reversal but delay the exit. Set to 1 for fastest response.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Use Underlying Chart</div>
+                <div class="setting-explain">For <strong>options positions</strong>, uses the underlying stock's price chart (e.g., SPY) instead of the option contract price to calculate the EMA. Recommended ON because stock prices are smoother and more reliable for trend detection than volatile option premiums.</div>
+            </div>
+            <div class="setting-row">
+                <div class="setting-name">Extended Hours</div>
+                <div class="setting-explain">When ON, includes pre-market (4:00 AM) and after-hours (until 8:00 PM) candle data in EMA calculations. When OFF, only regular market hours (9:30 AM - 4:00 PM ET) are used. Enable this if your strategy trades during extended hours.</div>
             </div>
         </div>
 
@@ -1889,7 +2010,7 @@
 
         <div class="example-box">
             <div class="ex-title">When to use Escalation Only</div>
-            <p>Use this when you want to <strong>ride the full position</strong> for maximum profit and only exit when the trend reverses. The escalating stop loss still protects you &mdash; after hitting PT3 with Standard profile, your stop is at +15%, so even in a crash you keep +15% on your entire position.</p>
+            <p>Use this when you want to <strong>ride the full position</strong> for maximum profit and only exit when the trend reverses. The escalating stop loss still protects you &mdash; after hitting PT3 with Standard profile, your stop is at +10%, so even in a crash you keep +10% on your entire position.</p>
         </div>
     </div>
 
@@ -1964,7 +2085,7 @@
                 <div class="es-tl-time">10:22</div>
                 <div class="es-tl-content es-highlight">
                     <div class="es-tl-title">Price $15.00 &mdash; PT3 Hit (+50%)</div>
-                    <div class="es-tl-desc"><strong>Sell 2 contracts</strong> at $15.00. Dynamic SL moves to $11.50 (+15%). Early trail Step 15: stop at $14.50 (+45%). 2 runner contracts remain.</div>
+                    <div class="es-tl-desc"><strong>Sell 2 contracts</strong> at $15.00. Dynamic SL moves to $11.00 (+10%). Early trail Step 15: stop at $14.50 (+45%). 2 runner contracts remain.</div>
                 </div>
             </div>
             <div class="es-tl-item">

@@ -430,9 +430,9 @@ async function loadChannels() {
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Profile:</label>
                                         <select id="risk-dynamic-sl-profile-${channel.id}" style="padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
-                                            <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative (PT1: BE, PT2: +3%, PT3: +10%, PT4: +20%)</option>
-                                            <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
-                                            <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive (PT1: -2%, PT2: BE, PT3: +10%, PT4: +20%)</option>
+                                            <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative (PT1: BE, PT2: +3%, PT3: +8%, PT4: +15%)</option>
+                                            <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard (PT1: BE, PT2: +5%, PT3: +10%, PT4: +17%)</option>
+                                            <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive (PT1: -2%, PT2: BE, PT3: +8%, PT4: +15%)</option>
                                         </select>
                                     </div>
                                     <div style="margin-top: 10px; padding: 10px; background: rgba(255, 100, 100, 0.03); border: 1px solid rgba(255, 100, 100, 0.12); border-radius: 6px;">
