@@ -584,6 +584,21 @@ class PositionCache:
             if closing_since > 0:
                 elapsed = _time.monotonic() - closing_since
                 if elapsed >= self.CLOSING_TIMEOUT_SECONDS:
+                    _has_active_chaser = False
+                    try:
+                        from src.risk.position_monitor import risk_manager_instance
+                        if risk_manager_instance:
+                            _chaser = getattr(risk_manager_instance, '_order_chaser', None)
+                            if _chaser and hasattr(_chaser, '_tracked_orders'):
+                                for _oid, _to in list(_chaser._tracked_orders.items()):
+                                    if getattr(_to, 'position_key', None) == position_key:
+                                        _has_active_chaser = True
+                                        break
+                    except Exception:
+                        pass
+                    if _has_active_chaser:
+                        print(f"[RISK] ⏳ {position_key}: Closing timeout ({elapsed:.0f}s) but chaser still active — keeping closing flag")
+                        return True
                     print(f"[RISK] ⚠️ {position_key}: Position still exists after {elapsed:.0f}s "
                           f"closing — resetting closing flag")
                     entry.reset_closing()

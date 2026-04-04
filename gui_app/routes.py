@@ -6120,6 +6120,43 @@ def register_routes(app):
             
             print(f"[API] Event loop healthy, proceeding with close...", flush=True)
             
+            _gui_pos_key = None
+            try:
+                from src.risk.exit_lease_manager import get_exit_lease_manager
+                _rm = getattr(_bot_instance, '_risk_manager', None) or getattr(_bot_instance, 'risk_manager', None)
+                if _rm and hasattr(_rm, 'cache'):
+                    for _pk in _rm.cache.positions:
+                        _pc = _rm.cache.get(_pk)
+                        if _pc and symbol in _pk and broker.lower() in _pk.lower():
+                            _gui_pos_key = _pk
+                            break
+                if _gui_pos_key:
+                    _lease_mgr = get_exit_lease_manager()
+                    _lease_ok = _lease_mgr.acquire(_gui_pos_key, 'GUI_MANUAL')
+                    if not _lease_ok:
+                        _lease_state = _lease_mgr.get_state(_gui_pos_key)
+                        print(f"[API] ⚠️ Exit lease busy for {_gui_pos_key}: owner={_lease_state.get('owner')} — proceeding with GUI close anyway")
+                    else:
+                        print(f"[API] ✓ Acquired exit lease for {_gui_pos_key}")
+                    if _rm and hasattr(_rm, 'cache'):
+                        _pc = _rm.cache.get(_gui_pos_key)
+                        if _pc:
+                            _pc.closing = True
+                            _pc._closing_since = __import__('time').time()
+                    if _rm and hasattr(_rm, '_cancel_broker_bracket_orders'):
+                        try:
+                            import asyncio
+                            _cancel_fut = asyncio.run_coroutine_threadsafe(
+                                _rm._cancel_broker_bracket_orders(_gui_pos_key, _rm.cache.get(_gui_pos_key), broker),
+                                _bot_instance.loop
+                            )
+                            _cancel_fut.result(timeout=5)
+                            print(f"[API] ✓ Cancelled bracket orders for {_gui_pos_key}")
+                        except Exception as _ce:
+                            print(f"[API] ⚠️ Could not cancel bracket orders: {_ce}")
+            except Exception as _lease_err:
+                print(f"[API] ⚠️ Lease/bracket cleanup skipped: {_lease_err}")
+            
             # ========== ALPACA BROKER CLOSE ==========
             if 'ALPACA' in broker:
                 print(f"[API] Routing to Alpaca broker for close (direct SDK)...")

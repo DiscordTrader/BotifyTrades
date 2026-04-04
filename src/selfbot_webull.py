@@ -19417,8 +19417,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if risk_manager_instance:
                                 if hasattr(risk_manager_instance, 'cache'):
                                     risk_manager_instance.cache.reset_exit_retry_state(signal['_position_key'])
-                                risk_manager_instance.release_exit_marker(signal['_position_key'])
-                                _original_print(f"[RISK-RETRY] ✓ Reset retry state + exit marker for {signal['_position_key']}", flush=True)
+                                _original_print(f"[RISK-RETRY] ✓ Reset retry state for {signal['_position_key']} (exit marker held until fill confirmed)", flush=True)
                         except Exception as reset_err:
                             _original_print(f"[RISK-RETRY] Could not reset state: {reset_err}", flush=True)
                     
