@@ -17394,8 +17394,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[WORKER] ⚠️ {_marker_key} lease transfer failed (owner={_lease_info['owner']}) — skipping", flush=True)
                             self.order_queue.task_done()
                             continue
-                    except Exception:
-                        pass
+                    except Exception as _lease_err:
+                        _original_print(f"[WORKER] ⚠️ Lease check failed for {_marker_key}: {_lease_err} — skipping exit (fail-closed)", flush=True)
+                        self.order_queue.task_done()
+                        continue
                     try:
                         _rm = getattr(self, '_risk_manager', None) or getattr(self, 'risk_manager', None)
                         if _rm and hasattr(_rm, '_exit_executed_lock'):

@@ -1388,10 +1388,10 @@ class RiskManager:
         self._STUCK_PRICE_THRESHOLD = 3
         self._rest_repaired_prices = {}
         self._rest_repair_cycle_keys = {}
-        self._price_unverified = {}
         self._STALENESS_EXIT_BLOCK_THRESHOLD = 10
         self._rest_confirmed_this_cycle = {}
         self._rest_validated_same = {}
+        self._partial_exit_in_flight = {}
         
         self._sync_ready_event = sync_ready_event
         self.cache = PositionCache()
@@ -2148,7 +2148,7 @@ class RiskManager:
             self._update_monitored_symbols([])
             self._rest_validated_same.clear()
             self._rest_confirmed_this_cycle.clear()
-            self._price_unverified.clear()
+            self._partial_exit_in_flight.clear()
             _fetch_ms = (_mc_t3 - _mc_t2) * 1000
             _setup_ms = (_mc_t1 - _mc_t0) * 1000
             self._last_cycle_timing_detail = f" [setup={_setup_ms:.0f}ms fetch={_fetch_ms:.0f}ms pos=0]"
@@ -3514,31 +3514,6 @@ class RiskManager:
         if freshness_result is not None:
             return freshness_result
 
-        _unverified_key = _repair_key if _repair_key in self._price_unverified else (_tracking_key if _tracking_key in self._price_unverified else None)
-        if _unverified_key:
-            import time as _sv
-            session_unv = self._get_market_session()
-            if session_unv in ('regular', 'extended'):
-                unv = self._price_unverified[_unverified_key]
-                unv_age = _sv.time() - unv['since']
-                if unv_age < 30:
-                    if _is_rest_validated_same:
-                        if not unv.get('override_logged'):
-                            print(f"[RISK] ✓ STALENESS OVERRIDE: {position.symbol} price ${position.current_price:.2f} "
-                                  f"REST-confirmed same price — clearing unverified block, allowing evaluation")
-                            unv['override_logged'] = True
-                        del self._price_unverified[_unverified_key]
-                    else:
-                        if not unv.get('logged'):
-                            print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price ${position.current_price:.2f} "
-                                  f"unverified (all sources returned same frozen price) — blocking exits for up to 30s")
-                            unv['logged'] = True
-                        return ExitDecision.no_exit()
-                else:
-                    del self._price_unverified[_unverified_key]
-            else:
-                del self._price_unverified[_unverified_key]
-
         _staleness_is_blocking = False
         _staleness_change_age = 0
         _rest_override_available = _is_rest_confirmed or _is_rest_validated_same
@@ -4011,7 +3986,17 @@ class RiskManager:
                 print(f"[RISK]   Retry {retry_state.get('retry_count')}/5 - wait {cooldown:.0f}s")
             return
         
-        if not decision.is_partial:
+        if decision.is_partial:
+            _tier = getattr(decision, 'tier', None)
+            if _tier:
+                _flight_key = f"{pos_key}_T{_tier}"
+                import time as _pf
+                _flight_ts = self._partial_exit_in_flight.get(_flight_key, 0)
+                if (_pf.time() - _flight_ts) < 30:
+                    print(f"[RISK] Partial exit T{_tier} already in-flight for {pos_key} — skipping duplicate")
+                    return
+                self._partial_exit_in_flight[_flight_key] = _pf.time()
+        else:
             from src.risk.exit_lease_manager import get_exit_lease_manager, OWNER_RISK_ENGINE
             lease_mgr = get_exit_lease_manager()
             tier_label = getattr(decision, 'tier', None)
@@ -5303,8 +5288,6 @@ class RiskManager:
                 tracker['last_price'] = pos.current_price
                 tracker['last_changed'] = now
                 tracker['rest_refreshed'] = 0
-                if key in self._price_unverified:
-                    del self._price_unverified[key]
                 if key in self._rest_validated_same:
                     del self._rest_validated_same[key]
                 continue
@@ -5338,11 +5321,15 @@ class RiskManager:
                 fresh_price = self._try_cross_hub_price(pos, now)
                 source = 'cross-hub'
                 _rest_checked = False
+                _cross_hub_confirmed_same = False
+                _sanity_rejected = False
+                if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) < 0.0001:
+                    _cross_hub_confirmed_same = True
                 if not fresh_price or abs(fresh_price - pos.current_price) < 0.0001:
                     if rest_repairs_this_cycle < _MAX_REST_REPAIRS_PER_CYCLE:
-                        _rest_checked = True
                         tracker['rest_refreshed'] = now
                         rest_price = await self._try_rest_quote(pos)
+                        _rest_checked = rest_price is not None
                         if rest_price and rest_price > 0:
                             fresh_price = rest_price
                             rest_via = getattr(self, '_last_rest_source', None)
@@ -5359,6 +5346,7 @@ class RiskManager:
                                   f"is {rest_deviation*100:.0f}% from entry ${entry:.2f} but streaming "
                                   f"shows ${pos.current_price:.2f} ({streaming_deviation*100:.1f}% dev) — rejecting stale REST price")
                             fresh_price = None
+                            _sanity_rejected = True
                     if fresh_price and fresh_price > 0 and pos.current_price > 0:
                         price_jump = abs(fresh_price - pos.current_price) / pos.current_price
                         if price_jump > 0.30:
@@ -5366,6 +5354,7 @@ class RiskManager:
                                   f"is {price_jump*100:.0f}% jump from streaming ${pos.current_price:.2f} — "
                                   f"rejecting suspicious REST price (session={session})")
                             fresh_price = None
+                            _sanity_rejected = True
 
                 if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) > 0.0001:
                     print(f"[RISK] 🔄 STUCK PRICE FIX ({source}): {pos.broker} {pos.symbol} "
@@ -5379,20 +5368,14 @@ class RiskManager:
                     }
                     self._rest_repair_cycle_keys[key] = now
                     self._rest_confirmed_this_cycle[key] = now
-                    if key in self._price_unverified:
-                        del self._price_unverified[key]
                     if key in self._rest_validated_same:
                         del self._rest_validated_same[key]
-                elif stuck_seconds >= self._STALENESS_EXIT_BLOCK_THRESHOLD and _rest_checked:
+                elif stuck_seconds >= self._STALENESS_EXIT_BLOCK_THRESHOLD and not _sanity_rejected and (_rest_checked or _cross_hub_confirmed_same):
                     import time as _vs
+                    _val_source = 'REST' if _rest_checked else 'cross-hub'
                     self._rest_validated_same[key] = _vs.time()
-                    if key in self._price_unverified:
-                        del self._price_unverified[key]
-                        print(f"[RISK] ✓ REST VALIDATED: {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
-                              f"REST confirmed same price ${pos.current_price:.4f} — clearing unverified, allowing evaluation")
-                    else:
-                        print(f"[RISK] ✓ REST VALIDATED: {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
-                              f"REST confirmed price ${pos.current_price:.4f} is real (same from all sources)")
+                    print(f"[RISK] ✓ PRICE VALIDATED ({_val_source}): {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
+                          f"confirmed price ${pos.current_price:.4f} is real (same from all sources)")
             except Exception as e:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
@@ -5412,9 +5395,9 @@ class RiskManager:
             stale_defer = [k for k in self._price_deferred_once if k not in active_keys]
             for k in stale_defer:
                 del self._price_deferred_once[k]
-        stale_unverified = [k for k in self._price_unverified if k not in active_keys]
-        for k in stale_unverified:
-            del self._price_unverified[k]
+        stale_in_flight = [k for k in self._partial_exit_in_flight if not any(k.startswith(ak) for ak in active_keys)]
+        for k in stale_in_flight:
+            del self._partial_exit_in_flight[k]
         stale_validated = [k for k in self._rest_validated_same if k not in active_keys]
         for k in stale_validated:
             del self._rest_validated_same[k]
@@ -5515,6 +5498,16 @@ class RiskManager:
             keys.append(pos.raw_symbol)
         return keys
 
+    @staticmethod
+    def _is_hub_live(hub):
+        import time as _hl
+        ts = getattr(hub, '_last_quote_ts', 0)
+        if ts <= 0:
+            return False
+        if (_hl.time() - ts) > 120:
+            return False
+        return True
+
     def _try_cross_hub_price(self, pos, now):
         broker_upper = (pos.broker or '').upper()
         is_option = pos.asset == 'option'
@@ -5523,7 +5516,7 @@ class RiskManager:
             try:
                 from src.services.webull_data_hub import get_webull_data_hub
                 wb_hub = get_webull_data_hub()
-                if wb_hub.is_streaming():
+                if wb_hub.is_streaming() and self._is_hub_live(wb_hub):
                     alt_hubs.append(('Webull', wb_hub))
             except Exception:
                 pass
@@ -5531,7 +5524,7 @@ class RiskManager:
             try:
                 from src.services.schwab_data_hub import get_schwab_data_hub
                 sc_hub = get_schwab_data_hub()
-                if sc_hub.is_streaming():
+                if sc_hub.is_streaming() and self._is_hub_live(sc_hub):
                     alt_hubs.append(('Schwab', sc_hub))
             except Exception:
                 pass
@@ -5539,7 +5532,7 @@ class RiskManager:
             try:
                 from src.services.ibkr_data_hub import get_ibkr_data_hub
                 ib_hub = get_ibkr_data_hub()
-                if ib_hub.is_streaming():
+                if ib_hub.is_streaming() and self._is_hub_live(ib_hub):
                     alt_hubs.append(('IBKR', ib_hub))
             except Exception:
                 pass
