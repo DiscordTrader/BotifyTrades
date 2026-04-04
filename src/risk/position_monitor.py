@@ -1390,6 +1390,8 @@ class RiskManager:
         self._rest_repair_cycle_keys = {}
         self._price_unverified = {}
         self._STALENESS_EXIT_BLOCK_THRESHOLD = 10
+        self._rest_confirmed_this_cycle = {}
+        self._rest_validated_same = {}
         
         self._sync_ready_event = sync_ready_event
         self.cache = PositionCache()
@@ -2144,6 +2146,9 @@ class RiskManager:
                 self._empty_pos_logged = True
             self._last_positions_snapshot = []
             self._update_monitored_symbols([])
+            self._rest_validated_same.clear()
+            self._rest_confirmed_this_cycle.clear()
+            self._price_unverified.clear()
             _fetch_ms = (_mc_t3 - _mc_t2) * 1000
             _setup_ms = (_mc_t1 - _mc_t0) * 1000
             self._last_cycle_timing_detail = f" [setup={_setup_ms:.0f}ms fetch={_fetch_ms:.0f}ms pos=0]"
@@ -2154,6 +2159,7 @@ class RiskManager:
             self._check_fill_watch_detected(positions)
 
         self._rest_repair_cycle_keys.clear()
+        self._rest_confirmed_this_cycle.clear()
         self._update_prices_from_hub(positions)
         await self._detect_and_fix_stuck_prices(positions)
         self._last_positions_snapshot = positions
@@ -3499,33 +3505,45 @@ class RiskManager:
         """Evaluate all exit conditions in priority order including Enhanced Risk v2.0."""
         
         _repair_key = f"{position.broker}_{position.symbol}_{position.asset}"
-        _is_repair_cycle = _repair_key in self._rest_repair_cycle_keys
+        _tracking_key = self._pos_tracking_key(position)
+        _is_repair_cycle = _repair_key in self._rest_repair_cycle_keys or _tracking_key in self._rest_repair_cycle_keys
+        _is_rest_confirmed = _repair_key in self._rest_confirmed_this_cycle or _tracking_key in self._rest_confirmed_this_cycle
+        _is_rest_validated_same = _repair_key in self._rest_validated_same or _tracking_key in self._rest_validated_same
 
         freshness_result = self._check_price_freshness(position, cache, channel_settings)
         if freshness_result is not None:
             return freshness_result
 
-        if _repair_key in self._price_unverified:
+        _unverified_key = _repair_key if _repair_key in self._price_unverified else (_tracking_key if _tracking_key in self._price_unverified else None)
+        if _unverified_key:
             import time as _sv
             session_unv = self._get_market_session()
             if session_unv in ('regular', 'extended'):
-                unv = self._price_unverified[_repair_key]
+                unv = self._price_unverified[_unverified_key]
                 unv_age = _sv.time() - unv['since']
                 if unv_age < 30:
-                    if not unv.get('logged'):
-                        print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price ${position.current_price:.2f} "
-                              f"unverified (all sources returned same frozen price) — blocking exits for up to 30s")
-                        unv['logged'] = True
-                    return ExitDecision.no_exit()
+                    if _is_rest_validated_same:
+                        if not unv.get('override_logged'):
+                            print(f"[RISK] ✓ STALENESS OVERRIDE: {position.symbol} price ${position.current_price:.2f} "
+                                  f"REST-confirmed same price — clearing unverified block, allowing evaluation")
+                            unv['override_logged'] = True
+                        del self._price_unverified[_unverified_key]
+                    else:
+                        if not unv.get('logged'):
+                            print(f"[RISK] 🛡️ STALENESS GATE: {position.symbol} price ${position.current_price:.2f} "
+                                  f"unverified (all sources returned same frozen price) — blocking exits for up to 30s")
+                            unv['logged'] = True
+                        return ExitDecision.no_exit()
                 else:
-                    del self._price_unverified[_repair_key]
+                    del self._price_unverified[_unverified_key]
             else:
-                del self._price_unverified[_repair_key]
+                del self._price_unverified[_unverified_key]
 
         _staleness_is_blocking = False
         _staleness_change_age = 0
-        tracker = self._stuck_price_tracker.get(_repair_key)
-        if tracker and not _is_repair_cycle:
+        _rest_override_available = _is_rest_confirmed or _is_rest_validated_same
+        tracker = self._stuck_price_tracker.get(_repair_key) or self._stuck_price_tracker.get(_tracking_key)
+        if tracker and not (_is_repair_cycle and not _is_rest_confirmed):
             import time as _st
             change_age = _st.time() - tracker['last_changed']
             _staleness_change_age = change_age
@@ -3535,7 +3553,17 @@ class RiskManager:
                 _effective_threshold = 300
             if change_age > _effective_threshold:
                 if session in ('regular', 'extended'):
-                    _staleness_is_blocking = True
+                    if _rest_override_available:
+                        if not hasattr(self, '_rest_override_logged'):
+                            self._rest_override_logged = {}
+                        _ro_key = f"{_repair_key}_{int(change_age)//30}"
+                        if _ro_key not in self._rest_override_logged:
+                            self._rest_override_logged[_ro_key] = True
+                            _override_src = "REST-confirmed fresh" if _is_rest_confirmed else "REST-validated same"
+                            print(f"[RISK] ✓ STALENESS OVERRIDE: {position.symbol} price ${position.current_price:.2f} "
+                                  f"stale {change_age:.0f}s but {_override_src} — allowing SL evaluation")
+                    else:
+                        _staleness_is_blocking = True
             elif change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD and session == 'extended':
                 _rest_price = None
                 try:
@@ -3556,7 +3584,8 @@ class RiskManager:
 
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
-            if not _is_repair_cycle:
+            _allow_eval = not _is_repair_cycle or _is_rest_confirmed
+            if _allow_eval:
                 if channel_settings and channel_settings.escalation_only_mode and decision.risk_trigger == 'profit_target':
                     pass
                 elif _staleness_is_blocking and decision.risk_trigger in ('stop_loss', 'stop_loss_price'):
@@ -3579,7 +3608,8 @@ class RiskManager:
         if channel_settings:
             decision = evaluate_channel_stop_loss(position, cache, channel_settings)
             if decision.should_exit:
-                if not _is_repair_cycle:
+                _allow_csl = not _is_repair_cycle or _is_rest_confirmed
+                if _allow_csl:
                     if _staleness_is_blocking:
                         if not hasattr(self, '_staleness_block_logged'):
                             self._staleness_block_logged = {}
@@ -3592,8 +3622,11 @@ class RiskManager:
                         return ExitDecision.no_exit()
                     return decision
         
-        if _is_repair_cycle:
+        if _is_repair_cycle and not _is_rest_confirmed:
             return ExitDecision.no_exit()
+        elif _is_repair_cycle and _is_rest_confirmed:
+            print(f"[RISK] ✓ REST CONFIRMED CYCLE: {position.symbol} — REST-verified price ${position.current_price:.2f}, "
+                  f"proceeding with exit evaluation (repair cycle override)")
         
         if channel_settings and channel_settings.has_tiered_targets:
             if channel_settings.escalation_only_mode:
@@ -4338,7 +4371,7 @@ class RiskManager:
             
             # Check if stop loss should use market order immediately
             # Use risk_trigger for accurate detection (stop_loss, trailing_stop, early_trailing, giveback_guard)
-            sl_triggers = ('stop_loss', 'trailing_stop', 'early_trailing', 'giveback_guard')
+            sl_triggers = ('stop_loss', 'trailing_stop', 'early_trailing', 'giveback_guard', 'dynamic_sl')
             is_sl_type_exit = decision.risk_trigger in sl_triggers
             if is_sl_type_exit and channel_settings and channel_settings.sl_order_mode == 'market':
                 use_market = True
@@ -5272,6 +5305,8 @@ class RiskManager:
                 tracker['rest_refreshed'] = 0
                 if key in self._price_unverified:
                     del self._price_unverified[key]
+                if key in self._rest_validated_same:
+                    del self._rest_validated_same[key]
                 continue
             stuck_seconds = now - tracker['last_changed']
 
@@ -5343,13 +5378,21 @@ class RiskManager:
                         'created_at': now
                     }
                     self._rest_repair_cycle_keys[key] = now
+                    self._rest_confirmed_this_cycle[key] = now
                     if key in self._price_unverified:
                         del self._price_unverified[key]
+                    if key in self._rest_validated_same:
+                        del self._rest_validated_same[key]
                 elif stuck_seconds >= self._STALENESS_EXIT_BLOCK_THRESHOLD and _rest_checked:
-                    if key not in self._price_unverified:
-                        self._price_unverified[key] = {'since': now, 'logged': False}
-                        print(f"[RISK] ⚠️ UNVERIFIED: {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
-                              f"all sources returned same price ${pos.current_price:.4f} — marking unverified")
+                    import time as _vs
+                    self._rest_validated_same[key] = _vs.time()
+                    if key in self._price_unverified:
+                        del self._price_unverified[key]
+                        print(f"[RISK] ✓ REST VALIDATED: {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
+                              f"REST confirmed same price ${pos.current_price:.4f} — clearing unverified, allowing evaluation")
+                    else:
+                        print(f"[RISK] ✓ REST VALIDATED: {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
+                              f"REST confirmed price ${pos.current_price:.4f} is real (same from all sources)")
             except Exception as e:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
@@ -5372,6 +5415,14 @@ class RiskManager:
         stale_unverified = [k for k in self._price_unverified if k not in active_keys]
         for k in stale_unverified:
             del self._price_unverified[k]
+        stale_validated = [k for k in self._rest_validated_same if k not in active_keys]
+        for k in stale_validated:
+            del self._rest_validated_same[k]
+        import time as _ttl_check
+        _ttl_expired = [k for k, ts in self._rest_validated_same.items() 
+                        if (_ttl_check.time() - ts) > 30]
+        for k in _ttl_expired:
+            del self._rest_validated_same[k]
         if hasattr(self, '_staleness_block_logged'):
             stale_sbl = [k for k in self._staleness_block_logged if not any(k.startswith(ak) for ak in active_keys)]
             for k in stale_sbl:
