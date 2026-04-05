@@ -72,3 +72,9 @@ id = "ILhessgvmo3uMESqA6Phl"
 uri = "file://Risk_Engine_Price_Flow_And_Exit_Timing.md"
 type = "text"
 title = "Risk Engine — Price Sourcing, Exit Timing & Staleness Gate Flow"
+
+[[outputs]]
+id = "zSOL7JfiBycYwqeH1eBk1"
+uri = "file://docs/BROKER_DISCONNECT_PLAN.md"
+type = "text"
+title = "Broker Disconnect Button — Implementation Plan"
