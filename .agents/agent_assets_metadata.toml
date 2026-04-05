@@ -60,3 +60,9 @@ id = "rpW9UfVQjab1YkMtWgMD-"
 uri = "file://.local/BotifyTrades_Risk_Architecture_Complete.md"
 type = "text"
 title = "BotifyTrades Risk Architecture — Complete Reference (Updated)"
+
+[[outputs]]
+id = "YzrVgs1WIe5Mcznj-sd0B"
+uri = "file://Staleness_Gate_Deep_Dive.md"
+type = "text"
+title = "Staleness Gate — Complete Technical Breakdown"
