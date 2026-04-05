@@ -421,7 +421,10 @@
             
             <div class="form-group">
                 <label for="licenseKey">License Key</label>
-                <textarea id="licenseKey" placeholder="Paste your license key here..."></textarea>
+                <div style="position: relative;">
+                    <textarea id="licenseKey" placeholder="Paste your license key here..."></textarea>
+                    <button type="button" onclick="pasteFromClipboard()" style="position: absolute; top: 8px; right: 8px; background: rgba(15, 240, 179, 0.2); border: 1px solid rgba(15, 240, 179, 0.4); color: #0FF0B3; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.background='rgba(15, 240, 179, 0.35)'" onmouseout="this.style.background='rgba(15, 240, 179, 0.2)'">📋 Paste</button>
+                </div>
             </div>
             
             <div class="button-group">
@@ -633,6 +636,28 @@
             loadLicenseStatus();
             loadMachineInfo();
             showMessage('Status refreshed', 'success');
+        }
+
+        async function pasteFromClipboard() {
+            const textarea = document.getElementById('licenseKey');
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    textarea.value = text.trim();
+                    showMessage('License key pasted from clipboard', 'success');
+                } else {
+                    showMessage('Clipboard is empty', 'error');
+                }
+            } catch (err) {
+                textarea.focus();
+                let fallbackOk = false;
+                try {
+                    fallbackOk = document.execCommand('paste');
+                } catch (e) {}
+                if (!fallbackOk) {
+                    showMessage('Clipboard access is restricted. Please click inside the text box and use Ctrl+V (or Cmd+V on Mac) to paste your license key.', 'error');
+                }
+            }
         }
 
         function copyMachineId() {
