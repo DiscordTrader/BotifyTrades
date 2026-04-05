@@ -1334,7 +1334,7 @@ class BaseConditionalOrderService(ABC):
     
     def is_enabled(self) -> bool:
         settings = get_conditional_order_settings()
-        return settings.get('enabled', False)
+        return settings.get('enabled', True)
     
     def start(self):
         """Start the service in its own thread with isolated event loop."""

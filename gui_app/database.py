@@ -12392,7 +12392,7 @@ def get_conditional_order_settings() -> Dict[str, Any]:
     except Exception as e:
         print(f"[DATABASE] Error getting conditional order settings: {e}")
         return {
-            'enabled': False,
+            'enabled': True,
             'default_expiry': 'end_of_day',
             'finnhub_fallback': True,
             'rate_limit_threshold': 80

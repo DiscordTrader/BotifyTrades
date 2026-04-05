@@ -544,7 +544,7 @@ class ConditionalOrderService:
     def is_enabled(self) -> bool:
         """Check if conditional order service is enabled globally."""
         settings = get_conditional_order_settings()
-        return settings.get('enabled', False)
+        return settings.get('enabled', True)
     
     def get_settings(self) -> Dict[str, Any]:
         """Get global service settings."""
