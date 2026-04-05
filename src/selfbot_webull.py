@@ -20461,9 +20461,10 @@ if __name__ == '__main__':
             # Clean up multiprocessing resources on macOS
             if sys.platform == 'darwin':
                 try:
-                    # Force cleanup of semaphores and shared memory
                     from multiprocessing import resource_tracker
-                    resource_tracker._resource_tracker._stop = True
+                    _rt = getattr(resource_tracker, '_resource_tracker', None)
+                    if _rt and hasattr(_rt, '_stop'):
+                        _rt._stop = True
                 except Exception:
                     pass
             
