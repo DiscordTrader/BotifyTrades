@@ -5088,10 +5088,17 @@ class RiskManager:
                 order_price = None
 
             if asset_type == 'option':
+                _exit_expiry = stc_signal.get('expiry', '')
+                _exit_expiry_year = stc_signal.get('expiry_year')
+                if 'IBKR' in broker_upper or 'TASTYTRADE' in broker_upper:
+                    if _exit_expiry_year and '/' in _exit_expiry and '-' not in _exit_expiry:
+                        _parts = _exit_expiry.split('/')
+                        if len(_parts) == 2:
+                            _exit_expiry = f"{_exit_expiry_year}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
                 option_kwargs = {
                     'symbol': stc_signal['symbol'],
                     'strike': stc_signal.get('strike'),
-                    'expiry': stc_signal.get('expiry'),
+                    'expiry': _exit_expiry,
                     'option_type': stc_signal.get('opt_type'),
                     'action': 'STC',
                     'quantity': stc_signal['qty'],
@@ -5126,6 +5133,16 @@ class RiskManager:
             order_id = None
             if isinstance(result, dict):
                 order_id = result.get('order_id') or result.get('orderId') or result.get('id')
+            elif hasattr(result, 'success'):
+                if result.success:
+                    order_id = getattr(result, 'order_id', None) or getattr(result, 'orderId', None)
+                    if not order_id and hasattr(result, 'data') and isinstance(result.data, dict):
+                        order_id = result.data.get('order_id') or result.data.get('orderId')
+                    if not order_id:
+                        order_id = f"ok-{pos_key[:20]}"
+                else:
+                    _fail_msg = getattr(result, 'message', str(result))
+                    print(f"[RISK] [DIRECT-EXIT] ⚠️ {pos_key} broker returned failure: {_fail_msg}")
             elif result:
                 order_id = str(result)
             

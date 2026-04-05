@@ -616,6 +616,13 @@ class TastytradeBroker(BrokerInterface):
     ) -> OrderResult:
         """Place a stock order"""
         try:
+            if not self._ensure_session_valid():
+                return OrderResult(
+                    success=False,
+                    message="Tastytrade session expired and refresh failed",
+                    symbol=symbol,
+                    action=action
+                )
             if not self.account or not self.session:
                 return OrderResult(
                     success=False,
@@ -708,6 +715,13 @@ class TastytradeBroker(BrokerInterface):
     ) -> OrderResult:
         """Place an options order"""
         try:
+            if not self._ensure_session_valid():
+                return OrderResult(
+                    success=False,
+                    message="Tastytrade session expired and refresh failed",
+                    symbol=symbol,
+                    action=action
+                )
             if not self.account or not self.session:
                 return OrderResult(
                     success=False,
