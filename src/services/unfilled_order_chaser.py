@@ -1229,7 +1229,7 @@ class UnfilledOrderChaser:
                 if not order.call_put:
                     print(f"[ORDER_CHASER] ❌ Cannot place exit option replacement — call_put is None for {order.symbol}")
                     return None
-                result = await broker.place_option_order(
+                opt_kwargs = dict(
                     symbol=order.symbol,
                     quantity=qty,
                     price=price,
@@ -1238,6 +1238,10 @@ class UnfilledOrderChaser:
                     expiry=order.expiry,
                     option_type=order.call_put
                 )
+                _wb_oid = self._resolve_webull_option_id(broker, order)
+                if _wb_oid:
+                    opt_kwargs['option_id'] = _wb_oid
+                result = await broker.place_option_order(**opt_kwargs)
             else:
                 result = await broker.place_stock_order(
                     symbol=order.symbol,
@@ -1265,7 +1269,7 @@ class UnfilledOrderChaser:
                 if not order.call_put:
                     print(f"[ORDER_CHASER] ❌ Cannot place market exit — call_put is None for {order.symbol}")
                     return None
-                result = await broker.place_option_order(
+                opt_kwargs = dict(
                     symbol=order.symbol,
                     quantity=qty,
                     price=0,
@@ -1274,6 +1278,10 @@ class UnfilledOrderChaser:
                     expiry=order.expiry,
                     option_type=order.call_put
                 )
+                _wb_oid = self._resolve_webull_option_id(broker, order)
+                if _wb_oid:
+                    opt_kwargs['option_id'] = _wb_oid
+                result = await broker.place_option_order(**opt_kwargs)
             else:
                 result = await broker.place_stock_order(
                     symbol=order.symbol,
@@ -1303,7 +1311,7 @@ class UnfilledOrderChaser:
                 if not order.call_put:
                     print(f"[ORDER_CHASER] ❌ Market fallback: call_put is None for {order.symbol}")
                     return False
-                result = await broker.place_option_order(
+                opt_kwargs = dict(
                     symbol=order.symbol,
                     quantity=qty,
                     price=0,
@@ -1312,6 +1320,10 @@ class UnfilledOrderChaser:
                     expiry=order.expiry,
                     option_type=order.call_put
                 )
+                _wb_oid = self._resolve_webull_option_id(broker, order)
+                if _wb_oid:
+                    opt_kwargs['option_id'] = _wb_oid
+                result = await broker.place_option_order(**opt_kwargs)
             else:
                 result = await broker.place_stock_order(
                     symbol=order.symbol,
@@ -1720,7 +1732,7 @@ class UnfilledOrderChaser:
                 if not order.call_put:
                     print(f"[ORDER_CHASER] ❌ Cannot place option replacement — call_put is None for {order.symbol}")
                     return None
-                result = await broker.place_option_order(
+                opt_kwargs = dict(
                     symbol=order.symbol,
                     quantity=qty,
                     price=price,
@@ -1729,6 +1741,10 @@ class UnfilledOrderChaser:
                     expiry=order.expiry,
                     option_type=order.call_put
                 )
+                _wb_oid = self._resolve_webull_option_id(broker, order)
+                if _wb_oid:
+                    opt_kwargs['option_id'] = _wb_oid
+                result = await broker.place_option_order(**opt_kwargs)
             else:
                 has_bracket = order.stop_loss_price or order.profit_target_price
                 if has_bracket and hasattr(broker, 'place_bracket_order'):
@@ -1904,6 +1920,22 @@ class UnfilledOrderChaser:
 
         print(f"[ORDER_CHASER] ⚠️ Could not verify order {order_id} status — assuming filled (fallback)")
         return 'UNKNOWN'
+
+    def _resolve_webull_option_id(self, broker, order):
+        try:
+            if not hasattr(broker, 'get_cached_option_id'):
+                return None
+            if not order.strike or not order.expiry or not order.call_put:
+                return None
+            cached = broker.get_cached_option_id(
+                order.symbol,
+                order.strike,
+                order.expiry,
+                order.call_put
+            )
+            return str(cached) if cached else None
+        except Exception:
+            return None
 
     def _get_broker(self, broker_id: str):
         """Get broker instance by ID"""
