@@ -3583,6 +3583,14 @@ class RiskManager:
                             _override_src = "REST-confirmed fresh" if _is_rest_confirmed else "REST-validated same"
                             print(f"[RISK] ✓ STALENESS OVERRIDE: {position.symbol} price ${position.current_price:.2f} "
                                   f"stale {change_age:.0f}s but {_override_src} — allowing SL evaluation")
+                    elif change_age > 90 and tracker.get('rest_checked_ok', 0) > 0:
+                        if not hasattr(self, '_max_stale_override_logged'):
+                            self._max_stale_override_logged = {}
+                        _mso_key = f"{_repair_key}_{int(change_age)//60}"
+                        if _mso_key not in self._max_stale_override_logged:
+                            self._max_stale_override_logged[_mso_key] = True
+                            print(f"[RISK] ✓ MAX STALENESS OVERRIDE: {position.symbol} price ${position.current_price:.2f} "
+                                  f"unchanged {change_age:.0f}s — REST checked, allowing SL evaluation (90s safety limit)")
                     else:
                         _staleness_is_blocking = True
             elif change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD and session == 'extended':
@@ -6578,15 +6586,20 @@ class RiskManager:
                 if fresh_price and fresh_price > 0 and abs(fresh_price - pos.current_price) < 0.0001:
                     _cross_hub_confirmed_same = True
                 if not fresh_price or abs(fresh_price - pos.current_price) < 0.0001:
-                    if rest_repairs_this_cycle < _MAX_REST_REPAIRS_PER_CYCLE:
+                    _already_validated = key in self._rest_validated_same
+                    _rest_limit = _MAX_REST_REPAIRS_PER_CYCLE if not _already_validated else _MAX_REST_REPAIRS_PER_CYCLE + 4
+                    if rest_repairs_this_cycle < _rest_limit:
                         tracker['rest_refreshed'] = now
                         rest_price = await self._try_rest_quote(pos)
                         _rest_checked = rest_price is not None
+                        if _rest_checked:
+                            tracker['rest_checked_ok'] = now
                         if rest_price and rest_price > 0:
                             fresh_price = rest_price
                             rest_via = getattr(self, '_last_rest_source', None)
                             source = f'REST/{rest_via}' if rest_via else 'REST'
-                            rest_repairs_this_cycle += 1
+                            if abs(rest_price - pos.current_price) > 0.0001:
+                                rest_repairs_this_cycle += 1
                 if fresh_price and fresh_price > 0 and source and 'REST' in source:
                     cache_entry = self.cache.get(key) or self.cache.get(f"{pos.broker}_{pos.symbol}")
                     if cache_entry and cache_entry.entry_price > 0:
@@ -6655,7 +6668,7 @@ class RiskManager:
             del self._rest_validated_same[k]
         import time as _ttl_check
         _ttl_expired = [k for k, ts in self._rest_validated_same.items() 
-                        if (_ttl_check.time() - ts) > 30]
+                        if (_ttl_check.time() - ts) > 60]
         for k in _ttl_expired:
             del self._rest_validated_same[k]
         if hasattr(self, '_staleness_block_logged'):
@@ -6821,40 +6834,58 @@ class RiskManager:
         self._last_rest_source = None
         is_option = pos.asset == 'option'
 
+        _last_valid_rest = None
         if not is_option:
             if 'WEBULL' in broker_upper:
                 price = await self._try_schwab_rest_quote(pos.symbol)
-                if price and price > 0 and abs(price - current) > 0.0001:
-                    self._last_rest_source = 'Schwab'
-                    return price
+                if price and price > 0:
+                    _last_valid_rest = price
+                    if abs(price - current) > 0.0001:
+                        self._last_rest_source = 'Schwab'
+                        return price
                 price = await self._try_webull_rest_quote(pos.symbol)
-                if price and price > 0 and abs(price - current) > 0.0001:
-                    self._last_rest_source = 'Webull'
-                    return price
+                if price and price > 0:
+                    _last_valid_rest = price
+                    if abs(price - current) > 0.0001:
+                        self._last_rest_source = 'Webull'
+                        return price
             elif 'SCHWAB' in broker_upper:
                 price = await self._try_webull_rest_quote(pos.symbol)
-                if price and price > 0 and abs(price - current) > 0.0001:
-                    self._last_rest_source = 'Webull'
-                    return price
+                if price and price > 0:
+                    _last_valid_rest = price
+                    if abs(price - current) > 0.0001:
+                        self._last_rest_source = 'Webull'
+                        return price
                 price = await self._try_schwab_rest_quote(pos.symbol)
-                if price and price > 0 and abs(price - current) > 0.0001:
-                    self._last_rest_source = 'Schwab'
-                    return price
+                if price and price > 0:
+                    _last_valid_rest = price
+                    if abs(price - current) > 0.0001:
+                        self._last_rest_source = 'Schwab'
+                        return price
             else:
                 price = await self._try_schwab_rest_quote(pos.symbol)
-                if price and price > 0 and abs(price - current) > 0.0001:
-                    self._last_rest_source = 'Schwab'
-                    return price
+                if price and price > 0:
+                    _last_valid_rest = price
+                    if abs(price - current) > 0.0001:
+                        self._last_rest_source = 'Schwab'
+                        return price
                 price = await self._try_webull_rest_quote(pos.symbol)
-                if price and price > 0 and abs(price - current) > 0.0001:
-                    self._last_rest_source = 'Webull'
-                    return price
+                if price and price > 0:
+                    _last_valid_rest = price
+                    if abs(price - current) > 0.0001:
+                        self._last_rest_source = 'Webull'
+                        return price
 
         if not is_option:
             price = await self._try_broker_get_quote(pos)
-            if price and price > 0 and abs(price - current) > 0.0001:
-                self._last_rest_source = pos.broker
-                return price
+            if price and price > 0:
+                _last_valid_rest = price
+                if abs(price - current) > 0.0001:
+                    self._last_rest_source = pos.broker
+                    return price
+        if _last_valid_rest and _last_valid_rest > 0:
+            self._last_rest_source = 'confirmed-same'
+            return _last_valid_rest
         return None
 
     async def _try_webull_rest_quote(self, symbol):
