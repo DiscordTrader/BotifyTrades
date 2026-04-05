@@ -1165,23 +1165,18 @@ def register_routes(app):
             
             user = db.get_user_by_username(username)
             if recovery_method == 'local':
-                import secrets
-                import tempfile
-                from pathlib import Path
-                
                 if user:
                     result = db.create_local_recovery_code(username)
                     if result:
-                        local_recovery = result
+                        local_recovery = {
+                            'file_path': result.get('file_path', ''),
+                            'username': username
+                        }
                     else:
-                        fake_code = f"{secrets.randbelow(1000000):06d}"
-                        fake_path = str(Path(tempfile.gettempdir()) / 'botifytrades_recovery' / f'recovery_{secrets.token_hex(8)}.txt')
-                        local_recovery = {'code': fake_code, 'file_path': fake_path, 'username': username}
+                        local_recovery = {'file_path': '', 'username': username}
                         print(f"[AUTH] Local recovery generation failed for {username}")
                 else:
-                    fake_code = f"{secrets.randbelow(1000000):06d}"
-                    fake_path = str(Path(tempfile.gettempdir()) / 'botifytrades_recovery' / f'recovery_{secrets.token_hex(8)}.txt')
-                    local_recovery = {'code': fake_code, 'file_path': fake_path, 'username': username}
+                    local_recovery = {'file_path': '', 'username': username}
                     print(f"[AUTH] Local recovery requested for non-existent user: {username}")
             else:
                 if user:

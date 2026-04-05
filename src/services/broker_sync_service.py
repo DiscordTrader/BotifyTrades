@@ -202,6 +202,8 @@ class BrokerSyncService:
     async def _sync_loop(self):
         """Main sync loop - runs every sync_interval seconds"""
         print("[SYNC] 🔄 Sync loop started", flush=True)
+        _consecutive_errors = 0
+        _MAX_BACKOFF = 120
         
         while self.running:
             try:
@@ -214,15 +216,19 @@ class BrokerSyncService:
                         self._order_in_progress.set()
                 
                 await self._perform_sync()
+                _consecutive_errors = 0
                 await asyncio.sleep(self.sync_interval)
                 
             except asyncio.CancelledError:
                 print("[SYNC] Sync loop cancelled", flush=True)
                 break
             except Exception as e:
-                print(f"[SYNC] Error in sync loop: {e}")
+                _consecutive_errors += 1
+                backoff = min(self.sync_interval * (2 ** _consecutive_errors), _MAX_BACKOFF)
+                print(f"[SYNC] Error in sync loop (attempt {_consecutive_errors}, backoff {backoff:.0f}s): {e}")
                 import traceback
                 traceback.print_exc()
+                await asyncio.sleep(backoff)
     
     async def _perform_sync(self):
         """Perform one sync cycle across all brokers"""

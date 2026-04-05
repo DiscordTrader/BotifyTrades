@@ -343,6 +343,7 @@ def get_connection():
             _local.connection.execute('PRAGMA journal_mode=WAL')
             _local.connection.execute('PRAGMA busy_timeout=30000')
             _local.connection.execute('PRAGMA synchronous=NORMAL')
+            _local.connection.execute('PRAGMA foreign_keys=ON')
         except Exception:
             pass
     return _local.connection
