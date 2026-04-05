@@ -9,9 +9,17 @@ Enhanced with:
 - Integration with centralized RateLimitManager
 """
 import asyncio
+import inspect
 import re
 from typing import Optional, List, Dict, Any, Callable, Awaitable
 from pathlib import Path
+
+
+async def _await_if_needed(result):
+    """Handle tastytrade SDK calls that may be sync or async depending on version."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 from .risk_types import (
     PositionSnapshot,
@@ -3252,7 +3260,9 @@ class RiskManager:
             broker_label = 'TASTYTRADE_LIVE' if getattr(self.tastytrade_broker, 'is_live', False) else 'TASTYTRADE_PAPER'
             
             if hasattr(self.tastytrade_broker, 'get_all_positions'):
-                raw_positions = await asyncio.to_thread(self.tastytrade_broker.get_all_positions) or []
+                raw_positions = await _await_if_needed(
+                    await asyncio.to_thread(self.tastytrade_broker.get_all_positions)
+                ) or []
                 
                 for pos in raw_positions:
                     asset_type = pos.get('asset_type', 'stock')
@@ -4099,7 +4109,9 @@ class RiskManager:
             from src.brokers.base_broker import OrderResult
             if not broker_instance._ensure_session_valid():
                 return OrderResult(success=False, message='TastyTrade session invalid', symbol=symbol, action=action)
-            tt_eq = await asyncio.to_thread(_TTEq.get, broker_instance.session, symbol)
+            tt_eq = await _await_if_needed(
+                await asyncio.to_thread(_TTEq.get, broker_instance.session, symbol)
+            )
             order_action = _TTAction.SELL_TO_CLOSE if action.upper() in ('STC', 'SELL') else _TTAction.BUY_TO_OPEN
             leg = tt_eq.build_leg(_TTDec(str(qty)), order_action)
             price_decimal = _TTDec(str(price))
@@ -4109,9 +4121,11 @@ class RiskManager:
                 legs=[leg],
                 price=price_decimal
             )
-            response = await asyncio.to_thread(
-                broker_instance.account.place_order,
-                broker_instance.session, order, dry_run=False
+            response = await _await_if_needed(
+                await asyncio.to_thread(
+                    broker_instance.account.place_order,
+                    broker_instance.session, order, dry_run=False
+                )
             )
             if response and hasattr(response, 'order') and response.order:
                 return OrderResult(success=True, order_id=str(response.order.id), symbol=symbol, action=action, quantity=qty, price=price)
@@ -4374,7 +4388,9 @@ class RiskManager:
                         return
 
                     if sl_price and sl_price > 0 and not is_option:
-                        tt_equity = await asyncio.to_thread(TTEquity.get, self.tastytrade_broker.session, symbol)
+                        tt_equity = await _await_if_needed(
+                            await asyncio.to_thread(TTEquity.get, self.tastytrade_broker.session, symbol)
+                        )
                         sl_leg = tt_equity.build_leg(TTDecimal(str(qty)), TTOrderAction.SELL_TO_CLOSE)
                         sl_tt_order = TTNewOrder(
                             time_in_force=TTTIF.GTC,
@@ -4382,9 +4398,11 @@ class RiskManager:
                             legs=[sl_leg],
                             stop_trigger=TTDecimal(str(sl_price))
                         )
-                        sl_resp = await asyncio.to_thread(
-                            self.tastytrade_broker.account.place_order,
-                            self.tastytrade_broker.session, sl_tt_order, dry_run=False
+                        sl_resp = await _await_if_needed(
+                            await asyncio.to_thread(
+                                self.tastytrade_broker.account.place_order,
+                                self.tastytrade_broker.session, sl_tt_order, dry_run=False
+                            )
                         )
                         if sl_resp and hasattr(sl_resp, 'order') and sl_resp.order:
                             cache.broker_stop_order_id = str(sl_resp.order.id)
@@ -5088,7 +5106,9 @@ class RiskManager:
                         if not self.tastytrade_broker._ensure_session_valid():
                             print(f"[RISK] ⚠️ TastyTrade session invalid, skip stop sync")
                             return
-                        tt_eq = await asyncio.to_thread(_TTEq.get, self.tastytrade_broker.session, symbol)
+                        tt_eq = await _await_if_needed(
+                            await asyncio.to_thread(_TTEq.get, self.tastytrade_broker.session, symbol)
+                        )
                         sl_leg = tt_eq.build_leg(_TTDec(str(qty)), _TTAction.SELL_TO_CLOSE)
                         sl_ord = _TTOrder(
                             time_in_force=_TTTIF.GTC,
@@ -5096,9 +5116,11 @@ class RiskManager:
                             legs=[sl_leg],
                             stop_trigger=_TTDec(str(new_stop_price))
                         )
-                        sl_resp = await asyncio.to_thread(
-                            self.tastytrade_broker.account.place_order,
-                            self.tastytrade_broker.session, sl_ord, dry_run=False
+                        sl_resp = await _await_if_needed(
+                            await asyncio.to_thread(
+                                self.tastytrade_broker.account.place_order,
+                                self.tastytrade_broker.session, sl_ord, dry_run=False
+                            )
                         )
                         if sl_resp and hasattr(sl_resp, 'order') and sl_resp.order:
                             cache.broker_stop_order_id = str(sl_resp.order.id)

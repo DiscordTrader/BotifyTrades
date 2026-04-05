@@ -9,9 +9,17 @@ Position/order snapshots use periodic REST calls via the broker's existing metho
 """
 
 import asyncio
+import inspect
 import time
 import threading
 from typing import Dict, Optional, List, Any, Callable, Set
+
+
+async def _await_if_needed(result):
+    """Handle tastytrade SDK calls that may be sync or async depending on version."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 from dataclasses import dataclass, field
 
 
@@ -262,7 +270,14 @@ class TastytradeDataHub:
             return symbol
         try:
             from tastytrade import Equity
-            equity = Equity.get(self._broker.session, symbol)
+            result = Equity.get(self._broker.session, symbol)
+            if inspect.isawaitable(result):
+                loop = asyncio.new_event_loop()
+                try:
+                    result = loop.run_until_complete(result)
+                finally:
+                    loop.close()
+            equity = result
             if equity and hasattr(equity, 'streamer_symbol'):
                 self._streamer_symbol_cache[symbol] = equity.streamer_symbol
                 return equity.streamer_symbol

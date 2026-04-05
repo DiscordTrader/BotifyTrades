@@ -319,7 +319,15 @@ class SignalVerificationService:
             except ValueError:
                 exp_date = datetime.strptime(expiry, "%m/%d/%Y")
             
+            import inspect as _inspect
             chain = get_option_chain(_tastytrade_session, ticker)
+            if _inspect.isawaitable(chain):
+                import asyncio as _asyncio
+                _loop = _asyncio.new_event_loop()
+                try:
+                    chain = _loop.run_until_complete(chain)
+                finally:
+                    _loop.close()
             
             if not chain:
                 return None
