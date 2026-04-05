@@ -20066,7 +20066,6 @@ def run_telegram_bot_thread():
     Uses Telethon to connect as a user account to read trading signals.
     Signals are passed via a thread-safe queue.Queue to avoid cross-loop issues.
     """
-    global _telegram_listener
     
     async def telegram_main():
         """Async entrypoint for Telegram listener with proper lifecycle"""

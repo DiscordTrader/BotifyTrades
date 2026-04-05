@@ -262,6 +262,7 @@ def get_webull_broker():
     """Get the Webull broker instance from the bot for option data.
     Falls back to creating standalone broker from database credentials.
     """
+    global _standalone_webull_broker
     if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
         return _bot_instance.broker
     
