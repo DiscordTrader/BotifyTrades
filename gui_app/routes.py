@@ -1977,9 +1977,18 @@ def register_routes(app):
             'stop_loss_pct': (0, 100), 'trailing_stop_pct': (0, 100), 'trailing_activation_pct': (0, 100),
             'profit_target_1_pct': (0, 1000), 'profit_target_2_pct': (0, 1000),
             'profit_target_3_pct': (0, 1000), 'profit_target_4_pct': (0, 1000),
+            'profit_target_qty_1': (0, 100), 'profit_target_qty_2': (0, 100),
+            'profit_target_qty_3': (0, 100), 'profit_target_qty_4': (0, 100),
             'position_size_pct': (0, 100), 'leave_runner_pct': (1, 100),
             'sl_limit_offset': (0, 1), 'giveback_allowed_pct': (0, 100),
+            'early_trailing_activation_pct': (0, 100), 'early_trailing_step_pct': (0, 100),
+            'trim_limit_offset': (0, 1), 'trim_limit_offset_pct': (0, 100),
+            'ema_period': (1, 200), 'ema_timeframe_minutes': (1, 1440),
+            'ema_buffer_pct': (0, 50),
         }
+        VALID_DYNAMIC_SL_PROFILES = {'conservative', 'standard', 'aggressive'}
+        if 'dynamic_sl_profile' in data and data['dynamic_sl_profile'] not in VALID_DYNAMIC_SL_PROFILES:
+            return jsonify({'success': False, 'error': "dynamic_sl_profile must be 'conservative', 'standard', or 'aggressive'"}), 400
         ORDER_MODE_FIELDS = ['entry_order_mode', 'trim_order_mode', 'sl_order_mode']
         
         validation_errors = []

@@ -4162,13 +4162,14 @@ class RiskManager:
                         from alpaca.trading.requests import StopOrderRequest, LimitOrderRequest
                         from alpaca.trading.enums import OrderSide, TimeInForce
 
+                        _alpaca_tif = TimeInForce.DAY if is_option else TimeInForce.GTC
                         if sl_price and sl_price > 0:
                             sl_req = StopOrderRequest(
                                 symbol=symbol,
                                 qty=qty,
                                 side=OrderSide.SELL,
                                 stop_price=sl_price,
-                                time_in_force=TimeInForce.GTC
+                                time_in_force=_alpaca_tif
                             )
                             sl_order = self.alpaca_broker.trading_client.submit_order(sl_req)
                             if sl_order and sl_order.id:
@@ -4181,7 +4182,7 @@ class RiskManager:
                                 qty=pt1_qty,
                                 side=OrderSide.SELL,
                                 limit_price=pt1_price,
-                                time_in_force=TimeInForce.GTC
+                                time_in_force=_alpaca_tif
                             )
                             pt_order = self.alpaca_broker.trading_client.submit_order(pt_req)
                             if pt_order and pt_order.id:
@@ -4316,12 +4317,13 @@ class RiskManager:
                 if hasattr(self.alpaca_broker, 'trading_client'):
                     from alpaca.trading.requests import LimitOrderRequest
                     from alpaca.trading.enums import OrderSide, TimeInForce
+                    _alpaca_tif = TimeInForce.DAY if is_option else TimeInForce.GTC
                     pt_req = LimitOrderRequest(
                         symbol=symbol,
                         qty=next_qty,
                         side=OrderSide.SELL,
                         limit_price=next_pt_price,
-                        time_in_force=TimeInForce.GTC
+                        time_in_force=_alpaca_tif
                     )
                     pt_order = self.alpaca_broker.trading_client.submit_order(pt_req)
                     if pt_order and pt_order.id:
@@ -4419,12 +4421,13 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Cancel old stop failed: {cancel_result.get('message', '')} — skipping new stop to avoid duplicates")
                         return
 
+                _is_opt = asset_type.lower() in ('option', 'options')
                 result = await self.schwab_broker.place_stop_order(
                     symbol=symbol,
                     quantity=qty,
                     stop_price=new_stop_price,
-                    side='sell',
-                    asset_type='OPTION' if asset_type.lower() in ('option', 'options') else 'EQUITY',
+                    side='sell_to_close' if _is_opt else 'sell',
+                    asset_type='OPTION' if _is_opt else 'EQUITY',
                     duration='GOOD_TILL_CANCEL'
                 )
 
@@ -4443,34 +4446,28 @@ class RiskManager:
                     print(f"[RISK] ⚠️ Alpaca not connected, skip broker stop sync")
                     return
 
-                if cache.broker_stop_order_id and hasattr(self.alpaca_broker, 'cancel_order'):
+                if cache.broker_stop_order_id:
                     try:
-                        await self.alpaca_broker.cancel_order(cache.broker_stop_order_id)
+                        if hasattr(self.alpaca_broker, 'trading_client'):
+                            self.alpaca_broker.trading_client.cancel_order_by_id(cache.broker_stop_order_id)
+                        elif hasattr(self.alpaca_broker, 'cancel_order'):
+                            await self.alpaca_broker.cancel_order(cache.broker_stop_order_id)
                         print(f"[RISK] 🔄 Cancelled old Alpaca stop #{cache.broker_stop_order_id}")
+                        cache.broker_stop_order_id = None
                     except Exception:
                         pass
 
-                if hasattr(self.alpaca_broker, 'place_stop_order'):
-                    result = await self.alpaca_broker.place_stop_order(
-                        symbol=symbol,
-                        quantity=qty,
-                        stop_price=new_stop_price,
-                        side='sell'
-                    )
-                    if result and getattr(result, 'order_id', None):
-                        cache.broker_stop_order_id = str(result.order_id)
-                        print(f"[RISK] ✅ Broker stop synced: Alpaca stop #{result.order_id} at ${new_stop_price:.2f}")
-                    else:
-                        print(f"[RISK] ⚠️ Alpaca stop order returned no order_id")
-                elif hasattr(self.alpaca_broker, 'trading_client'):
+                if hasattr(self.alpaca_broker, 'trading_client'):
                     from alpaca.trading.requests import StopOrderRequest
                     from alpaca.trading.enums import OrderSide, TimeInForce
+                    _is_opt = asset_type.lower() in ('option', 'options')
+                    _tif = TimeInForce.DAY if _is_opt else TimeInForce.GTC
                     req = StopOrderRequest(
                         symbol=symbol,
                         qty=qty,
                         side=OrderSide.SELL,
                         stop_price=new_stop_price,
-                        time_in_force=TimeInForce.GTC
+                        time_in_force=_tif
                     )
                     order = self.alpaca_broker.trading_client.submit_order(req)
                     if order and order.id:
