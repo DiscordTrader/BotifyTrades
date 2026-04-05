@@ -15412,11 +15412,30 @@ def register_routes(app):
                 
                 try:
                     from tastytrade import Session, Account
+                    import asyncio
+                    import inspect
                     
                     print(f"[API] Tastytrade: Using OAuth2 authentication (is_test={is_paper})")
-                    session = Session(client_secret, refresh_token, is_test=is_paper)
                     
-                    accounts = Account.get(session)
+                    session_result = Session(client_secret, refresh_token, is_test=is_paper)
+                    if inspect.isawaitable(session_result):
+                        loop = asyncio.new_event_loop()
+                        try:
+                            session = loop.run_until_complete(session_result)
+                        finally:
+                            loop.close()
+                    else:
+                        session = session_result
+                    
+                    accounts_result = Account.get(session)
+                    if inspect.isawaitable(accounts_result):
+                        loop = asyncio.new_event_loop()
+                        try:
+                            accounts = loop.run_until_complete(accounts_result)
+                        finally:
+                            loop.close()
+                    else:
+                        accounts = accounts_result
                     
                     if not accounts:
                         set_broker_status(broker_id, False, 'error', 'No accounts found')
@@ -15429,7 +15448,15 @@ def register_routes(app):
                         if matched:
                             account = matched[0]
                     
-                    balances = account.get_balances(session)
+                    balances_result = account.get_balances(session)
+                    if inspect.isawaitable(balances_result):
+                        loop = asyncio.new_event_loop()
+                        try:
+                            balances = loop.run_until_complete(balances_result)
+                        finally:
+                            loop.close()
+                    else:
+                        balances = balances_result
                     
                     nlv = float(getattr(balances, 'net_liquidating_value', 0) or 0)
                     cash = float(getattr(balances, 'cash_balance', 0) or 0)

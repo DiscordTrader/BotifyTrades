@@ -7,9 +7,17 @@ import sys
 import os
 import re
 import asyncio
+import inspect
 from typing import Optional, Dict, Any, List
 from datetime import datetime, date, timedelta
 from decimal import Decimal
+
+
+async def _await_if_needed(result):
+    """Handle tastytrade SDK calls that may be sync or async depending on version."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -124,14 +132,18 @@ class TastytradeBroker(BrokerInterface):
             mode = "SANDBOX" if self.paper_trade else "LIVE"
             print(f"[{self.name}] Connecting to {mode} account via OAuth2...")
             
-            self.session = await asyncio.to_thread(
-                Session,
-                client_secret,
-                refresh_token,
-                is_test=self.paper_trade
+            self.session = await _await_if_needed(
+                await asyncio.to_thread(
+                    Session,
+                    client_secret,
+                    refresh_token,
+                    is_test=self.paper_trade
+                )
             )
             
-            accounts = await asyncio.to_thread(Account.get, self.session)
+            accounts = await _await_if_needed(
+                await asyncio.to_thread(Account.get, self.session)
+            )
             
             if not accounts:
                 print(f"[{self.name}] No accounts found")
@@ -164,7 +176,9 @@ class TastytradeBroker(BrokerInterface):
             
             self.connected = True
             
-            balances = await asyncio.to_thread(self.account.get_balances, self.session)
+            balances = await _await_if_needed(
+                await asyncio.to_thread(self.account.get_balances, self.session)
+            )
             
             nlv = float(getattr(balances, 'net_liquidating_value', 0) or 0)
             cash = float(getattr(balances, 'cash_balance', 0) or 0)
@@ -230,7 +244,9 @@ class TastytradeBroker(BrokerInterface):
             if not self.account or not self.session:
                 return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
             
-            balances = await asyncio.to_thread(self.account.get_balances, self.session)
+            balances = await _await_if_needed(
+                await asyncio.to_thread(self.account.get_balances, self.session)
+            )
             
             nlv = float(getattr(balances, 'net_liquidating_value', 0) or 0)
             cash = float(getattr(balances, 'cash_balance', 0) or 0)
@@ -271,7 +287,9 @@ class TastytradeBroker(BrokerInterface):
             if not self.account or not self.session:
                 return {}
             
-            positions = await asyncio.to_thread(self.account.get_positions, self.session)
+            positions = await _await_if_needed(
+                await asyncio.to_thread(self.account.get_positions, self.session)
+            )
             result = {}
             for pos in positions:
                 symbol = getattr(pos, 'symbol', None)
@@ -493,7 +511,9 @@ class TastytradeBroker(BrokerInterface):
             if not self._ensure_session_valid():
                 return {}
             
-            balances = await asyncio.to_thread(self.account.get_balances, self.session)
+            balances = await _await_if_needed(
+                await asyncio.to_thread(self.account.get_balances, self.session)
+            )
             
             return {
                 'net_liquidating_value': float(getattr(balances, 'net_liquidating_value', 0) or 0),
@@ -597,8 +617,10 @@ class TastytradeBroker(BrokerInterface):
             if not self.account or not self.session:
                 return {'success': False, 'msg': 'Not connected to Tastytrade'}
             
-            result = await asyncio.to_thread(
-                self.account.delete_order, self.session, int(order_id)
+            result = await _await_if_needed(
+                await asyncio.to_thread(
+                    self.account.delete_order, self.session, int(order_id)
+                )
             )
             print(f"[{self.name}] ✓ Cancelled order {order_id}")
             return {'success': True, 'order_id': order_id}
@@ -631,7 +653,9 @@ class TastytradeBroker(BrokerInterface):
                     action=action
                 )
             
-            equity = await asyncio.to_thread(Equity.get, self.session, symbol)
+            equity = await _await_if_needed(
+                await asyncio.to_thread(Equity.get, self.session, symbol)
+            )
             
             if action.upper() == 'BTO':
                 order_action = OrderAction.BUY_TO_OPEN
@@ -663,11 +687,13 @@ class TastytradeBroker(BrokerInterface):
             
             print(f"[{self.name}] Placing stock order: {action} {quantity} {symbol} @ ${price or 'MARKET'}")
             
-            response = await asyncio.to_thread(
-                self.account.place_order,
-                self.session,
-                order,
-                dry_run=False
+            response = await _await_if_needed(
+                await asyncio.to_thread(
+                    self.account.place_order,
+                    self.session,
+                    order,
+                    dry_run=False
+                )
             )
             
             if response and hasattr(response, 'order') and response.order:
@@ -749,7 +775,9 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Looking up option chain for {symbol} expiry {expiry_date}")
             
             try:
-                chain = await asyncio.to_thread(get_option_chain, self.session, symbol)
+                chain = await _await_if_needed(
+                    await asyncio.to_thread(get_option_chain, self.session, symbol)
+                )
                 
                 if expiry_date not in chain:
                     available_expiries = list(chain.keys())[:5]
@@ -818,11 +846,13 @@ class TastytradeBroker(BrokerInterface):
             
             print(f"[{self.name}] Placing option order: {action} {quantity} {target_option.symbol} @ ${price or 'MARKET'}")
             
-            response = await asyncio.to_thread(
-                self.account.place_order,
-                self.session,
-                order,
-                dry_run=False
+            response = await _await_if_needed(
+                await asyncio.to_thread(
+                    self.account.place_order,
+                    self.session,
+                    order,
+                    dry_run=False
+                )
             )
             
             if response and hasattr(response, 'order') and response.order:
@@ -876,7 +906,9 @@ class TastytradeBroker(BrokerInterface):
                     pass
                 return symbol
             
-            streamer_sym = await asyncio.to_thread(_lookup_streamer_symbol)
+            streamer_sym = await _await_if_needed(
+                await asyncio.to_thread(_lookup_streamer_symbol)
+            )
             
             async with DXLinkStreamer(self.session) as streamer:
                 await streamer.subscribe(Quote, [streamer_sym])
@@ -1350,7 +1382,9 @@ class TastytradeBroker(BrokerInterface):
                     pass
                 return None
             
-            streamer_symbol = await asyncio.to_thread(fetch_quote)
+            streamer_symbol = await _await_if_needed(
+                await asyncio.to_thread(fetch_quote)
+            )
             
             if streamer_symbol and DXLINK_AVAILABLE:
                 quotes = self._get_option_data_sync([streamer_symbol], timeout=5.0)
@@ -1398,7 +1432,9 @@ class TastytradeBroker(BrokerInterface):
                     print(f"[{self.name}] Option lookup error: {e}")
                 return None
             
-            occ_symbol = await asyncio.to_thread(fetch_option)
+            occ_symbol = await _await_if_needed(
+                await asyncio.to_thread(fetch_option)
+            )
             
             if occ_symbol:
                 def get_streamer():
@@ -1410,7 +1446,9 @@ class TastytradeBroker(BrokerInterface):
                         pass
                     return None
                 
-                streamer_symbol = await asyncio.to_thread(get_streamer)
+                streamer_symbol = await _await_if_needed(
+                    await asyncio.to_thread(get_streamer)
+                )
                 
                 if streamer_symbol and DXLINK_AVAILABLE:
                     quotes = self._get_option_data_sync([streamer_symbol], timeout=5.0)
