@@ -1583,12 +1583,69 @@ def register_routes(app):
         if not email:
             return jsonify({'success': False, 'error': 'Email is required'}), 400
         
-        # Basic email validation
         import re
         if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
             return jsonify({'success': False, 'error': 'Invalid email format'}), 400
         
         result = db.add_to_waitlist(email, name, 'docs_page', referral_code or None)
+        
+        if result.get('success'):
+            import asyncio
+            from src.services.gmail_service import get_gmail_service
+            
+            discord_link = 'https://discord.gg/botifytrades'
+            
+            try:
+                gmail = get_gmail_service()
+                loop = None
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                admin_subject = f'New Waitlist Signup: {email}'
+                admin_body = f'New waitlist signup:\n\nEmail: {email}\nName: {name or "Not provided"}\nReferral Code: {referral_code or "None"}\n'
+                admin_html = f'''
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0f; color: #e0e0e0; padding: 30px; border-radius: 12px;">
+                    <h2 style="color: #0FF0B3; margin-bottom: 20px;">New Waitlist Signup</h2>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr><td style="padding: 8px 0; color: #888;">Email:</td><td style="padding: 8px 0; color: #fff;">{email}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #888;">Name:</td><td style="padding: 8px 0; color: #fff;">{name or "Not provided"}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #888;">Referral:</td><td style="padding: 8px 0; color: #fff;">{referral_code or "None"}</td></tr>
+                    </table>
+                </div>'''
+                
+                user_subject = 'Welcome to BotifyTrades - Join Our Community!'
+                user_body = f'Welcome to BotifyTrades!\n\nThank you for joining our waitlist. We are excited to have you on board.\n\nJoin our Discord community for updates, trading signals, and early access announcements:\n{discord_link}\n\nBest regards,\nThe BotifyTrades Team'
+                user_html = f'''
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0f; color: #e0e0e0; padding: 40px; border-radius: 16px; border: 1px solid rgba(15, 240, 179, 0.2);">
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <div style="display: inline-block; width: 60px; height: 60px; background: linear-gradient(135deg, #0FF0B3, #7C3AED); border-radius: 14px; line-height: 60px; font-size: 24px; font-weight: 800; color: #0a0a0f;">BT</div>
+                        <h1 style="font-size: 28px; margin: 15px 0 5px; background: linear-gradient(135deg, #0FF0B3, #7C3AED); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">BotifyTrades</h1>
+                    </div>
+                    <h2 style="color: #0FF0B3; text-align: center; margin-bottom: 10px;">Welcome aboard!</h2>
+                    <p style="color: #aaa; text-align: center; margin-bottom: 30px;">Thank you for joining our waitlist. We are excited to have you on board.</p>
+                    <div style="background: rgba(88, 101, 242, 0.1); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
+                        <p style="color: #5865F2; font-size: 14px; font-weight: 600; margin-bottom: 12px;">JOIN OUR DISCORD COMMUNITY</p>
+                        <a href="{discord_link}" style="display: inline-block; background: #5865F2; color: white; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 700; font-size: 16px;">Join Discord Server</a>
+                        <p style="color: #888; font-size: 12px; margin-top: 12px;">Get updates, trading signals, and early access announcements</p>
+                    </div>
+                    <p style="color: #666; font-size: 12px; text-align: center;">The BotifyTrades Team</p>
+                </div>'''
+                
+                loop.run_until_complete(gmail.send_email('admin@botifytrades.com', admin_subject, admin_body, admin_html))
+                loop.run_until_complete(gmail.send_email(email, user_subject, user_body, user_html))
+                
+                print(f"[WAITLIST] Emails sent for signup: {email}")
+            except Exception as e:
+                print(f"[WAITLIST] Email send failed for {email}: {e}")
+            
+            result['discord_link'] = discord_link
+        
         return jsonify(result)
     
     @app.route('/api/waitlist', methods=['GET'])
