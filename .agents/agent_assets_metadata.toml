@@ -66,3 +66,9 @@ id = "YzrVgs1WIe5Mcznj-sd0B"
 uri = "file://Staleness_Gate_Deep_Dive.md"
 type = "text"
 title = "Staleness Gate — Complete Technical Breakdown"
+
+[[outputs]]
+id = "ILhessgvmo3uMESqA6Phl"
+uri = "file://Risk_Engine_Price_Flow_And_Exit_Timing.md"
+type = "text"
+title = "Risk Engine — Price Sourcing, Exit Timing & Staleness Gate Flow"
