@@ -1040,7 +1040,7 @@ class WebullBroker(BrokerInterface):
                     try:
                         quote = self.wb.get_quote(stock=symbol)
                         if quote:
-                            _lot_check_price = float(quote.get('close', 0) or quote.get('price', 0) or 0)
+                            _lot_check_price = self._extract_current_price(quote)
                     except Exception:
                         pass
                 if _lot_check_price and _lot_check_price > 0:
@@ -1065,7 +1065,7 @@ class WebullBroker(BrokerInterface):
                     try:
                         quote = self.wb.get_quote(stock=symbol)
                         if quote:
-                            _qp = float(quote.get('close', 0) or quote.get('price', 0) or 0)
+                            _qp = self._extract_current_price(quote)
                             if _qp > 0:
                                 if side == 'SELL':
                                     _effective_price = round(_qp * 0.97, 4)
@@ -1652,12 +1652,30 @@ class WebullBroker(BrokerInterface):
                 action=action
             )
     
+    def _extract_current_price(self, quote: dict) -> float:
+        if not quote:
+            return 0.0
+        bid = float(quote.get('bidPrice', 0) or 0)
+        ask = float(quote.get('askPrice', 0) or 0)
+        if bid > 0 and ask > 0:
+            return (bid + ask) / 2
+        pp = float(quote.get('pPrice', 0) or 0)
+        if pp > 0:
+            return pp
+        last = float(quote.get('last', 0) or 0)
+        if last > 0:
+            return last
+        close_val = float(quote.get('close', 0) or 0)
+        return close_val
+
     async def get_quote(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
         try:
             quote = await asyncio.to_thread(self.wb.get_quote, symbol)
             if quote:
-                return float(quote.get('close', 0))
+                price = self._extract_current_price(quote)
+                if price > 0:
+                    return price
             return None
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
