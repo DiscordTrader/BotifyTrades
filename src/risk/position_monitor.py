@@ -4049,11 +4049,28 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] ⚠️ Could not register PT with chaser: {e}")
 
+    def _get_broker_instance_for_bracket(self, broker_name: str):
+        broker_upper = broker_name.upper()
+        if broker_upper == 'SCHWAB':
+            return self.schwab_broker
+        elif broker_upper in ('ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE'):
+            return self.alpaca_broker
+        elif 'IBKR' in broker_upper:
+            return self.ibkr_broker
+        elif 'TASTYTRADE' in broker_upper:
+            return self.tastytrade_broker
+        elif 'TRADING212' in broker_upper:
+            return self.trading212_broker
+        elif 'ROBINHOOD' in broker_upper:
+            return self.robinhood_broker
+        elif 'WEBULL_PAPER' in broker_upper:
+            return getattr(self, 'webull_paper_broker', None) or (getattr(self.bot, 'webull_paper', None) if hasattr(self, 'bot') and self.bot else None)
+        elif 'WEBULL' in broker_upper:
+            return getattr(self, 'webull_broker', None) or (self.bot.webull if hasattr(self, 'bot') and self.bot else None)
+        return None
+
     async def _place_initial_broker_bracket(self, position, cache, channel_settings):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
-        if broker_name not in ('SCHWAB', 'ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE'):
-            cache.broker_orders_placed = True
-            return
 
         entry_price = cache.entry_price
         if entry_price <= 0:
@@ -4062,6 +4079,11 @@ class RiskManager:
         sl_pct = channel_settings.stop_loss_pct
         pt1_pct = channel_settings.profit_target_1_pct
         if sl_pct <= 0 and pt1_pct <= 0:
+            cache.broker_orders_placed = True
+            return
+
+        broker_instance = self._get_broker_instance_for_bracket(broker_name)
+        if not broker_instance:
             cache.broker_orders_placed = True
             return
 
@@ -4096,7 +4118,7 @@ class RiskManager:
             _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
             _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
             print(f"[RISK] 📋 PROGRESSIVE BRACKET: {position.symbol} entry=${entry_price:.2f} "
-                  f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty})")
+                  f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty}) broker={broker_name}")
 
             if broker_name == 'SCHWAB' and self.schwab_broker:
                 try:
@@ -4196,6 +4218,302 @@ class RiskManager:
                 except Exception as e:
                     print(f"[RISK] ⚠️ Alpaca initial bracket error: {e}")
 
+            elif 'IBKR' in broker_name and self.ibkr_broker:
+                try:
+                    if not self.ibkr_broker.ib.isConnected():
+                        print(f"[RISK] ⚠️ IBKR not connected, skip initial bracket")
+                        return
+
+                    from ib_insync import StopOrder, LimitOrder as IBLimitOrder, Stock as IBStock, Option as IBOption
+
+                    if is_option:
+                        expiry_fmt = self.ibkr_broker._normalize_expiry_yyyymmdd(position.expiry or '')
+                        right = 'C' if (position.direction or '').upper() in ('C', 'CALL') else 'P'
+                        contract = IBOption(position.symbol, expiry_fmt, position.strike, right, 'SMART')
+                    else:
+                        contract = IBStock(symbol, 'SMART', 'USD')
+                    await self.ibkr_broker.ib.qualifyContractsAsync(contract)
+
+                    if sl_price and sl_price > 0:
+                        sl_order = StopOrder('SELL', qty, sl_price)
+                        sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
+                        sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
+                        await asyncio.sleep(1)
+                        if sl_trade and sl_trade.orderStatus.status != 'Cancelled':
+                            cache.broker_stop_order_id = str(sl_trade.order.orderId)
+                            print(f"[RISK] ✅ Broker SL placed: IBKR stop #{sl_trade.order.orderId} at ${sl_price:.2f} (qty={qty})")
+                        else:
+                            print(f"[RISK] ⚠️ IBKR SL order failed: {sl_trade.orderStatus.status if sl_trade else 'no trade'}")
+
+                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                        pt_order = IBLimitOrder('SELL', pt1_qty, pt1_price)
+                        pt_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
+                        pt_trade = self.ibkr_broker.ib.placeOrder(contract, pt_order)
+                        await asyncio.sleep(1)
+                        if pt_trade and pt_trade.orderStatus.status != 'Cancelled':
+                            cache.broker_pt_order_id = str(pt_trade.order.orderId)
+                            cache.broker_pt_tier = 1
+                            print(f"[RISK] ✅ Broker PT1 placed: IBKR limit #{pt_trade.order.orderId} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            await self._register_pt_with_chaser(str(pt_trade.order.orderId), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                        else:
+                            print(f"[RISK] ⚠️ IBKR PT1 order failed: {pt_trade.orderStatus.status if pt_trade else 'no trade'}")
+
+                    if cache.broker_stop_order_id or cache.broker_pt_order_id:
+                        cache.broker_orders_placed = True
+                except Exception as e:
+                    print(f"[RISK] ⚠️ IBKR initial bracket error: {e}")
+
+            elif 'TASTYTRADE' in broker_name and self.tastytrade_broker:
+                try:
+                    from tastytrade.instruments import Equity as TTEquity
+                    from tastytrade.order import NewOrder as TTNewOrder, OrderAction as TTOrderAction, OrderTimeInForce as TTTIF, OrderType as TTOrderType
+                    from decimal import Decimal as TTDecimal
+
+                    if not self.tastytrade_broker._ensure_session_valid():
+                        print(f"[RISK] ⚠️ TastyTrade session invalid, skip initial bracket")
+                        return
+
+                    if sl_price and sl_price > 0 and not is_option:
+                        tt_equity = await asyncio.to_thread(TTEquity.get, self.tastytrade_broker.session, symbol)
+                        sl_leg = tt_equity.build_leg(TTDecimal(str(qty)), TTOrderAction.SELL_TO_CLOSE)
+                        sl_tt_order = TTNewOrder(
+                            time_in_force=TTTIF.GTC,
+                            order_type=TTOrderType.STOP,
+                            legs=[sl_leg],
+                            stop_trigger=TTDecimal(str(sl_price))
+                        )
+                        sl_resp = await asyncio.to_thread(
+                            self.tastytrade_broker.account.place_order,
+                            self.tastytrade_broker.session, sl_tt_order, dry_run=False
+                        )
+                        if sl_resp and hasattr(sl_resp, 'order') and sl_resp.order:
+                            cache.broker_stop_order_id = str(sl_resp.order.id)
+                            print(f"[RISK] ✅ Broker SL placed: TastyTrade stop #{sl_resp.order.id} at ${sl_price:.2f} (qty={qty})")
+                        else:
+                            print(f"[RISK] ⚠️ TastyTrade SL order submitted (no order obj returned)")
+                            cache.broker_stop_order_id = "tt_sl_submitted"
+
+                    if sl_price and sl_price > 0 and is_option:
+                        sl_result = await self.tastytrade_broker.place_option_order(
+                            symbol=position.symbol,
+                            strike=position.strike,
+                            expiry=position.expiry or '',
+                            option_type=position.direction or 'C',
+                            action='STC',
+                            quantity=qty,
+                            price=sl_price
+                        )
+                        if sl_result and sl_result.success:
+                            _sl_oid = getattr(sl_result, 'order_id', None) or 'tt_sl_opt'
+                            cache.broker_stop_order_id = str(_sl_oid)
+                            print(f"[RISK] ✅ Broker SL placed: TastyTrade option limit #{_sl_oid} at ${sl_price:.2f} (qty={qty}) [limit used - options don't support stop orders on TastyTrade]")
+                        else:
+                            msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                            print(f"[RISK] ⚠️ TastyTrade option SL order failed: {msg}")
+
+                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                        pt_result = await self.tastytrade_broker.place_option_order(
+                            symbol=position.symbol,
+                            strike=position.strike,
+                            expiry=position.expiry or '',
+                            option_type=position.direction or 'C',
+                            action='STC',
+                            quantity=pt1_qty,
+                            price=pt1_price
+                        ) if is_option else await self.tastytrade_broker.place_stock_order(
+                            symbol=symbol,
+                            action='STC',
+                            quantity=pt1_qty,
+                            price=pt1_price
+                        )
+                        if pt_result and pt_result.success:
+                            _pt_oid = getattr(pt_result, 'order_id', None) or 'tt_pt1'
+                            cache.broker_pt_order_id = str(_pt_oid)
+                            cache.broker_pt_tier = 1
+                            print(f"[RISK] ✅ Broker PT1 placed: TastyTrade limit #{_pt_oid} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            await self._register_pt_with_chaser(str(_pt_oid), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                        else:
+                            msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                            print(f"[RISK] ⚠️ TastyTrade PT1 order failed: {msg}")
+
+                    if cache.broker_stop_order_id or cache.broker_pt_order_id:
+                        cache.broker_orders_placed = True
+                except Exception as e:
+                    print(f"[RISK] ⚠️ TastyTrade initial bracket error: {e}")
+
+            elif 'TRADING212' in broker_name and self.trading212_broker:
+                try:
+                    if not getattr(self.trading212_broker, 'connected', False):
+                        print(f"[RISK] ⚠️ Trading212 not connected, skip initial bracket")
+                        return
+
+                    if is_option:
+                        print(f"[RISK] ⚠️ Trading212 does not support options — bracket orders for stocks only")
+                        cache.broker_orders_placed = True
+                        return
+
+                    if sl_price and sl_price > 0:
+                        sl_result = await self.trading212_broker.place_stop_order(
+                            symbol=symbol,
+                            action='STC',
+                            quantity=qty,
+                            stop_price=sl_price
+                        )
+                        if sl_result and sl_result.success and sl_result.order_id:
+                            cache.broker_stop_order_id = str(sl_result.order_id)
+                            print(f"[RISK] ✅ Broker SL placed: Trading212 stop #{sl_result.order_id} at ${sl_price:.2f} (qty={qty})")
+                        else:
+                            msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                            print(f"[RISK] ⚠️ Trading212 SL order failed: {msg}")
+
+                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                        pt_result = await self.trading212_broker.place_stock_order(
+                            symbol=symbol,
+                            action='STC',
+                            quantity=pt1_qty,
+                            price=pt1_price
+                        )
+                        if pt_result and pt_result.success and pt_result.order_id:
+                            cache.broker_pt_order_id = str(pt_result.order_id)
+                            cache.broker_pt_tier = 1
+                            print(f"[RISK] ✅ Broker PT1 placed: Trading212 limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                        else:
+                            msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                            print(f"[RISK] ⚠️ Trading212 PT1 order failed: {msg}")
+
+                    if cache.broker_stop_order_id or cache.broker_pt_order_id:
+                        cache.broker_orders_placed = True
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Trading212 initial bracket error: {e}")
+
+            elif 'ROBINHOOD' in broker_name and self.robinhood_broker:
+                try:
+                    if not getattr(self.robinhood_broker, '_logged_in', False):
+                        print(f"[RISK] ⚠️ Robinhood not logged in, skip initial bracket")
+                        return
+
+                    if sl_price and sl_price > 0 and not is_option:
+                        sl_result = await self.robinhood_broker.place_stock_order(
+                            symbol=symbol,
+                            action='STC',
+                            quantity=qty,
+                            stop_price=sl_price
+                        )
+                        if sl_result and sl_result.success and sl_result.order_id:
+                            cache.broker_stop_order_id = str(sl_result.order_id)
+                            print(f"[RISK] ✅ Broker SL placed: Robinhood stop #{sl_result.order_id} at ${sl_price:.2f} (qty={qty})")
+                        else:
+                            msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                            print(f"[RISK] ⚠️ Robinhood SL order failed: {msg}")
+                    elif sl_price and sl_price > 0 and is_option:
+                        print(f"[RISK] ⚠️ Robinhood does not support stop orders for options — SL will be monitored locally")
+
+                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                        if is_option:
+                            pt_result = await self.robinhood_broker.place_option_order(
+                                symbol=position.symbol,
+                                strike=position.strike,
+                                expiry=position.expiry or '',
+                                option_type=position.direction or 'C',
+                                action='STC',
+                                quantity=pt1_qty,
+                                price=pt1_price
+                            )
+                        else:
+                            pt_result = await self.robinhood_broker.place_stock_order(
+                                symbol=symbol,
+                                action='STC',
+                                quantity=pt1_qty,
+                                price=pt1_price
+                            )
+                        if pt_result and pt_result.success and pt_result.order_id:
+                            cache.broker_pt_order_id = str(pt_result.order_id)
+                            cache.broker_pt_tier = 1
+                            print(f"[RISK] ✅ Broker PT1 placed: Robinhood limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                        else:
+                            msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                            print(f"[RISK] ⚠️ Robinhood PT1 order failed: {msg}")
+
+                    if cache.broker_stop_order_id or cache.broker_pt_order_id:
+                        cache.broker_orders_placed = True
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Robinhood initial bracket error: {e}")
+
+            elif 'WEBULL' in broker_name and broker_instance:
+                try:
+                    if not getattr(broker_instance, 'connected', False) and not getattr(broker_instance, 'wb', None):
+                        print(f"[RISK] ⚠️ Webull not connected, skip initial bracket")
+                        return
+
+                    if sl_price and sl_price > 0 and not is_option:
+                        def _wb_sl_order():
+                            return broker_instance.wb.place_order(
+                                stock=symbol,
+                                price=sl_price,
+                                action='SELL',
+                                orderType='STP',
+                                enforce='GTC',
+                                quant=qty
+                            )
+                        sl_resp = await asyncio.to_thread(_wb_sl_order)
+                        if sl_resp and not sl_resp.get('msg'):
+                            _sl_oid = str(sl_resp.get('orderId', ''))
+                            if _sl_oid:
+                                cache.broker_stop_order_id = _sl_oid
+                                print(f"[RISK] ✅ Broker SL placed: Webull stop #{_sl_oid} at ${sl_price:.2f} (qty={qty})")
+                        else:
+                            print(f"[RISK] ⚠️ Webull SL order failed: {sl_resp.get('msg', 'unknown') if sl_resp else 'no response'}")
+                    elif sl_price and sl_price > 0 and is_option:
+                        print(f"[RISK] ⚠️ Webull does not support stop orders for options — SL will be monitored locally")
+
+                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                        if is_option:
+                            pt_result = await broker_instance.place_option_order(
+                                symbol=position.symbol,
+                                strike=position.strike,
+                                expiry=position.expiry or '',
+                                option_type=position.direction or 'C',
+                                action='STC',
+                                quantity=pt1_qty,
+                                price=pt1_price
+                            )
+                            if pt_result and pt_result.success and pt_result.order_id:
+                                cache.broker_pt_order_id = str(pt_result.order_id)
+                                cache.broker_pt_tier = 1
+                                print(f"[RISK] ✅ Broker PT1 placed: Webull option limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                                await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                            else:
+                                msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                                print(f"[RISK] ⚠️ Webull PT1 option order failed: {msg}")
+                        else:
+                            def _wb_pt_order():
+                                return broker_instance.wb.place_order(
+                                    stock=symbol,
+                                    price=pt1_price,
+                                    action='SELL',
+                                    orderType='LMT',
+                                    enforce='GTC',
+                                    quant=pt1_qty,
+                                    outsideRegularTradingHour=True
+                                )
+                            pt_resp = await asyncio.to_thread(_wb_pt_order)
+                            if pt_resp and not pt_resp.get('msg'):
+                                _pt_oid = str(pt_resp.get('orderId', ''))
+                                if _pt_oid:
+                                    cache.broker_pt_order_id = _pt_oid
+                                    cache.broker_pt_tier = 1
+                                    print(f"[RISK] ✅ Broker PT1 placed: Webull limit #{_pt_oid} at ${pt1_price:.2f} (qty={pt1_qty})")
+                                    await self._register_pt_with_chaser(_pt_oid, broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                            else:
+                                print(f"[RISK] ⚠️ Webull PT1 order failed: {pt_resp.get('msg', 'unknown') if pt_resp else 'no response'}")
+
+                    if cache.broker_stop_order_id or cache.broker_pt_order_id:
+                        cache.broker_orders_placed = True
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Webull initial bracket error: {e}")
+
     async def _place_next_pt_bracket(self, position, cache, channel_settings, completed_tier: int):
         if not hasattr(self, '_broker_stop_locks'):
             self._broker_stop_locks = {}
@@ -4213,7 +4531,8 @@ class RiskManager:
 
     async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int, _retry_count: int = 0):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
-        if broker_name not in ('SCHWAB', 'ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE'):
+        broker_instance = self._get_broker_instance_for_bracket(broker_name)
+        if not broker_instance:
             return
 
         entry_price = cache.entry_price
@@ -4344,6 +4663,98 @@ class RiskManager:
                     await asyncio.sleep(1)
                     return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
 
+        else:
+            try:
+                if cache.broker_pt_order_id:
+                    try:
+                        await self._cancel_single_order(broker_name, cache.broker_pt_order_id, broker_instance)
+                    except Exception:
+                        pass
+                    cache.broker_pt_order_id = None
+
+                if is_option:
+                    pt_result = await self._place_generic_pt_option(broker_name, broker_instance, position, next_qty, next_pt_price)
+                else:
+                    pt_result = await self._place_generic_pt_stock(broker_name, broker_instance, symbol, next_qty, next_pt_price)
+
+                if pt_result and getattr(pt_result, 'success', False):
+                    _pt_oid = getattr(pt_result, 'order_id', None) or f"{broker_name}_pt{next_tier}"
+                    cache.broker_pt_order_id = str(_pt_oid)
+                    cache.broker_pt_tier = next_tier
+                    print(f"[RISK] ✅ Broker PT{next_tier} placed: {broker_name} limit #{_pt_oid} at ${next_pt_price:.2f} (qty={next_qty})")
+                    await self._register_pt_with_chaser(str(_pt_oid), broker_name, position, cache, next_qty, next_pt_price, is_option)
+                elif pt_result:
+                    msg = getattr(pt_result, 'message', 'unknown')
+                    print(f"[RISK] ⚠️ {broker_name} PT{next_tier} order failed: {msg}")
+                    if _retry_count < 2:
+                        await asyncio.sleep(1)
+                        return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
+            except Exception as e:
+                print(f"[RISK] ⚠️ {broker_name} PT{next_tier} bracket error: {e}")
+                if _retry_count < 2:
+                    await asyncio.sleep(1)
+                    return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
+
+    async def _place_generic_pt_stock(self, broker_name, broker_instance, symbol, qty, price):
+        if 'IBKR' in broker_name:
+            return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
+        elif 'TASTYTRADE' in broker_name:
+            return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
+        elif 'TRADING212' in broker_name:
+            return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
+        elif 'ROBINHOOD' in broker_name:
+            return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
+        elif 'WEBULL' in broker_name:
+            def _wb_pt():
+                return broker_instance.wb.place_order(
+                    stock=symbol, price=price, action='SELL',
+                    orderType='LMT', enforce='GTC', quant=qty,
+                    outsideRegularTradingHour=True
+                )
+            resp = await asyncio.to_thread(_wb_pt)
+            if resp and not resp.get('msg'):
+                _oid = str(resp.get('orderId', ''))
+                from src.brokers.base_broker import OrderResult
+                return OrderResult(success=True, order_id=_oid, symbol=symbol, action='STC', quantity=qty, price=price)
+            else:
+                from src.brokers.base_broker import OrderResult
+                return OrderResult(success=False, message=resp.get('msg', 'unknown') if resp else 'no response', symbol=symbol, action='STC')
+        return None
+
+    async def _place_generic_pt_option(self, broker_name, broker_instance, position, qty, price):
+        if 'TRADING212' in broker_name:
+            print(f"[RISK] ⚠️ Trading212 does not support options — PT cascade skipped")
+            return None
+        return await broker_instance.place_option_order(
+            symbol=position.symbol,
+            strike=position.strike,
+            expiry=position.expiry or '',
+            option_type=position.direction or 'C',
+            action='STC',
+            quantity=qty,
+            price=price
+        )
+
+    async def _cancel_single_order(self, broker_name, order_id, broker_instance=None):
+        broker_upper = broker_name.upper()
+        if broker_upper == 'SCHWAB' and self.schwab_broker:
+            await self.schwab_broker.cancel_order(order_id)
+        elif broker_upper in ('ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE') and self.alpaca_broker:
+            if hasattr(self.alpaca_broker, 'trading_client'):
+                self.alpaca_broker.trading_client.cancel_order_by_id(order_id)
+            elif hasattr(self.alpaca_broker, 'cancel_order'):
+                await self.alpaca_broker.cancel_order(order_id)
+        elif 'IBKR' in broker_upper and self.ibkr_broker:
+            await self.ibkr_broker.cancel_order(order_id)
+        elif 'TASTYTRADE' in broker_upper and self.tastytrade_broker:
+            await self.tastytrade_broker.cancel_order(order_id)
+        elif 'TRADING212' in broker_upper and self.trading212_broker:
+            await self.trading212_broker.cancel_order(order_id)
+        elif 'ROBINHOOD' in broker_upper and self.robinhood_broker:
+            await self.robinhood_broker.cancel_order(order_id)
+        elif 'WEBULL' in broker_upper and broker_instance:
+            await broker_instance.cancel_order(order_id)
+
     async def _cancel_broker_bracket_orders(self, position, cache):
         if not hasattr(self, '_broker_stop_locks'):
             self._broker_stop_locks = {}
@@ -4367,15 +4778,11 @@ class RiskManager:
 
         print(f"[RISK] 🧹 Cancelling {len(orders_to_cancel)} outstanding bracket order(s) for {position.symbol}")
 
+        broker_instance = self._get_broker_instance_for_bracket(broker_name)
         for label, order_id in orders_to_cancel:
             try:
-                if broker_name == 'SCHWAB' and self.schwab_broker:
-                    await self.schwab_broker.cancel_order(order_id)
-                    print(f"[RISK] ✅ Cancelled broker {label} order #{order_id}")
-                elif broker_name in ('ALPACA', 'ALPACA_PAPER', 'ALPACA_LIVE') and self.alpaca_broker:
-                    if hasattr(self.alpaca_broker, 'trading_client'):
-                        self.alpaca_broker.trading_client.cancel_order_by_id(order_id)
-                        print(f"[RISK] ✅ Cancelled broker {label} order #{order_id}")
+                await self._cancel_single_order(broker_name, order_id, broker_instance)
+                print(f"[RISK] ✅ Cancelled broker {label} order #{order_id}")
             except Exception as e:
                 print(f"[RISK] ⚠️ Failed to cancel broker {label} order #{order_id}: {e}")
 
@@ -4477,8 +4884,125 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Alpaca stop order returned no ID")
             except Exception as e:
                 print(f"[RISK] ⚠️ Alpaca broker stop sync error: {e}")
+
         else:
-            pass
+            broker_instance = self._get_broker_instance_for_bracket(broker_name)
+            if not broker_instance:
+                return
+            _is_opt = asset_type.lower() in ('option', 'options')
+            try:
+                if cache.broker_stop_order_id:
+                    try:
+                        await self._cancel_single_order(broker_name, cache.broker_stop_order_id, broker_instance)
+                        print(f"[RISK] 🔄 Cancelled old {broker_name} stop #{cache.broker_stop_order_id}")
+                        cache.broker_stop_order_id = None
+                    except Exception as ce:
+                        print(f"[RISK] ⚠️ Cancel old {broker_name} stop failed: {ce} — skipping new stop to avoid duplicates")
+                        return
+
+                if 'IBKR' in broker_name:
+                    from ib_insync import StopOrder as IBStopOrder, Stock as _IBStock, Option as _IBOption
+                    if _is_opt:
+                        expiry_fmt = self.ibkr_broker._normalize_expiry_yyyymmdd(position.expiry or '')
+                        right = 'C' if (position.direction or '').upper() in ('C', 'CALL') else 'P'
+                        contract = _IBOption(position.symbol, expiry_fmt, position.strike, right, 'SMART')
+                    else:
+                        contract = _IBStock(symbol, 'SMART', 'USD')
+                    await self.ibkr_broker.ib.qualifyContractsAsync(contract)
+                    sl_order = IBStopOrder('SELL', qty, new_stop_price)
+                    sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
+                    sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
+                    await asyncio.sleep(1)
+                    if sl_trade and sl_trade.orderStatus.status != 'Cancelled':
+                        cache.broker_stop_order_id = str(sl_trade.order.orderId)
+                        print(f"[RISK] ✅ Broker stop synced: IBKR stop #{sl_trade.order.orderId} at ${new_stop_price:.2f}")
+                    else:
+                        print(f"[RISK] ⚠️ IBKR stop sync failed: {sl_trade.orderStatus.status if sl_trade else 'no trade'}")
+
+                elif 'TASTYTRADE' in broker_name:
+                    if not _is_opt:
+                        from tastytrade.instruments import Equity as _TTEq
+                        from tastytrade.order import NewOrder as _TTOrder, OrderAction as _TTAction, OrderTimeInForce as _TTTIF, OrderType as _TTType
+                        from decimal import Decimal as _TTDec
+                        if not self.tastytrade_broker._ensure_session_valid():
+                            print(f"[RISK] ⚠️ TastyTrade session invalid, skip stop sync")
+                            return
+                        tt_eq = await asyncio.to_thread(_TTEq.get, self.tastytrade_broker.session, symbol)
+                        sl_leg = tt_eq.build_leg(_TTDec(str(qty)), _TTAction.SELL_TO_CLOSE)
+                        sl_ord = _TTOrder(
+                            time_in_force=_TTTIF.GTC,
+                            order_type=_TTType.STOP,
+                            legs=[sl_leg],
+                            stop_trigger=_TTDec(str(new_stop_price))
+                        )
+                        sl_resp = await asyncio.to_thread(
+                            self.tastytrade_broker.account.place_order,
+                            self.tastytrade_broker.session, sl_ord, dry_run=False
+                        )
+                        if sl_resp and hasattr(sl_resp, 'order') and sl_resp.order:
+                            cache.broker_stop_order_id = str(sl_resp.order.id)
+                            print(f"[RISK] ✅ Broker stop synced: TastyTrade stop #{sl_resp.order.id} at ${new_stop_price:.2f}")
+                        else:
+                            cache.broker_stop_order_id = "tt_sl_synced"
+                            print(f"[RISK] ✅ Broker stop synced: TastyTrade stop submitted at ${new_stop_price:.2f}")
+                    else:
+                        sl_result = await self.tastytrade_broker.place_option_order(
+                            symbol=position.symbol, strike=position.strike,
+                            expiry=position.expiry or '', option_type=position.direction or 'C',
+                            action='STC', quantity=qty, price=new_stop_price
+                        )
+                        if sl_result and sl_result.success:
+                            _sl_oid = getattr(sl_result, 'order_id', None) or 'tt_sl_opt_sync'
+                            cache.broker_stop_order_id = str(_sl_oid)
+                            print(f"[RISK] ✅ Broker stop synced: TastyTrade option limit #{_sl_oid} at ${new_stop_price:.2f} [options use limit, not stop]")
+
+                elif 'TRADING212' in broker_name:
+                    if _is_opt:
+                        return
+                    sl_result = await self.trading212_broker.place_stop_order(
+                        symbol=symbol, action='STC', quantity=qty, stop_price=new_stop_price
+                    )
+                    if sl_result and sl_result.success and sl_result.order_id:
+                        cache.broker_stop_order_id = str(sl_result.order_id)
+                        print(f"[RISK] ✅ Broker stop synced: Trading212 stop #{sl_result.order_id} at ${new_stop_price:.2f}")
+                    else:
+                        msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                        print(f"[RISK] ⚠️ Trading212 stop sync failed: {msg}")
+
+                elif 'ROBINHOOD' in broker_name:
+                    if _is_opt:
+                        print(f"[RISK] ⚠️ Robinhood options don't support stop orders — dynamic SL monitored locally")
+                        return
+                    sl_result = await self.robinhood_broker.place_stock_order(
+                        symbol=symbol, action='STC', quantity=qty, stop_price=new_stop_price
+                    )
+                    if sl_result and sl_result.success and sl_result.order_id:
+                        cache.broker_stop_order_id = str(sl_result.order_id)
+                        print(f"[RISK] ✅ Broker stop synced: Robinhood stop #{sl_result.order_id} at ${new_stop_price:.2f}")
+                    else:
+                        msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                        print(f"[RISK] ⚠️ Robinhood stop sync failed: {msg}")
+
+                elif 'WEBULL' in broker_name:
+                    if _is_opt:
+                        print(f"[RISK] ⚠️ Webull options don't support stop orders — dynamic SL monitored locally")
+                        return
+                    def _wb_stop_sync():
+                        return broker_instance.wb.place_order(
+                            stock=symbol, price=new_stop_price, action='SELL',
+                            orderType='STP', enforce='GTC', quant=qty
+                        )
+                    sl_resp = await asyncio.to_thread(_wb_stop_sync)
+                    if sl_resp and not sl_resp.get('msg'):
+                        _sl_oid = str(sl_resp.get('orderId', ''))
+                        if _sl_oid:
+                            cache.broker_stop_order_id = _sl_oid
+                            print(f"[RISK] ✅ Broker stop synced: Webull stop #{_sl_oid} at ${new_stop_price:.2f}")
+                    else:
+                        print(f"[RISK] ⚠️ Webull stop sync failed: {sl_resp.get('msg', 'unknown') if sl_resp else 'no response'}")
+
+            except Exception as e:
+                print(f"[RISK] ⚠️ {broker_name} broker stop sync error: {e}")
 
     async def _execute_exit(
         self,
