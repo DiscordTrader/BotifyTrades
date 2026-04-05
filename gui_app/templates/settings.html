@@ -1462,7 +1462,7 @@ input:checked + .slider:before {
         <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,212,255,0.1);">
             <div class="toggle-row">
                 <label class="toggle-label">
-                    <input type="checkbox" id="auto-import-external" checked>
+                    <input type="checkbox" id="auto-import-external">
                     <span class="toggle-slider"></span>
                 </label>
                 <span>Auto-Import External Positions</span>
@@ -3681,7 +3681,7 @@ async function loadBackgroundServicesSettings() {
         if (data.success) {
             document.getElementById('broker-sync-enabled').checked = data.settings.broker_sync_enabled !== false;
             document.getElementById('risk-monitor-enabled').checked = data.settings.risk_monitor_enabled !== false;
-            document.getElementById('auto-import-external').checked = data.settings.auto_import_external !== false;
+            document.getElementById('auto-import-external').checked = data.settings.auto_import_external === true;
             updateBackgroundServicesToggleStatus();
         }
     } catch (error) {

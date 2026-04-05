@@ -2353,6 +2353,24 @@ class BrokerSyncService:
             pos_key = self._build_position_key(symbol, asset_type, strike, expiry, call_put)
             
             if pos_key not in tracked_keys:
+                # Check auto-import setting — skip external positions if disabled
+                # FAIL-CLOSED: default is disabled, errors keep it disabled
+                _auto_import_allowed = False
+                try:
+                    from gui_app.database import get_setting as _get_ai_setting
+                    _ai_setting = _get_ai_setting('auto_import_external', 'false')
+                    _auto_import_allowed = _ai_setting.lower() == 'true'
+                except Exception as _ai_err:
+                    print(f"[SYNC] ⚠️ Could not read auto_import_external setting: {_ai_err} — defaulting to disabled")
+                
+                if not _auto_import_allowed:
+                    if not hasattr(self, '_sync_skip_logged'):
+                        self._sync_skip_logged = set()
+                    if pos_key not in self._sync_skip_logged:
+                        self._sync_skip_logged.add(pos_key)
+                        print(f"[SYNC] ⏭️ Skipping external position {symbol} ({asset_type}, key={pos_key}) — auto-import disabled")
+                    continue
+                
                 # Skip if there's already a pending exit order for this symbol
                 # (prevents re-import loop while limit STC orders are awaiting fill)
                 if symbol.upper() in pending_sell_pos_keys:

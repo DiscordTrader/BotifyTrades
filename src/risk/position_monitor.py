@@ -3393,11 +3393,18 @@ class RiskManager:
                     )
                 self.cache.set_trade_id(pos_key, trade_id)
             else:
-                auto_import_enabled = True
+                auto_import_enabled = False
                 try:
-                    from gui_app.database import get_setting as _get_setting_ai
-                    auto_import_setting = _get_setting_ai('auto_import_external', 'true')
-                    auto_import_enabled = auto_import_setting.lower() == 'true'
+                    import time as _ai_time
+                    _ai_now = _ai_time.monotonic()
+                    _ai_cached = getattr(self, '_auto_import_cache', None)
+                    if _ai_cached and (_ai_now - _ai_cached[1]) < 10:
+                        auto_import_enabled = _ai_cached[0]
+                    else:
+                        from gui_app.database import get_setting as _get_setting_ai
+                        auto_import_setting = _get_setting_ai('auto_import_external', 'false')
+                        auto_import_enabled = auto_import_setting.lower() == 'true'
+                        self._auto_import_cache = (auto_import_enabled, _ai_now)
                 except Exception:
                     pass
                 

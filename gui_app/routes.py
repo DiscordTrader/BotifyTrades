@@ -13008,7 +13008,7 @@ def register_routes(app):
         try:
             broker_sync_enabled = db.get_setting('broker_sync_enabled', 'true').lower() == 'true'
             risk_monitor_enabled = db.get_setting('risk_monitor_enabled', 'true').lower() == 'true'
-            auto_import_external = db.get_setting('auto_import_external', 'true').lower() == 'true'
+            auto_import_external = db.get_setting('auto_import_external', 'false').lower() == 'true'
             return jsonify({
                 'success': True,
                 'settings': {
@@ -13028,7 +13028,7 @@ def register_routes(app):
             data = request.json
             broker_sync_enabled = data.get('broker_sync_enabled', True)
             risk_monitor_enabled = data.get('risk_monitor_enabled', True)
-            auto_import_external = data.get('auto_import_external', True)
+            auto_import_external = data.get('auto_import_external', False)
             
             db.save_setting('broker_sync_enabled', 'true' if broker_sync_enabled else 'false')
             db.save_setting('risk_monitor_enabled', 'true' if risk_monitor_enabled else 'false')
