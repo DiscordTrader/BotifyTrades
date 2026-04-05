@@ -1388,7 +1388,7 @@ class RiskManager:
         self._STUCK_PRICE_THRESHOLD = 3
         self._rest_repaired_prices = {}
         self._rest_repair_cycle_keys = {}
-        self._STALENESS_EXIT_BLOCK_THRESHOLD = 10
+        self._STALENESS_EXIT_BLOCK_THRESHOLD = 5
         self._rest_confirmed_this_cycle = {}
         self._rest_validated_same = {}
         self._partial_exit_in_flight = {}
@@ -3583,14 +3583,14 @@ class RiskManager:
                             _override_src = "REST-confirmed fresh" if _is_rest_confirmed else "REST-validated same"
                             print(f"[RISK] ✓ STALENESS OVERRIDE: {position.symbol} price ${position.current_price:.2f} "
                                   f"stale {change_age:.0f}s but {_override_src} — allowing SL evaluation")
-                    elif change_age > 90 and tracker.get('rest_checked_ok', 0) > 0:
+                    elif change_age > 60 and tracker.get('rest_checked_ok', 0) > tracker.get('last_changed', 0):
                         if not hasattr(self, '_max_stale_override_logged'):
                             self._max_stale_override_logged = {}
                         _mso_key = f"{_repair_key}_{int(change_age)//60}"
                         if _mso_key not in self._max_stale_override_logged:
                             self._max_stale_override_logged[_mso_key] = True
                             print(f"[RISK] ✓ MAX STALENESS OVERRIDE: {position.symbol} price ${position.current_price:.2f} "
-                                  f"unchanged {change_age:.0f}s — REST checked, allowing SL evaluation (90s safety limit)")
+                                  f"unchanged {change_age:.0f}s — REST checked, allowing SL evaluation (60s safety limit)")
                     else:
                         _staleness_is_blocking = True
             elif change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD and session == 'extended':
@@ -6635,12 +6635,14 @@ class RiskManager:
                     self._rest_confirmed_this_cycle[key] = now
                     if key in self._rest_validated_same:
                         del self._rest_validated_same[key]
-                elif stuck_seconds >= self._STALENESS_EXIT_BLOCK_THRESHOLD and not _sanity_rejected and (_rest_checked or _cross_hub_confirmed_same):
-                    import time as _vs
-                    _val_source = 'REST' if _rest_checked else 'cross-hub'
-                    self._rest_validated_same[key] = _vs.time()
-                    print(f"[RISK] ✓ PRICE VALIDATED ({_val_source}): {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
-                          f"confirmed price ${pos.current_price:.4f} is real (same from all sources)")
+                elif not _sanity_rejected and (_rest_checked or _cross_hub_confirmed_same):
+                    if stuck_seconds >= self._STUCK_PRICE_THRESHOLD:
+                        import time as _vs
+                        _val_source = 'REST' if _rest_checked else 'cross-hub'
+                        self._rest_validated_same[key] = _vs.time()
+                        if stuck_seconds >= self._STALENESS_EXIT_BLOCK_THRESHOLD:
+                            print(f"[RISK] ✓ PRICE VALIDATED ({_val_source}): {pos.broker} {pos.symbol} frozen {stuck_seconds:.0f}s — "
+                                  f"confirmed price ${pos.current_price:.4f} is real (same from all sources)")
             except Exception as e:
                 if not hasattr(self, '_stuck_fix_err_logged'):
                     self._stuck_fix_err_logged = True
