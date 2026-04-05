@@ -1459,6 +1459,17 @@ input:checked + .slider:before {
             </div>
             <p class="help-text">Monitors positions for stop-loss/take-profit triggers every 30 seconds (1 API call/30s)</p>
         </div>
+        <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,212,255,0.1);">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="auto-import-external" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Auto-Import External Positions</span>
+                <span id="auto-import-status" class="toggle-status">ON</span>
+            </div>
+            <p class="help-text">When enabled, positions bought manually (outside the bot) are automatically imported for risk monitoring. When disabled, only bot-placed trades are tracked.</p>
+        </div>
         <div class="btn-group">
             <button id="save-background-services" class="btn btn-success">💾 Save Background Services</button>
             <span id="background-services-save-status" style="margin-left: 12px; font-size: 13px;"></span>
@@ -3654,6 +3665,12 @@ function updateBackgroundServicesToggleStatus() {
         riskMonitorStatus.textContent = riskMonitorEnabled ? 'ON' : 'OFF';
         riskMonitorStatus.style.color = riskMonitorEnabled ? '#00ff88' : '#6c757d';
     }
+    const autoImportEnabled = document.getElementById('auto-import-external').checked;
+    const autoImportStatus = document.getElementById('auto-import-status');
+    if (autoImportStatus) {
+        autoImportStatus.textContent = autoImportEnabled ? 'ON' : 'OFF';
+        autoImportStatus.style.color = autoImportEnabled ? '#00ff88' : '#6c757d';
+    }
 }
 
 async function loadBackgroundServicesSettings() {
@@ -3664,6 +3681,7 @@ async function loadBackgroundServicesSettings() {
         if (data.success) {
             document.getElementById('broker-sync-enabled').checked = data.settings.broker_sync_enabled !== false;
             document.getElementById('risk-monitor-enabled').checked = data.settings.risk_monitor_enabled !== false;
+            document.getElementById('auto-import-external').checked = data.settings.auto_import_external !== false;
             updateBackgroundServicesToggleStatus();
         }
     } catch (error) {
@@ -3673,11 +3691,13 @@ async function loadBackgroundServicesSettings() {
 
 document.getElementById('broker-sync-enabled').addEventListener('change', updateBackgroundServicesToggleStatus);
 document.getElementById('risk-monitor-enabled').addEventListener('change', updateBackgroundServicesToggleStatus);
+document.getElementById('auto-import-external').addEventListener('change', updateBackgroundServicesToggleStatus);
 
 document.getElementById('save-background-services').addEventListener('click', async () => {
     const data = {
         broker_sync_enabled: document.getElementById('broker-sync-enabled').checked,
-        risk_monitor_enabled: document.getElementById('risk-monitor-enabled').checked
+        risk_monitor_enabled: document.getElementById('risk-monitor-enabled').checked,
+        auto_import_external: document.getElementById('auto-import-external').checked
     };
     
     const inlineStatus = document.getElementById('background-services-save-status');

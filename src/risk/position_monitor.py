@@ -3393,6 +3393,22 @@ class RiskManager:
                     )
                 self.cache.set_trade_id(pos_key, trade_id)
             else:
+                auto_import_enabled = True
+                try:
+                    from gui_app.database import get_setting as _get_setting_ai
+                    auto_import_setting = _get_setting_ai('auto_import_external', 'true')
+                    auto_import_enabled = auto_import_setting.lower() == 'true'
+                except Exception:
+                    pass
+                
+                if not auto_import_enabled:
+                    if not hasattr(self, '_skipped_external_logged'):
+                        self._skipped_external_logged = set()
+                    if pos_key not in self._skipped_external_logged:
+                        self._skipped_external_logged.add(pos_key)
+                        print(f"[RISK] ⏭️ Skipping external position {pos_key} — auto-import disabled")
+                    return
+                
                 if not hasattr(self, '_auto_imported_keys'):
                     self._auto_imported_keys = set()
                 
