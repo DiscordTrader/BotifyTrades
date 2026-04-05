@@ -865,8 +865,8 @@
         
         .broker-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.5rem;
         }
         
         .broker-card {
@@ -928,6 +928,26 @@
         .broker-logo.ibkr {
             background: transparent;
             box-shadow: 0 10px 40px rgba(215, 25, 32, 0.3);
+        }
+        
+        .broker-logo.schwab {
+            background: transparent;
+            box-shadow: 0 10px 40px rgba(0, 163, 224, 0.3);
+        }
+        
+        .broker-logo.tastytrade {
+            background: transparent;
+            box-shadow: 0 10px 40px rgba(255, 68, 68, 0.3);
+        }
+        
+        .broker-logo.robinhood {
+            background: transparent;
+            box-shadow: 0 10px 40px rgba(0, 200, 5, 0.3);
+        }
+        
+        .broker-logo.t212 {
+            background: transparent;
+            box-shadow: 0 10px 40px rgba(0, 200, 255, 0.3);
         }
         
         .broker-card:hover .broker-logo {
@@ -1699,6 +1719,12 @@
             border: 1px solid var(--border-subtle);
         }
         
+        .share-btn.discord {
+            background: rgba(88, 101, 242, 0.15);
+            color: #5865F2;
+            border: 1px solid rgba(88, 101, 242, 0.3);
+        }
+        
         .share-btn:hover {
             transform: translateY(-3px);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
@@ -1764,8 +1790,8 @@
         </h1>
         
         <p class="hero-subtitle">
-            Execute trades across multiple brokers simultaneously from Discord signals. 
-            Real-time monitoring, intelligent risk management, and AI-powered analysis.
+            Execute trades across multiple brokers simultaneously from Discord and Telegram signals. 
+            Real-time monitoring, intelligent risk management, and automated execution.
         </p>
         
         <div class="hero-cta">
@@ -1782,7 +1808,7 @@
 
         <div class="stats-bar">
             <div class="stat-item">
-                <div class="stat-value">3</div>
+                <div class="stat-value">7</div>
                 <div class="stat-label">Supported Brokers</div>
             </div>
             <div class="stat-item">
@@ -1815,7 +1841,7 @@
                 <div class="feature-icon cyan">🔀</div>
                 <h3 class="feature-title">Multi-Broker Execution</h3>
                 <p class="feature-desc">
-                    Execute trades on Webull, Alpaca, and Interactive Brokers simultaneously from a single signal. 
+                    Execute trades on Webull, Schwab, Alpaca, Interactive Brokers, Tastytrade, Robinhood, and Trading212 simultaneously from a single signal. 
                     Perfect for diversification and redundancy.
                 </p>
                 <div class="feature-tags">
@@ -1850,20 +1876,6 @@
                     <span class="feature-tag">Trailing</span>
                 </div>
             </div>
-
-            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(249, 115, 22, 0.15);">
-                <div class="feature-icon orange">🤖</div>
-                <h3 class="feature-title">AI-Powered Analysis</h3>
-                <p class="feature-desc">
-                    Pre-trade swing analysis using technical indicators. Post-execution AI insights 
-                    powered by GPT models for continuous improvement.
-                </p>
-                <div class="feature-tags">
-                    <span class="feature-tag">Technical Analysis</span>
-                    <span class="feature-tag">GPT-4</span>
-                </div>
-            </div>
-
 
             <div class="feature-card animate-on-scroll" style="--card-glow: rgba(59, 130, 246, 0.15);">
                 <div class="feature-icon blue">🔔</div>
@@ -1910,6 +1922,27 @@
                     <span class="mode-badge paper">PAPER</span>
                 </div>
                 <p class="broker-features">Stocks • Options • Index Options (SPX)</p>
+            </div>
+
+            <div class="broker-card animate-on-scroll">
+                <div class="broker-logo schwab">
+                    <svg viewBox="0 0 200 200" width="60" height="60">
+                        <defs>
+                            <linearGradient id="schwabGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#00A3E0"/>
+                                <stop offset="100%" style="stop-color:#0078AB"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="100" cy="100" r="90" fill="url(#schwabGrad)"/>
+                        <text x="100" y="90" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="24" font-weight="700">CHARLES</text>
+                        <text x="100" y="125" text-anchor="middle" fill="white" font-family="Arial Black, sans-serif" font-size="32" font-weight="900">SCHWAB</text>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Charles Schwab</h3>
+                <div class="broker-modes">
+                    <span class="mode-badge live">LIVE</span>
+                </div>
+                <p class="broker-features">Stocks • Options • Index Options • Streaming</p>
             </div>
 
             <div class="broker-card animate-on-scroll">
@@ -1960,6 +1993,68 @@
                     <span class="mode-badge paper">PAPER</span>
                 </div>
                 <p class="broker-features">Stocks • Options • Index Options • Futures</p>
+            </div>
+
+            <div class="broker-card animate-on-scroll">
+                <div class="broker-logo tastytrade">
+                    <svg viewBox="0 0 200 200" width="60" height="60">
+                        <defs>
+                            <linearGradient id="tastyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#FF4444"/>
+                                <stop offset="100%" style="stop-color:#CC0000"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="100" cy="100" r="90" fill="url(#tastyGrad)"/>
+                        <text x="100" y="88" text-anchor="middle" fill="white" font-family="Arial Black, sans-serif" font-size="28" font-weight="900">tasty</text>
+                        <text x="100" y="125" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="26" font-weight="700">trade</text>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Tastytrade</h3>
+                <div class="broker-modes">
+                    <span class="mode-badge live">LIVE</span>
+                </div>
+                <p class="broker-features">Stocks • Options • Advanced Greeks</p>
+            </div>
+
+            <div class="broker-card animate-on-scroll">
+                <div class="broker-logo robinhood">
+                    <svg viewBox="0 0 200 200" width="60" height="60">
+                        <defs>
+                            <linearGradient id="rhGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#00C805"/>
+                                <stop offset="100%" style="stop-color:#00A004"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="100" cy="100" r="90" fill="url(#rhGrad)"/>
+                        <path d="M130 70c0-15-12-27-27-27H85l-15 45h20l-10 45 50-63h-25l25-0z" fill="white"/>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Robinhood</h3>
+                <div class="broker-modes">
+                    <span class="mode-badge live">LIVE</span>
+                </div>
+                <p class="broker-features">Stocks • Options • Commission-Free</p>
+            </div>
+
+            <div class="broker-card animate-on-scroll">
+                <div class="broker-logo t212">
+                    <svg viewBox="0 0 200 200" width="60" height="60">
+                        <defs>
+                            <linearGradient id="t212Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#00C8FF"/>
+                                <stop offset="100%" style="stop-color:#0096CC"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="100" cy="100" r="90" fill="url(#t212Grad)"/>
+                        <text x="100" y="88" text-anchor="middle" fill="white" font-family="Arial Black, sans-serif" font-size="30" font-weight="900">T</text>
+                        <text x="100" y="130" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="40" font-weight="800">212</text>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Trading 212</h3>
+                <div class="broker-modes">
+                    <span class="mode-badge live">LIVE</span>
+                </div>
+                <p class="broker-features">Stocks • Commission-Free • UK/EU</p>
             </div>
         </div>
     </section>
@@ -2221,6 +2316,10 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                 Email
             </button>
+            <button class="share-btn discord" onclick="joinDiscord()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.8732.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg>
+                Join Discord
+            </button>
         </div>
     </section>
 
@@ -2277,6 +2376,10 @@
 
         function shareEmail() {
             window.location.href = `mailto:?subject=${encodeURIComponent('Check out BotifyTrades')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`;
+        }
+
+        function joinDiscord() {
+            window.open('https://discord.gg/botifytrades', '_blank');
         }
 
         // Waitlist form handler
