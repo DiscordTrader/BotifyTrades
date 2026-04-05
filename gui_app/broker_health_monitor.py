@@ -26,8 +26,6 @@ def check_broker_health(broker_name: str, is_connected: bool, error_message: Opt
         is_connected: True if broker is connected and working
         error_message: Optional error message if disconnected
     """
-    global _broker_status, _last_check_time, _consecutive_failures
-    
     with _status_lock:
         previous_status = _broker_status.get(broker_name)
         current_failures = _consecutive_failures.get(broker_name, 0)

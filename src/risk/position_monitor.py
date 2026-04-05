@@ -3617,6 +3617,7 @@ class RiskManager:
                     else:
                         _staleness_is_blocking = True
             elif change_age > self._STALENESS_EXIT_BLOCK_THRESHOLD and session == 'extended':
+                _ext_pos_key = f"{position.broker}_{position.symbol}_{position.asset}"
                 _rest_price = None
                 try:
                     from src.services.webull_data_hub import get_webull_data_hub
@@ -3628,8 +3629,8 @@ class RiskManager:
                 if _rest_price and abs(_rest_price - position.current_price) / max(position.current_price, 0.001) < 0.02:
                     if not hasattr(self, '_ext_hours_staleness_bypass_logged'):
                         self._ext_hours_staleness_bypass_logged = set()
-                    if pos_key not in self._ext_hours_staleness_bypass_logged:
-                        self._ext_hours_staleness_bypass_logged.add(pos_key)
+                    if _ext_pos_key not in self._ext_hours_staleness_bypass_logged:
+                        self._ext_hours_staleness_bypass_logged.add(_ext_pos_key)
                         print(f"[RISK] ✓ EXTENDED HOURS: {position.symbol} price ${position.current_price:.4f} "
                               f"confirmed by REST (${_rest_price:.4f}) — allowing exit evaluation "
                               f"despite {change_age:.0f}s staleness")

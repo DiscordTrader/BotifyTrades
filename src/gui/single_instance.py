@@ -28,8 +28,6 @@ def check_single_instance(app_name: str = "BotifyTrades") -> bool:
         True if this is the only instance (safe to proceed)
         False if another instance is already running
     """
-    global _lock_handle, _lock_file
-    
     # Skip check in cloud environments - they manage single instances via workflows
     if _is_cloud_environment():
         print("[SINGLE INSTANCE] Cloud environment detected - skipping check (managed by workflow)")

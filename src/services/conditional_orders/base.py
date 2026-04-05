@@ -1986,7 +1986,8 @@ class BaseConditionalOrderService(ABC):
                 
                 order_data = self.pending_orders.get(oid)
                 if order_data and self._loop:
-                    async def _restart_monitor(oid_inner=oid, order_inner=order_data):
+                    _captured_err = e
+                    async def _restart_monitor(oid_inner=oid, order_inner=order_data, _err=_captured_err):
                         try:
                             await asyncio.sleep(2 ** restart_count)
                             if oid_inner not in self.pending_orders:
@@ -2000,7 +2001,7 @@ class BaseConditionalOrderService(ABC):
                             update_conditional_order_status(
                                 oid_inner, 'ERROR',
                                 event='MONITOR_RESTART_FAILED',
-                                error_message=f'Monitor crashed ({str(e)[:100]}) and restart failed'
+                                error_message=f'Monitor crashed ({str(_err)[:100]}) and restart failed'
                             )
                             if oid_inner in self.pending_orders:
                                 del self.pending_orders[oid_inner]

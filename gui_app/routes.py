@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Optional, Any, Dict, Callable
 from functools import wraps
-from flask import render_template, jsonify, request, make_response, session, redirect, url_for, send_from_directory
+from flask import render_template, jsonify, request, make_response, session, redirect, url_for, send_from_directory, flash, Response
 from . import database as db
 from .webhook_service import get_db_connection
 
@@ -262,8 +262,6 @@ def get_webull_broker():
     """Get the Webull broker instance from the bot for option data.
     Falls back to creating standalone broker from database credentials.
     """
-    global _bot_instance, _standalone_webull_broker
-    
     if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
         return _bot_instance.broker
     
@@ -289,7 +287,7 @@ def get_webull_loop():
     """Get the bot's event loop for async calls.
     Falls back to creating a standalone loop when bot isn't running.
     """
-    global _bot_instance, _standalone_loop
+    global _standalone_loop
     
     if _bot_instance and hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
         return _bot_instance.loop
@@ -2599,8 +2597,6 @@ def register_routes(app):
         """Get dashboard statistics"""
         from datetime import datetime
         
-        # Clear cache to ensure fresh data
-        global _api_cache
         _api_cache.clear()
         
         # Get channel counts
@@ -2755,8 +2751,6 @@ def register_routes(app):
     @app.route('/api/trades', methods=['GET'])
     def api_get_trades():
         """Get trades with optional filters and tab support"""
-        # Clear cache for this request to ensure fresh data
-        global _api_cache
         _api_cache.clear()
         
         tab = request.args.get('tab', 'live')
@@ -6003,7 +5997,6 @@ def register_routes(app):
         Used for stale positions (manual broker close, ticker rename, etc.)."""
         try:
             from datetime import datetime
-            db = get_db()
             numeric_id = int(trade_id)
             trade = db.get_trade(numeric_id)
             if not trade:
@@ -16119,9 +16112,9 @@ def register_routes(app):
                 license_key = ''
             
             if not license_key:
-                # Try database API keys
                 try:
-                    api_keys = get_api_keys_extended()
+                    from .broker_credentials_service import get_api_keys_extended as _get_api_keys
+                    api_keys = _get_api_keys()
                     license_key = api_keys.get('license_key', '').strip()
                 except Exception:
                     pass

@@ -108,7 +108,6 @@ def load_credentials_from_database() -> Dict[str, Any]:
 
 def get_config() -> configparser.ConfigParser:
     """Get the loaded configuration (loads if not already loaded)."""
-    global _config
     if _config is None:
         load_config_file()
     return _config

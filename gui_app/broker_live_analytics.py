@@ -488,10 +488,19 @@ class BrokerLiveAnalytics:
                     
         except Exception as e:
             print(f"[ANALYTICS] Error getting account info for {broker_id}: {e}")
+            return {
+                'connected': False,
+                'error': str(e),
+                'buying_power': 0,
+                'cash': 0,
+                'portfolio_value': 0,
+                'day_pnl': 0,
+                'day_pnl_percent': 0
+            }
             
         return {
             'connected': False,
-            'error': str(e) if 'e' in dir() else 'Unknown error',
+            'error': 'Unknown error',
             'buying_power': 0,
             'cash': 0,
             'portfolio_value': 0,

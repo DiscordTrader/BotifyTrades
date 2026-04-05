@@ -98,7 +98,7 @@ _snapshot_log_seen_warnings = set()
 def _log(msg: str):
     if not _snapshot_log_verbose and '[ENRICH]' in msg:
         return
-    global _snapshot_log_last_summary, _snapshot_log_seen_warnings
+    global _snapshot_log_last_summary
     if msg.startswith('Refreshed:'):
         now = time.time()
         if now - _snapshot_log_last_summary < 60:
@@ -1123,7 +1123,7 @@ _broker_position_cache_lock = threading.Lock()
 
 
 def _refresh_snapshot(bot_instance, force_all: bool = False):
-    global _snapshot_cache, _snapshot_version
+    global _snapshot_version
 
     with _snapshot_lock:
         if _snapshot_cache.get('updating'):

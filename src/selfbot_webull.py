@@ -2369,8 +2369,6 @@ class WebullBroker:
                 print(f"[{self.name}] Cannot refresh trade token - no client")
                 return False
             
-            # Get the global WB_PIN
-            global WB_PIN
             if not WB_PIN:
                 print(f"[{self.name}] Cannot refresh trade token - no trade PIN configured")
                 return False
@@ -10128,8 +10126,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         await self._process_message(message, arrived_at=message_arrived_at)
 
     async def on_ready(self):
-        global _discord_ready_event  # Declare at function start for early signaling
-        
         # Guard against duplicate on_ready calls (Discord reconnects can trigger this multiple times)
         # First fast-path check (no locking needed if already completed)
         if self._on_ready_completed:
@@ -10270,14 +10266,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             conditional_order_router.set_bot_ref(self)
             
             if conditional_order_router.is_enabled():
-                global _telegram_signal_queue
-                
                 # Set up async execution callback
                 async def execute_conditional_order(order, triggered_price):
                     """Execute a triggered conditional order using sync signal queue."""
                     import sys
                     from gui_app.database import get_channel_by_discord_id, get_channel_by_telegram_id
-                    global _telegram_signal_queue
                     try:
                         sys.stderr.write(f"[CONDITIONAL EXEC] Starting execution for order: {order.get('id')}\n")
                         sys.stderr.flush()
@@ -10917,7 +10910,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         ):
                             print(f"[OMS EDIT] ✓ SL updated: ${current_sl} -> ${final_sl}")
                             
-                            channel_broker = instance.get('broker') or channel_settings.get('broker_override') if channel_settings else None
+                            _ch_settings = db.get_channel_settings(str(after.channel.id)) if hasattr(db, 'get_channel_settings') else None
+                            channel_broker = instance.get('broker') or (_ch_settings.get('broker_override') if _ch_settings else None)
                             broker_inst = self.get_broker_instance(channel_broker) if channel_broker else None
                             
                             await signal_exit_manager.handle_sl_update(
@@ -17203,8 +17197,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         and pushes them to the async order queue for processing.
         This enables cross-thread signal passing from Telegram to the worker.
         """
-        global _telegram_signal_queue
-        
         if _telegram_signal_queue is None:
             return
         
@@ -19288,7 +19280,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                           f"**Reason:** {error_msg}\n"
                                           f"**Error Type:** {error_type}"
                             }
-                            requests.post(webhook_url, json=webhook_data)
+                            import requests as _req_lib
+                            _req_lib.post(webhook_url, json=webhook_data)
                         except:
                             pass
                 
@@ -19986,7 +19979,7 @@ def run_discord_bot_thread():
     Runs Discord bot in its own dedicated thread with isolated asyncio event loop.
     Uses client.start() with asyncio.run() for proper loop isolation.
     """
-    global _discord_ready_event, _discord_shutdown_event, _discord_error_queue, _discord_thread_started
+    global _discord_thread_started
     
     # Guard: Prevent duplicate Discord threads (critical for PyInstaller builds)
     if _discord_thread_started:
@@ -20073,7 +20066,7 @@ def run_telegram_bot_thread():
     Uses Telethon to connect as a user account to read trading signals.
     Signals are passed via a thread-safe queue.Queue to avoid cross-loop issues.
     """
-    global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue, _telegram_listener
+    global _telegram_listener
     
     async def telegram_main():
         """Async entrypoint for Telegram listener with proper lifecycle"""
@@ -20175,9 +20168,7 @@ def run_bot_startup(progress_callback=None):
     progress_callback: Optional function to report progress (step, message)
     """
     import time
-    global _discord_ready_event, _discord_shutdown_event, _discord_error_queue
-    global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
-    global _startup_in_progress, _discord_thread_started
+    global _startup_in_progress
     
     # Guard: Prevent duplicate startup calls (critical for PyInstaller builds with lifecycle watchdog)
     if _startup_in_progress:
@@ -20207,7 +20198,6 @@ def _run_bot_startup_inner(progress_callback=None):
     import time
     global _discord_ready_event, _discord_shutdown_event, _discord_error_queue
     global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
-    global _discord_thread_started
 
     startup_start = time.time()
     step_times = {}
@@ -20431,8 +20421,10 @@ if __name__ == '__main__':
         
         try:
             try:
-                if hasattr(bot_instance, 'broker') and bot_instance.broker:
-                    task = getattr(bot_instance.broker, '_token_refresh_task', None)
+                from gui_app import routes as _routes_cleanup
+                _bot_ref = getattr(_routes_cleanup, '_bot_instance', None)
+                if _bot_ref and hasattr(_bot_ref, 'broker') and _bot_ref.broker:
+                    task = getattr(_bot_ref.broker, '_token_refresh_task', None)
                     if task and not task.done():
                         task.cancel()
             except Exception:

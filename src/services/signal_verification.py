@@ -221,7 +221,6 @@ class SignalVerificationService:
         if hub_result:
             return hub_result
 
-        global _webull_client
         if not _webull_client:
             return None
         
@@ -309,7 +308,6 @@ class SignalVerificationService:
     def _get_tastytrade_option_quote(self, ticker: str, strike: float, expiry: str,
                                       direction: str) -> Optional[Dict]:
         """Get real-time option quote from Tastytrade"""
-        global _tastytrade_session
         if not _tastytrade_session:
             return None
         
@@ -445,7 +443,6 @@ class SignalVerificationService:
     def _get_schwab_option_quote(self, ticker: str, strike: float, expiry: str,
                                   direction: str) -> Optional[Dict]:
         """Get real-time option quote from Schwab"""
-        global _schwab_broker
         if not _schwab_broker:
             return None
         
@@ -518,7 +515,6 @@ class SignalVerificationService:
     def _get_ibkr_option_quote(self, ticker: str, strike: float, expiry: str,
                                 direction: str) -> Optional[Dict]:
         """Get real-time option quote from IBKR (requires TWS/Gateway)"""
-        global _ibkr_broker
         if not _ibkr_broker or not hasattr(_ibkr_broker, 'ib'):
             return None
         
@@ -586,7 +582,6 @@ class SignalVerificationService:
     def _get_robinhood_option_quote(self, ticker: str, strike: float, expiry: str,
                                      direction: str) -> Optional[Dict]:
         """Get option quote from Robinhood (WARNING: LIVE ONLY - no paper trading)"""
-        global _robinhood_broker
         if not _robinhood_broker:
             return None
         
@@ -685,7 +680,6 @@ class SignalVerificationService:
     
     def _get_alpaca_stock_quote(self, ticker: str) -> Optional[Dict]:
         """Get real-time stock quote from Alpaca"""
-        global _alpaca_broker
         if not _alpaca_broker:
             return None
         
@@ -712,7 +706,6 @@ class SignalVerificationService:
     
     def _get_schwab_stock_quote(self, ticker: str) -> Optional[Dict]:
         """Get real-time stock quote from Schwab"""
-        global _schwab_broker
         if not _schwab_broker:
             return None
         
@@ -740,7 +733,6 @@ class SignalVerificationService:
     
     def _get_ibkr_stock_quote(self, ticker: str) -> Optional[Dict]:
         """Get real-time stock quote from IBKR (requires TWS/Gateway)"""
-        global _ibkr_broker
         if not _ibkr_broker or not hasattr(_ibkr_broker, 'ib'):
             return None
         
@@ -771,7 +763,6 @@ class SignalVerificationService:
     
     def _get_robinhood_stock_quote(self, ticker: str) -> Optional[Dict]:
         """Get stock quote from Robinhood (WARNING: LIVE ONLY - no paper trading)"""
-        global _robinhood_broker
         if not _robinhood_broker:
             return None
         
@@ -799,7 +790,6 @@ class SignalVerificationService:
     
     def get_stock_market_data(self, ticker: str, preferred_broker: str = 'auto') -> Optional[Dict]:
         """Fetch stock quote — streaming hubs first, then preferred broker"""
-        global _webull_client, _alpaca_broker, _schwab_broker, _ibkr_broker, _robinhood_broker
         
         if preferred_broker != 'yfinance':
             hub_result = self._check_streaming_hubs_stock(ticker)
