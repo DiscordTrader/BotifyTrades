@@ -128,13 +128,9 @@ print_success "Committed: $COMMIT_MSG"
 # Step 5: Push to private repo
 print_step 5 6 "Pushing to origin..."
 
-# Use credential helper with RELEASE_TOKEN for secure push
+# Use RELEASE_TOKEN for authenticated push
 if [ -n "$RELEASE_TOKEN" ]; then
-    # Clear any cached credentials first
-    git credential-cache exit 2>/dev/null || true
-    # Fine-grained PATs require username=oauth2 (not x-access-token)
-    git -c credential.helper="!f() { echo username=oauth2; echo password=$RELEASE_TOKEN; }; f" \
-        push https://github.com/$PRIVATE_REPO.git main
+    git push "https://x-access-token:${RELEASE_TOKEN}@github.com/${PRIVATE_REPO}.git" main
 else
     git push origin main
 fi
