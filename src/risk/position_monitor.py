@@ -3939,6 +3939,11 @@ class RiskManager:
                 stop_display = f"${cache.early_stop_price:.2f}" if cache.early_stop_price else "entry"
                 print(f"[RISK] ✓ Early Trailing ACTIVATED - Breakeven locked at {stop_display}")
                 self.cache.persist_early_trailing_state(position.position_key)
+                if action.new_stop_price and cache.broker_orders_placed and cache.broker_stop_order_id:
+                    _et_sp = action.new_stop_price
+                    pos_key = position.position_key
+                    self._enqueue_broker_op(pos_key, 'SYNC_STOP', 10,
+                        lambda _p=position, _c=cache, _sp=_et_sp: self._sync_stop_to_broker(_p, _c, _sp))
             
             elif action.action_type == ActionType.UPDATE_EARLY_STOP and action.new_stop_price is not None:
                 old_stop = cache.early_stop_price
@@ -3950,6 +3955,11 @@ class RiskManager:
                 old_display = f"${old_stop:.2f}" if old_stop else "entry"
                 print(f"[RISK] 📈 Early Trail PROFIT LOCKED: {old_display} → ${action.new_stop_price:.2f} (step {cache.early_steps_locked})")
                 self.cache.persist_early_trailing_state(position.position_key)
+                if cache.broker_orders_placed and cache.broker_stop_order_id:
+                    _et_sp = action.new_stop_price
+                    pos_key = position.position_key
+                    self._enqueue_broker_op(pos_key, 'SYNC_STOP', 10,
+                        lambda _p=position, _c=cache, _sp=_et_sp: self._sync_stop_to_broker(_p, _c, _sp))
 
             elif action.action_type == ActionType.EMA_EXIT:
                 channel_name = channel_settings.channel_name
@@ -4159,8 +4169,19 @@ class RiskManager:
 
             leave_runner = channel_settings.leave_runner_pct if channel_settings.leave_runner_enabled else 0
             escalation_only = getattr(channel_settings, 'escalation_only_mode', False)
-            tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
-            pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
+
+            _custom_pt1_qty = getattr(channel_settings, 'profit_target_qty_1', None)
+            if _custom_pt1_qty and _custom_pt1_qty > 0 and not escalation_only:
+                runner_qty = max(1, int(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
+                pt1_qty = min(_custom_pt1_qty, qty - runner_qty)
+            else:
+                tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
+                pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
+
+            _trim_mode = getattr(channel_settings, 'trim_order_mode', 'limit') or 'limit'
+            if _trim_mode == 'market':
+                pt1_qty = 0
+                pt1_price = None
 
             _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
             _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
@@ -4586,6 +4607,13 @@ class RiskManager:
                 return
             await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier)
 
+        if cache.broker_stop_order_id and not cache.closing:
+            _current_sl = cache.dynamic_sl_price or cache.early_stop_price or cache.stop_loss_price
+            if _current_sl and _current_sl > 0:
+                print(f"[RISK] 📋 PROGRESSIVE: Resizing broker stop after PT{completed_tier} fill — syncing to remaining qty at ${_current_sl:.2f}")
+                self._enqueue_broker_op(pos_key, 'RESIZE_STOP', 15,
+                    lambda _p=position, _c=cache, _sp=_current_sl: self._sync_stop_to_broker(_p, _c, _sp))
+
     async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int, _retry_count: int = 0):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         broker_instance = self._get_broker_instance_for_bracket(broker_name)
@@ -4605,6 +4633,11 @@ class RiskManager:
 
         next_pt_price = round(entry_price * (1 + next_pt_pct / 100), 4)
 
+        _trim_mode = getattr(channel_settings, 'trim_order_mode', 'limit') or 'limit'
+        if _trim_mode == 'market':
+            print(f"[RISK] 📋 PROGRESSIVE: PT{next_tier} skipped — trim_order_mode is 'market', risk engine will handle exit")
+            return
+
         from src.risk.risk_engine import calculate_auto_tier_quantities
         enabled_tiers = []
         for tier, attr in [(1, 'profit_target_1_pct'), (2, 'profit_target_2_pct'),
@@ -4616,8 +4649,18 @@ class RiskManager:
         qty = cache.original_qty or int(position.quantity)
         leave_runner = channel_settings.leave_runner_pct if channel_settings.leave_runner_enabled else 0
         escalation_only = getattr(channel_settings, 'escalation_only_mode', False)
-        tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
-        next_qty = tier_qtys.get(next_tier, 0) if not escalation_only else 0
+
+        _custom_qty_attr = f'profit_target_qty_{next_tier}'
+        _custom_qty = getattr(channel_settings, _custom_qty_attr, None)
+        if _custom_qty and _custom_qty > 0 and not escalation_only:
+            runner_qty = max(1, int(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
+            max_sellable = qty - runner_qty
+            already_sold = max(0, qty - int(position.quantity))
+            max_additional = max(0, max_sellable - already_sold)
+            next_qty = min(_custom_qty, max_additional)
+        else:
+            tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
+            next_qty = tier_qtys.get(next_tier, 0) if not escalation_only else 0
 
         if next_qty <= 0:
             print(f"[RISK] 📋 PROGRESSIVE: PT{next_tier} qty=0, skipping broker order")
