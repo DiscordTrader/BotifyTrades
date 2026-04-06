@@ -11042,15 +11042,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 channel_id = str(after.channel.id)
                 
                 cond_broker = cond_order.get('broker_primary')
-                _old_metadata = cond_order.get('metadata')
-                if _old_metadata:
-                    try:
-                        import json
-                        _old_meta = json.loads(_old_metadata)
-                        if _old_meta.get('all_brokers'):
-                            parsed['_all_brokers'] = _old_meta['all_brokers']
-                    except Exception:
-                        pass
+                parsed.pop('_all_brokers', None)
                 
                 new_order_id = conditional_order_router.create_order(channel_id, parsed, cond_broker)
                 if new_order_id:
@@ -12516,39 +12508,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             h_sig['message_id'] = str(message.id)
                                             h_sig['author_id'] = str(message.author.id)
                                             h_sig['author_name'] = str(message.author)
-                                            cond_broker = cond_brokers[0]
-                                            h_sig['_all_brokers'] = cond_brokers
-                                            order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
-                                            if order_id:
-                                                print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}]")
-                                                try:
-                                                    from src.services.signal_conversation_state import get_conversation_state_manager
-                                                    state_mgr = get_conversation_state_manager()
-                                                    state_mgr.register_signal(
-                                                        message_id=int(message.id),
-                                                        channel_id=int(message.channel.id),
-                                                        author_id=int(message.author.id),
-                                                        timestamp=message.created_at,
-                                                        symbol=h_sig['symbol'],
-                                                        order_id=order_id
-                                                    )
-                                                except Exception as ctx_err:
-                                                    print(f"[HENGY] ⚠️ Conversation state error: {ctx_err}")
-                                                try:
-                                                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
-                                                    cond_signal = {
-                                                        'action': 'BTO',
-                                                        'symbol': h_sig['symbol'],
-                                                        'qty': 1,
-                                                        'price': h_sig.get('trigger_price', 0),
-                                                        'asset': 'stock',
-                                                        '_conditional_order_id': order_id
-                                                    }
-                                                    self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
-                                                except Exception as save_err:
-                                                    print(f"[HENGY] ⚠️ DB save error: {save_err}")
-                                            else:
-                                                print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
+                                            h_sig.pop('_all_brokers', None)
+                                            _h_first_oid = None
+                                            for _hb_idx, cond_broker in enumerate(cond_brokers):
+                                                order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
+                                                if order_id:
+                                                    print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}] ({_hb_idx+1}/{len(cond_brokers)})")
+                                                    if _h_first_oid is None:
+                                                        _h_first_oid = order_id
+                                                        try:
+                                                            from src.services.signal_conversation_state import get_conversation_state_manager
+                                                            state_mgr = get_conversation_state_manager()
+                                                            state_mgr.register_signal(
+                                                                message_id=int(message.id),
+                                                                channel_id=int(message.channel.id),
+                                                                author_id=int(message.author.id),
+                                                                timestamp=message.created_at,
+                                                                symbol=h_sig['symbol'],
+                                                                order_id=order_id
+                                                            )
+                                                        except Exception as ctx_err:
+                                                            print(f"[HENGY] ⚠️ Conversation state error: {ctx_err}")
+                                                        try:
+                                                            author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                            cond_signal = {
+                                                                'action': 'BTO',
+                                                                'symbol': h_sig['symbol'],
+                                                                'qty': 1,
+                                                                'price': h_sig.get('trigger_price', 0),
+                                                                'asset': 'stock',
+                                                                '_conditional_order_id': order_id
+                                                            }
+                                                            self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                        except Exception as save_err:
+                                                            print(f"[HENGY] ⚠️ DB save error: {save_err}")
+                                                else:
+                                                    print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
                                     else:
                                         print(f"[HENGY] ❌ No broker configured for channel {cond_channel_id}")
                                     return
@@ -12571,39 +12566,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             eg_sig['message_id'] = str(message.id)
                                             eg_sig['author_id'] = str(message.author.id)
                                             eg_sig['author_name'] = str(message.author)
-                                            cond_broker = cond_brokers[0]
-                                            eg_sig['_all_brokers'] = cond_brokers
-                                            order_id = conditional_order_router.create_order(cond_channel_id, eg_sig, cond_broker)
-                                            if order_id:
-                                                print(f"[EQUITY-GENIE] ✓ Created conditional order #{order_id}: {eg_sig['symbol']} over ${eg_sig['trigger_price']} [{cond_broker}]")
-                                                try:
-                                                    from src.services.signal_conversation_state import get_conversation_state_manager
-                                                    state_mgr = get_conversation_state_manager()
-                                                    state_mgr.register_signal(
-                                                        message_id=int(message.id),
-                                                        channel_id=int(message.channel.id),
-                                                        author_id=int(message.author.id),
-                                                        timestamp=message.created_at,
-                                                        symbol=eg_sig['symbol'],
-                                                        order_id=order_id
-                                                    )
-                                                except Exception as ctx_err:
-                                                    print(f"[EQUITY-GENIE] ⚠️ Conversation state error: {ctx_err}")
-                                                try:
-                                                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
-                                                    cond_signal = {
-                                                        'action': 'BTO',
-                                                        'symbol': eg_sig['symbol'],
-                                                        'qty': 1,
-                                                        'price': eg_sig.get('trigger_price', 0),
-                                                        'asset': 'stock',
-                                                        '_conditional_order_id': order_id
-                                                    }
-                                                    self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
-                                                except Exception as save_err:
-                                                    print(f"[EQUITY-GENIE] ⚠️ DB save error: {save_err}")
-                                            else:
-                                                print(f"[EQUITY-GENIE] ⚠️ Failed to create order for {eg_sig['symbol']} [{cond_broker}]")
+                                            eg_sig.pop('_all_brokers', None)
+                                            _eg_first_oid = None
+                                            for _egb_idx, cond_broker in enumerate(cond_brokers):
+                                                order_id = conditional_order_router.create_order(cond_channel_id, eg_sig, cond_broker)
+                                                if order_id:
+                                                    print(f"[EQUITY-GENIE] ✓ Created conditional order #{order_id}: {eg_sig['symbol']} over ${eg_sig['trigger_price']} [{cond_broker}] ({_egb_idx+1}/{len(cond_brokers)})")
+                                                    if _eg_first_oid is None:
+                                                        _eg_first_oid = order_id
+                                                        try:
+                                                            from src.services.signal_conversation_state import get_conversation_state_manager
+                                                            state_mgr = get_conversation_state_manager()
+                                                            state_mgr.register_signal(
+                                                                message_id=int(message.id),
+                                                                channel_id=int(message.channel.id),
+                                                                author_id=int(message.author.id),
+                                                                timestamp=message.created_at,
+                                                                symbol=eg_sig['symbol'],
+                                                                order_id=order_id
+                                                            )
+                                                        except Exception as ctx_err:
+                                                            print(f"[EQUITY-GENIE] ⚠️ Conversation state error: {ctx_err}")
+                                                        try:
+                                                            author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                            cond_signal = {
+                                                                'action': 'BTO',
+                                                                'symbol': eg_sig['symbol'],
+                                                                'qty': 1,
+                                                                'price': eg_sig.get('trigger_price', 0),
+                                                                'asset': 'stock',
+                                                                '_conditional_order_id': order_id
+                                                            }
+                                                            self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                        except Exception as save_err:
+                                                            print(f"[EQUITY-GENIE] ⚠️ DB save error: {save_err}")
+                                                else:
+                                                    print(f"[EQUITY-GENIE] ⚠️ Failed to create order for {eg_sig['symbol']} [{cond_broker}]")
                                         for eg_exit in equity_genie_exits:
                                             exit_symbol = eg_exit['symbol']
                                             exit_action = eg_exit.get('action', 'STC')
@@ -12761,43 +12759,44 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     return
 
                                 first_order_id = None
-                                cond_broker = cond_brokers[0]
-                                parsed_cond['_all_brokers'] = cond_brokers
-                                order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
-                                if order_id:
-                                    trigger_type = parsed_cond.get('trigger_type', 'over')
-                                    print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']} [{cond_broker}]")
-                                    first_order_id = order_id
-                                    try:
-                                        from src.services.signal_conversation_state import get_conversation_state_manager
-                                        state_mgr = get_conversation_state_manager()
-                                        state_mgr.register_signal(
-                                            message_id=int(message.id),
-                                            channel_id=int(message.channel.id),
-                                            author_id=int(message.author.id),
-                                            timestamp=message.created_at,
-                                            symbol=parsed_cond['symbol'],
-                                            order_id=order_id
-                                        )
-                                        print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
-                                    except Exception as ctx_err:
-                                        print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
-                                    try:
-                                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
-                                        cond_signal = {
-                                            'action': 'BTO',
-                                            'symbol': parsed_cond['symbol'],
-                                            'qty': parsed_cond.get('calculated_qty', 1),
-                                            'price': parsed_cond.get('trigger_price', 0),
-                                            'asset': parsed_cond.get('asset_type', 'stock'),
-                                            '_conditional_order_id': order_id
-                                        }
-                                        self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
-                                        print(f"[COND ORDER] ✓ Signal saved to database for Execution tab")
-                                    except Exception as save_err:
-                                        print(f"[COND ORDER] ⚠️ Failed to save signal to DB: {save_err}")
-                                else:
-                                    print(f"[COND ORDER] ⚠️ Failed to create conditional order for {cond_broker}")
+                                parsed_cond.pop('_all_brokers', None)
+                                for _cb_idx, cond_broker in enumerate(cond_brokers):
+                                    order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
+                                    if order_id:
+                                        trigger_type = parsed_cond.get('trigger_type', 'over')
+                                        print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']} [{cond_broker}] ({_cb_idx+1}/{len(cond_brokers)})")
+                                        if first_order_id is None:
+                                            first_order_id = order_id
+                                            try:
+                                                from src.services.signal_conversation_state import get_conversation_state_manager
+                                                state_mgr = get_conversation_state_manager()
+                                                state_mgr.register_signal(
+                                                    message_id=int(message.id),
+                                                    channel_id=int(message.channel.id),
+                                                    author_id=int(message.author.id),
+                                                    timestamp=message.created_at,
+                                                    symbol=parsed_cond['symbol'],
+                                                    order_id=order_id
+                                                )
+                                                print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
+                                            except Exception as ctx_err:
+                                                print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
+                                            try:
+                                                author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                cond_signal = {
+                                                    'action': 'BTO',
+                                                    'symbol': parsed_cond['symbol'],
+                                                    'qty': parsed_cond.get('calculated_qty', 1),
+                                                    'price': parsed_cond.get('trigger_price', 0),
+                                                    'asset': parsed_cond.get('asset_type', 'stock'),
+                                                    '_conditional_order_id': order_id
+                                                }
+                                                self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                print(f"[COND ORDER] ✓ Signal saved to database for Execution tab")
+                                            except Exception as save_err:
+                                                print(f"[COND ORDER] ⚠️ Failed to save signal to DB: {save_err}")
+                                    else:
+                                        print(f"[COND ORDER] ⚠️ Failed to create conditional order for {cond_broker}")
                             else:
                                 print(f"[COND ORDER] ⚠️ Could not parse conditional order signal")
                             return  # Don't forward conditional order signals
@@ -13082,39 +13081,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         h_sig['message_id'] = str(message.id)
                                         h_sig['author_id'] = str(message.author.id)
                                         h_sig['author_name'] = str(message.author)
-                                        cond_broker = cond_brokers[0]
-                                        h_sig['_all_brokers'] = cond_brokers
-                                        order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
-                                        if order_id:
-                                            print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}]")
-                                            try:
-                                                from src.services.signal_conversation_state import get_conversation_state_manager
-                                                state_mgr = get_conversation_state_manager()
-                                                state_mgr.register_signal(
-                                                    message_id=int(message.id),
-                                                    channel_id=int(message.channel.id),
-                                                    author_id=int(message.author.id),
-                                                    timestamp=message.created_at,
-                                                    symbol=h_sig['symbol'],
-                                                    order_id=order_id
-                                                )
-                                            except Exception:
-                                                pass
-                                            try:
-                                                author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
-                                                cond_signal = {
-                                                    'action': 'BTO',
-                                                    'symbol': h_sig['symbol'],
-                                                    'qty': 1,
-                                                    'price': h_sig.get('trigger_price', 0),
-                                                    'asset': 'stock',
-                                                    '_conditional_order_id': order_id
-                                                }
-                                                self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
-                                            except Exception:
-                                                pass
-                                        else:
-                                            print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
+                                        h_sig.pop('_all_brokers', None)
+                                        _h2_first_oid = None
+                                        for _hb2_idx, cond_broker in enumerate(cond_brokers):
+                                            order_id = conditional_order_router.create_order(cond_channel_id, h_sig, cond_broker)
+                                            if order_id:
+                                                print(f"[HENGY] ✓ Created conditional order #{order_id}: {h_sig['symbol']} over ${h_sig['trigger_price']} [{cond_broker}] ({_hb2_idx+1}/{len(cond_brokers)})")
+                                                if _h2_first_oid is None:
+                                                    _h2_first_oid = order_id
+                                                    try:
+                                                        from src.services.signal_conversation_state import get_conversation_state_manager
+                                                        state_mgr = get_conversation_state_manager()
+                                                        state_mgr.register_signal(
+                                                            message_id=int(message.id),
+                                                            channel_id=int(message.channel.id),
+                                                            author_id=int(message.author.id),
+                                                            timestamp=message.created_at,
+                                                            symbol=h_sig['symbol'],
+                                                            order_id=order_id
+                                                        )
+                                                    except Exception:
+                                                        pass
+                                                    try:
+                                                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                        cond_signal = {
+                                                            'action': 'BTO',
+                                                            'symbol': h_sig['symbol'],
+                                                            'qty': 1,
+                                                            'price': h_sig.get('trigger_price', 0),
+                                                            'asset': 'stock',
+                                                            '_conditional_order_id': order_id
+                                                        }
+                                                        self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                    except Exception:
+                                                        pass
+                                            else:
+                                                print(f"[HENGY] ⚠️ Failed to create order for {h_sig['symbol']} [{cond_broker}]")
                                 else:
                                     print(f"[HENGY] ❌ No broker configured for channel {cond_channel_id}")
                                 return
@@ -13140,13 +13142,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _reg_result['author_name'] = str(message.author)
                                     cond_brokers = self._get_channel_brokers(channel_info)
                                     if cond_brokers:
-                                        cond_broker = cond_brokers[0]
-                                        _reg_result['_all_brokers'] = cond_brokers
-                                        order_id = conditional_order_router.create_order(str(message.channel.id), _reg_result, cond_broker)
-                                        if order_id:
-                                            print(f"[{_reg_fmt}] ✓ Created conditional order #{order_id} [{cond_broker}] - monitoring started")
-                                        else:
-                                            print(f"[{_reg_fmt}] ⚠️ Failed to create conditional order [{cond_broker}]")
+                                        _reg_result.pop('_all_brokers', None)
+                                        for _rb_idx, cond_broker in enumerate(cond_brokers):
+                                            order_id = conditional_order_router.create_order(str(message.channel.id), _reg_result, cond_broker)
+                                            if order_id:
+                                                print(f"[{_reg_fmt}] ✓ Created conditional order #{order_id} [{cond_broker}] ({_rb_idx+1}/{len(cond_brokers)}) - monitoring started")
+                                            else:
+                                                print(f"[{_reg_fmt}] ⚠️ Failed to create conditional order [{cond_broker}]")
                                     else:
                                         print(f"[{_reg_fmt}] ❌ No broker configured for channel {message.channel.id}")
                                 else:
@@ -13213,47 +13215,48 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     return
 
                                 first_order_id = None
-                                cond_broker = cond_brokers[0]
-                                parsed_cond['_all_brokers'] = cond_brokers
-                                order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
-                                if order_id:
-                                    trigger_type = parsed_cond.get('trigger_type', 'over')
-                                    print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']} [{cond_broker}]")
-                                    first_order_id = order_id
-                                    try:
-                                        from src.services.signal_conversation_state import get_conversation_state_manager
-                                        state_mgr = get_conversation_state_manager()
-                                        state_mgr.register_signal(
-                                            message_id=int(message.id),
-                                            channel_id=int(message.channel.id),
-                                            author_id=int(message.author.id),
-                                            timestamp=message.created_at,
-                                            symbol=parsed_cond['symbol'],
-                                            order_id=order_id
-                                        )
-                                        print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
-                                    except Exception as ctx_err:
-                                        print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
-                                    try:
-                                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
-                                        cond_signal = {
-                                            'action': 'BTO',
-                                            'symbol': parsed_cond['symbol'],
-                                            'qty': parsed_cond.get('calculated_qty', 1),
-                                            'asset': parsed_cond.get('asset_type', 'stock'),
-                                            'channel_id': cond_channel_id,
-                                            'author': author_name,
-                                            'message_content': message.content[:200],
-                                            'is_conditional': True,
-                                            'trigger_price': parsed_cond['trigger_price'],
-                                            'trigger_type': trigger_type,
-                                        }
-                                        from gui_app import database as db
-                                        db.add_signal(cond_signal)
-                                    except Exception:
-                                        pass
-                                else:
-                                    print(f"[COND ORDER] ⚠️ Failed to create conditional order for {cond_broker}")
+                                parsed_cond.pop('_all_brokers', None)
+                                for _nm_idx, cond_broker in enumerate(cond_brokers):
+                                    order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
+                                    if order_id:
+                                        trigger_type = parsed_cond.get('trigger_type', 'over')
+                                        print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']} [{cond_broker}] ({_nm_idx+1}/{len(cond_brokers)})")
+                                        if first_order_id is None:
+                                            first_order_id = order_id
+                                            try:
+                                                from src.services.signal_conversation_state import get_conversation_state_manager
+                                                state_mgr = get_conversation_state_manager()
+                                                state_mgr.register_signal(
+                                                    message_id=int(message.id),
+                                                    channel_id=int(message.channel.id),
+                                                    author_id=int(message.author.id),
+                                                    timestamp=message.created_at,
+                                                    symbol=parsed_cond['symbol'],
+                                                    order_id=order_id
+                                                )
+                                                print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
+                                            except Exception as ctx_err:
+                                                print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
+                                            try:
+                                                author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                cond_signal = {
+                                                    'action': 'BTO',
+                                                    'symbol': parsed_cond['symbol'],
+                                                    'qty': parsed_cond.get('calculated_qty', 1),
+                                                    'asset': parsed_cond.get('asset_type', 'stock'),
+                                                    'channel_id': cond_channel_id,
+                                                    'author': author_name,
+                                                    'message_content': message.content[:200],
+                                                    'is_conditional': True,
+                                                    'trigger_price': parsed_cond['trigger_price'],
+                                                    'trigger_type': trigger_type,
+                                                }
+                                                from gui_app import database as db
+                                                db.add_signal(cond_signal)
+                                            except Exception:
+                                                pass
+                                    else:
+                                        print(f"[COND ORDER] ⚠️ Failed to create conditional order for {cond_broker}")
 
                                 return
                     except Exception as e:
@@ -13666,17 +13669,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'author_name': str(message.author),
                     }
                     
-                    broker = brokers[0]
-                    conditional_signal['_all_brokers'] = brokers
-                    order_id = conditional_order_router.create_order(
-                        channel_id=str(message.channel.id),
-                        parsed_signal=conditional_signal,
-                        broker=broker
-                    )
-                    if order_id:
-                        print(f"[INDIA CONDITIONAL] ✓ Created conditional order #{order_id} [{broker}] - monitoring started")
-                    else:
-                        print(f"[INDIA CONDITIONAL] ⚠️ Failed to create conditional order for {broker}")
+                    conditional_signal.pop('_all_brokers', None)
+                    for _ib_idx, broker in enumerate(brokers):
+                        order_id = conditional_order_router.create_order(
+                            channel_id=str(message.channel.id),
+                            parsed_signal=conditional_signal,
+                            broker=broker
+                        )
+                        if order_id:
+                            print(f"[INDIA CONDITIONAL] ✓ Created conditional order #{order_id} [{broker}] ({_ib_idx+1}/{len(brokers)}) - monitoring started")
+                        else:
+                            print(f"[INDIA CONDITIONAL] ⚠️ Failed to create conditional order for {broker}")
                 else:
                     print(f"[INDIA CONDITIONAL] ⚠️ Conditional order service disabled - signal ignored")
             except ImportError as e:
@@ -13731,7 +13734,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         registry_result['author_id'] = str(message.author.id)
                         registry_result['author_name'] = str(message.author)
                         
-                        cond_broker = None
+                        _reg_brokers = []
                         if channel_info:
                             if channel_info.get('enabled_brokers'):
                                 try:
@@ -13748,28 +13751,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'TRADING212': 'TRADING212',
                                             'TRADING212_PAPER': 'TRADING212_PAPER',
                                         }
-                                        cond_broker = broker_map.get(enabled[0].upper(), enabled[0].upper())
-                                        if len(enabled) > 1:
-                                            _all_reg_brokers = [broker_map.get(b.upper(), b.upper()) for b in enabled]
-                                            registry_result['_all_brokers'] = _all_reg_brokers
+                                        _reg_brokers = [broker_map.get(b.upper(), b.upper()) for b in enabled]
                                 except Exception:
                                     pass
-                            if not cond_broker and channel_info.get('broker_override'):
-                                cond_broker = channel_info.get('broker_override')
+                            if not _reg_brokers and channel_info.get('broker_override'):
+                                _reg_brokers = [channel_info.get('broker_override')]
                         
-                        if not cond_broker:
+                        if not _reg_brokers:
                             print(f"[{fmt_name}] ❌ REJECTED: No broker configured for channel {message.channel.id}")
                             return
                         
-                        order_id = conditional_order_router.create_order(
-                            channel_id=str(message.channel.id),
-                            parsed_signal=registry_result,
-                            broker=cond_broker
-                        )
-                        if order_id:
-                            print(f"[{fmt_name}] ✓ Created conditional order #{order_id} [{cond_broker}] - monitoring started")
-                        else:
-                            print(f"[{fmt_name}] ⚠️ Failed to create conditional order")
+                        registry_result.pop('_all_brokers', None)
+                        for _rg_idx, cond_broker in enumerate(_reg_brokers):
+                            order_id = conditional_order_router.create_order(
+                                channel_id=str(message.channel.id),
+                                parsed_signal=registry_result,
+                                broker=cond_broker
+                            )
+                            if order_id:
+                                print(f"[{fmt_name}] ✓ Created conditional order #{order_id} [{cond_broker}] ({_rg_idx+1}/{len(_reg_brokers)}) - monitoring started")
+                            else:
+                                print(f"[{fmt_name}] ⚠️ Failed to create conditional order [{cond_broker}]")
                     else:
                         print(f"[{fmt_name}] ⚠️ Conditional order service disabled")
                 except ImportError as e:
@@ -14025,8 +14027,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if conditional_order_router.is_enabled():
                         # Get broker from channel config - use channel's configured broker
                         broker = None
+                        _cond_brokers_list = []
                         if channel_info:
-                            # Check enabled_brokers FIRST (more specific - from Execution page)
                             if channel_info.get('enabled_brokers'):
                                 try:
                                     import json
@@ -14034,7 +14036,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     if isinstance(enabled, str):
                                         enabled = json.loads(enabled)
                                     if enabled and len(enabled) > 0:
-                                        # Map uppercase names to proper broker names (including paper accounts)
                                         broker_map = {
                                             'WEBULL': 'Webull', 
                                             'ALPACA': 'ALPACA_PAPER',
@@ -14052,38 +14053,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'TRADING212': 'TRADING212',
                                             'TRADING212_PAPER': 'TRADING212_PAPER'
                                         }
-                                        first_broker = enabled[0].upper()
-                                        broker = broker_map.get(first_broker, enabled[0].upper())
-                                        if len(enabled) > 1:
-                                            _all_cond_brokers = [broker_map.get(b.upper(), b.upper()) for b in enabled]
-                                            conditional_signal['_all_brokers'] = _all_cond_brokers
-                                        print(f"[CONDITIONAL] Using channel enabled_brokers[0]: {enabled[0]} -> {broker}")
+                                        _cond_brokers_list = [broker_map.get(b.upper(), b.upper()) for b in enabled]
+                                        print(f"[CONDITIONAL] Using channel enabled_brokers: {enabled} -> {_cond_brokers_list}")
                                 except Exception as e:
                                     print(f"[CONDITIONAL] Error parsing enabled_brokers: {e}")
-                            # Fall back to broker_override if enabled_brokers not set
-                            elif channel_info.get('broker_override'):
-                                broker = channel_info.get('broker_override')
-                                print(f"[CONDITIONAL] Using channel broker_override: {broker}")
+                            if not _cond_brokers_list and channel_info.get('broker_override'):
+                                _cond_brokers_list = [channel_info.get('broker_override')]
+                                print(f"[CONDITIONAL] Using channel broker_override: {_cond_brokers_list[0]}")
                         
-                        # Reject if no broker is configured - do NOT fallback to a default
-                        if not broker:
+                        if not _cond_brokers_list:
                             print(f"[CONDITIONAL] ❌ REJECTED: No broker configured for channel {message.channel.id}")
                             print(f"[CONDITIONAL] Please configure 'enabled_brokers' in the Execution page for this channel")
-                            # Reactions disabled for conditional orders
                             return
-                        print(f"[CONDITIONAL] Using broker: {broker}")
                         
-                        order_id = conditional_order_router.create_order(
-                            channel_id=str(message.channel.id),
-                            parsed_signal=conditional_signal,
-                            broker=broker
-                        )
-                        
-                        if order_id:
-                            print(f"[CONDITIONAL] ✓ Created conditional order #{order_id} - monitoring started")
-                            # Reactions disabled for conditional orders
-                        else:
-                            print(f"[CONDITIONAL] ⚠️ Failed to create conditional order")
+                        conditional_signal.pop('_all_brokers', None)
+                        for _ec_idx, broker in enumerate(_cond_brokers_list):
+                            order_id = conditional_order_router.create_order(
+                                channel_id=str(message.channel.id),
+                                parsed_signal=conditional_signal,
+                                broker=broker
+                            )
+                            if order_id:
+                                print(f"[CONDITIONAL] ✓ Created conditional order #{order_id} [{broker}] ({_ec_idx+1}/{len(_cond_brokers_list)}) - monitoring started")
+                            else:
+                                print(f"[CONDITIONAL] ⚠️ Failed to create conditional order [{broker}]")
                     else:
                         print(f"[CONDITIONAL] ⚠️ Conditional order service disabled - signal ignored")
                 except ImportError as e:
@@ -14979,23 +14972,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     parsed_signal['expiry'] = opt.get('expiry')
                                 
                                 enabled_brokers = opt.get('_enabled_brokers', [])
-                                broker = enabled_brokers[0] if enabled_brokers else 'ALPACA_PAPER'
-                                if len(enabled_brokers) > 1:
-                                    parsed_signal['_all_brokers'] = enabled_brokers
-                                
-                                order_id = conditional_order_router.create_order(
-                                    channel_id=str(message.channel.id),
-                                    parsed_signal=parsed_signal,
-                                    broker=broker
-                                )
-                                
-                                if order_id:
-                                    print(f"[CONDITIONAL] ✓ Created conditional order #{order_id}")
-                                    print(f"[CONDITIONAL]   {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
+                                if not enabled_brokers:
+                                    enabled_brokers = ['ALPACA_PAPER']
+                                parsed_signal.pop('_all_brokers', None)
+                                _any_created = False
+                                for _ob_idx, broker in enumerate(enabled_brokers):
+                                    order_id = conditional_order_router.create_order(
+                                        channel_id=str(message.channel.id),
+                                        parsed_signal=parsed_signal,
+                                        broker=broker
+                                    )
+                                    if order_id:
+                                        _any_created = True
+                                        print(f"[CONDITIONAL] ✓ Created conditional order #{order_id} [{broker}] ({_ob_idx+1}/{len(enabled_brokers)})")
+                                        print(f"[CONDITIONAL]   {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
+                                    else:
+                                        print(f"[CONDITIONAL] ⚠️ Failed to create conditional order [{broker}]")
+                                if _any_created:
                                     print(f"[CONDITIONAL]   Monitoring for trigger... (will execute when price condition met)")
                                     return
                                 else:
-                                    print(f"[CONDITIONAL] ❌ Failed to create conditional order - falling back to immediate execution")
+                                    print(f"[CONDITIONAL] ❌ All conditional orders failed - falling back to immediate execution")
                         except Exception as cond_err:
                             print(f"[CONDITIONAL] ❌ Error routing to conditional service: {cond_err}")
                             import traceback
@@ -15606,21 +15603,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 }
                                 
                                 enabled_brokers = stk.get('_enabled_brokers', [])
-                                broker = enabled_brokers[0] if enabled_brokers else (stk.get('_broker_override') or 'ALPACA_PAPER')
-                                if len(enabled_brokers) > 1:
-                                    stk_cond_signal['_all_brokers'] = enabled_brokers
-                                
-                                order_id = conditional_order_router.create_order(
-                                    channel_id=stk.get('channel_id', str(message.channel.id)),
-                                    parsed_signal=stk_cond_signal,
-                                    broker=broker
-                                )
-                                
-                                if order_id:
-                                    print(f"[ENTRY CONFIRM] ✓ Created conditional order #{order_id} for {stk.get('symbol')} OVER ${stk_confirmation_trigger}")
+                                if not enabled_brokers:
+                                    enabled_brokers = [stk.get('_broker_override') or 'ALPACA_PAPER']
+                                stk_cond_signal.pop('_all_brokers', None)
+                                _ec_any = False
+                                for _ecb_idx, broker in enumerate(enabled_brokers):
+                                    order_id = conditional_order_router.create_order(
+                                        channel_id=stk.get('channel_id', str(message.channel.id)),
+                                        parsed_signal=stk_cond_signal,
+                                        broker=broker
+                                    )
+                                    if order_id:
+                                        _ec_any = True
+                                        print(f"[ENTRY CONFIRM] ✓ Created conditional order #{order_id} for {stk.get('symbol')} OVER ${stk_confirmation_trigger} [{broker}] ({_ecb_idx+1}/{len(enabled_brokers)})")
+                                    else:
+                                        print(f"[ENTRY CONFIRM] ⚠️ Failed to create conditional order [{broker}]")
+                                if _ec_any:
                                     print(f"[ENTRY CONFIRM]   Watching price: ${stk_watching_price} + {stk_entry_confirmation_pct}% = ${stk_confirmation_trigger}")
                                 else:
-                                    print(f"[ENTRY CONFIRM] ❌ Failed to create conditional order - falling back to immediate execution")
+                                    print(f"[ENTRY CONFIRM] ❌ All conditional orders failed - falling back to immediate execution")
                                     import time as _tmod
                                     stk['_queued_at'] = _tmod.monotonic()
                                     await self.order_queue.put(stk)
@@ -17512,26 +17513,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 'message_id': signal.get('message_id'),
                 'author_name': signal.get('author_name'),
             }
-            if _broker_list and len(_broker_list) > 1:
-                conditional_signal['_all_brokers'] = _broker_list
-            
-            order_id = conditional_order_router.create_order(
-                channel_id=channel_id,
-                parsed_signal=conditional_signal,
-                broker=broker_primary
-            )
-            
-            if order_id:
-                _original_print(f"[TELEGRAM CONDITIONAL] ✓ Created conditional order #{order_id}", flush=True)
-                _original_print(f"[TELEGRAM CONDITIONAL]   Symbol: {symbol} {strike}{opt_type} exp={expiry}", flush=True)
-                _original_print(f"[TELEGRAM CONDITIONAL]   Trigger: {trigger_type.upper()} ₹{trigger_price}", flush=True)
-                if stop_loss:
-                    _original_print(f"[TELEGRAM CONDITIONAL]   SL: ₹{stop_loss}", flush=True)
-                if profit_targets:
-                    _original_print(f"[TELEGRAM CONDITIONAL]   Targets: {profit_targets}", flush=True)
-                _original_print(f"[TELEGRAM CONDITIONAL] ✓ Order #{order_id} routed to INDIA service", flush=True)
+            conditional_signal.pop('_all_brokers', None)
+            _tg_any = False
+            for _tg_idx, broker_primary in enumerate(_broker_list):
+                order_id = conditional_order_router.create_order(
+                    channel_id=channel_id,
+                    parsed_signal=conditional_signal,
+                    broker=broker_primary
+                )
+                if order_id:
+                    _tg_any = True
+                    _original_print(f"[TELEGRAM CONDITIONAL] ✓ Created conditional order #{order_id} [{broker_primary}] ({_tg_idx+1}/{len(_broker_list)})", flush=True)
+                    _original_print(f"[TELEGRAM CONDITIONAL]   Symbol: {symbol} {strike}{opt_type} exp={expiry}", flush=True)
+                    _original_print(f"[TELEGRAM CONDITIONAL]   Trigger: {trigger_type.upper()} ₹{trigger_price}", flush=True)
+                    if stop_loss:
+                        _original_print(f"[TELEGRAM CONDITIONAL]   SL: ₹{stop_loss}", flush=True)
+                    if profit_targets:
+                        _original_print(f"[TELEGRAM CONDITIONAL]   Targets: {profit_targets}", flush=True)
+                else:
+                    _original_print(f"[TELEGRAM CONDITIONAL] ⚠️ Failed to create conditional order [{broker_primary}]", flush=True)
+            if _tg_any:
+                _original_print(f"[TELEGRAM CONDITIONAL] ✓ All orders routed to INDIA service", flush=True)
             else:
-                _original_print(f"[TELEGRAM CONDITIONAL] ❌ Failed to create conditional order", flush=True)
+                _original_print(f"[TELEGRAM CONDITIONAL] ❌ All conditional orders failed", flush=True)
                 await self.order_queue.put(signal)
                 
         except Exception as e:

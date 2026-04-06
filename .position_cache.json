@@ -79,7 +79,7 @@
   },
   "ALPACA_PAPER_QQQ_stock": {
     "entry_price": 604.135381,
-    "highest_price": 587.68,
+    "highest_price": 588.41,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -97,7 +97,7 @@
     "max_pnl_seen": 0.4183663261970393,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 586.0401,
+    "last_evaluated_price": 587.97,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
