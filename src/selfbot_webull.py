@@ -15518,31 +15518,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     }
                     print(f"[RISK CONFIG] ✓ Channel risk settings attached for LIVE stock execution")
                 
-                # Auto-generate bracket order prices from channel risk settings (stock BTO only)
-                # When signal doesn't include SL/PT but channel has them configured, compute dollar prices
-                # SKIP bracket auto-generation for 'signal' exit mode — exits should only happen via STC signals
+                # Bracket orders are now placed exclusively by the Risk Engine after fill detection.
+                # Risk Engine uses channel percentage settings directly — no need to pre-compute dollar prices.
+                # Signal-provided SL/PT (already on stk dict) will be stored on trade record for Risk Engine.
                 ch_exit_mode = channel_info.get('exit_strategy_mode', 'signal') if channel_info else 'signal'
-                if channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode not in ('signal', 'risk'):
-                    entry_price = float(stk['price'])
-                    
-                    if not stk.get('stop_loss_price'):
-                        ch_sl_pct = channel_info.get('stop_loss_pct')
-                        if ch_sl_pct and float(ch_sl_pct) > 0:
-                            sl_price = round(entry_price * (1 - float(ch_sl_pct) / 100), 2)
-                            stk['stop_loss_price'] = sl_price
-                            print(f"[BRACKET AUTO] ✓ Channel SL {ch_sl_pct}% → ${sl_price:.2f} (entry: ${entry_price:.2f})")
-                    
-                    if not stk.get('profit_target_price'):
-                        ch_pt_pct = channel_info.get('profit_target_1_pct')
-                        if ch_pt_pct and float(ch_pt_pct) > 0:
-                            pt_price = round(entry_price * (1 + float(ch_pt_pct) / 100), 2)
-                            stk['profit_target_price'] = pt_price
-                            stk['_pt_from_channel'] = True
-                            print(f"[BRACKET AUTO] ✓ Channel PT1 {ch_pt_pct}% → ${pt_price:.2f} (entry: ${entry_price:.2f})")
-                elif channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode == 'signal':
-                    print(f"[BRACKET AUTO] ⏭ Skipped bracket auto-generation — exit_strategy_mode='signal' (exits via STC signals only)")
-                elif channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price') and ch_exit_mode == 'risk':
-                    print(f"[BRACKET AUTO] ⏭ Skipped bracket auto-generation — exit_strategy_mode='risk' (progressive brackets placed by risk engine after fill)")
+                if channel_info and stk.get('action', 'BTO').upper() == 'BTO' and stk.get('price'):
+                    if stk.get('stop_loss_price') or stk.get('profit_target_price'):
+                        print(f"[BRACKET] ✓ Signal SL/PT will be stored on trade for Risk Engine (exit_mode={ch_exit_mode})")
+                    else:
+                        print(f"[BRACKET] 📋 Risk Engine will use channel settings for brackets after fill (exit_mode={ch_exit_mode})")
                 
                 stk['_exit_strategy_mode'] = ch_exit_mode
                 
@@ -16328,24 +16312,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             _original_print(f"[{broker_name}] Executing {signal['action']} {signal['qty']} {signal['symbol']}")
             
-            # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
-            # In 'signal' mode: bracket ONLY when signal itself carries PT/SL (_signal_has_bracket)
-            # In 'risk' mode: bracket handled by position_monitor, skip here
-            # In 'hybrid' mode: always allow bracket
+            # Bracket orders are now placed exclusively by the Risk Engine (position_monitor.py)
+            # after fill detection. This prevents duplicate bracket legs and ensures a single
+            # owner for the entire bracket lifecycle (initial placement, PT cascade, SL sync).
+            # SL/PT values are still stored on the trade record for Risk Engine consumption.
             _sig_exit_mode = signal.get('_exit_strategy_mode', 'hybrid')
-            _signal_has_bracket = signal.get('_signal_has_bracket', False)
-            use_bracket = (
-                signal['action'] == 'BTO' and
-                (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                hasattr(broker_instance, 'place_bracket_order') and
-                (_sig_exit_mode not in ('signal', 'risk') or
-                 (_sig_exit_mode == 'signal' and _signal_has_bracket))
-            )
-            
-            if _sig_exit_mode == 'signal' and (signal.get('stop_loss_price') or signal.get('profit_target_price')) and not _signal_has_bracket:
-                _original_print(f"[{broker_name}] ⏭ Bracket order SKIPPED — exit_strategy_mode='signal' (no signal-provided PT/SL)")
-            elif _sig_exit_mode == 'signal' and _signal_has_bracket:
-                _original_print(f"[{broker_name}] ✓ Signal carries explicit PT/SL — placing bracket in signal mode (PT1 + SL only)")
+            use_bracket = False
+            if signal['action'] == 'BTO' and (signal.get('stop_loss_price') or signal.get('profit_target_price')):
+                _original_print(f"[{broker_name}] 📋 SL/PT stored for Risk Engine bracket placement after fill (exit_mode={_sig_exit_mode})")
             
             if use_bracket:
                 asset_label = signal['asset'].upper()
@@ -18716,19 +18690,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             raise  # Re-raise to skip order
                                         _original_print(f"[PAPER TRADE] [POSITION SIZE] ⚠️ Could not calculate position size: {e}")
                                 
-                                # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
-                                # NEVER use bracket orders for 'signal' exit mode
+                                # Bracket orders are now placed exclusively by the Risk Engine after fill detection
                                 _paper_exit_mode = signal.get('_exit_strategy_mode', 'hybrid')
-                                _paper_signal_bracket = signal.get('_signal_has_bracket', False)
-                                use_bracket = (
-                                    signal['action'] == 'BTO' and
-                                    (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                                    hasattr(active_paper_broker, 'place_bracket_order') and
-                                    (_paper_exit_mode not in ('signal', 'risk') or (_paper_exit_mode == 'signal' and _paper_signal_bracket))
-                                )
-                                
-                                if _paper_exit_mode in ('signal', 'risk') and (signal.get('stop_loss_price') or signal.get('profit_target_price')) and not (_paper_exit_mode == 'signal' and _paper_signal_bracket):
-                                    _original_print(f"[PAPER TRADE] ⏭ Bracket order SKIPPED — exit_strategy_mode='{_paper_exit_mode}'")
+                                use_bracket = False
+                                if signal['action'] == 'BTO' and (signal.get('stop_loss_price') or signal.get('profit_target_price')):
+                                    _original_print(f"[PAPER TRADE] 📋 SL/PT stored for Risk Engine bracket placement after fill (exit_mode={_paper_exit_mode})")
                                 
                                 if use_bracket:
                                     asset_label = signal['asset'].upper()
@@ -18939,19 +18905,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 import traceback
                                 traceback.print_exc()
                         
-                        # Check if we should use bracket orders (stocks OR options with stop loss or profit target)
-                        # NEVER use bracket orders for 'signal' exit mode
+                        # Bracket orders are now placed exclusively by the Risk Engine after fill detection
                         _live_exit_mode = signal.get('_exit_strategy_mode', 'hybrid')
-                        _live_signal_bracket = signal.get('_signal_has_bracket', False)
-                        use_bracket = (
-                            signal['action'] == 'BTO' and
-                            (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                            hasattr(live_broker, 'place_bracket_order') and
-                            (_live_exit_mode not in ('signal', 'risk') or (_live_exit_mode == 'signal' and _live_signal_bracket))
-                        )
-                        
-                        if _live_exit_mode in ('signal', 'risk') and (signal.get('stop_loss_price') or signal.get('profit_target_price')) and not (_live_exit_mode == 'signal' and _live_signal_bracket):
-                            _original_print(f"[LIVE TRADE] ⏭ Bracket order SKIPPED — exit_strategy_mode='{_live_exit_mode}'")
+                        use_bracket = False
+                        if signal['action'] == 'BTO' and (signal.get('stop_loss_price') or signal.get('profit_target_price')):
+                            _original_print(f"[LIVE TRADE] 📋 SL/PT stored for Risk Engine bracket placement after fill (exit_mode={_live_exit_mode})")
                         
                         # Retry configuration for transient errors
                         max_retries = 3

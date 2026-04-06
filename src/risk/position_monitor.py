@@ -676,6 +676,27 @@ class RiskDBAdapter:
                                 trailing_activation_pct=row[6] or 15.0,
                                 exit_strategy_mode=channel_exit_mode,
                             )
+                    ch_sl = row[4] or 0
+                    ch_pt1 = row[1] or 0
+                    if ch_sl > 0 or ch_pt1 > 0:
+                        channel_name = row[7] or 'Unknown'
+                        channel_exit_mode = row[18] if len(row) > 18 and row[18] else 'hybrid'
+                        print(f"[RISK] ✓ Using channel SL/PT for bracket seeding (global risk OFF, use_global=ON, "
+                              f"SL={ch_sl}%, PT1={ch_pt1}%, exit_mode={channel_exit_mode})")
+                        return ChannelRiskSettings(
+                            channel_id=str(row[0]),
+                            channel_name=channel_name,
+                            profit_target_1_pct=ch_pt1,
+                            profit_target_2_pct=row[2] or 0,
+                            profit_target_3_pct=row[3] or 0,
+                            profit_target_4_pct=row[11] or 0,
+                            stop_loss_pct=ch_sl,
+                            trailing_stop_pct=row[5] or 0,
+                            trailing_activation_pct=row[6] or 15.0,
+                            exit_strategy_mode=channel_exit_mode,
+                            leave_runner_enabled=bool(row[9]) if len(row) > 9 and row[9] else False,
+                            leave_runner_pct=row[10] if len(row) > 10 and row[10] else 25.0,
+                        )
                     return None
                 else:
                     return None
@@ -3515,11 +3536,14 @@ class RiskManager:
 
         if channel_settings and not cache.broker_orders_placed:
             _exit_mode = channel_settings.exit_strategy_mode
-            if _exit_mode in ('risk', 'hybrid'):
+            _has_levels = (channel_settings.stop_loss_pct > 0 or channel_settings.profit_target_1_pct > 0)
+            if _has_levels:
                 try:
                     await self._place_initial_broker_bracket(position, cache, channel_settings)
                 except Exception as e:
                     print(f"[RISK] ⚠️ Initial broker bracket failed (non-blocking): {e}")
+            elif not _has_levels:
+                print(f"[RISK] ⏭ No SL/PT levels configured — skipping broker bracket (exit_mode={_exit_mode})")
 
         # Check exit_strategy_mode - if 'signal', skip automated risk evaluation
         # 'signal' mode = follow trader exit signals only, no automated exits
@@ -4182,7 +4206,6 @@ class RiskManager:
         sl_pct = channel_settings.stop_loss_pct
         pt1_pct = channel_settings.profit_target_1_pct
         if sl_pct <= 0 and pt1_pct <= 0:
-            cache.broker_orders_placed = True
             return
 
         broker_instance = self._get_broker_instance_for_bracket(broker_name)
@@ -4231,8 +4254,9 @@ class RiskManager:
 
             _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
             _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
+            _bracket_exit_mode = getattr(channel_settings, 'exit_strategy_mode', 'unknown')
             print(f"[RISK] 📋 PROGRESSIVE BRACKET: {position.symbol} entry=${entry_price:.2f} "
-                  f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty}) broker={broker_name}")
+                  f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty}) broker={broker_name} exit_mode={_bracket_exit_mode}")
 
             if broker_name == 'SCHWAB' and self.schwab_broker:
                 try:

@@ -1746,46 +1746,14 @@ class UnfilledOrderChaser:
                     opt_kwargs['option_id'] = _wb_oid
                 result = await broker.place_option_order(**opt_kwargs)
             else:
-                has_bracket = order.stop_loss_price or order.profit_target_price
-                if has_bracket and hasattr(broker, 'place_bracket_order'):
-                    try:
-                        print(f"[ORDER_CHASER] Placing bracket replacement: SL=${order.stop_loss_price} PT=${order.profit_target_price}")
-                        result = await broker.place_bracket_order(
-                            symbol=order.symbol,
-                            action=order.action,
-                            quantity=qty,
-                            stop_loss_price=order.stop_loss_price,
-                            profit_target_price=order.profit_target_price,
-                            entry_price=price
-                        )
-                        bracket_ok = result and (
-                            (hasattr(result, 'success') and result.success) or
-                            (isinstance(result, dict) and result.get('orderId'))
-                        )
-                        if not bracket_ok:
-                            err_msg = getattr(result, 'message', str(result)) if result else 'No response'
-                            print(f"[ORDER_CHASER] Bracket replacement returned failure ({err_msg}), falling back to simple order")
-                            result = await broker.place_stock_order(
-                                symbol=order.symbol,
-                                quantity=qty,
-                                price=price,
-                                action=order.action
-                            )
-                    except Exception as bracket_err:
-                        print(f"[ORDER_CHASER] Bracket replacement exception ({bracket_err}), falling back to simple order")
-                        result = await broker.place_stock_order(
-                            symbol=order.symbol,
-                            quantity=qty,
-                            price=price,
-                            action=order.action
-                        )
-                else:
-                    result = await broker.place_stock_order(
-                        symbol=order.symbol,
-                        quantity=qty,
-                        price=price,
-                        action=order.action
-                    )
+                if order.stop_loss_price or order.profit_target_price:
+                    print(f"[ORDER_CHASER] SL/PT on entry order — Risk Engine will place brackets after fill (SL=${order.stop_loss_price} PT=${order.profit_target_price})")
+                result = await broker.place_stock_order(
+                    symbol=order.symbol,
+                    quantity=qty,
+                    price=price,
+                    action=order.action
+                )
             
             return self._extract_order_id(result)
         except Exception as e:

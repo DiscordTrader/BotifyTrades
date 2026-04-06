@@ -189,7 +189,7 @@ it WILL place a bracket at entry time → Risk Engine ALSO places brackets → d
 
 ---
 
-## PROPOSED ARCHITECTURE (Single Owner: Risk Engine)
+## IMPLEMENTED ARCHITECTURE (Single Owner: Risk Engine)
 
 The core idea: **Remove all bracket logic from the entry path.** Make the Risk Engine the single owner of ALL bracket orders across ALL exit modes.
 
@@ -205,9 +205,10 @@ NO bracket legs placed — no SL, no PT
 This is the SAME regardless of exit mode (hybrid, signal, or risk)
 ```
 
-**What changes in code:**
-- Remove the `use_bracket` logic from all 3 gates in `selfbot_webull.py`
-- Entry path always places a simple market/limit order, never a bracket
+**Implementation (completed):**
+- All 3 bracket gates in `selfbot_webull.py` set `use_bracket = False` unconditionally
+- Bracket auto-generation removed — Risk Engine uses channel percentages directly
+- Signal-provided SL/PT still stored on trade record for Risk Engine consumption
 
 ### Step 2: Risk Engine Places Initial Bracket (ALL Modes)
 
@@ -237,9 +238,10 @@ HYBRID mode:
     PT1 = from signal or channel, whichever is available
 ```
 
-**What changes in code:**
-- `position_monitor.py`: Enable `_place_initial_broker_bracket()` for signal mode (currently blocked)
-- Use `settings_source` provenance to determine where PT/SL values come from
+**Implementation (completed):**
+- `position_monitor.py`: Removed exit_mode gate — bracket now fires for ALL modes when SL>0 or PT1>0
+- `get_channel_risk_settings()`: Now returns settings for signal mode when channel/signal SL/PT exists
+- False `broker_orders_placed=True` removed when no levels exist (prevents silent suppression)
 
 ### Step 3: PT Cascade + Dynamic SL Replacement
 
@@ -271,9 +273,11 @@ PT2 fills: SELL 60 RKLB @ $31.25
 ...and so on for each tier
 ```
 
-**What changes in code:**
-- `position_monitor.py`: On each dynamic SL update, call `_sync_stop_to_broker()` to cancel old SL and place new one
-- Ensure `_place_next_pt_bracket()` fires after each PT fill
+**Implementation (already working in v8.2.3, unchanged):**
+- `_sync_stop_to_broker()` already fires on MOVE_STOP, ACTIVATE_EARLY_TRAIL, UPDATE_EARLY_STOP
+- `_place_next_pt_bracket()` already fires on tier hit when `broker_orders_placed=True`
+- RESIZE_STOP resizes SL qty after partial fills
+- All brokers supported: Schwab, Alpaca, Webull (stocks), IBKR, Tastytrade, Trading212, Robinhood
 
 ### SL-Only Escalation Mode
 
@@ -400,19 +404,22 @@ T + 45 min     PT1 FILLS
                Profit: 500 × ($9.80 - $8.20) = $800 (19.5% return)
 ```
 
-### What Happens Today (Current Bug):
+### What Happened Before (v8.2.3 Bug — Now Fixed):
 
 ```
 T + 0 sec      Phoenix sends: "BTO 500 LUNR @ $8.20, SL $7.50, PT $9.80"
                Signal mode checks _signal_has_bracket...
                
-               IF provenance is correct:  bracket placed at entry  ← sometimes works
-               IF provenance is wrong:    bracket SKIPPED           ← LUNR has NO protection!
+               IF provenance is correct:  bracket placed at entry  ← sometimes worked
+               IF provenance is wrong:    bracket SKIPPED           ← LUNR had NO protection!
                
-               Risk Engine?  BLOCKED for signal mode — won't place brackets either.
+               Risk Engine?  BLOCKED for signal mode — wouldn't place brackets either.
                
                Result: 500 shares of a volatile penny stock with ZERO broker protection.
-               LUNR drops 40% → you lose $1,640 with nothing to stop it.
+
+NOW (Fixed): Risk Engine places brackets for ALL modes after fill detection.
+             Signal SL/PT flows through trade record to Risk Engine.
+             No more provenance-dependent entry-time bracket ambiguity.
 ```
 
 ---
@@ -423,19 +430,24 @@ How each broker handles cancelling and replacing stop loss orders:
 
 | Broker | Method | Details |
 |--------|--------|---------|
-| **Webull** | Cancel + New Order | `cancel_order(old_sl_id)` then `place_order(new_sl)`. 3 unlinked orders, cancel/replace individually |
-| **Schwab** | Native Replace | `replace_order(old_sl_id, new_price)`. Most efficient, single API call |
-| **Alpaca** | Cancel + New Order | `cancel_order(old_sl_id)` then `place_order(new_sl)`. Has true OCO but replace via cancel+new |
-| **Tastytrade** | No Bracket Support | SL/PT monitored locally by Risk Engine. Risk Engine places market sell orders when triggered |
+| **Webull** | Cancel + New Order | `cancel_order(old_sl_id)` then `place_order(new_sl)`. Stocks only — options monitored locally |
+| **Schwab** | Cancel + New Order | `cancel_order(old_sl_id)` then `place_stop_order(new_price)`. Stocks and options |
+| **Alpaca** | Cancel + New Order | `cancel_order(old_sl_id)` then StopOrderRequest. Has OCO but replace via cancel+new |
+| **IBKR** | Cancel + New Order | `cancel_order(old_sl_id)` then `place_stop_order(new_sl)` |
+| **Tastytrade** | No Bracket Support | SL/PT monitored locally by Risk Engine. Market sell when triggered |
+| **Trading212** | Cancel + New Order | Stocks only — options not supported |
+| **Robinhood** | Cancel + New Order | `cancel_order(old_sl_id)` then `place_order(new_sl)` |
 
 ---
 
-## CODE CHANGES SUMMARY
+## CODE CHANGES SUMMARY (Implemented)
 
-| File | Change |
-|------|--------|
-| `selfbot_webull.py` | Remove bracket gates from all 3 entry paths (main, paper, live). Entry always places simple order. |
-| `position_monitor.py` | Enable `_place_initial_broker_bracket()` for signal mode (currently only risk/hybrid) |
-| `position_monitor.py` | On each dynamic SL update, call `_sync_stop_to_broker()` to cancel+replace broker-side SL |
-| `position_monitor.py` | Ensure `_place_next_pt_bracket()` fires after each PT fill for PT cascade |
-| `settings_source` | Keep provenance flags (`sl:signal`, `pt:signal`, etc.) for audit trail |
+| File | Change | Status |
+|------|--------|--------|
+| `selfbot_webull.py` | All 3 bracket gates set `use_bracket = False` — entry always places simple order | ✅ Done |
+| `selfbot_webull.py` | Bracket auto-generation removed — Risk Engine uses channel percentages directly | ✅ Done |
+| `position_monitor.py` | Removed exit_mode gate — `_place_initial_broker_bracket()` fires for ALL modes when SL>0 or PT1>0 | ✅ Done |
+| `position_monitor.py` | `get_channel_risk_settings()` now returns settings for signal mode when channel/signal SL/PT exists | ✅ Done |
+| `position_monitor.py` | Removed false `broker_orders_placed=True` when no SL/PT levels exist | ✅ Done |
+| `position_monitor.py` | PT cascade + SL sync already working from v8.2.3 (unchanged) | ✅ Existing |
+| `settings_source` | Provenance flags (`sl:signal`, `pt:signal`, etc.) preserved for audit trail | ✅ Existing |
