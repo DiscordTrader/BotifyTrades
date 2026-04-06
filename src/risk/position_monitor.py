@@ -4234,6 +4234,23 @@ class RiskManager:
             print(f"[RISK] ⚠️ Webull option_id resolution failed: {e}")
         return None
 
+    def _resolve_webull_ticker_id(self, wb_client, symbol: str):
+        tId = None
+        try:
+            from src.services.webull_data_hub import get_webull_data_hub
+            hub = get_webull_data_hub()
+            cached_tid = hub.get_ticker_id(symbol.upper())
+            if cached_tid:
+                tId = int(cached_tid)
+        except Exception:
+            pass
+        if not tId:
+            try:
+                tId = wb_client.get_ticker(symbol)
+            except Exception:
+                pass
+        return tId
+
     def _get_broker_instance_for_bracket(self, broker_name: str):
         broker_upper = broker_name.upper()
         if broker_upper == 'SCHWAB':
@@ -4655,11 +4672,17 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Webull not connected (no client), skip initial bracket")
                         return
 
+                    _wb_tId = await asyncio.to_thread(self._resolve_webull_ticker_id, _wb_client, symbol)
+                    if not _wb_tId:
+                        print(f"[RISK] ⚠️ Webull ticker ID not found for {symbol}, skip initial bracket")
+                        return
+
                     if sl_price and sl_price > 0 and not is_option:
                         _sl_price_r = round(sl_price, 4 if sl_price < 1.0 else 2)
-                        def _wb_sl_order(_c=_wb_client, _s=symbol, _p=_sl_price_r, _q=qty):
+                        def _wb_sl_order(_c=_wb_client, _s=symbol, _p=_sl_price_r, _q=qty, _t=_wb_tId):
                             return _c.place_order(
                                 stock=_s,
+                                tId=int(_t),
                                 stpPrice=_p,
                                 action='SELL',
                                 orderType='STP',
@@ -4703,9 +4726,10 @@ class RiskManager:
                                     print(f"[RISK] ⚠️ Webull PT1 option order failed: {msg}")
                         else:
                             _pt_price_r = round(pt1_price, 4 if pt1_price < 1.0 else 2)
-                            def _wb_pt_order(_c=_wb_client, _s=symbol, _p=_pt_price_r, _q=pt1_qty):
+                            def _wb_pt_order(_c=_wb_client, _s=symbol, _p=_pt_price_r, _q=pt1_qty, _t=_wb_tId):
                                 return _c.place_order(
                                     stock=_s,
+                                    tId=int(_t),
                                     price=_p,
                                     action='SELL',
                                     orderType='LMT',
@@ -4947,10 +4971,14 @@ class RiskManager:
             if not _wb_c:
                 from src.brokers.base_broker import OrderResult
                 return OrderResult(success=False, message='Webull client not connected', symbol=symbol, action='STC')
+            _wb_tid = await asyncio.to_thread(self._resolve_webull_ticker_id, _wb_c, symbol)
+            if not _wb_tid:
+                from src.brokers.base_broker import OrderResult
+                return OrderResult(success=False, message=f'Webull ticker ID not found for {symbol}', symbol=symbol, action='STC')
             _pt_p = round(price, 4 if price < 1.0 else 2)
-            def _wb_pt(_c=_wb_c, _s=symbol, _p=_pt_p, _q=qty):
+            def _wb_pt(_c=_wb_c, _s=symbol, _p=_pt_p, _q=qty, _t=_wb_tid):
                 return _c.place_order(
-                    stock=_s, price=_p, action='SELL',
+                    stock=_s, tId=int(_t), price=_p, action='SELL',
                     orderType='LMT', enforce='GTC', quant=_q,
                     outsideRegularTradingHour=True
                 )
@@ -5267,10 +5295,14 @@ class RiskManager:
                     if not _wb_c2:
                         print(f"[RISK] ⚠️ Webull client not connected — cannot sync stop")
                         return
+                    _wb_tId2 = await asyncio.to_thread(self._resolve_webull_ticker_id, _wb_c2, symbol)
+                    if not _wb_tId2:
+                        print(f"[RISK] ⚠️ Webull ticker ID not found for {symbol} — cannot sync stop")
+                        return
                     _stp_r = round(new_stop_price, 4 if new_stop_price < 1.0 else 2)
-                    def _wb_stop_sync(_c=_wb_c2, _s=symbol, _p=_stp_r, _q=qty):
+                    def _wb_stop_sync(_c=_wb_c2, _s=symbol, _p=_stp_r, _q=qty, _t=_wb_tId2):
                         return _c.place_order(
-                            stock=_s, stpPrice=_p, action='SELL',
+                            stock=_s, tId=int(_t), stpPrice=_p, action='SELL',
                             orderType='STP', enforce='GTC', quant=_q
                         )
                     sl_resp = await asyncio.to_thread(_wb_stop_sync)
