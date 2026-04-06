@@ -8,7 +8,7 @@ There are **two separate systems** that can place bracket orders, and they don't
 
 ### System 1: Entry-Time Brackets (in `selfbot_webull.py`)
 
-When a signal arrives (e.g., `BTO AAPL $190C`), the function `execute_on_single_broker()` decides whether to place a bracket order based on the exit strategy mode:
+When a signal arrives (e.g., `BTO 100 SMCI @ $42.50` from Phoenix), the function `execute_on_single_broker()` decides whether to place a bracket order based on the exit strategy mode:
 
 ```
 Signal arrives -> execute_on_single_broker() -> Should I place a bracket?
@@ -41,42 +41,54 @@ Position detected -> _place_initial_broker_bracket() -> Places SL + PT1 at broke
 
 ### Problem 1: HYBRID MODE — Duplicate Bracket Legs
 
+Imagine Phoenix sends: `BTO 100 SMCI @ $42.50`  
+Channel has SL=10%, PT1=+15% configured.
+
 ```
 T+0s:  execute_on_single_broker() places bracket:
-         Entry BUY 5x, SL SELL 5x @ $185, PT SELL 5x @ $195
+         Entry: BUY 100 SMCI @ $42.50
+         SL:    SELL 100 SMCI @ $38.25  (stop order)
+         PT:    SELL 100 SMCI @ $48.88  (limit order)
 
 T+15s: Risk Engine detects position, calls _place_initial_broker_bracket()
-         Places ANOTHER SL SELL 5x @ $185, ANOTHER PT SELL 5x @ $195
+         Places ANOTHER SL: SELL 100 @ $38.25
+         Places ANOTHER PT: SELL 100 @ $48.88
 
-Result: 2 SL orders + 2 PT orders on the SAME position!
-        If SL triggers, broker tries to sell 10x but you only have 5x
+Result: 2 SL orders + 2 PT orders on the SAME 100 shares!
+        If SL triggers, broker tries to sell 200 shares but you only have 100
 ```
 
 ### Problem 2: SIGNAL MODE — No Broker Protection
 
+Phoenix sends: `BTO 500 LUNR @ $8.20`  
+Channel has SL=10% configured, but signal message didn't include SL/PT.
+
 ```
-T+0s:  Signal: BTO AAPL $190C (channel has SL=10% configured)
+T+0s:  Signal: BTO 500 LUNR @ $8.20
        execute_on_single_broker() checks: did signal message have PT/SL?
-       Answer: NO (SL came from channel defaults)
+       Answer: NO (SL=10% came from channel defaults, not from Phoenix)
        Result: bracket SKIPPED, entry-only order placed
 
-T+0s:  Position has ZERO protection at broker
-       No stop loss order, no profit target order
-       Relies entirely on trader sending "STC" message later
+T+0s:  Position has ZERO protection at broker!
+       500 shares of LUNR with no stop loss, no profit target
+       Relies entirely on Phoenix sending "STC LUNR" message later
 
 T+???  If bot goes offline -> position is completely unprotected!
-       No SL at broker = unlimited downside risk
+       LUNR drops 30% -> you lose $1,230 with no SL to protect you
 ```
 
 ### Problem 3: RISK MODE — 15-Second Gap
 
-```
-T+0s:   Signal: BTO AAPL $190C
-        execute_on_single_broker() -> bracket BLOCKED for risk mode
-        Entry order placed WITHOUT any SL/PT
+Phoenix sends: `BTO 200 RKLB @ $25.00`
 
-T+0s to T+15s:  UNPROTECTED!  No SL at broker for ~15 seconds
-                Price could crash during this window
+```
+T+0s:   execute_on_single_broker() -> bracket BLOCKED for risk mode
+        Entry order placed: BUY 200 RKLB @ $25.00
+        NO SL, NO PT at broker
+
+T+0s to T+15s:  UNPROTECTED! No SL at broker for ~15 seconds
+                If RKLB drops 5% in those 15 seconds = $250 loss
+                with no protection
 
 T+15s:  Risk Engine syncs positions, detects fill
         _place_initial_broker_bracket() places SL + PT1
@@ -85,27 +97,35 @@ T+15s:  Risk Engine syncs positions, detects fill
 
 ### Problem 4: Dynamic SL Not Replaced at Broker
 
+Continuing the RKLB example after Risk Engine places initial bracket:
+
 ```
-T+0s:   SL placed at broker @ $2.70
+T+15s:  SL placed at broker: SELL 200 RKLB @ $22.50 (10% below $25.00)
 
-T+30m:  PT1 fills, Risk Engine internally moves SL to $3.00 (breakeven)
-        BUT the broker still has the old SL order @ $2.70!
-        Internal SL = $3.00, Broker SL = $2.70 (mismatch)
+T+30m:  RKLB hits $28.75 (PT1 = +15%)
+        Risk Engine internally moves SL to $25.00 (breakeven)
+        BUT the broker still has the old SL order @ $22.50!
 
-Result: If price drops to $2.70, broker fills old SL order
-        You lose money that the dynamic SL should have protected
+        Internal SL = $25.00 (breakeven)
+        Broker SL   = $22.50 (still the original -10%)
+        
+        MISMATCH!
+
+Result: RKLB drops to $22.50 -> broker fills old SL
+        You lose $2.50/share ($500 total) instead of breaking even
+        The dynamic SL escalation was supposed to protect you!
 ```
 
 ### Problem 5: No PT Cascade
 
 ```
-T+0s:   Bracket placed with PT1 @ $3.45 only
+T+15s:  Bracket placed with only PT1: SELL 60 RKLB @ $28.75
         No PT2, no PT3 at broker
 
-T+30m:  PT1 fills (SELL 2x @ $3.45)
-        Remaining 4x contracts have NO profit target at broker
+T+30m:  PT1 fills (SELL 60 @ $28.75)
+        Remaining 140 shares have NO profit target at broker
         Must rely on Risk Engine's internal monitoring for PT2/PT3
-        If bot goes offline after PT1 fill -> no PT2 protection
+        If bot goes offline after PT1 fill -> 140 shares unprotected
 ```
 
 ---
@@ -116,13 +136,13 @@ The core idea: **Remove all bracket logic from the entry path.** Make the Risk E
 
 ### Step 1: Entry Order (Same for ALL Modes)
 
+Phoenix sends: `BTO 200 RKLB @ $25.00`
+
 ```
-Signal arrives: BTO 6x AAPL $190C @ $3.00
-
 execute_on_single_broker() places ENTRY ONLY:
-  BUY 6x AAPL $190C @ MARKET
+  BUY 200 RKLB @ $25.00 (market order)
 
-NO bracket legs placed (no SL, no PT)
+NO bracket legs placed — no SL, no PT
 This is the SAME regardless of exit mode (hybrid, signal, or risk)
 ```
 
@@ -132,27 +152,30 @@ This is the SAME regardless of exit mode (hybrid, signal, or risk)
 
 ### Step 2: Risk Engine Places Initial Bracket (ALL Modes)
 
+Risk Engine detects the fill (via broker sync or fill-watch callback), then places the initial bracket. Where it gets the SL/PT values depends on the exit mode:
+
 ```
-Risk Engine detects fill (via broker sync or fill-watch callback)
+RISK mode (Phoenix channel set to risk, SL=10%, PT1=+15%):
+  Risk Engine computes from channel settings:
+    SL = 10% below $25.00 = $22.50
+    PT1 = 15% above $25.00 = $28.75, qty = 60 shares (tier 1 allocation)
+  Places at broker:
+    SL order:  SELL 200 RKLB @ $22.50 (stop)
+    PT1 order: SELL 60 RKLB @ $28.75 (limit)
 
-Calls _place_initial_broker_bracket() for ALL modes:
+SIGNAL mode (Phoenix sent "BTO 200 RKLB @ $25.00, SL $23.50, PT $28.00"):
+  Risk Engine reads signal-provided values (from settings_source provenance):
+    SL = $23.50 (from Phoenix's message)
+    PT1 = $28.00 (from Phoenix's message)
+  Places at broker:
+    SL order:  SELL 200 RKLB @ $23.50 (stop)
+    PT1 order: SELL 200 RKLB @ $28.00 (limit)
 
-  RISK mode:
-    SL = from channel risk settings (e.g., 10% below entry)
-    PT1 = from channel tier settings (e.g., +15% above entry)
-    Qty per tier = calculated from tier configuration
-
-  SIGNAL mode:
-    SL = from signal message (e.g., $185)
-    PT1 = from signal message (e.g., $195)
-    Uses provenance flags (settings_source) to know what came from signal
-
-  HYBRID mode:
-    SL = tighter of signal SL vs channel SL (ExitOrderArbiter)
+HYBRID mode:
+  Risk Engine picks the tighter protection:
+    Signal SL = $23.50, Channel SL = $22.50
+    Uses $23.50 (tighter / closer to entry = more protective)
     PT1 = from signal or channel, whichever is available
-
-Result: SL + PT1 placed at broker for ALL modes!
-        Single owner = no duplicates
 ```
 
 **What changes in code:**
@@ -161,27 +184,30 @@ Result: SL + PT1 placed at broker for ALL modes!
 
 ### Step 3: PT Cascade + Dynamic SL Replacement
 
-When PT1 fills at broker, the Risk Engine runs the escalation cycle:
+When PT1 fills at broker, the Risk Engine runs the escalation cycle.  
+Continuing the RKLB example in Risk mode (SL=10%, PT1=+15%, PT2=+25%, PT3=+40%, Dynamic SL=Standard):
 
 ```
-PT1 fills: SELL 2x @ $3.45
+PT1 fills: SELL 60 RKLB @ $28.75 (PT1 = +15% above $25.00)
 
   1. CANCEL old SL order at broker
-     cancel_order(broker_stop_order_id)
+     cancel_order(broker_stop_order_id)   -- removes the $22.50 stop
 
   2. Place NEW SL at escalated price
-     e.g., SL moved from $2.70 -> $3.00 (breakeven)
-     Standard dynamic SL profile: PT1 hit = move SL to breakeven
+     Standard profile: PT1 hit = move SL to breakeven
+     NEW SL = $25.00 (breakeven)
+     place_order(SELL 140 RKLB @ $25.00, type=stop)
 
   3. Place PT2 at broker
-     SELL 2x @ $3.75 (next tier target)
-     _place_next_pt_bracket() handles this
+     PT2 = +25% above $25.00 = $31.25
+     Tier 2 allocation = 60 shares
+     place_order(SELL 60 RKLB @ $31.25, type=limit)
 
-PT2 fills: SELL 2x @ $3.75
+PT2 fills: SELL 60 RKLB @ $31.25
 
-  1. CANCEL old SL @ $3.00
-  2. Place NEW SL @ $3.15 (+5% above entry)
-  3. Place PT3: SELL 2x @ $4.20
+  1. CANCEL old SL @ $25.00
+  2. Place NEW SL @ $26.25 (+5% above entry, Standard profile PT2)
+  3. Place PT3: SELL 80 RKLB @ $35.00 (runner, +40% above entry)
 
 ...and so on for each tier
 ```
@@ -192,70 +218,142 @@ PT2 fills: SELL 2x @ $3.75
 
 ### SL-Only Escalation Mode
 
-Same SL replacement behavior, but PT hits do NOT trigger partial sells:
+Same SL replacement behavior, but PT hits do NOT trigger partial sells.  
+Example: Phoenix channel with SL-Only Escalation, 200 shares of RKLB:
 
 ```
-PT1 price reached ($3.45):
-  - NO sell order executed
-  - SL moved from $2.70 -> $3.00 (breakeven)
-  - Old broker SL cancelled, new SL placed
+RKLB hits $28.75 (PT1 level):
+  - NO sell order executed (position stays at 200 shares)
+  - SL moved from $22.50 -> $25.00 (breakeven)
+  - Old broker SL cancelled, new SL placed at $25.00
 
-PT2 price reached ($3.75):
-  - NO sell order executed
-  - SL moved from $3.00 -> $3.15
-  - Old broker SL cancelled, new SL placed
+RKLB hits $31.25 (PT2 level):
+  - NO sell order executed (still 200 shares)
+  - SL moved from $25.00 -> $26.25
+  - Old broker SL cancelled, new SL placed at $26.25
 
-Price drops to $3.15:
-  - SL fills: SELL ALL 6x @ $3.15
+RKLB drops to $26.25:
+  - SL fills: SELL ALL 200 shares @ $26.25
   - Full position exits at once
+  - Profit: $1.25/share × 200 = $250 (locked in by escalated SL)
 ```
 
 ---
 
-## REAL TRADE EXAMPLE
+## REAL TRADE EXAMPLE — Stock (Phoenix Channel, RKLB)
 
-**Setup:** Risk Mode, AAPL $190C, Entry $3.00, SL=10%, PT1=+15%, PT2=+25%, PT3=+40%, Dynamic SL=Standard
+**Setup:** Risk Mode, 200 shares of RKLB @ $25.00, SL=10%, PT1=+15%, PT2=+25%, PT3=+40%, Dynamic SL=Standard
+
+Tier allocation: PT1 = 60 shares, PT2 = 60 shares, PT3/Runner = 80 shares
 
 ### Timeline:
 
 ```
 T + 0 sec      ENTRY
-               Signal: BTO 6x AAPL $190C @ $3.00
-               execute_on_single_broker() places: BUY 6x AAPL $190C @ MARKET
+               Phoenix sends: "BTO 200 RKLB @ $25.00"
+               Bot places: BUY 200 RKLB @ MARKET
                NO bracket legs — just the entry order
+               Cost: 200 × $25.00 = $5,000
                     |
                     v
-T + 3 sec      RISK ENGINE DETECTS FILL
+T + 3 sec      RISK ENGINE DETECTS FILL → PLACES INITIAL BRACKET
                _place_initial_broker_bracket() places:
-                 SL order:  SELL 6x @ $2.70 (stop)    [10% below $3.00]
-                 PT1 order: SELL 2x @ $3.45 (limit)   [15% above $3.00]
+                 SL order:  SELL 200 RKLB @ $22.50 (stop)    [10% below $25.00]
+                 PT1 order: SELL 60 RKLB @ $28.75 (limit)    [15% above $25.00]
+               
                Position now protected at broker!
+               Even if bot goes offline, broker will execute SL or PT1.
                     |
                     v
 T + 30 min     PT1 FILLS — ESCALATION CYCLE #1
-               Broker fills: SELL 2x @ $3.45 (PT1 hit!)
+               RKLB hits $28.75 → broker fills: SELL 60 @ $28.75
+               Profit locked: 60 × ($28.75 - $25.00) = $225
+               
                Risk Engine detects fill, then:
-                 1. CANCEL old SL @ $2.70
-                 2. Place NEW SL @ $3.00 (breakeven)
-                 3. Place PT2: SELL 2x @ $3.75 (25% above entry)
-               Remaining: 4x AAPL $190C, SL=$3.00, PT2 pending
+                 1. CANCEL old SL @ $22.50        (remove outdated stop)
+                 2. Place NEW SL @ $25.00          (breakeven — Standard PT1)
+                 3. Place PT2: SELL 60 @ $31.25    (25% above entry)
+               
+               Remaining: 140 shares, SL = $25.00, PT2 pending
+               Worst case now = breakeven (not a loss!)
                     |
                     v
 T + 1 hour     PT2 FILLS — ESCALATION CYCLE #2
-               Broker fills: SELL 2x @ $3.75 (PT2 hit!)
+               RKLB hits $31.25 → broker fills: SELL 60 @ $31.25
+               Profit locked: 60 × ($31.25 - $25.00) = $375
+               
                Risk Engine detects fill, then:
-                 1. CANCEL old SL @ $3.00
-                 2. Place NEW SL @ $3.15 (+5% above entry)
-                 3. Place PT3: SELL 2x @ $4.20 (40% above entry)
-               Remaining: 2x AAPL $190C, SL=$3.15, PT3 pending
+                 1. CANCEL old SL @ $25.00
+                 2. Place NEW SL @ $26.25          (+5% above entry — Standard PT2)
+                 3. Place PT3: SELL 80 @ $35.00    (40% above entry, runner)
+               
+               Remaining: 80 shares (runner), SL = $26.25, PT3 pending
+               Worst case now = $1.25/share profit locked in
                     |
                     v
-T + 2 hours    PRICE DROPS — SL FILLS
-               Price drops to $3.15 -> SL order fills: SELL 2x @ $3.15
+T + 2 hours    PRICE DROPS → ESCALATED SL FILLS
+               RKLB drops back to $26.25 → SL fills: SELL 80 @ $26.25
                Cancel PT3 order (no longer needed)
+               Runner profit: 80 × ($26.25 - $25.00) = $100
+               
                Position fully closed!
                
-               Profit: 2x@$3.45 + 2x@$3.75 + 2x@$3.15 = $3.70 total gain
+               TOTAL PROFIT:
+                 PT1:    60 shares × $3.75 profit  = $225
+                 PT2:    60 shares × $6.25 profit  = $375
+                 SL exit: 80 shares × $1.25 profit = $100
+                 ─────────────────────────────────────────
+                 TOTAL: $700 profit on $5,000 position (14% return)
+```
+
+---
+
+## REAL TRADE EXAMPLE — Penny Stock (Phoenix Channel, LUNR)
+
+**Setup:** Signal Mode, 500 shares of LUNR @ $8.20  
+Phoenix message included: `SL $7.50, PT $9.80`
+
+### Timeline:
+
+```
+T + 0 sec      ENTRY
+               Phoenix sends: "BTO 500 LUNR @ $8.20, SL $7.50, PT $9.80"
+               Bot places: BUY 500 LUNR @ MARKET
+               NO bracket legs — just the entry order
+               Cost: 500 × $8.20 = $4,100
+                    |
+                    v
+T + 3 sec      RISK ENGINE DETECTS FILL → PLACES SIGNAL-PROVIDED BRACKET
+               Signal mode + signal-provided SL/PT (from settings_source provenance)
+               _place_initial_broker_bracket() places:
+                 SL order:  SELL 500 LUNR @ $7.50 (stop)    [from Phoenix's message]
+                 PT1 order: SELL 500 LUNR @ $9.80 (limit)   [from Phoenix's message]
+               
+               Penny stock protected at broker!
+               Even if bot disconnects, SL at $7.50 protects against crash.
+                    |
+                    v
+T + 45 min     PT1 FILLS
+               LUNR hits $9.80 → broker fills: SELL 500 @ $9.80
+               Cancel SL order (no longer needed)
+               
+               Position fully closed!
+               Profit: 500 × ($9.80 - $8.20) = $800 (19.5% return)
+```
+
+### What Happens Today (Current Bug):
+
+```
+T + 0 sec      Phoenix sends: "BTO 500 LUNR @ $8.20, SL $7.50, PT $9.80"
+               Signal mode checks _signal_has_bracket...
+               
+               IF provenance is correct:  bracket placed at entry  ← sometimes works
+               IF provenance is wrong:    bracket SKIPPED           ← LUNR has NO protection!
+               
+               Risk Engine?  BLOCKED for signal mode — won't place brackets either.
+               
+               Result: 500 shares of a volatile penny stock with ZERO broker protection.
+               LUNR drops 40% → you lose $1,640 with nothing to stop it.
 ```
 
 ---
