@@ -2414,6 +2414,9 @@ class SchwabBroker(BrokerInterface):
             instruction = instruction_map.get(side.lower(), 'SELL')
 
             session = self._get_session_type()
+            if session == "SEAMLESS":
+                session = "NORMAL"
+                print(f"[{self.name}] ℹ️ STOP order forced to NORMAL session (SEAMLESS doesn't support STOP orders)")
             order_duration = self._get_duration(duration_hint=duration, is_exit=True)
 
             order_payload = {
@@ -2594,6 +2597,9 @@ class SchwabBroker(BrokerInterface):
             instruction = instruction_map.get(side.lower(), 'SELL')
 
             session = self._get_session_type()
+            if session == "SEAMLESS":
+                session = "NORMAL"
+                print(f"[{self.name}] ℹ️ TRAILING_STOP order forced to NORMAL session (SEAMLESS doesn't support STOP-type orders)")
             valid_basis = {'BID', 'ASK', 'LAST'}
             valid_type = {'VALUE', 'PERCENT'}
             price_basis = price_basis.upper() if price_basis.upper() in valid_basis else 'BID'
