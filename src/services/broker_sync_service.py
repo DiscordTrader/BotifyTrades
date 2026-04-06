@@ -1524,7 +1524,8 @@ class BrokerSyncService:
                                                 'opt_type': trade.get('call_put'),
                                                 'channel_id': discord_channel_id,
                                                 'db_channel_id': channel_row['id'],
-                                                'received_at': datetime.now()
+                                                'received_at': datetime.now(),
+                                                'exit_reason': 'BROKER_CLOSED'
                                             }
                                             lot_result = matcher.process_signal(lot_signal)
                                             if lot_result:
@@ -1991,14 +1992,15 @@ class BrokerSyncService:
                                     'action': 'STC',
                                     'symbol': symbol,
                                     'asset': asset_type,
-                                    'qty': quantity,  # Preserve as float for partial positions
-                                    'price': exit_price,  # Can be 0 for expired options
+                                    'qty': quantity,
+                                    'price': exit_price,
                                     'strike': trade.get('strike'),
                                     'expiry': trade.get('expiry'),
                                     'opt_type': trade.get('call_put'),
                                     'channel_id': discord_channel_id,
                                     'db_channel_id': db_channel_id,
-                                    'received_at': datetime.now()
+                                    'received_at': datetime.now(),
+                                    'exit_reason': 'BROKER_CLOSED'
                                 }
                                 lot_result = matcher.process_signal(lot_signal)
                                 if lot_result:

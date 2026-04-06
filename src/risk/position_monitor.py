@@ -4648,19 +4648,21 @@ class RiskManager:
 
             elif 'WEBULL' in broker_name and broker_instance:
                 try:
-                    if not getattr(broker_instance, 'connected', False) and not getattr(broker_instance, 'wb', None):
-                        print(f"[RISK] ⚠️ Webull not connected, skip initial bracket")
+                    _wb_client = getattr(broker_instance, '_client', None) or getattr(broker_instance, 'wb', None)
+                    if not _wb_client:
+                        print(f"[RISK] ⚠️ Webull not connected (no client), skip initial bracket")
                         return
 
                     if sl_price and sl_price > 0 and not is_option:
-                        def _wb_sl_order():
-                            return broker_instance.wb.place_order(
-                                stock=symbol,
-                                price=sl_price,
+                        _sl_price_r = round(sl_price, 4 if sl_price < 1.0 else 2)
+                        def _wb_sl_order(_c=_wb_client, _s=symbol, _p=_sl_price_r, _q=qty):
+                            return _c.place_order(
+                                stock=_s,
+                                price=_p,
                                 action='SELL',
                                 orderType='STP',
                                 enforce='GTC',
-                                quant=qty
+                                quant=_q
                             )
                         sl_resp = await asyncio.to_thread(_wb_sl_order)
                         if sl_resp and not sl_resp.get('msg'):
@@ -4698,14 +4700,15 @@ class RiskManager:
                                     msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
                                     print(f"[RISK] ⚠️ Webull PT1 option order failed: {msg}")
                         else:
-                            def _wb_pt_order():
-                                return broker_instance.wb.place_order(
-                                    stock=symbol,
-                                    price=pt1_price,
+                            _pt_price_r = round(pt1_price, 4 if pt1_price < 1.0 else 2)
+                            def _wb_pt_order(_c=_wb_client, _s=symbol, _p=_pt_price_r, _q=pt1_qty):
+                                return _c.place_order(
+                                    stock=_s,
+                                    price=_p,
                                     action='SELL',
                                     orderType='LMT',
                                     enforce='GTC',
-                                    quant=pt1_qty,
+                                    quant=_q,
                                     outsideRegularTradingHour=True
                                 )
                             pt_resp = await asyncio.to_thread(_wb_pt_order)
@@ -4938,10 +4941,15 @@ class RiskManager:
         elif 'ROBINHOOD' in broker_name:
             return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
         elif 'WEBULL' in broker_name:
-            def _wb_pt():
-                return broker_instance.wb.place_order(
-                    stock=symbol, price=price, action='SELL',
-                    orderType='LMT', enforce='GTC', quant=qty,
+            _wb_c = getattr(broker_instance, '_client', None) or getattr(broker_instance, 'wb', None)
+            if not _wb_c:
+                from src.brokers.base_broker import OrderResult
+                return OrderResult(success=False, message='Webull client not connected', symbol=symbol, action='STC')
+            _pt_p = round(price, 4 if price < 1.0 else 2)
+            def _wb_pt(_c=_wb_c, _s=symbol, _p=_pt_p, _q=qty):
+                return _c.place_order(
+                    stock=_s, price=_p, action='SELL',
+                    orderType='LMT', enforce='GTC', quant=_q,
                     outsideRegularTradingHour=True
                 )
             resp = await asyncio.to_thread(_wb_pt)
@@ -5252,10 +5260,15 @@ class RiskManager:
                     if _is_opt:
                         print(f"[RISK] ⚠️ Webull options don't support stop orders — dynamic SL monitored locally")
                         return
-                    def _wb_stop_sync():
-                        return broker_instance.wb.place_order(
-                            stock=symbol, price=new_stop_price, action='SELL',
-                            orderType='STP', enforce='GTC', quant=qty
+                    _wb_c2 = getattr(broker_instance, '_client', None) or getattr(broker_instance, 'wb', None)
+                    if not _wb_c2:
+                        print(f"[RISK] ⚠️ Webull client not connected — cannot sync stop")
+                        return
+                    _stp_r = round(new_stop_price, 4 if new_stop_price < 1.0 else 2)
+                    def _wb_stop_sync(_c=_wb_c2, _s=symbol, _p=_stp_r, _q=qty):
+                        return _c.place_order(
+                            stock=_s, price=_p, action='SELL',
+                            orderType='STP', enforce='GTC', quant=_q
                         )
                     sl_resp = await asyncio.to_thread(_wb_stop_sync)
                     if sl_resp and not sl_resp.get('msg'):
