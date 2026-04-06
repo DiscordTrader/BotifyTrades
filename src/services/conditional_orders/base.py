@@ -1615,6 +1615,17 @@ class BaseConditionalOrderService(ABC):
         stop_loss_fixed = parsed_signal.get('stop_loss_fixed')
         stop_loss_pct = parsed_signal.get('stop_loss_pct')
         
+        if stop_loss_value and stop_loss_type == 'fixed' and adjusted_price and adjusted_price > 0:
+            try:
+                _sl_num = float(stop_loss_value)
+                if _sl_num > adjusted_price:
+                    self._log(f"SL auto-correct: ${stop_loss_value} > trigger ${adjusted_price} — treating as {stop_loss_value}% (not dollar)")
+                    stop_loss_type = 'percent'
+                    stop_loss_pct = _sl_num
+                    stop_loss_fixed = None
+            except (ValueError, TypeError):
+                pass
+        
         if not stop_loss_value and channel_settings.get('stop_loss_pct'):
             stop_loss_type = 'percent'
             stop_loss_value = channel_settings.get('stop_loss_pct')
