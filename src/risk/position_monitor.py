@@ -4679,24 +4679,37 @@ class RiskManager:
 
                     if sl_price and sl_price > 0 and not is_option:
                         _sl_price_r = round(sl_price, 4 if sl_price < 1.0 else 2)
-                        def _wb_sl_order(_c=_wb_client, _s=symbol, _p=_sl_price_r, _q=qty, _t=_wb_tId):
-                            return _c.place_order(
-                                stock=_s,
-                                tId=int(_t),
-                                stpPrice=_p,
-                                action='SELL',
-                                orderType='STP',
-                                enforce='GTC',
-                                quant=_q
-                            )
-                        sl_resp = await asyncio.to_thread(_wb_sl_order)
-                        if sl_resp and not sl_resp.get('msg'):
-                            _sl_oid = str(sl_resp.get('orderId', ''))
-                            if _sl_oid:
-                                cache.broker_stop_order_id = _sl_oid
-                                print(f"[RISK] ✅ Broker SL placed: Webull stop #{_sl_oid} at ${sl_price:.2f} (qty={qty})")
-                        else:
-                            print(f"[RISK] ⚠️ Webull SL order failed: {sl_resp.get('msg', 'unknown') if sl_resp else 'no response'}")
+                        _wb_sl_placed = False
+                        for _ext_hrs in [True, False]:
+                            def _wb_sl_order(_c=_wb_client, _s=symbol, _p=_sl_price_r, _q=qty, _t=_wb_tId, _eh=_ext_hrs):
+                                return _c.place_order(
+                                    stock=_s,
+                                    tId=int(_t),
+                                    stpPrice=_p,
+                                    action='SELL',
+                                    orderType='STP',
+                                    enforce='GTC',
+                                    quant=_q,
+                                    outsideRegularTradingHour=_eh
+                                )
+                            sl_resp = await asyncio.to_thread(_wb_sl_order)
+                            print(f"[RISK] [DEBUG] Webull SL response (extHrs={_ext_hrs}): {sl_resp}")
+                            if sl_resp and not sl_resp.get('msg'):
+                                _sl_oid = str(sl_resp.get('data', {}).get('orderId', '')) if isinstance(sl_resp.get('data'), dict) else str(sl_resp.get('orderId', ''))
+                                if _sl_oid:
+                                    cache.broker_stop_order_id = _sl_oid
+                                    print(f"[RISK] ✅ Broker SL placed: Webull stop #{_sl_oid} at ${sl_price:.2f} (qty={qty})")
+                                    _wb_sl_placed = True
+                                    break
+                            else:
+                                _err = sl_resp.get('msg', 'unknown') if sl_resp else 'no response'
+                                if _ext_hrs:
+                                    print(f"[RISK] ⚠️ Webull SL failed (extHrs=True): {_err} — retrying with extHrs=False")
+                                else:
+                                    print(f"[RISK] ⚠️ Webull SL order failed: {_err} — SL will be monitored locally")
+                        if not _wb_sl_placed:
+                            cache._webull_stp_unsupported = True
+                            cache.broker_orders_placed = True
                     elif sl_price and sl_price > 0 and is_option:
                         print(f"[RISK] ⚠️ Webull does not support stop orders for options — SL will be monitored locally")
 
@@ -5300,19 +5313,29 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Webull ticker ID not found for {symbol} — cannot sync stop")
                         return
                     _stp_r = round(new_stop_price, 4 if new_stop_price < 1.0 else 2)
-                    def _wb_stop_sync(_c=_wb_c2, _s=symbol, _p=_stp_r, _q=qty, _t=_wb_tId2):
-                        return _c.place_order(
-                            stock=_s, tId=int(_t), stpPrice=_p, action='SELL',
-                            orderType='STP', enforce='GTC', quant=_q
-                        )
-                    sl_resp = await asyncio.to_thread(_wb_stop_sync)
-                    if sl_resp and not sl_resp.get('msg'):
-                        _sl_oid = str(sl_resp.get('orderId', ''))
-                        if _sl_oid:
-                            cache.broker_stop_order_id = _sl_oid
-                            print(f"[RISK] ✅ Broker stop synced: Webull stop #{_sl_oid} at ${new_stop_price:.2f}")
-                    else:
-                        print(f"[RISK] ⚠️ Webull stop sync failed: {sl_resp.get('msg', 'unknown') if sl_resp else 'no response'}")
+                    if getattr(cache, '_webull_stp_unsupported', False):
+                        return
+                    for _ext_hrs in [True, False]:
+                        def _wb_stop_sync(_c=_wb_c2, _s=symbol, _p=_stp_r, _q=qty, _t=_wb_tId2, _eh=_ext_hrs):
+                            return _c.place_order(
+                                stock=_s, tId=int(_t), stpPrice=_p, action='SELL',
+                                orderType='STP', enforce='GTC', quant=_q,
+                                outsideRegularTradingHour=_eh
+                            )
+                        sl_resp = await asyncio.to_thread(_wb_stop_sync)
+                        print(f"[RISK] [DEBUG] Webull stop sync response (extHrs={_ext_hrs}): {sl_resp}")
+                        if sl_resp and not sl_resp.get('msg'):
+                            _sl_oid = str(sl_resp.get('data', {}).get('orderId', '')) if isinstance(sl_resp.get('data'), dict) else str(sl_resp.get('orderId', ''))
+                            if _sl_oid:
+                                cache.broker_stop_order_id = _sl_oid
+                                print(f"[RISK] ✅ Broker stop synced: Webull stop #{_sl_oid} at ${new_stop_price:.2f}")
+                                break
+                        else:
+                            _err = sl_resp.get('msg', 'unknown') if sl_resp else 'no response'
+                            if _ext_hrs:
+                                print(f"[RISK] ⚠️ Webull stop sync failed (extHrs=True): {_err} — retrying")
+                            else:
+                                print(f"[RISK] ⚠️ Webull stop sync failed: {_err} — SL monitored locally")
 
             except Exception as e:
                 print(f"[RISK] ⚠️ {broker_name} broker stop sync error: {e}")
