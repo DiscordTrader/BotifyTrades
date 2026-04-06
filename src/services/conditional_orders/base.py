@@ -1726,6 +1726,7 @@ class BaseConditionalOrderService(ABC):
             message_id=parsed_signal.get('message_id'),
             breakout_reset_enabled=breakout_reset_enabled,
             original_signal_price=parsed_signal.get('trigger_price', 0),
+            all_brokers=json.dumps(parsed_signal['_all_brokers']) if parsed_signal.get('_all_brokers') else None,
         )
         
         if order_id:
@@ -2598,6 +2599,14 @@ class BaseConditionalOrderService(ABC):
         if self.execution_callback:
             try:
                 order['triggered_price'] = trigger_price
+                metadata_str = order.get('metadata')
+                if metadata_str:
+                    try:
+                        metadata = json.loads(metadata_str)
+                        if metadata.get('all_brokers'):
+                            order['all_brokers'] = metadata['all_brokers']
+                    except (json.JSONDecodeError, TypeError):
+                        pass
                 result = self.execution_callback(order, trigger_price)
                 callback_success = True
                 if asyncio.iscoroutine(result):

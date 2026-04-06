@@ -12465,7 +12465,8 @@ def create_conditional_order(
     author_name: str = None,
     message_id: str = None,
     breakout_reset_enabled: int = 1,
-    original_signal_price: float = None
+    original_signal_price: float = None,
+    all_brokers: str = None
 ) -> Optional[int]:
     """Create a new conditional order with full channel settings linkage.
     
@@ -12482,6 +12483,12 @@ def create_conditional_order(
     cursor = conn.cursor()
     
     try:
+        import json as _json
+        metadata_dict = {}
+        if all_brokers:
+            metadata_dict['all_brokers'] = _json.loads(all_brokers) if isinstance(all_brokers, str) else all_brokers
+        metadata_json = _json.dumps(metadata_dict) if metadata_dict else None
+
         cursor.execute('''
             INSERT INTO conditional_orders (
                 channel_id, symbol, trigger_type, trigger_price, adjusted_trigger_price,
@@ -12492,8 +12499,8 @@ def create_conditional_order(
                 exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
                 trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
                 limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id, breakout_reset_enabled,
-                original_signal_price
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                original_signal_price, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
@@ -12503,7 +12510,7 @@ def create_conditional_order(
             exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
             trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
             limit_cap_enabled, limit_cap_pct, limit_price, author_name, message_id, breakout_reset_enabled,
-            original_signal_price
+            original_signal_price, metadata_json
         ))
         
         order_id = cursor.lastrowid
