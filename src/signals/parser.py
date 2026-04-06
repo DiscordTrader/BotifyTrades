@@ -895,7 +895,14 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     
     # Exclude "Watching XXX over Y.Y" patterns - these are watchlist alerts, not trade signals
     # Examples: "Watching TEAD over 0.70 @Daytrades", "Watching BNAI over 30.00 @Daytrades"
+    # Also handles Jacob typos: "Watching. ISPC over", "WatchingVCIG OVEE", "Watching RIME pver"
+    # and variants: "Also watching over 40.00", "Still watching UGRO over 12.00"
     if re.search(r'\bWATCHING\s+[A-Z]+\s+OVER\b', text_upper):
+        return False
+    stripped = re.sub(r'[.\s\u200b-\u200f\u202a-\u202e]+', ' ', text_upper).strip()
+    if re.search(r'(?:^|\b)WATCHING\s*[A-Z]{1,5}\b', stripped):
+        return False
+    if re.search(r'\bWATCHING\b', text_upper) and re.search(r'\bOV(?:ER|EE|ER)\b', text_upper):
         return False
     
     # Exclude protrader structured format — these have their own parser in the format registry
