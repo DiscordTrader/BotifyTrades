@@ -2,130 +2,189 @@
 
 ---
 
-## CURRENT ARCHITECTURE (How It Works Today)
+## V8.2.3 ARCHITECTURE (How Bracket Orders Actually Work)
 
-There are **two separate systems** that can place bracket orders, and they don't coordinate with each other.
+There are **two separate systems** that place bracket orders, and they work in different modes.
 
 ### System 1: Entry-Time Brackets (in `selfbot_webull.py`)
 
-When a signal arrives (e.g., `BTO 100 SMCI @ $42.50` from Phoenix), the function `execute_on_single_broker()` decides whether to place a bracket order based on the exit strategy mode:
+When a stock signal arrives (e.g., `BTO 100 SMCI @ $42.50` from Phoenix), the bot first runs **Bracket Auto-Generation** — if the signal doesn't have SL/PT but the channel has them configured, it computes dollar prices from the channel percentages. Then `execute_on_single_broker()` decides whether to place the bracket:
 
 ```
-Signal arrives -> execute_on_single_broker() -> Should I place a bracket?
+Signal arrives -> Bracket Auto-Generation -> execute_on_single_broker()
 
-  HYBRID mode:  YES - always places bracket (entry + SL + PT1)
-  SIGNAL mode:  ONLY if the signal message itself had PT/SL
-                Channel-default PT/SL does NOT trigger bracket
-  RISK mode:    NEVER - bracket is blocked
+BRACKET AUTO-GENERATION (line ~15353):
+  - Only runs for stock BTO signals with a price
+  - Only runs if exit mode is NOT 'signal' and NOT 'risk'
+  - If signal has no SL but channel has stop_loss_pct:
+      Computes SL price = entry × (1 - stop_loss_pct/100)
+  - If signal has no PT but channel has profit_target_1_pct:
+      Computes PT price = entry × (1 + pt1_pct/100)
+  - Signal mode: SKIPPED ("exits via STC signals only")
+  - Risk mode: SKIPPED ("progressive brackets placed by risk engine after fill")
+
+BRACKET GATE (execute_on_single_broker, line ~16166):
+  use_bracket = BTO + has SL/PT + broker supports it + exit_mode not in ('signal','risk')
+
+  HYBRID mode:  YES — bracket placed at entry (entry + SL + PT1)
+  SIGNAL mode:  NO — bracket always skipped (auto-gen also skipped)
+  RISK mode:    NO — bracket always skipped (auto-gen also skipped)
+
+PAPER TRADE GATE (line ~18548):
+  use_bracket = BTO + has SL/PT + broker supports it + exit_mode != 'signal'
+  NOTE: Risk mode NOT excluded here (inconsistency with main gate)
+
+LIVE TRADE GATE (line ~18770):
+  use_bracket = BTO + has SL/PT + broker supports it + exit_mode != 'signal'
+  NOTE: Risk mode NOT excluded here (inconsistency with main gate)
 ```
-
-**Code location:** `selfbot_webull.py` lines ~16337-16345 (main gate), ~18724-18734 (paper), ~18947-18957 (live)
 
 ### System 2: Risk Engine Brackets (in `position_monitor.py`)
 
-After a trade is filled, the Risk Engine detects the new position via broker sync (~15 seconds later) and can also place brackets:
+After a trade fills, the Risk Engine detects the new position via broker sync and can place its own brackets:
 
 ```
-Position detected -> _place_initial_broker_bracket() -> Places SL + PT1 at broker
+Position detected -> _evaluate_position() -> checks broker_orders_placed flag
 
-  RISK mode:    YES - places bracket from channel risk settings
-  HYBRID mode:  YES - places bracket
-  SIGNAL mode:  NO - blocked, does not place brackets
+BRACKET TRIGGER (line ~3507):
+  if channel_settings AND NOT cache.broker_orders_placed:
+      if exit_mode in ('risk', 'hybrid'):
+          _place_initial_broker_bracket()
+
+  RISK mode:    YES — places bracket from channel SL% and PT1%
+  HYBRID mode:  YES — places bracket from channel SL% and PT1%
+  SIGNAL mode:  NO — skipped, risk engine does not place brackets
 ```
 
-**Code location:** `position_monitor.py` function `_place_initial_broker_bracket()`
+**What `_place_initial_broker_bracket()` does (line ~4161):**
+- Computes SL price from channel `stop_loss_pct`
+- Computes PT1 price from channel `profit_target_1_pct`
+- Calculates tier qty (how many shares for PT1 using `calculate_auto_tier_quantities`)
+- Places SL stop order + PT1 limit order at broker
+- Stores `broker_stop_order_id` and `broker_pt_order_id` in cache
+- Sets `broker_orders_placed = True` (prevents re-placement)
+
+**What happens when PT1 fills (line ~3711):**
+- Risk engine detects tier hit + `broker_orders_placed` + has `broker_pt_order_id`
+- Enqueues `PLACE_PT{next}` broker operation
+- `_place_next_pt_bracket()` places next tier's limit order at broker
+- Also enqueues `RESIZE_STOP` to sync the stop order qty to remaining position
+
+**What happens on Dynamic SL escalation (line ~3960):**
+- When `MOVE_STOP` action fires, enqueues `SYNC_STOP` broker operation
+- `_sync_stop_to_broker()` cancels old SL order, places new SL at escalated price
+- Supports Schwab, Alpaca, Webull, IBKR, Tastytrade, Trading212, Robinhood
+- Each broker uses cancel + resubmit (Schwab also has native replace)
+
+**Signal-level SL/PT override (line ~650):**
+- If the trade record has `stop_loss_price` and `profit_target_price` from the signal
+- Risk engine converts those to percentages and uses them as overrides
+- This works even when global risk is disabled (per-trade bracket from signal)
 
 ---
 
-## PROBLEMS WITH CURRENT SETUP
+## PROBLEMS WITH V8.2.3 SETUP
 
-### Problem 1: HYBRID MODE — Duplicate Bracket Legs
+### Problem 1: HYBRID MODE — Potential Duplicate Bracket Legs
 
-Imagine Phoenix sends: `BTO 100 SMCI @ $42.50`  
-Channel has SL=10%, PT1=+15% configured.
+Phoenix sends: `BTO 100 SMCI @ $42.50`  
+Channel has SL=10%, PT1=+15% configured, exit mode = hybrid.
 
 ```
-T+0s:  execute_on_single_broker() places bracket:
+T+0s:  Bracket Auto-Gen: computes SL=$38.25, PT=$48.88
+       execute_on_single_broker() places bracket:
          Entry: BUY 100 SMCI @ $42.50
          SL:    SELL 100 SMCI @ $38.25  (stop order)
          PT:    SELL 100 SMCI @ $48.88  (limit order)
 
-T+15s: Risk Engine detects position, calls _place_initial_broker_bracket()
-         Places ANOTHER SL: SELL 100 @ $38.25
-         Places ANOTHER PT: SELL 100 @ $48.88
+T+15s: Risk Engine detects position
+       broker_orders_placed = False (entry-time brackets don't set this flag!)
+       Calls _place_initial_broker_bracket()
+       Places ANOTHER SL: SELL 100 @ $38.25
+       Places ANOTHER PT: SELL 100 @ $48.88
 
 Result: 2 SL orders + 2 PT orders on the SAME 100 shares!
         If SL triggers, broker tries to sell 200 shares but you only have 100
 ```
 
-### Problem 2: SIGNAL MODE — No Broker Protection
+### Problem 2: SIGNAL MODE — No Broker-Side Protection At All
 
 Phoenix sends: `BTO 500 LUNR @ $8.20`  
-Channel has SL=10% configured, but signal message didn't include SL/PT.
+Channel has SL=10% configured, exit mode = signal.  
+Signal message didn't include SL/PT explicitly.
 
 ```
-T+0s:  Signal: BTO 500 LUNR @ $8.20
-       execute_on_single_broker() checks: did signal message have PT/SL?
-       Answer: NO (SL=10% came from channel defaults, not from Phoenix)
-       Result: bracket SKIPPED, entry-only order placed
+T+0s:  Bracket Auto-Gen: SKIPPED (exit_mode = 'signal')
+       execute_on_single_broker(): bracket gate fails (exit_mode = 'signal')
+       Entry order placed: BUY 500 LUNR @ $8.20
 
 T+0s:  Position has ZERO protection at broker!
        500 shares of LUNR with no stop loss, no profit target
        Relies entirely on Phoenix sending "STC LUNR" message later
 
+T+15s: Risk Engine detects position
+       exit_mode = 'signal' → _place_initial_broker_bracket() SKIPPED
+
 T+???  If bot goes offline -> position is completely unprotected!
        LUNR drops 30% -> you lose $1,230 with no SL to protect you
 ```
 
-### Problem 3: RISK MODE — 15-Second Gap
+### Problem 3: RISK MODE — Works Well, But Has a ~3-15s Gap
 
-Phoenix sends: `BTO 200 RKLB @ $25.00`
+Phoenix sends: `BTO 200 RKLB @ $25.00`  
+Channel has SL=10%, PT1=+15%, exit mode = risk.
 
 ```
-T+0s:   execute_on_single_broker() -> bracket BLOCKED for risk mode
+T+0s:   Bracket Auto-Gen: SKIPPED (exit_mode = 'risk')
+        execute_on_single_broker(): bracket gate blocks risk mode
         Entry order placed: BUY 200 RKLB @ $25.00
-        NO SL, NO PT at broker
+        NO SL, NO PT at broker yet
 
-T+0s to T+15s:  UNPROTECTED! No SL at broker for ~15 seconds
-                If RKLB drops 5% in those 15 seconds = $250 loss
-                with no protection
+T+3-15s: Risk Engine detects position via broker sync
+         exit_mode = 'risk' → calls _place_initial_broker_bracket()
+         Places SL @ $22.50 + PT1 SELL 60 @ $28.75
+         Stores broker_stop_order_id and broker_pt_order_id
+         Sets broker_orders_placed = True
 
-T+15s:  Risk Engine syncs positions, detects fill
-        _place_initial_broker_bracket() places SL + PT1
-        Now protected (but 15s late)
+Gap: ~3-15 seconds with no protection (fill-watch can reduce this)
+     Risk mode OTHERWISE works correctly for the full lifecycle
 ```
 
-### Problem 4: Dynamic SL Not Replaced at Broker
+### Problem 4: Risk Mode PT Cascade + SL Sync DOES Work (v8.2.3)
 
-Continuing the RKLB example after Risk Engine places initial bracket:
-
-```
-T+15s:  SL placed at broker: SELL 200 RKLB @ $22.50 (10% below $25.00)
-
-T+30m:  RKLB hits $28.75 (PT1 = +15%)
-        Risk Engine internally moves SL to $25.00 (breakeven)
-        BUT the broker still has the old SL order @ $22.50!
-
-        Internal SL = $25.00 (breakeven)
-        Broker SL   = $22.50 (still the original -10%)
-        
-        MISMATCH!
-
-Result: RKLB drops to $22.50 -> broker fills old SL
-        You lose $2.50/share ($500 total) instead of breaking even
-        The dynamic SL escalation was supposed to protect you!
-```
-
-### Problem 5: No PT Cascade
+Continuing the RKLB risk mode example — this part actually works:
 
 ```
-T+15s:  Bracket placed with only PT1: SELL 60 RKLB @ $28.75
-        No PT2, no PT3 at broker
+T+30m:  RKLB hits $28.75 → PT1 fills (SELL 60 @ $28.75)
+        Risk Engine detects tier hit:
+          1. Enqueues PLACE_PT2 → _place_next_pt_bracket() places PT2 at broker
+          2. Enqueues RESIZE_STOP → _sync_stop_to_broker() updates SL qty
 
-T+30m:  PT1 fills (SELL 60 @ $28.75)
-        Remaining 140 shares have NO profit target at broker
-        Must rely on Risk Engine's internal monitoring for PT2/PT3
-        If bot goes offline after PT1 fill -> 140 shares unprotected
+T+30m:  Dynamic SL escalation fires (MOVE_STOP action):
+          Enqueues SYNC_STOP → _sync_stop_to_broker():
+            cancel_order(old_sl_id)
+            place new SL at escalated price (e.g., breakeven $25.00)
+
+This cascade continues for PT2 → PT3 → etc.
+```
+
+**So risk mode in v8.2.3 already has working PT cascade and SL replacement!**  
+The main gaps are: signal mode has no brackets, and hybrid mode has duplicates.
+
+### Problem 5: Legacy Paper/Live Gates Allow Risk Mode (Bug)
+
+```
+Main gate (execute_on_single_broker):
+  exit_mode not in ('signal', 'risk')     ← correctly blocks both
+
+Paper gate:
+  exit_mode != 'signal'                   ← only blocks signal, risk mode gets through!
+
+Live gate:
+  exit_mode != 'signal'                   ← only blocks signal, risk mode gets through!
+
+If a stock signal goes through the legacy paper/live path in risk mode,
+it WILL place a bracket at entry time → Risk Engine ALSO places brackets → duplicates
 ```
 
 ---
