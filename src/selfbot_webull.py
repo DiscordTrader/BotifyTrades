@@ -11372,6 +11372,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as hengy_err:
                 print(f"[HENGY] ⚠️ Parse error: {hengy_err}")
         
+        equity_genie_entries = []
+        equity_genie_exits = []
+        if hasattr(message, 'embeds') and message.embeds:
+            try:
+                from src.signals.equity_genie_parser import is_equity_genie_embed, parse_equity_genie_embed
+                for embed in message.embeds:
+                    embed_title = embed.title if embed.title else ""
+                    embed_desc = embed.description if embed.description else ""
+                    if is_equity_genie_embed(embed_title, embed_desc):
+                        entries, exits = parse_equity_genie_embed(embed_title, embed_desc)
+                        if entries:
+                            equity_genie_entries.extend(entries)
+                            print(f"[EQUITY-GENIE] ✓ Detected {len(entries)} entry signal(s) from embed")
+                        if exits:
+                            equity_genie_exits.extend(exits)
+                            print(f"[EQUITY-GENIE] ✓ Detected {len(exits)} exit signal(s) from embed")
+            except Exception as eg_err:
+                print(f"[EQUITY-GENIE] ⚠️ Parse error: {eg_err}")
+        
         # Strip forward marker from combined_content before parsing to ensure accurate signal detection
         # The marker format is: ║FWD:source_channel_id║
         # Also strip from content even if we're going to skip - keeps logs clean
@@ -12514,6 +12533,88 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             except Exception as hengy_route_err:
                                 import traceback
                                 print(f"[HENGY] ⚠️ Routing error: {hengy_route_err}")
+                                traceback.print_exc()
+                    
+                    if (equity_genie_entries or equity_genie_exits) and channel_info and channel_info.get('conditional_order_enabled'):
+                        if not execute_enabled:
+                            print(f"[EQUITY-GENIE] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
+                        else:
+                            try:
+                                from src.services.conditional_orders.router import conditional_order_router
+                                if conditional_order_router.is_enabled():
+                                    cond_channel_id = str(message.channel.id)
+                                    cond_brokers = self._get_channel_brokers(channel_info)
+                                    if cond_brokers:
+                                        for eg_sig in equity_genie_entries:
+                                            eg_sig['message_id'] = str(message.id)
+                                            eg_sig['author_id'] = str(message.author.id)
+                                            eg_sig['author_name'] = str(message.author)
+                                            for cond_broker in cond_brokers:
+                                                order_id = conditional_order_router.create_order(cond_channel_id, eg_sig, cond_broker)
+                                                if order_id:
+                                                    print(f"[EQUITY-GENIE] ✓ Created conditional order #{order_id}: {eg_sig['symbol']} over ${eg_sig['trigger_price']} [{cond_broker}]")
+                                                    try:
+                                                        from src.services.signal_conversation_state import get_conversation_state_manager
+                                                        state_mgr = get_conversation_state_manager()
+                                                        state_mgr.register_signal(
+                                                            message_id=int(message.id),
+                                                            channel_id=int(message.channel.id),
+                                                            author_id=int(message.author.id),
+                                                            timestamp=message.created_at,
+                                                            symbol=eg_sig['symbol'],
+                                                            order_id=order_id
+                                                        )
+                                                    except Exception as ctx_err:
+                                                        print(f"[EQUITY-GENIE] ⚠️ Conversation state error: {ctx_err}")
+                                                    try:
+                                                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                        cond_signal = {
+                                                            'action': 'BTO',
+                                                            'symbol': eg_sig['symbol'],
+                                                            'qty': 1,
+                                                            'price': eg_sig.get('trigger_price', 0),
+                                                            'asset': 'stock',
+                                                            '_conditional_order_id': order_id
+                                                        }
+                                                        self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                                    except Exception as save_err:
+                                                        print(f"[EQUITY-GENIE] ⚠️ DB save error: {save_err}")
+                                                else:
+                                                    print(f"[EQUITY-GENIE] ⚠️ Failed to create order for {eg_sig['symbol']} [{cond_broker}]")
+                                        for eg_exit in equity_genie_exits:
+                                            exit_symbol = eg_exit['symbol']
+                                            exit_action = eg_exit.get('action', 'STC')
+                                            sell_pct = eg_exit.get('sell_pct')
+                                            exit_price = eg_exit.get('exit_price')
+                                            print(f"[EQUITY-GENIE] Processing exit: {exit_action} {exit_symbol}")
+                                            cancelled = conditional_order_router.cancel_order_by_symbol(cond_channel_id, exit_symbol)
+                                            if cancelled:
+                                                print(f"[EQUITY-GENIE] ✓ Cancelled pending conditional order(s) for {exit_symbol}")
+                                            if exit_action in ('STC', 'STC_PARTIAL'):
+                                                try:
+                                                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                                    exit_signal = {
+                                                        'action': 'STC',
+                                                        'symbol': exit_symbol,
+                                                        'qty': 0,
+                                                        'price': exit_price,
+                                                        'asset': 'stock',
+                                                        'is_market_order': exit_price is None,
+                                                        '_equity_genie_exit': True,
+                                                    }
+                                                    if sell_pct and sell_pct < 100:
+                                                        exit_signal['_sell_pct'] = sell_pct
+                                                        exit_signal['_partial_exit'] = True
+                                                    self._save_signal_to_db(exit_signal, message.channel.id, message.id, author_name)
+                                                    print(f"[EQUITY-GENIE] ✓ Exit signal saved: {exit_action} {exit_symbol} @ ${exit_price or 'market'}" + (f" ({sell_pct}%)" if sell_pct else ""))
+                                                except Exception as exit_err:
+                                                    print(f"[EQUITY-GENIE] ⚠️ Exit save error: {exit_err}")
+                                    else:
+                                        print(f"[EQUITY-GENIE] ❌ No broker configured for channel {cond_channel_id}")
+                                    return
+                            except Exception as eg_route_err:
+                                import traceback
+                                print(f"[EQUITY-GENIE] ⚠️ Routing error: {eg_route_err}")
                                 traceback.print_exc()
                     
                     # Check for CONDITIONAL ORDER signals (e.g., "AAPL over 150 SL 5%")
