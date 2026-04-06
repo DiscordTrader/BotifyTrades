@@ -12587,16 +12587,75 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             sell_pct = eg_exit.get('sell_pct')
                                             exit_price = eg_exit.get('exit_price')
                                             print(f"[EQUITY-GENIE] Processing exit: {exit_action} {exit_symbol}")
-                                            cancelled = conditional_order_router.cancel_order_by_symbol(cond_channel_id, exit_symbol)
-                                            if cancelled:
-                                                print(f"[EQUITY-GENIE] ✓ Cancelled pending conditional order(s) for {exit_symbol}")
-                                            if exit_action in ('STC', 'STC_PARTIAL'):
+                                            if exit_action == 'SL_UPDATE':
+                                                sl_val = eg_exit.get('sl_update')
+                                                print(f"[EQUITY-GENIE] ℹ️ SL update for {exit_symbol}: {sl_val} (informational only, not modifying existing orders)")
+                                            elif exit_action in ('STC', 'STC_PARTIAL'):
+                                                cancelled = conditional_order_router.cancel_order_by_symbol(cond_channel_id, exit_symbol)
+                                                if cancelled:
+                                                    print(f"[EQUITY-GENIE] ✓ Cancelled pending conditional order(s) for {exit_symbol}")
                                                 try:
+                                                    from gui_app.database import get_open_position_for_symbol, partial_exit_signal_instance
+                                                    channel_id = message.channel.id
+                                                    open_pos = get_open_position_for_symbol(channel_id, exit_symbol)
+                                                    if open_pos:
+                                                        remaining_qty = open_pos.get('qty', 1)
+                                                        original_qty = open_pos.get('original_qty', remaining_qty)
+                                                        if sell_pct and sell_pct < 100:
+                                                            import math
+                                                            actual_exit_qty = math.ceil(original_qty * sell_pct / 100)
+                                                            actual_exit_qty = min(actual_exit_qty, remaining_qty)
+                                                            actual_exit_qty = max(1, actual_exit_qty) if remaining_qty > 0 else 0
+                                                        else:
+                                                            actual_exit_qty = remaining_qty
+                                                        exit_result = partial_exit_signal_instance(
+                                                            channel_id=channel_id,
+                                                            ticker=exit_symbol,
+                                                            exit_qty=actual_exit_qty,
+                                                            close_reason='exit_signal'
+                                                        )
+                                                        if exit_result:
+                                                            fully_closed = exit_result.get('fully_closed', True)
+                                                            signal_inst_id = open_pos.get('id')
+                                                            if signal_inst_id:
+                                                                from src.services.signal_exit_manager import signal_exit_manager
+                                                                channel_broker = open_pos.get('broker') or (channel_info.get('broker_override') if channel_info else None)
+                                                                if fully_closed:
+                                                                    await signal_exit_manager.handle_exit_signal(
+                                                                        signal_instance_id=signal_inst_id,
+                                                                        exit_type='signal',
+                                                                        reason='EG EXIT signal',
+                                                                        source='signal',
+                                                                        channel_id=channel_id,
+                                                                        broker=channel_broker,
+                                                                        symbol=exit_symbol,
+                                                                        asset_type='stock',
+                                                                        fill_price=exit_price,
+                                                                        closed_qty=actual_exit_qty
+                                                                    )
+                                                                    print(f"[EQUITY-GENIE] ✓ FULL EXIT executed: {exit_symbol} @ ${exit_price or 'market'} x{actual_exit_qty}")
+                                                                else:
+                                                                    await signal_exit_manager.handle_partial_exit(
+                                                                        signal_instance_id=signal_inst_id,
+                                                                        closed_qty=actual_exit_qty,
+                                                                        fill_price=exit_price,
+                                                                        channel_id=channel_id,
+                                                                        broker=channel_broker,
+                                                                        symbol=exit_symbol,
+                                                                        asset_type='stock',
+                                                                        exit_source='signal'
+                                                                    )
+                                                                    new_remaining = exit_result.get('remaining_qty', 0)
+                                                                    print(f"[EQUITY-GENIE] ✓ PARTIAL EXIT executed: {exit_symbol} @ ${exit_price or 'market'} x{actual_exit_qty}, remaining: {new_remaining}")
+                                                        else:
+                                                            print(f"[EQUITY-GENIE] ⚠️ Exit result empty for {exit_symbol}")
+                                                    else:
+                                                        print(f"[EQUITY-GENIE] ℹ️ No open position for {exit_symbol} — conditional may not have filled yet")
                                                     author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
                                                     exit_signal = {
                                                         'action': 'STC',
                                                         'symbol': exit_symbol,
-                                                        'qty': 0,
+                                                        'qty': actual_exit_qty if open_pos else 0,
                                                         'price': exit_price,
                                                         'asset': 'stock',
                                                         'is_market_order': exit_price is None,
@@ -12608,7 +12667,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     self._save_signal_to_db(exit_signal, message.channel.id, message.id, author_name)
                                                     print(f"[EQUITY-GENIE] ✓ Exit signal saved: {exit_action} {exit_symbol} @ ${exit_price or 'market'}" + (f" ({sell_pct}%)" if sell_pct else ""))
                                                 except Exception as exit_err:
-                                                    print(f"[EQUITY-GENIE] ⚠️ Exit save error: {exit_err}")
+                                                    import traceback
+                                                    print(f"[EQUITY-GENIE] ⚠️ Exit error: {exit_err}")
+                                                    traceback.print_exc()
                                     else:
                                         print(f"[EQUITY-GENIE] ❌ No broker configured for channel {cond_channel_id}")
                                     return

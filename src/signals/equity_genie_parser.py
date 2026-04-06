@@ -95,12 +95,18 @@ EXIT_SOLD_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+EXIT_SOLD_HALF_PATTERN = re.compile(
+    r'Sold\s+Half!?\s+\$?(' + PRICE_NUM + r')',
+    re.IGNORECASE
+)
+
 EXIT_OUT_KEYWORD = re.compile(
     r'\bOUT\b(?!\s*(?:STANDING|LOOK|SIDE|PERFORM))',
     re.IGNORECASE
 )
 
 PARTIAL_EXIT_PATTERNS = [
+    (re.compile(r'Sold\s+Half', re.IGNORECASE), 50),
     (re.compile(r'OUT\s+HALF', re.IGNORECASE), 50),
     (re.compile(r'OUT\s+MOST', re.IGNORECASE), 75),
     (re.compile(r'OUT\s+ALL\s+BUT\s+1/3', re.IGNORECASE), 67),
@@ -112,6 +118,9 @@ PARTIAL_EXIT_PATTERNS = [
     (re.compile(r'TRIMMED?\s+1/3', re.IGNORECASE), 33),
     (re.compile(r'TRIMMED?\s+1/2', re.IGNORECASE), 50),
     (re.compile(r'TRIMMED', re.IGNORECASE), 50),
+    (re.compile(r'Trim\s+1/4', re.IGNORECASE), 25),
+    (re.compile(r'Trim\s+1/3', re.IGNORECASE), 33),
+    (re.compile(r'Trim\s+1/2', re.IGNORECASE), 50),
 ]
 
 SL_ENTRY_PATTERN = re.compile(r'\bSL\s+(?:ENTRY|AT\s+ENTRY)', re.IGNORECASE)
@@ -345,7 +354,14 @@ def parse_equity_genie_entries(embed_title: str, embed_description: str) -> List
             '_equity_genie': True,
         }
 
-        pt_str = ', '.join([f"${pt}" for pt in profit_targets]) if profit_targets else "None"
+        if profit_targets and trigger_price:
+            valid_pts = [pt for pt in profit_targets if pt > trigger_price]
+            if len(valid_pts) < len(profit_targets):
+                bad_pts = [pt for pt in profit_targets if pt <= trigger_price]
+                print(f"[EQUITY-GENIE] ⚠️ PT sanity: {ticker} trigger=${trigger_price}, dropping PTs below trigger: {bad_pts}")
+                signal['profit_targets'] = valid_pts
+
+        pt_str = ', '.join([f"${pt}" for pt in signal['profit_targets']]) if signal['profit_targets'] else "None"
         sl_str = f"${sl_value}" if sl_value else "None"
         print(f"[EQUITY-GENIE] ✓ Parsed ENTRY: {ticker} over ${trigger_price} | PTs: {pt_str} | SL: {sl_str}")
 
@@ -402,6 +418,10 @@ def parse_equity_genie_exits(embed_title: str, embed_description: str) -> List[D
             m = EXIT_SOLD_PATTERN.search(block_clean)
             if m:
                 exit_price = _parse_price(m.group(1))
+        if exit_price is None:
+            m = EXIT_SOLD_HALF_PATTERN.search(block_clean)
+            if m:
+                exit_price = _parse_price(m.group(1))
 
         sell_pct = None
         is_partial = False
@@ -443,9 +463,12 @@ def parse_equity_genie_exits(embed_title: str, embed_description: str) -> List[D
             print(f"[EQUITY-GENIE] ℹ️ EXIT skipped (not actionable) for {ticker}: {block_clean[:80]}")
             continue
 
-        action_type = 'STC'
-        if is_partial and sell_pct:
+        if not is_actionable and sl_update:
+            action_type = 'SL_UPDATE'
+        elif is_partial and sell_pct:
             action_type = 'STC_PARTIAL'
+        else:
+            action_type = 'STC'
 
         signal = {
             'format': 'EQUITY_GENIE',
