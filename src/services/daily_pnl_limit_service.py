@@ -483,6 +483,21 @@ class DailyPnLLimitService:
             'brokers': result,
         }
 
+    def unlock_broker(self, broker_name: str) -> bool:
+        normalized = _normalize(broker_name)
+        with self._lock:
+            state = self._states.get(normalized)
+            if not state or state.get('lock_type', 'none') == 'none':
+                return False
+            old_lock = state.get('lock_type')
+            state['lock_type'] = 'none'
+            state['locked_at'] = None
+            self._states[normalized] = state
+            self._persist_state(normalized, dict(state))
+        self._warned.discard(normalized)
+        print(f"[DAILY P&L] 🔓 {normalized} MANUALLY UNLOCKED (was: {old_lock})")
+        return True
+
     def reset_all(self):
         with self._lock:
             self._states.clear()

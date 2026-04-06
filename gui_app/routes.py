@@ -8593,6 +8593,24 @@ def register_routes(app):
             print(f"[API] Error fetching daily P&L status: {e}")
             return jsonify({'enabled': False, 'limits': {}, 'brokers': []})
 
+    @app.route('/api/daily-pnl-unlock', methods=['POST'])
+    def api_daily_pnl_unlock():
+        try:
+            data = request.json or {}
+            broker_name = data.get('broker_name')
+            if not broker_name:
+                return jsonify({'success': False, 'message': 'broker_name required'}), 400
+            from src.services.daily_pnl_limit_service import get_daily_pnl_service
+            service = get_daily_pnl_service()
+            unlocked = service.unlock_broker(broker_name)
+            if unlocked:
+                return jsonify({'success': True, 'message': f'{broker_name} unlocked'})
+            else:
+                return jsonify({'success': False, 'message': f'{broker_name} was not locked'})
+        except Exception as e:
+            print(f"[API] Error unlocking daily P&L: {e}")
+            return jsonify({'success': False, 'message': str(e)}), 500
+
     @app.route('/api/settings/global-risk', methods=['GET'])
     def api_get_global_risk_settings():
         """Get global risk management settings for OMS/RMS"""

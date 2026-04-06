@@ -3596,6 +3596,26 @@ async function streamingQuotePoll() {
 
 let _pnlDismissed = {};
 
+async function unlockDailyPnl(brokerName) {
+    if (!confirm('Unlock ' + brokerName + ' for trading? The lock may re-engage if the limit is still exceeded.')) return;
+    try {
+        const resp = await fetch('/api/daily-pnl-unlock', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({broker_name: brokerName})
+        });
+        const data = await resp.json();
+        if (data.success) {
+            delete _pnlDismissed[brokerName];
+            pollDailyPnlStatus();
+        } else {
+            alert(data.message || 'Failed to unlock');
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
+}
+
 async function pollDailyPnlStatus() {
     try {
         const resp = await fetch('/api/daily-pnl-status');
@@ -3684,6 +3704,9 @@ async function pollDailyPnlStatus() {
                                     ${pctStr}
                                 </div>
                             </div>
+                            <button onclick="unlockDailyPnl('${key}')" 
+                                style="background: rgba(255,255,255,0.1); border: 1px solid ${border}; color: ${titleColor}; cursor: pointer; font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; font-weight: 600;"
+                                title="Unlock this broker for trading">🔓 Unlock</button>
                             <button onclick="_pnlDismissed['${key}']=true; pollDailyPnlStatus();" 
                                 style="background: none; border: none; color: ${titleColor}; cursor: pointer; font-size: 1.2rem; padding: 4px; opacity: 0.6;"
                                 title="Dismiss (will re-appear if still locked)">×</button>
