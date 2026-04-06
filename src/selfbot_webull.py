@@ -10682,6 +10682,100 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 conditional_order_router.set_execution_callback(execute_conditional_order, main_loop)
                 print(f"[STARTUP] Starting market-isolated conditional order services...", flush=True)
                 conditional_order_router.start()
+                
+                _early_reg = 0
+                if getattr(self, 'schwab_broker', None) and getattr(self.schwab_broker, 'connected', False):
+                    conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
+                    _early_reg += 1
+                if getattr(self, 'trading212_broker', None) and getattr(self.trading212_broker, 'connected', False):
+                    conditional_order_router.set_broker_instance('Trading212', self.trading212_broker)
+                    _early_reg += 1
+                if getattr(self, 'broker', None) and getattr(self.broker, '_logged_in', False):
+                    conditional_order_router.set_broker_instance('Webull', self.broker)
+                    _early_reg += 1
+                if getattr(self, 'paper_broker', None) and getattr(self.paper_broker, 'connected', False):
+                    conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
+                    _early_reg += 1
+                if getattr(self, 'robinhood_broker', None) and getattr(self.robinhood_broker, 'connected', False):
+                    conditional_order_router.set_broker_instance('Robinhood', self.robinhood_broker)
+                    _early_reg += 1
+                if getattr(self, 'ibkr_broker', None) and getattr(self.ibkr_broker, 'connected', False):
+                    conditional_order_router.set_broker_instance('IBKR', self.ibkr_broker)
+                    _early_reg += 1
+                if getattr(self, 'tastytrade_broker', None) and getattr(self.tastytrade_broker, 'connected', False):
+                    conditional_order_router.set_broker_instance('Tastytrade', self.tastytrade_broker)
+                    _early_reg += 1
+                
+                try:
+                    from src.services.trading212_data_hub import get_trading212_data_hub
+                    _t212_hub = get_trading212_data_hub()
+                    if _t212_hub:
+                        conditional_order_router.set_data_hub('trading212', _t212_hub)
+                except Exception:
+                    pass
+                try:
+                    from src.services.schwab_data_hub import get_schwab_data_hub
+                    _schwab_hub = get_schwab_data_hub()
+                    if _schwab_hub:
+                        conditional_order_router.set_data_hub('schwab', _schwab_hub)
+                except Exception:
+                    pass
+                try:
+                    from src.services.webull_data_hub import get_webull_data_hub
+                    _wb_hub = get_webull_data_hub()
+                    if _wb_hub:
+                        conditional_order_router.set_data_hub('webull', _wb_hub)
+                except Exception:
+                    pass
+                
+                if _early_reg > 0:
+                    print(f"[STARTUP] ✓ Early-registered {_early_reg} broker(s) with conditional router", flush=True)
+                
+                async def _deferred_broker_registration():
+                    await asyncio.sleep(15)
+                    try:
+                        _late_reg = 0
+                        if getattr(self, 'schwab_broker', None) and getattr(self.schwab_broker, 'connected', False):
+                            conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
+                            _late_reg += 1
+                        if getattr(self, 'trading212_broker', None) and getattr(self.trading212_broker, 'connected', False):
+                            conditional_order_router.set_broker_instance('Trading212', self.trading212_broker)
+                            _late_reg += 1
+                        if getattr(self, 'broker', None) and getattr(self.broker, '_logged_in', False):
+                            conditional_order_router.set_broker_instance('Webull', self.broker)
+                            _late_reg += 1
+                        if getattr(self, 'paper_broker', None) and getattr(self.paper_broker, 'connected', False):
+                            conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
+                            _late_reg += 1
+                        if getattr(self, 'ibkr_broker', None) and getattr(self.ibkr_broker, 'connected', False):
+                            conditional_order_router.set_broker_instance('IBKR', self.ibkr_broker)
+                            _late_reg += 1
+                        if getattr(self, 'tastytrade_broker', None) and getattr(self.tastytrade_broker, 'connected', False):
+                            conditional_order_router.set_broker_instance('Tastytrade', self.tastytrade_broker)
+                            _late_reg += 1
+                        try:
+                            from src.services.trading212_data_hub import get_trading212_data_hub
+                            _t212h = get_trading212_data_hub()
+                            if _t212h:
+                                conditional_order_router.set_data_hub('trading212', _t212h)
+                        except Exception:
+                            pass
+                        try:
+                            from src.services.schwab_data_hub import get_schwab_data_hub
+                            _sch = get_schwab_data_hub()
+                            if _sch:
+                                conditional_order_router.set_data_hub('schwab', _sch)
+                        except Exception:
+                            pass
+                        status_check = conditional_order_router.get_market_status()
+                        for mkt, ms in status_check.items():
+                            if ms['registered_brokers']:
+                                print(f"[CONDITIONAL] Deferred check — {mkt}: running={ms['running']}, brokers={ms['registered_brokers']}", flush=True)
+                    except Exception as _dr_err:
+                        print(f"[CONDITIONAL] Deferred registration error: {_dr_err}", flush=True)
+                
+                asyncio.ensure_future(_deferred_broker_registration())
+                
                 status = conditional_order_router.get_market_status()
                 print(f"[STARTUP] ✓ Conditional Order Router started", flush=True)
                 for market, mstatus in status.items():

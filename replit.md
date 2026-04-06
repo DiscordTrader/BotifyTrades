@@ -47,6 +47,7 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **Rate Limit Enforcement**: REST fallback calls and frozen probes check and record API calls against a rate limit tracker.
 - **Risk Management Parity (Signal Routing Engine)**: Ensures full risk parity between the Position Monitor and Signal Routing Engine, incorporating EMA and early trailing stops into virtual positions.
 - **Trading212 Event Loop Mismatch Fix**: Addresses `asyncio.Lock` and `aiohttp.ClientSession` binding issues to ensure proper function of conditional order monitors and position fetching.
+- **T212 Conditional Order Race Condition Fix**: Three-layer broker registration (early in on_ready, background in _init_brokers_background, deferred 15s later) ensures T212 and all brokers are registered with the conditional router regardless of startup timing. Removed destructive `clear()` calls in `_retry_start_monitor` that wiped valid broker/hub registrations. Added visible `print()` logging for monitor startup, auto-discovery, and trigger events (previously only logged to stderr).
 
 ### System Design Choices
 - **Broker Isolation**: Prevents data cross-contamination by isolating each broker's streaming data.

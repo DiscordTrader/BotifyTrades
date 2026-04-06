@@ -1840,6 +1840,7 @@ class BaseConditionalOrderService(ABC):
                         self.broker_instances[bname] = binst
                         newly_discovered.append((bname, binst))
                         self._log(f"Auto-discovered broker: {bname}")
+                        print(f"[CONDITIONAL] ✓ Auto-discovered {bname} broker for {self.MARKET} conditional orders", flush=True)
                 
                 for bname, binst in newly_discovered:
                     if self._loop:
@@ -1896,6 +1897,7 @@ class BaseConditionalOrderService(ABC):
                     if hub and hname not in self.data_hubs:
                         self.data_hubs[hname] = hub
                         self._log(f"Auto-discovered data hub: {hname}")
+                        print(f"[CONDITIONAL] ✓ Auto-discovered {hname} data hub for {self.MARKET} service", flush=True)
                 
                 if self.broker_instances:
                     self._log(f"Auto-discovery found {len(self.broker_instances)} broker(s), {len(self.data_hubs)} hub(s)")
@@ -1919,6 +1921,7 @@ class BaseConditionalOrderService(ABC):
         broker = order['broker_primary']
         
         self._log(f"Starting monitor for #{order_id} {symbol} broker={broker}")
+        print(f"[CONDITIONAL] Starting price monitor for #{order_id} {symbol} (broker={broker}, market={self.MARKET})", flush=True)
         
         self._auto_discover_brokers()
         
@@ -1929,11 +1932,14 @@ class BaseConditionalOrderService(ABC):
         if not broker_instance and broker_lower:
             broker_instance = self.broker_instances.get(broker_lower)
         
+        print(f"[CONDITIONAL] #{order_id} {symbol}: broker_instance={'found' if broker_instance else 'MISSING'}, hubs={list(self.data_hubs.keys())}, brokers={list(self.broker_instances.keys())}", flush=True)
+        
         monitor = await self.build_price_monitor(order, broker_instance, broker or '')
         
         if not monitor:
             self._starting_monitors.discard(order_id)
             self._log(f"No price monitor available for #{order_id} — scheduling retry in 5s")
+            print(f"[CONDITIONAL] ⚠️ #{order_id} {symbol}: No price monitor — retrying in 5s (broker={broker})", flush=True)
             update_conditional_order_status(
                 order_id,
                 'ACTIVE_MONITORING',
@@ -2046,6 +2052,10 @@ class BaseConditionalOrderService(ABC):
         
         task = asyncio.create_task(monitor.start())
         task.add_done_callback(lambda t: _on_monitor_done(t, order_id))
+        
+        monitor_type = type(monitor).__name__
+        data_source = getattr(monitor, 'broker_name', broker or 'unknown')
+        print(f"[CONDITIONAL] ✓ Monitor started for #{order_id} {symbol} via {data_source} ({monitor_type})", flush=True)
         self.monitor_tasks[order_id] = task
         
         self._log(f"Started monitor task for #{order_id}")
@@ -2069,8 +2079,6 @@ class BaseConditionalOrderService(ABC):
             
             needed_broker = self.broker_instances.get(broker_key) or self.broker_instances.get(broker_lower)
             if not needed_broker:
-                self.broker_instances.clear()
-                self.data_hubs.clear()
                 self._auto_discover_brokers()
                 needed_broker = self.broker_instances.get(broker_key) or self.broker_instances.get(broker_lower)
             
@@ -2289,6 +2297,7 @@ class BaseConditionalOrderService(ABC):
                 return
             self._executing_orders.add(order_id)
             self._log(f"TRIGGERED #{order_id} {symbol}")
+            print(f"[CONDITIONAL] 🎯 TRIGGERED #{order_id} {symbol} @ ${price:.4f} (trigger: {trigger_type} ${adjusted_trigger})", flush=True)
             try:
                 notify_conditional_triggered(
                     symbol=symbol,
