@@ -3963,10 +3963,32 @@ class RiskManager:
                 pts_hit = {1: cache.tier1_hit, 2: cache.tier2_hit, 3: cache.tier3_hit, 4: cache.tier4_hit}
                 current_px = position.current_price if hasattr(position, 'current_price') else None
                 new_dynamic_sl = calculate_dynamic_sl(cache.entry_price, pts_hit, channel_settings.dynamic_sl_profile, current_price=current_px)
+
+                configured_tiers = [t for t in [1,2,3,4] if tier_thresholds.get(t, 0) > 0]
+                all_configured_hit = all(pts_hit.get(t, False) for t in configured_tiers) if configured_tiers else False
+                if all_configured_hit and configured_tiers and current_pnl > 0:
+                    from src.risk.risk_engine import DYNAMIC_SL_PROFILES
+                    _profile_name = channel_settings.dynamic_sl_profile or 'standard'
+                    _profile = DYNAMIC_SL_PROFILES.get(_profile_name, DYNAMIC_SL_PROFILES['standard'])
+                    highest_configured = max(configured_tiers)
+                    highest_tier_pct = tier_thresholds[highest_configured]
+                    highest_sl_pct = _profile.get(f'pt{highest_configured}_sl_pct', 0)
+                    giveback_pct = highest_tier_pct - highest_sl_pct
+                    if giveback_pct < 1:
+                        giveback_pct = 5.0
+                    if current_pnl > highest_tier_pct:
+                        ratchet_sl_pct = current_pnl - giveback_pct
+                        ratchet_sl_price = cache.entry_price * (1 + ratchet_sl_pct / 100)
+                        if current_px and ratchet_sl_price >= current_px:
+                            ratchet_sl_price = current_px * 0.98
+                        if new_dynamic_sl is None or ratchet_sl_price > new_dynamic_sl:
+                            new_dynamic_sl = ratchet_sl_price
+
                 if new_dynamic_sl and (cache.dynamic_sl_price is None or new_dynamic_sl > cache.dynamic_sl_price):
                     old_escalation_sl = cache.dynamic_sl_price
                     cache.dynamic_sl_price = new_dynamic_sl
-                    print(f"[RISK] Dynamic SL escalated to ${new_dynamic_sl:.2f} after PT tier hit (escalation_only)")
+                    _sl_pnl = ((new_dynamic_sl / cache.entry_price) - 1) * 100
+                    print(f"[RISK] Dynamic SL escalated to ${new_dynamic_sl:.2f} (+{_sl_pnl:.1f}%) after PT tier hit (escalation_only)")
                     self.cache.update_enhanced_risk_state(position.position_key, dynamic_sl_price=new_dynamic_sl)
                     if cache.broker_orders_placed and cache.broker_stop_order_id:
                         pos_key = position.position_key
