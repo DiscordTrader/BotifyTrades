@@ -701,9 +701,8 @@ class ConditionalOrderService:
                 qty_value = channel_settings.get('default_quantity')
                 print(f"[CONDITIONAL] Using channel default_quantity: {qty_value}")
         
-        # Profit targets: only store signal-embedded targets (dollar prices)
-        # Channel percentage targets are read at execution time from live settings
         profit_targets = parsed_signal.get('profit_targets', [])
+        _pt_from_signal = bool(profit_targets)
         take_profit_json = None
         if profit_targets:
             take_profit_json = json.dumps(profit_targets)
@@ -711,10 +710,10 @@ class ConditionalOrderService:
         else:
             print(f"[CONDITIONAL] No signal targets - will use channel settings at trigger time")
         
-        # Stop loss: signal first, then channel settings
         stop_loss = parsed_signal.get('stop_loss')
         stop_loss_type = parsed_signal.get('stop_loss_type')
         stop_loss_value = parsed_signal.get('stop_loss_value') or stop_loss
+        _sl_from_signal = bool(stop_loss_value)
         
         if not stop_loss_value and channel_settings.get('stop_loss_pct'):
             stop_loss_type = 'percent'
@@ -754,6 +753,10 @@ class ConditionalOrderService:
             lot_size=lot_size,
             lots=lots,
             author_name=parsed_signal.get('author_name'),
+            settings_source='; '.join(
+                (['sl:signal'] if _sl_from_signal else (['sl:channel'] if stop_loss_value else [])) +
+                (['pt:signal'] if _pt_from_signal else (['pt:channel'] if take_profit_json else []))
+            ) or None,
         )
         
         if order_id:

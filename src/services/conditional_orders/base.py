@@ -1599,6 +1599,7 @@ class BaseConditionalOrderService(ABC):
                 qty_value = channel_settings.get('default_quantity')
         
         profit_targets = parsed_signal.get('profit_targets', [])
+        _pt_from_signal = bool(profit_targets)
         if not profit_targets:
             channel_targets = []
             for i in range(1, 5):
@@ -1609,6 +1610,7 @@ class BaseConditionalOrderService(ABC):
                 profit_targets = channel_targets
         
         stop_loss_value = parsed_signal.get('stop_loss_value') or parsed_signal.get('stop_loss')
+        _sl_from_signal = bool(stop_loss_value)
         stop_loss_type = parsed_signal.get('stop_loss_type')
         stop_loss_fixed = parsed_signal.get('stop_loss_fixed')
         stop_loss_pct = parsed_signal.get('stop_loss_pct')
@@ -1672,6 +1674,14 @@ class BaseConditionalOrderService(ABC):
             settings_sources.append(f"trailing:channel({trailing_stop_pct}%)")
         if exit_strategy_mode != 'signal':
             settings_sources.append(f"exit_mode:channel({exit_strategy_mode})")
+        if _sl_from_signal:
+            settings_sources.append("sl:signal")
+        elif stop_loss_value:
+            settings_sources.append("sl:channel")
+        if _pt_from_signal:
+            settings_sources.append("pt:signal")
+        elif profit_targets:
+            settings_sources.append("pt:channel")
         settings_source = '; '.join(settings_sources) if settings_sources else None
         
         self._log(f"Channel settings applied: exit_mode={exit_strategy_mode}, slippage={slippage_protection_enabled}/{slippage_max_pct}, "
