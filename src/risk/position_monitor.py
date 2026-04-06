@@ -4382,11 +4382,12 @@ class RiskManager:
 
                         _alpaca_tif = TimeInForce.DAY if is_option else TimeInForce.GTC
                         if sl_price and sl_price > 0:
+                            _alpaca_sl = round(sl_price, 2)
                             sl_req = StopOrderRequest(
                                 symbol=symbol,
                                 qty=qty,
                                 side=OrderSide.SELL,
-                                stop_price=sl_price,
+                                stop_price=_alpaca_sl,
                                 time_in_force=_alpaca_tif
                             )
                             sl_order = self.alpaca_broker.trading_client.submit_order(sl_req)
@@ -4395,11 +4396,12 @@ class RiskManager:
                                 print(f"[RISK] ✅ Broker SL placed: Alpaca stop #{sl_order.id} at ${sl_price:.2f} (qty={qty})")
 
                         if pt1_price and pt1_price > 0 and pt1_qty > 0:
+                            _alpaca_pt = round(pt1_price, 2)
                             pt_req = LimitOrderRequest(
                                 symbol=symbol,
                                 qty=pt1_qty,
                                 side=OrderSide.SELL,
-                                limit_price=pt1_price,
+                                limit_price=_alpaca_pt,
                                 time_in_force=_alpaca_tif
                             )
                             pt_order = self.alpaca_broker.trading_client.submit_order(pt_req)
@@ -4658,7 +4660,7 @@ class RiskManager:
                         def _wb_sl_order(_c=_wb_client, _s=symbol, _p=_sl_price_r, _q=qty):
                             return _c.place_order(
                                 stock=_s,
-                                price=_p,
+                                stpPrice=_p,
                                 action='SELL',
                                 orderType='STP',
                                 enforce='GTC',
@@ -5135,17 +5137,18 @@ class RiskManager:
                     from alpaca.trading.enums import OrderSide, TimeInForce
                     _is_opt = asset_type.lower() in ('option', 'options')
                     _tif = TimeInForce.DAY if _is_opt else TimeInForce.GTC
+                    _alpaca_stp = round(new_stop_price, 2)
                     req = StopOrderRequest(
                         symbol=symbol,
                         qty=qty,
                         side=OrderSide.SELL,
-                        stop_price=new_stop_price,
+                        stop_price=_alpaca_stp,
                         time_in_force=_tif
                     )
                     order = self.alpaca_broker.trading_client.submit_order(req)
                     if order and order.id:
                         cache.broker_stop_order_id = str(order.id)
-                        print(f"[RISK] ✅ Broker stop synced: Alpaca stop #{order.id} at ${new_stop_price:.2f}")
+                        print(f"[RISK] ✅ Broker stop synced: Alpaca stop #{order.id} at ${_alpaca_stp:.2f}")
                     else:
                         print(f"[RISK] ⚠️ Alpaca stop order returned no ID")
             except Exception as e:
@@ -5267,7 +5270,7 @@ class RiskManager:
                     _stp_r = round(new_stop_price, 4 if new_stop_price < 1.0 else 2)
                     def _wb_stop_sync(_c=_wb_c2, _s=symbol, _p=_stp_r, _q=qty):
                         return _c.place_order(
-                            stock=_s, price=_p, action='SELL',
+                            stock=_s, stpPrice=_p, action='SELL',
                             orderType='STP', enforce='GTC', quant=_q
                         )
                     sl_resp = await asyncio.to_thread(_wb_stop_sync)

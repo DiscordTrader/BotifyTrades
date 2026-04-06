@@ -1305,9 +1305,9 @@ class WebullBroker(BrokerInterface):
                     def execute_stop_loss():
                         return self.wb.place_order(
                             stock=symbol,
-                            price=stop_loss_price,
+                            stpPrice=stop_loss_price,
                             action=exit_side,
-                            orderType='STP',  # Stop order
+                            orderType='STP',
                             enforce='GTC',
                             quant=quantity
                         )
