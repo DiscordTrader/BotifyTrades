@@ -324,7 +324,16 @@ def evaluate_channel_stop_loss(
         stop_loss_price = cache.dynamic_sl_price
         if entry_price > 0:
             stop_loss_pct = ((entry_price - stop_loss_price) / entry_price) * 100
-        sl_source = "DYNAMIC"
+        if stop_loss_price and entry_price > 0 and stop_loss_price < entry_price and channel_settings.stop_loss_pct > 0:
+            channel_sl_floor = entry_price * (1 - channel_settings.stop_loss_pct / 100)
+            if stop_loss_price > channel_sl_floor:
+                stop_loss_pct = channel_settings.stop_loss_pct
+                stop_loss_price = channel_sl_floor
+                sl_source = "CHANNEL"
+            else:
+                sl_source = "DYNAMIC"
+        else:
+            sl_source = "DYNAMIC"
     else:
         stop_loss_pct = channel_settings.stop_loss_pct
         if entry_price > 0 and stop_loss_pct > 0:

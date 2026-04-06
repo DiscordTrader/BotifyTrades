@@ -398,11 +398,16 @@ def evaluate_exit_actions(
             is_option = state.position_direction in ('C', 'P')
             if not is_option:
                 current_stop = state.dynamic_sl_price or state.current_stop_price or 0
-                if ema_result.new_stop_price > current_stop:
+                ema_stop = ema_result.new_stop_price
+                if state.entry_price > 0 and config.stop_loss_pct > 0:
+                    channel_sl_floor = state.entry_price * (1 - config.stop_loss_pct / 100)
+                    if ema_stop < state.entry_price and ema_stop > channel_sl_floor:
+                        ema_stop = None
+                if ema_stop and ema_stop > current_stop:
                     actions.append(RiskAction(
                         action_type=ActionType.EMA_ESCALATE_STOP,
                         reason=ema_result.reason,
-                        new_stop_price=ema_result.new_stop_price,
+                        new_stop_price=ema_stop,
                         priority=2
                     ))
             state.ema_no_trend_count = 0
