@@ -3964,8 +3964,17 @@ class RiskManager:
                 current_px = position.current_price if hasattr(position, 'current_price') else None
                 new_dynamic_sl = calculate_dynamic_sl(cache.entry_price, pts_hit, channel_settings.dynamic_sl_profile, current_price=current_px)
                 if new_dynamic_sl and (cache.dynamic_sl_price is None or new_dynamic_sl > cache.dynamic_sl_price):
+                    old_escalation_sl = cache.dynamic_sl_price
                     cache.dynamic_sl_price = new_dynamic_sl
                     print(f"[RISK] Dynamic SL escalated to ${new_dynamic_sl:.2f} after PT tier hit (escalation_only)")
+                    self.cache.update_enhanced_risk_state(position.position_key, dynamic_sl_price=new_dynamic_sl)
+                    if cache.broker_orders_placed and cache.broker_stop_order_id:
+                        pos_key = position.position_key
+                        _esc_sp = new_dynamic_sl
+                        _old_sl_str = f"${old_escalation_sl:.2f}" if old_escalation_sl else "none"
+                        print(f"[RISK] 🔄 Syncing broker stop to escalated SL ${_esc_sp:.2f} (was {_old_sl_str})")
+                        self._enqueue_broker_op(pos_key, 'SYNC_STOP', 10,
+                            lambda _p=position, _c=cache, _sp=_esc_sp: self._sync_stop_to_broker(_p, _c, _sp))
 
         new_tier_hits = (cache.tier1_hit, cache.tier2_hit, cache.tier3_hit, cache.tier4_hit)
         if new_tier_hits != old_tier_hits:
