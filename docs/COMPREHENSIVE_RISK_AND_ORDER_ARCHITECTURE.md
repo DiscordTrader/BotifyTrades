@@ -132,18 +132,18 @@ The `UnfilledOrderChaser` service monitors all pending orders (entry and exit) a
 | `_tracked_orders` | Exit (STC) orders | Risk engine PT/SL sells |
 | `_tracked_entry_orders` | Entry (BTO) orders | Signal-triggered buys |
 
-### Chase Flow
+### Chase Flow — 3-Step Escalation
 
 ```
 Order Placed → Registered with Chaser
-  → Monitor Loop (1s interval)
-  → Stale? (age > chase_timeout, default 2s)
-    → YES: Chase
-      → Exit: Cancel → Replace at Mid-Price (avg Bid/Ask)
-      → Entry: Cancel → Replace at Ask Price (within slippage limits)
-    → Still unfilled after max_chase_attempts (default 3)?
-      → Exit: MARKET ORDER fallback (force close for risk safety)
-      → Entry: Cancel (prevent buying at bad price)
+  → Monitor Loop (0.5s poll interval)
+  → Stale? (age > 1s timeout)
+    → Attempt 1: Cancel → Replace at MID-PRICE (bid+ask)/2
+    → Attempt 2: Cancel → Replace at BID (exits) / ASK (entries)
+    → Attempt 3: Cancel → MARKET ORDER (price=0, force fill)
+
+Exit timeline:  ~1s stale → ~1.2s mid → ~2.2s bid → ~3.2s market = ~4s worst case
+Entry timeline: ~1s stale → ~1.2s mid → ~2.2s ask → cancel (no market for entries)
 ```
 
 ### Risk Engine Integration

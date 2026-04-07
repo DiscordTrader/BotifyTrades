@@ -151,17 +151,17 @@ class UnfilledOrderChaser:
     - Entry orders: Replaced with ask price for aggressive fills
     """
     
-    DEFAULT_CHASE_TIMEOUT_SECONDS = 2
+    DEFAULT_CHASE_TIMEOUT_SECONDS = 1
     DEFAULT_MAX_CHASE_ATTEMPTS = 3
-    DEFAULT_POLL_INTERVAL_SECONDS = 1
+    DEFAULT_POLL_INTERVAL_SECONDS = 0.5
     DEFAULT_CANCEL_ON_MAX_ATTEMPTS = True
     
     def __init__(
         self,
         broker_manager,
-        chase_timeout_seconds: int = DEFAULT_CHASE_TIMEOUT_SECONDS,
+        chase_timeout_seconds: float = DEFAULT_CHASE_TIMEOUT_SECONDS,
         max_chase_attempts: int = DEFAULT_MAX_CHASE_ATTEMPTS,
-        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
+        poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
         cancel_entry_on_max_attempts: bool = DEFAULT_CANCEL_ON_MAX_ATTEMPTS
     ):
         self.broker_manager = broker_manager
@@ -839,7 +839,7 @@ class UnfilledOrderChaser:
             
             print(f"[ORDER_CHASER] ✓ Cancelled original order")
             
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
             
             replace_qty = remaining_qty
             if is_market:
@@ -885,7 +885,7 @@ class UnfilledOrderChaser:
             else:
                 _retry_price_str = "MKT" if is_market else f"${mid_price:.2f}"
                 print(f"[ORDER_CHASER] ❌ Failed to place replacement exit order — immediate retry at {_retry_price_str}")
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
                 if is_market:
                     retry_order_id = await self._place_market_replacement(broker, order, quantity_override=replace_qty)
                 else:
@@ -1534,7 +1534,7 @@ class UnfilledOrderChaser:
             
             print(f"[ORDER_CHASER] ✓ Cancelled original entry order")
             
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
             
             replace_qty = remaining_qty
             new_order_id = await self._place_entry_replacement_order(broker, order, chase_price, quantity_override=replace_qty)
@@ -1573,7 +1573,7 @@ class UnfilledOrderChaser:
                     self._tracked_entry_orders[new_order_id] = new_tracked
             else:
                 print(f"[ORDER_CHASER] ❌ Failed to place entry replacement order — immediate retry")
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
                 retry_order_id = await self._place_entry_replacement_order(broker, order, chase_price, quantity_override=replace_qty)
                 if retry_order_id:
                     print(f"[ORDER_CHASER] ✓ Entry retry succeeded: {retry_order_id} @ ${chase_price:.2f}")
