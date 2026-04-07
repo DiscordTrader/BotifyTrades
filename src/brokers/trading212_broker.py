@@ -129,6 +129,13 @@ class Trading212Broker(BrokerInterface):
         except Exception as e:
             print(f"[T212] Failed to load instruments: {e}")
 
+    def _get_extended_hours_enabled(self) -> bool:
+        try:
+            from gui_app.database import get_broker_extended_hours
+            return get_broker_extended_hours('trading212')
+        except Exception:
+            return False
+
     def _translate_ticker(self, symbol: str) -> Optional[str]:
         if not self._instruments_ready:
             return None
@@ -407,12 +414,16 @@ class Trading212Broker(BrokerInterface):
         limit_price = kwargs.get('limit_price')
 
         try:
+            ext_hours = self._get_extended_hours_enabled()
+
             if self.is_live:
                 if stop_price and stop_price > 0:
                     print(f"[T212] ⚠️ LIVE: stop/stop-limit not supported — downgrading to market order for {symbol}")
                 elif price and price > 0:
                     print(f"[T212] ⚠️ LIVE: limit orders not supported — downgrading to market order for {symbol}")
-                result = await self._client.place_market_order(ticker, qty)
+                if ext_hours:
+                    print(f"[T212] Extended hours ENABLED for {symbol}", flush=True)
+                result = await self._client.place_market_order(ticker, qty, extended_hours=ext_hours)
             elif stop_price and stop_price > 0 and limit_price and limit_price > 0:
                 return await self.place_stop_limit_order(symbol, action, quantity, stop_price, limit_price)
             elif stop_price and stop_price > 0:
@@ -420,7 +431,9 @@ class Trading212Broker(BrokerInterface):
             elif price and price > 0:
                 result = await self._client.place_limit_order(ticker, qty, price)
             else:
-                result = await self._client.place_market_order(ticker, qty)
+                if ext_hours:
+                    print(f"[T212] Extended hours ENABLED for {symbol}", flush=True)
+                result = await self._client.place_market_order(ticker, qty, extended_hours=ext_hours)
 
             print(f"[T212] API response: success={result.get('success')}, has_data={bool(result.get('data'))}, error='{result.get('error', 'N/A')}', status={result.get('status', 'N/A')}", flush=True)
 

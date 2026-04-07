@@ -20092,7 +20092,8 @@ def register_routes(app):
                     'alpaca': {'method': 'extended_hours flag', 'hours': '4AM-9:30AM, 4PM-8PM ET', 'note': 'LIMIT orders only'},
                     'ibkr': {'method': 'outsideRth flag', 'hours': '4AM-9:30AM, 4PM-8PM ET'},
                     'robinhood': {'method': 'extendedHours flag', 'hours': '9AM-9:30AM, 4PM-6PM ET', 'note': 'Stocks only, NOT options'},
-                    'webull': {'method': 'outsideRegularTradingHour flag', 'hours': '4AM-9:30AM, 4PM-8PM ET', 'note': 'LIMIT orders only'}
+                    'webull': {'method': 'outsideRegularTradingHour flag', 'hours': '4AM-9:30AM, 4PM-8PM ET', 'note': 'LIMIT orders only'},
+                    'trading212': {'method': 'extendedHours flag', 'hours': 'Pre-market + After-hours', 'note': 'Market orders only, instrument-specific availability'}
                 }
             })
         except Exception as e:

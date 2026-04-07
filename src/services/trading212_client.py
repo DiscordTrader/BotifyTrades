@@ -210,11 +210,14 @@ class Trading212Client:
     async def get_orders(self) -> Dict[str, Any]:
         return await self.get('/equity/orders')
 
-    async def place_market_order(self, ticker: str, quantity: float) -> Dict[str, Any]:
-        return await self.post('/equity/orders/market', {
+    async def place_market_order(self, ticker: str, quantity: float, extended_hours: bool = False) -> Dict[str, Any]:
+        payload = {
             'ticker': ticker,
             'quantity': quantity,
-        })
+        }
+        if extended_hours:
+            payload['extendedHours'] = True
+        return await self.post('/equity/orders/market', payload)
 
     async def place_limit_order(self, ticker: str, quantity: float, limit_price: float, time_validity: str = 'DAY') -> Dict[str, Any]:
         return await self.post('/equity/orders/limit', {
