@@ -1028,6 +1028,8 @@ class BaseConditionalOrderService(ABC):
         self._price_reset_needed: Dict[int, bool] = {}
         self._execution_locks: Dict[int, asyncio.Lock] = {}
         self._executing_orders: set = set()
+        self._execution_block_counts: Dict[int, int] = {}
+        self._MAX_EXECUTION_BLOCKS = 5
         
         self._init_rate_limiters()
     
@@ -2313,6 +2315,32 @@ class BaseConditionalOrderService(ABC):
             async with self._execution_locks[order_id]:
                 await self._execute_order(order_id, order, price)
     
+    async def _handle_execution_block(self, order_id: int, symbol: str, reason: str, cooldown_sec: int = 0, broker: str = ''):
+        """Handle a blocked execution attempt with retry tracking and cleanup."""
+        block_count = self._execution_block_counts.get(order_id, 0) + 1
+        self._execution_block_counts[order_id] = block_count
+        print(f"[CONDITIONAL] ⛔ BLOCKED #{order_id} {symbol}: {reason} (attempt {block_count}/{self._MAX_EXECUTION_BLOCKS})", flush=True)
+        if block_count >= self._MAX_EXECUTION_BLOCKS:
+            print(f"[CONDITIONAL] ❌ #{order_id} {symbol}: Max execution blocks reached ({block_count}) — cancelling order", flush=True)
+            update_conditional_order_status(
+                order_id, 'CANCELLED',
+                event='MAX_BLOCKS_REACHED',
+                details=f'Order blocked {block_count} times: {reason}'
+            )
+            await self._cleanup_order(order_id)
+            self._executing_orders.discard(order_id)
+            self._execution_locks.pop(order_id, None)
+            self._execution_block_counts.pop(order_id, None)
+            return True
+        if cooldown_sec > 0:
+            import time as _time
+            if not hasattr(self, '_block_cooldowns'):
+                self._block_cooldowns = {}
+            self._block_cooldowns[order_id] = _time.monotonic() + cooldown_sec
+        self._executing_orders.discard(order_id)
+        self._execution_locks.pop(order_id, None)
+        return False
+
     async def _execute_order(self, order_id: int, order: Dict, trigger_price: float):
         """Execute triggered order with safety checks."""
         symbol = order.get('symbol', 'UNKNOWN')
@@ -2325,6 +2353,7 @@ class BaseConditionalOrderService(ABC):
                 if not ch:
                     ch = get_channel_by_telegram_id(str(channel_id))
                 if ch and not ch.get('execute_enabled', 0):
+                    print(f"[CONDITIONAL] ⛔ CANCELLED #{order_id} {symbol}: Channel execute is OFF", flush=True)
                     self._log(f"⛔ BLOCKED #{order_id} {symbol}: Channel execute is OFF — cancelling triggered order")
                     update_conditional_order_status(
                         order_id, 'CANCELLED',
@@ -2392,8 +2421,7 @@ class BaseConditionalOrderService(ABC):
                     event='STALENESS_BLOCK',
                     details=f"Price stale ({staleness_sec}s) - waiting for fresh data"
                 )
-                self._executing_orders.discard(order_id)
-                self._execution_locks.pop(order_id, None)
+                cancelled = await self._handle_execution_block(order_id, symbol, f"Price stale ({staleness_sec}s > 30s)")
                 return
         
         try:
@@ -2406,8 +2434,7 @@ class BaseConditionalOrderService(ABC):
                     event='CIRCUIT_BREAKER_BLOCK',
                     details="Global trading halted by circuit breaker"
                 )
-                self._executing_orders.discard(order_id)
-                self._execution_locks.pop(order_id, None)
+                await self._handle_execution_block(order_id, symbol, "Global circuit breaker HALTED", cooldown_sec=60)
                 return
             
             if channel_id:
@@ -2420,8 +2447,7 @@ class BaseConditionalOrderService(ABC):
                         event='CHANNEL_HALT_BLOCK',
                         details=f"Channel trading halted: {channel_state.reason}"
                     )
-                    self._executing_orders.discard(order_id)
-                    self._execution_locks.pop(order_id, None)
+                    await self._handle_execution_block(order_id, symbol, f"Channel {channel_id} halted", cooldown_sec=60)
                     return
         except ImportError:
             pass
@@ -2440,12 +2466,7 @@ class BaseConditionalOrderService(ABC):
                     event='CIRCUIT_BREAKER_BLOCK',
                     details=cb_reason
                 )
-                import time as _time
-                if not hasattr(self, '_block_cooldowns'):
-                    self._block_cooldowns = {}
-                self._block_cooldowns[order_id] = _time.monotonic() + 60
-                self._executing_orders.discard(order_id)
-                self._execution_locks.pop(order_id, None)
+                await self._handle_execution_block(order_id, symbol, cb_reason, cooldown_sec=60)
                 return
         except Exception as db_cb_err:
             self._log(f"DB circuit breaker check error: {db_cb_err}")
@@ -2468,6 +2489,7 @@ class BaseConditionalOrderService(ABC):
                         tc = pnl_check.get('daily_trade_count', 0)
                         tl = pnl_check.get('daily_trade_limit', 0)
                         block_detail = f"Daily trade limit reached ({tc}/{tl})"
+                        print(f"[CONDITIONAL] ⛔ CANCELLED #{order_id} {symbol}: {block_detail}", flush=True)
                         self._log(f"⛔ CANCELLED #{order_id} {symbol}: {block_detail} — order cancelled")
                         update_conditional_order_status(
                             order_id,
@@ -2475,17 +2497,7 @@ class BaseConditionalOrderService(ABC):
                             event='DAILY_TRADE_LIMIT',
                             details=block_detail
                         )
-                        if order_id in self.monitors:
-                            try:
-                                await self.monitors[order_id].stop()
-                            except Exception:
-                                pass
-                            self.monitors.pop(order_id, None)
-                        if order_id in self.monitor_tasks:
-                            self.monitor_tasks[order_id].cancel()
-                            self.monitor_tasks.pop(order_id, None)
-                        self.pending_orders.pop(order_id, None)
-                        self._price_reset_needed.pop(order_id, None)
+                        await self._cleanup_order(order_id)
                         self._executing_orders.discard(order_id)
                         self._execution_locks.pop(order_id, None)
                         try:
@@ -2503,12 +2515,7 @@ class BaseConditionalOrderService(ABC):
                             event='DAILY_PNL_BLOCK',
                             details=block_detail
                         )
-                        import time as _time
-                        if not hasattr(self, '_block_cooldowns'):
-                            self._block_cooldowns = {}
-                        self._block_cooldowns[order_id] = _time.monotonic() + 60
-                        self._executing_orders.discard(order_id)
-                        self._execution_locks.pop(order_id, None)
+                        await self._handle_execution_block(order_id, symbol, block_detail, cooldown_sec=60)
                         return
         except ImportError:
             pass
@@ -2566,6 +2573,7 @@ class BaseConditionalOrderService(ABC):
             
             if not broker_recovered:
                 reason = f"Broker {broker_primary} API/streaming unavailable after 5s wait — order cancelled for safety"
+                print(f"[CONDITIONAL] ❌ #{order_id} {symbol}: {reason}", flush=True)
                 self._log(f"❌ #{order_id} {symbol}: {reason}")
                 
                 if order_id in self.pending_orders:
@@ -2616,6 +2624,7 @@ class BaseConditionalOrderService(ABC):
             details=f"Price reached {trigger_price} (staleness OK, circuit breaker OK)"
         )
         
+        self._execution_block_counts.pop(order_id, None)
         if self.execution_callback:
             try:
                 order['triggered_price'] = trigger_price
@@ -2627,6 +2636,7 @@ class BaseConditionalOrderService(ABC):
                             order['all_brokers'] = metadata['all_brokers']
                     except (json.JSONDecodeError, TypeError):
                         pass
+                print(f"[CONDITIONAL] 🚀 Executing #{order_id} {symbol} @ ${trigger_price} → calling callback", flush=True)
                 result = self.execution_callback(order, trigger_price)
                 callback_success = True
                 if asyncio.iscoroutine(result):
@@ -2636,9 +2646,11 @@ class BaseConditionalOrderService(ABC):
                             cb_result = future.result(timeout=30)
                             if cb_result is False:
                                 callback_success = False
+                                print(f"[CONDITIONAL] ⚠️ Callback returned False for #{order_id} {symbol}", flush=True)
                                 self._log(f"Execution callback returned False for #{order_id}")
                         except Exception as e:
                             callback_success = False
+                            print(f"[CONDITIONAL] ❌ Async callback error #{order_id} {symbol}: {e}", flush=True)
                             self._log(f"Async execution error #{order_id}: {e}")
                             update_conditional_order_status(
                                 order_id,
@@ -2648,6 +2660,7 @@ class BaseConditionalOrderService(ABC):
                             )
                     else:
                         callback_success = False
+                        print(f"[CONDITIONAL] ❌ No main event loop for #{order_id} {symbol}", flush=True)
                         self._log(f"Cannot execute async callback - no main event loop")
                         update_conditional_order_status(
                             order_id,
@@ -2656,12 +2669,14 @@ class BaseConditionalOrderService(ABC):
                             error_message="No main event loop available"
                         )
                 if callback_success:
+                    print(f"[CONDITIONAL] ✅ #{order_id} {symbol} execution callback succeeded — status → EXECUTING", flush=True)
                     update_conditional_order_status(order_id, 'EXECUTING')
                 self._executing_orders.discard(order_id)
                 self._execution_locks.pop(order_id, None)
             except Exception as e:
                 self._executing_orders.discard(order_id)
                 self._execution_locks.pop(order_id, None)
+                print(f"[CONDITIONAL] ❌ Execution exception #{order_id} {symbol}: {e}", flush=True)
                 self._log(f"Execution error #{order_id}: {e}")
                 update_conditional_order_status(
                     order_id,
