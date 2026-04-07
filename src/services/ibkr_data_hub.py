@@ -100,9 +100,9 @@ class IBKRDataHub:
         self._reconnect_in_progress = False
         self._reconnect_lock = threading.Lock()
         self._last_reconnect_ts: float = 0
-        self._RECONNECT_COOLDOWN = 30.0
+        self._RECONNECT_COOLDOWN = 15.0
         self._consecutive_stale_checks = 0
-        self._STALE_CHECK_THRESHOLD = 3
+        self._STALE_CHECK_THRESHOLD = 2
 
         print("[IBKR_HUB] ✓ IBKRDataHub initialized (singleton)")
 
@@ -166,8 +166,8 @@ class IBKRDataHub:
         self._ib.errorEvent += self._on_error_event
         self._ib.disconnectedEvent += self._on_disconnected
         self._ib.timeoutEvent += self._on_timeout
-        self._ib.setTimeout(120)
-        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors, disconnect, timeout=120s)")
+        self._ib.setTimeout(30)
+        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors, disconnect, timeout=30s)")
 
     def _on_error_event(self, reqId, errorCode, errorString, contract):
         if errorCode in (1100, 1101, 1102):
@@ -685,7 +685,7 @@ class IBKRDataHub:
         except Exception as e:
             print(f"[IBKR_HUB] Position refresh error: {e}")
 
-    async def start_reconciliation_loop(self, interval: float = 10.0):
+    async def start_reconciliation_loop(self, interval: float = 5.0):
         print(f"[IBKR_HUB] ✓ Position reconciliation loop started ({interval}s)")
         while True:
             try:
@@ -704,7 +704,7 @@ class IBKRDataHub:
                         await asyncio.sleep(self._RECONNECT_COOLDOWN)
                         continue
 
-                if is_connected and has_subs and self._last_quote_ts > 0 and quote_age > 90:
+                if is_connected and has_subs and self._last_quote_ts > 0 and quote_age > 30:
                     self._consecutive_stale_checks += 1
                     if self._consecutive_stale_checks >= self._STALE_CHECK_THRESHOLD:
                         print(f"[IBKR_HUB] ⚠️ Price data stale for {quote_age:.0f}s with {len(self._subscribed_symbols)} active subscriptions — connection may be zombie, attempting reconnect")
