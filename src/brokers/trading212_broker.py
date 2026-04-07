@@ -1,5 +1,6 @@
 import asyncio
 import time
+import builtins
 from typing import Optional, Dict, Any, List
 
 import sys
@@ -7,6 +8,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from broker_interface import BrokerInterface, OrderResult
+
+_t212_print = getattr(builtins, '_original_print', print)
 
 
 class Trading212Broker(BrokerInterface):
@@ -422,7 +425,7 @@ class Trading212Broker(BrokerInterface):
                 elif price and price > 0:
                     print(f"[T212] ⚠️ LIVE: limit orders not supported — downgrading to market order for {symbol}")
                 if ext_hours:
-                    print(f"[T212] Extended hours ENABLED for {symbol}", flush=True)
+                    _t212_print(f"[T212] Extended hours ENABLED for {symbol}", flush=True)
                 result = await self._client.place_market_order(ticker, qty, extended_hours=ext_hours)
             elif stop_price and stop_price > 0 and limit_price and limit_price > 0:
                 return await self.place_stop_limit_order(symbol, action, quantity, stop_price, limit_price)
@@ -432,10 +435,10 @@ class Trading212Broker(BrokerInterface):
                 result = await self._client.place_limit_order(ticker, qty, price)
             else:
                 if ext_hours:
-                    print(f"[T212] Extended hours ENABLED for {symbol}", flush=True)
+                    _t212_print(f"[T212] Extended hours ENABLED for {symbol}", flush=True)
                 result = await self._client.place_market_order(ticker, qty, extended_hours=ext_hours)
 
-            print(f"[T212] API response: success={result.get('success')}, has_data={bool(result.get('data'))}, error='{result.get('error', 'N/A')}', status={result.get('status', 'N/A')}", flush=True)
+            _t212_print(f"[T212] API response: success={result.get('success')}, has_data={bool(result.get('data'))}, error='{result.get('error', 'N/A')}', status={result.get('status', 'N/A')}", flush=True)
 
             if result.get('success') and result.get('data'):
                 order_data = result['data']
@@ -444,7 +447,7 @@ class Trading212Broker(BrokerInterface):
                 status = order_data.get('status', 'UNKNOWN')
 
                 self._schedule_post_order_refresh()
-                print(f"[T212] ✅ Order PLACED: {action} {abs(int(quantity))} {symbol} — order_id={order_id}, status={status}", flush=True)
+                _t212_print(f"[T212] ✅ Order PLACED: {action} {abs(int(quantity))} {symbol} — order_id={order_id}, status={status}", flush=True)
 
                 return OrderResult(
                     success=True,
@@ -459,7 +462,7 @@ class Trading212Broker(BrokerInterface):
                 error = result.get('error', 'Unknown error')
                 if not error:
                     error = f"Empty error (HTTP {result.get('status', '?')}, data={result.get('data')})"
-                print(f"[T212] ❌ Order FAILED: {action} {quantity} {symbol} — {error}", flush=True)
+                _t212_print(f"[T212] ❌ Order FAILED: {action} {quantity} {symbol} — {error}", flush=True)
                 return OrderResult(
                     success=False,
                     symbol=symbol,

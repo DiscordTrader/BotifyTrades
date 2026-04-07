@@ -3790,24 +3790,28 @@ class RiskManager:
                     _tf = channel_settings.ema_timeframe_minutes
                     _pd = channel_settings.ema_period
                     _ema_st = _cs.get_ema_state(position.symbol, timeframe=_tf, period=_pd)
-                    if _ema_st and _ema_st.last_candle:
-                        _candle_close = _ema_st.last_candle.close
-                        if _candle_close and cache.entry_price > 0:
-                            _candle_pct = ((_candle_close - cache.entry_price) / cache.entry_price) * 100
-                            if _candle_pct <= -channel_settings.stop_loss_pct:
-                                _cname = channel_settings.channel_name
-                                _allow_candle_sl = not _is_repair_cycle or _is_rest_confirmed
-                                if _allow_candle_sl and not _staleness_is_blocking:
-                                    print(f"[RISK] CANDLE SL: {position.symbol} candle close ${_candle_close:.2f} shows "
-                                          f"{_candle_pct:.1f}% loss (streaming ${position.current_price:.2f} lagged) "
-                                          f"— triggering SL at candle price")
-                                    return ExitDecision(
-                                        should_exit=True,
-                                        reason=f"STOP LOSS [{_cname}] Hard SL hit ({_candle_pct:.1f}% <= -{channel_settings.stop_loss_pct:.1f}%)",
-                                        exit_qty=int(position.quantity),
-                                        is_partial=False,
-                                        risk_trigger='stop_loss'
-                                    )
+                    if _ema_st and _ema_st.last_candle and _ema_st.last_candle_time:
+                        import time as _time_mod
+                        _candle_age = _time_mod.time() - _ema_st.last_candle_time
+                        _max_candle_age = _tf * 60 * 3
+                        if _candle_age <= _max_candle_age:
+                            _candle_close = _ema_st.last_candle.close
+                            if _candle_close and cache.entry_price > 0:
+                                _candle_pct = ((_candle_close - cache.entry_price) / cache.entry_price) * 100
+                                if _candle_pct <= -channel_settings.stop_loss_pct:
+                                    _cname = channel_settings.channel_name
+                                    _allow_candle_sl = not _is_repair_cycle or _is_rest_confirmed
+                                    if _allow_candle_sl and not _staleness_is_blocking:
+                                        print(f"[RISK] CANDLE SL: {position.symbol} candle close ${_candle_close:.2f} shows "
+                                              f"{_candle_pct:.1f}% loss (streaming ${position.current_price:.2f} lagged) "
+                                              f"— triggering SL at candle price")
+                                        return ExitDecision(
+                                            should_exit=True,
+                                            reason=f"STOP LOSS [{_cname}] Hard SL hit ({_candle_pct:.1f}% <= -{channel_settings.stop_loss_pct:.1f}%)",
+                                            exit_qty=int(position.quantity),
+                                            is_partial=False,
+                                            risk_trigger='stop_loss'
+                                        )
             except Exception as _csl_err:
                 pass
 
