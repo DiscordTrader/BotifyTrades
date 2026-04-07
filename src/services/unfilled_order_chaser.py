@@ -187,12 +187,33 @@ class UnfilledOrderChaser:
             if bot:
                 rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
             if rm and hasattr(rm, 'cache'):
+                _lock = None
+                if hasattr(rm, '_broker_stop_locks') and position_key in rm._broker_stop_locks:
+                    _lock = rm._broker_stop_locks[position_key]
                 pos_cache = rm.cache.get(position_key)
-                if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == old_order_id:
-                    pos_cache.broker_pt_order_id = new_order_id
-                    print(f"[ORDER_CHASER] ✓ Synced broker_pt_order_id: {old_order_id} → {new_order_id} for {position_key}")
+                if pos_cache:
+                    current_id = getattr(pos_cache, 'broker_pt_order_id', None)
+                    if current_id == old_order_id or current_id is None:
+                        pos_cache.broker_pt_order_id = new_order_id
+                        print(f"[ORDER_CHASER] ✓ Synced broker_pt_order_id: {old_order_id} → {new_order_id} for {position_key}")
+                    else:
+                        print(f"[ORDER_CHASER] ⚠️ PT order ID mismatch: expected {old_order_id}, found {current_id} — skipping sync (position_monitor may have updated)")
         except Exception as e:
             print(f"[ORDER_CHASER] ⚠️ Could not sync broker_pt_order_id: {e}")
+
+    def _clear_broker_pt_order_id(self, position_key: str, order_id: str):
+        try:
+            bot = self.broker_manager
+            rm = None
+            if bot:
+                rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
+            if rm and hasattr(rm, 'cache'):
+                pos_cache = rm.cache.get(position_key)
+                if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == order_id:
+                    pos_cache.broker_pt_order_id = None
+                    print(f"[ORDER_CHASER] ✓ Cleared broker_pt_order_id {order_id} for {position_key} (pre-cancel)")
+        except Exception as e:
+            print(f"[ORDER_CHASER] ⚠️ Could not clear broker_pt_order_id: {e}")
 
     def _get_remaining_qty(self, pending_orders: list, order_id: str, original_qty: int) -> int:
         """Extract remaining unfilled quantity from pending order data.
@@ -831,17 +852,41 @@ class UnfilledOrderChaser:
             else:
                 print(f"[ORDER_CHASER]   Exit Price: ${mid_price:.2f} (attempt {order.chase_attempts})")
 
+            if order.position_key and order.is_risk_order:
+                self._clear_broker_pt_order_id(order.position_key, order.order_id)
+
             cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
             if not cancel_ok:
                 print(f"[ORDER_CHASER] ❌ Failed to cancel exit order — keeping existing order")
+                if order.position_key and order.is_risk_order:
+                    self._sync_broker_pt_order_id(order.position_key, order.order_id, order.order_id)
                 order.status = OrderChaseStatus.PENDING
                 return
             
             print(f"[ORDER_CHASER] ✓ Cancelled original order")
             
             await asyncio.sleep(0.2)
-            
-            replace_qty = remaining_qty
+
+            post_cancel_pending = []
+            if hasattr(broker, 'get_pending_orders'):
+                _pc_result = broker.get_pending_orders()
+                if inspect.iscoroutine(_pc_result):
+                    post_cancel_pending = await _pc_result
+                else:
+                    post_cancel_pending = _pc_result
+            still_active = any(
+                str(po.get('order_id', '')) == str(order.order_id)
+                for po in (post_cancel_pending or [])
+            )
+            if still_active:
+                print(f"[ORDER_CHASER] ⚠️ Order {order.order_id} still active after cancel — waiting 0.3s for settlement")
+                await asyncio.sleep(0.3)
+
+            replace_qty = self._get_remaining_qty(post_cancel_pending, order.order_id, remaining_qty)
+            if replace_qty <= 0:
+                print(f"[ORDER_CHASER] Order fully filled during cancel window — marking filled")
+                await self.mark_filled(order.order_id)
+                return
             if is_market:
                 new_order_id = await self._place_market_replacement(broker, order, quantity_override=replace_qty)
             else:
@@ -1535,8 +1580,27 @@ class UnfilledOrderChaser:
             print(f"[ORDER_CHASER] ✓ Cancelled original entry order")
             
             await asyncio.sleep(0.2)
-            
-            replace_qty = remaining_qty
+
+            post_cancel_pending = []
+            if hasattr(broker, 'get_pending_orders'):
+                _pc_result = broker.get_pending_orders()
+                if inspect.iscoroutine(_pc_result):
+                    post_cancel_pending = await _pc_result
+                else:
+                    post_cancel_pending = _pc_result
+            still_active = any(
+                str(po.get('order_id', '')) == str(order.order_id)
+                for po in (post_cancel_pending or [])
+            )
+            if still_active:
+                print(f"[ORDER_CHASER] ⚠️ Entry order {order.order_id} still active after cancel — waiting 0.3s for settlement")
+                await asyncio.sleep(0.3)
+
+            replace_qty = self._get_remaining_qty(post_cancel_pending, order.order_id, remaining_qty)
+            if replace_qty <= 0:
+                print(f"[ORDER_CHASER] Entry order fully filled during cancel window — marking filled")
+                await self.mark_entry_filled(order.order_id)
+                return
             new_order_id = await self._place_entry_replacement_order(broker, order, chase_price, quantity_override=replace_qty)
             
             if new_order_id:
