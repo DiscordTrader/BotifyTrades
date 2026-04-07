@@ -422,6 +422,8 @@ class Trading212Broker(BrokerInterface):
             else:
                 result = await self._client.place_market_order(ticker, qty)
 
+            print(f"[T212] API response: success={result.get('success')}, has_data={bool(result.get('data'))}, error='{result.get('error', 'N/A')}', status={result.get('status', 'N/A')}", flush=True)
+
             if result.get('success') and result.get('data'):
                 order_data = result['data']
                 order_id = str(order_data.get('id', ''))
@@ -442,6 +444,8 @@ class Trading212Broker(BrokerInterface):
                 )
             else:
                 error = result.get('error', 'Unknown error')
+                if not error:
+                    error = f"Empty error (HTTP {result.get('status', '?')}, data={result.get('data')})"
                 print(f"[T212] ❌ Order FAILED: {action} {quantity} {symbol} — {error}", flush=True)
                 return OrderResult(
                     success=False,

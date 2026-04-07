@@ -164,8 +164,13 @@ class Trading212Client:
                     body = {'message': raw_text.strip()}
 
                 if resp.status >= 400:
-                    error_msg = body.get('message', '') if isinstance(body, dict) else str(body)
-                    print(f"[T212-CLIENT] API error {resp.status}: {error_msg} ({method} {path})")
+                    if isinstance(body, dict):
+                        error_msg = body.get('message', '') or body.get('errorMessage', '') or body.get('error', '') or body.get('code', '')
+                        if not error_msg:
+                            error_msg = str(body) if body else f'HTTP {resp.status}'
+                    else:
+                        error_msg = str(body)
+                    print(f"[T212-CLIENT] API error {resp.status}: {error_msg} ({method} {path}) body={body}")
                     return {'success': False, 'error': error_msg, 'status': resp.status}
 
                 return {'success': True, 'data': body}
