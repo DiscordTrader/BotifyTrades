@@ -3782,6 +3782,35 @@ class RiskManager:
                     else:
                         return decision
         
+        if channel_settings and channel_settings.ema_risk_enabled and channel_settings.stop_loss_pct > 0:
+            try:
+                from .ema_engine import get_candle_service
+                _cs = get_candle_service()
+                if _cs:
+                    _tf = channel_settings.ema_timeframe_minutes
+                    _pd = channel_settings.ema_period
+                    _ema_st = _cs.get_ema_state(position.symbol, timeframe=_tf, period=_pd)
+                    if _ema_st and _ema_st.last_candle:
+                        _candle_close = _ema_st.last_candle.close
+                        if _candle_close and cache.entry_price > 0:
+                            _candle_pct = ((_candle_close - cache.entry_price) / cache.entry_price) * 100
+                            if _candle_pct <= -channel_settings.stop_loss_pct:
+                                _cname = channel_settings.channel_name
+                                _allow_candle_sl = not _is_repair_cycle or _is_rest_confirmed
+                                if _allow_candle_sl and not _staleness_is_blocking:
+                                    print(f"[RISK] CANDLE SL: {position.symbol} candle close ${_candle_close:.2f} shows "
+                                          f"{_candle_pct:.1f}% loss (streaming ${position.current_price:.2f} lagged) "
+                                          f"— triggering SL at candle price")
+                                    return ExitDecision(
+                                        should_exit=True,
+                                        reason=f"STOP LOSS [{_cname}] Hard SL hit ({_candle_pct:.1f}% <= -{channel_settings.stop_loss_pct:.1f}%)",
+                                        exit_qty=int(position.quantity),
+                                        is_partial=False,
+                                        risk_trigger='stop_loss'
+                                    )
+            except Exception as _csl_err:
+                pass
+
         if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard or channel_settings.ema_risk_enabled or channel_settings.enable_early_trailing):
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position)
             if engine_decision and engine_decision.should_exit:
