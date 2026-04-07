@@ -3803,18 +3803,16 @@ def register_routes(app):
         import asyncio
 
         cache_key = 'trading212_balance'
+        t212_cache_ttl = 30
         if cache_key in _api_cache:
             cached_value, timestamp = _api_cache[cache_key]
-            if time.time() - timestamp < 5:
+            if time.time() - timestamp < t212_cache_ttl:
                 return jsonify(cached_value)
 
         try:
-            print("[API] Fetching Trading 212 balance...")
-
             if _bot_instance and hasattr(_bot_instance, 'trading212_broker') and _bot_instance.trading212_broker:
                 broker = _bot_instance.trading212_broker
                 if broker.connected:
-                    print("[API] Using bot's existing Trading 212 broker instance")
                     try:
                         account_future = asyncio.run_coroutine_threadsafe(
                             broker.get_account_info(),
@@ -3857,10 +3855,20 @@ def register_routes(app):
                         return jsonify(result_data)
                     except Exception as e:
                         error_type = type(e).__name__
-                        print(f"[API] Error using bot's Trading 212 broker: {error_type}: {e}")
+                        if error_type == 'TimeoutError':
+                            print(f"[API] T212 balance timeout — using cached data (API rate-limited or slow)")
+                        else:
+                            print(f"[API] Error using bot's Trading 212 broker: {error_type}: {e}")
+                        try:
+                            account_future.cancel()
+                        except Exception:
+                            pass
+                        try:
+                            positions_future.cancel()
+                        except Exception:
+                            pass
                         cached = getattr(broker, '_account_cache', None)
                         if cached:
-                            print(f"[API] Using cached T212 account data as fallback")
                             result_data = {
                                 'buying_power': cached.get('buying_power', 0),
                                 'cash_balance': cached.get('cash', 0),
@@ -3874,6 +3882,7 @@ def register_routes(app):
                                 'positions': [],
                                 'status': 'ok_cached'
                             }
+                            _api_cache[cache_key] = (result_data, time.time())
                             return jsonify(result_data)
 
                     return jsonify({
