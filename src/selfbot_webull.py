@@ -10279,7 +10279,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if not broker_name:
                             sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Order #{order.get('id')} has no broker_primary - SKIPPING\n")
                             sys.stderr.flush()
-                            return
+                            return False
                         market = order.get('market', 'US')
                         currency = '₹' if market == 'INDIA' else '$'
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
@@ -10353,7 +10353,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         }
                         
                         all_brokers = order.get('all_brokers')
-                        if all_brokers and len(all_brokers) > 1:
+                        if not all_brokers:
+                            metadata_str = order.get('metadata')
+                            if metadata_str:
+                                try:
+                                    import json as _json_mod
+                                    _meta = _json_mod.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+                                    if isinstance(_meta, dict) and _meta.get('all_brokers'):
+                                        all_brokers = _meta['all_brokers']
+                                except (json.JSONDecodeError, TypeError, ValueError):
+                                    pass
+                        if isinstance(all_brokers, str):
+                            try:
+                                all_brokers = json.loads(all_brokers)
+                            except (json.JSONDecodeError, TypeError, ValueError):
+                                all_brokers = None
+                        if isinstance(all_brokers, list) and len(all_brokers) > 1:
                             signal['_enabled_brokers'] = all_brokers
                             sys.stderr.write(f"[CONDITIONAL EXEC] Multi-broker execution: {all_brokers}\n")
                             sys.stderr.flush()

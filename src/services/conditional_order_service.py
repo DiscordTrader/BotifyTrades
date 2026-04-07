@@ -1071,6 +1071,16 @@ class ConditionalOrderService:
             sys.stderr.flush()
             return
         
+        metadata_str = order.get('metadata')
+        if metadata_str and not order.get('all_brokers'):
+            try:
+                import json as _json_mod
+                _meta = _json_mod.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+                if isinstance(_meta, dict) and _meta.get('all_brokers'):
+                    order['all_brokers'] = _meta['all_brokers']
+            except (ValueError, TypeError):
+                pass
+        
         sys.stderr.write(f"[CONDITIONAL] Order #{order_id} retrieved, callback={self.execution_callback is not None}\n")
         sys.stderr.flush()
         
