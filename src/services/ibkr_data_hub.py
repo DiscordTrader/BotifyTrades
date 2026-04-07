@@ -97,6 +97,13 @@ class IBKRDataHub:
         self._mktdata_denied_symbols: Set[str] = set()
         self._mktdata_denied_lock = threading.Lock()
 
+        self._reconnect_in_progress = False
+        self._reconnect_lock = threading.Lock()
+        self._last_reconnect_ts: float = 0
+        self._RECONNECT_COOLDOWN = 30.0
+        self._consecutive_stale_checks = 0
+        self._STALE_CHECK_THRESHOLD = 3
+
         print("[IBKR_HUB] ✓ IBKRDataHub initialized (singleton)")
 
     def on(self, event: str, handler: Callable):
@@ -140,6 +147,7 @@ class IBKRDataHub:
                 old_ib.positionEvent -= self._on_position_event
                 old_ib.orderStatusEvent -= self._on_order_status
                 old_ib.errorEvent -= self._on_error_event
+                old_ib.disconnectedEvent -= self._on_disconnected
             except Exception:
                 pass
         self._ib = None
@@ -156,10 +164,30 @@ class IBKRDataHub:
         self._ib.positionEvent += self._on_position_event
         self._ib.orderStatusEvent += self._on_order_status
         self._ib.errorEvent += self._on_error_event
-        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors)")
+        self._ib.disconnectedEvent += self._on_disconnected
+        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors, disconnect)")
 
     def _on_error_event(self, reqId, errorCode, errorString, contract):
-        if errorCode in (10089, 10168):
+        if errorCode in (1100, 1101, 1102):
+            if errorCode == 1100:
+                print(f"[IBKR_HUB] ⚠️ TWS connectivity lost (error 1100: {errorString})")
+                self._streaming_active = False
+            elif errorCode == 1101:
+                print(f"[IBKR_HUB] ✓ TWS connectivity restored — data lost (error 1101). Will re-subscribe.")
+                self._streaming_active = True
+                old_symbols = set(self._subscribed_symbols)
+                self._subscribed_symbols.clear()
+                self._subscribed_conids.clear()
+                for sym in old_symbols:
+                    self._pending_subscriptions.add(sym)
+            elif errorCode == 1102:
+                print(f"[IBKR_HUB] ✓ TWS connectivity restored — data maintained (error 1102)")
+                self._streaming_active = True
+        elif errorCode == 504:
+            print(f"[IBKR_HUB] ⚠️ Not connected to TWS (error 504)")
+        elif errorCode == 502:
+            print(f"[IBKR_HUB] ⚠️ Could not connect to TWS (error 502)")
+        elif errorCode in (10089, 10168):
             symbol = ''
             if contract:
                 symbol = getattr(contract, 'symbol', '') or ''
@@ -171,6 +199,93 @@ class IBKRDataHub:
                 self._subscribed_symbols.discard(symbol)
                 if not already_denied:
                     logger.warning(f"[IBKR_HUB] ⚠️ Market data denied for {symbol} (error {errorCode}) — will fall back to other brokers")
+
+    def _on_disconnected(self):
+        print(f"[IBKR_HUB] ⚠️ TWS/Gateway DISCONNECTED — streaming prices will stop. Auto-reconnect will attempt in reconciliation loop.")
+        self._streaming_active = False
+        self._emit('disconnected', {})
+
+    async def _attempt_reconnect(self):
+        now = time.time()
+        with self._reconnect_lock:
+            if self._reconnect_in_progress:
+                return False
+            if now - self._last_reconnect_ts < self._RECONNECT_COOLDOWN:
+                return False
+            self._reconnect_in_progress = True
+            self._last_reconnect_ts = now
+
+        try:
+            if not self._broker:
+                print("[IBKR_HUB] Cannot reconnect — no broker reference")
+                return False
+
+            print("[IBKR_HUB] 🔄 Attempting auto-reconnect to TWS/Gateway...")
+
+            old_ib = self._ib
+            if old_ib:
+                try:
+                    old_ib.pendingTickersEvent -= self._on_pending_tickers
+                    old_ib.positionEvent -= self._on_position_event
+                    old_ib.orderStatusEvent -= self._on_order_status
+                    old_ib.errorEvent -= self._on_error_event
+                    old_ib.disconnectedEvent -= self._on_disconnected
+                except Exception:
+                    pass
+                try:
+                    old_ib.disconnect()
+                except Exception:
+                    pass
+
+            from ib_insync import IB
+            new_ib = IB()
+            host = getattr(self._broker, 'host', '127.0.0.1')
+            port = getattr(self._broker, 'port', 7497)
+            client_id = getattr(self._broker, 'client_id', 1)
+
+            await new_ib.connectAsync(host=host, port=port, clientId=client_id, timeout=15)
+
+            if not new_ib.isConnected():
+                print("[IBKR_HUB] ❌ Auto-reconnect failed — TWS/Gateway not responding")
+                return False
+
+            self._broker.ib = new_ib
+            self._broker.connected = True
+            self._ib = new_ib
+            self._attach_events()
+            self._streaming_active = True
+            self._consecutive_stale_checks = 0
+
+            old_symbols = set(self._subscribed_symbols)
+            self._subscribed_symbols.clear()
+            self._subscribed_conids.clear()
+
+            resubscribed = 0
+            for sym in old_symbols:
+                with self._contract_lock:
+                    contract = self._symbol_to_contract.get(sym)
+                if contract:
+                    try:
+                        self._ib.reqMktData(contract, '', False, False)
+                        self._subscribed_symbols.add(sym)
+                        con_id = contract.conId if contract else 0
+                        if con_id:
+                            self._subscribed_conids.add(con_id)
+                        resubscribed += 1
+                    except Exception as e:
+                        self._pending_subscriptions.add(sym)
+                else:
+                    self._pending_subscriptions.add(sym)
+
+            print(f"[IBKR_HUB] ✅ Auto-reconnect SUCCESS — re-subscribed {resubscribed}/{len(old_symbols)} symbols")
+            self._emit('reconnected', {'resubscribed': resubscribed})
+            return True
+        except Exception as e:
+            print(f"[IBKR_HUB] ❌ Auto-reconnect error: {e}")
+            return False
+        finally:
+            with self._reconnect_lock:
+                self._reconnect_in_progress = False
 
     def is_symbol_denied(self, symbol: str) -> bool:
         with self._mktdata_denied_lock:
@@ -567,7 +682,31 @@ class IBKRDataHub:
         while True:
             try:
                 await asyncio.sleep(interval)
-                if self._ib and self._ib.isConnected():
+
+                is_connected = self._ib and self._ib.isConnected()
+                has_subs = len(self._subscribed_symbols) > 0
+                quote_age = (time.time() - self._last_quote_ts) if self._last_quote_ts > 0 else 0
+
+                if not is_connected and self._broker:
+                    print(f"[IBKR_HUB] ⚠️ Connection lost detected in reconciliation loop — attempting reconnect")
+                    reconnected = await self._attempt_reconnect()
+                    if reconnected:
+                        continue
+                    else:
+                        await asyncio.sleep(self._RECONNECT_COOLDOWN)
+                        continue
+
+                if is_connected and has_subs and self._last_quote_ts > 0 and quote_age > 90:
+                    self._consecutive_stale_checks += 1
+                    if self._consecutive_stale_checks >= self._STALE_CHECK_THRESHOLD:
+                        print(f"[IBKR_HUB] ⚠️ Price data stale for {quote_age:.0f}s with {len(self._subscribed_symbols)} active subscriptions — connection may be zombie, attempting reconnect")
+                        reconnected = await self._attempt_reconnect()
+                        if reconnected:
+                            continue
+                else:
+                    self._consecutive_stale_checks = 0
+
+                if is_connected:
                     await self._refresh_positions_from_ib()
 
                     for sym in list(self._pending_subscriptions):
