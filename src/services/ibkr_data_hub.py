@@ -165,7 +165,9 @@ class IBKRDataHub:
         self._ib.orderStatusEvent += self._on_order_status
         self._ib.errorEvent += self._on_error_event
         self._ib.disconnectedEvent += self._on_disconnected
-        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors, disconnect)")
+        self._ib.timeoutEvent += self._on_timeout
+        self._ib.setTimeout(120)
+        print("[IBKR_HUB] ✓ Event handlers attached (tickers, positions, orders, errors, disconnect, timeout=120s)")
 
     def _on_error_event(self, reqId, errorCode, errorString, contract):
         if errorCode in (1100, 1101, 1102):
@@ -205,6 +207,11 @@ class IBKRDataHub:
         self._streaming_active = False
         self._emit('disconnected', {})
 
+    def _on_timeout(self, idlePeriod):
+        print(f"[IBKR_HUB] ⚠️ TWS timeout — no data received for {idlePeriod:.0f}s. Marking stale, will attempt reconnect.")
+        self._streaming_active = False
+        self._consecutive_stale_checks = self._STALE_CHECK_THRESHOLD
+
     async def _attempt_reconnect(self):
         now = time.time()
         with self._reconnect_lock:
@@ -230,6 +237,7 @@ class IBKRDataHub:
                     old_ib.orderStatusEvent -= self._on_order_status
                     old_ib.errorEvent -= self._on_error_event
                     old_ib.disconnectedEvent -= self._on_disconnected
+                    old_ib.timeoutEvent -= self._on_timeout
                 except Exception:
                     pass
                 try:
