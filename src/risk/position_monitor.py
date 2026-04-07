@@ -4576,6 +4576,12 @@ class RiskManager:
                         cache.broker_orders_placed = True
                         return
 
+                    _t212_is_live = getattr(self.trading212_broker, 'is_live', False)
+                    if _t212_is_live:
+                        print(f"[RISK] ℹ️ Trading212 LIVE: broker-side SL/PT not supported — relying on software risk monitoring for {symbol}")
+                        cache.broker_orders_placed = True
+                        return
+
                     if sl_price and sl_price > 0:
                         sl_result = await self.trading212_broker.place_stop_order(
                             symbol=symbol,
@@ -5275,6 +5281,8 @@ class RiskManager:
 
                 elif 'TRADING212' in broker_name:
                     if _is_opt:
+                        return
+                    if getattr(self.trading212_broker, 'is_live', False):
                         return
                     sl_result = await self.trading212_broker.place_stop_order(
                         symbol=symbol, action='STC', quantity=qty, stop_price=new_stop_price

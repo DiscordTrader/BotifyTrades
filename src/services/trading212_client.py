@@ -11,6 +11,7 @@ class Trading212RateLimiter:
     ENDPOINT_LIMITS = {
         'portfolio': (1, 5),
         'orders': (1, 5),
+        'order_placement': (1, 2),
         'account': (1, 5),
         'instruments': (1, 30),
         'history': (6, 60),
@@ -30,10 +31,12 @@ class Trading212RateLimiter:
                 self._locks[loop_id] = asyncio.Lock()
             return self._locks[loop_id]
 
-    def _classify(self, path: str) -> str:
+    def _classify(self, path: str, method: str = 'GET') -> str:
         if '/portfolio' in path or '/positions' in path:
             return 'portfolio'
         if '/orders' in path:
+            if method == 'POST':
+                return 'order_placement'
             return 'orders'
         if '/account' in path:
             return 'account'
@@ -43,8 +46,8 @@ class Trading212RateLimiter:
             return 'history'
         return 'default'
 
-    async def acquire(self, path: str):
-        category = self._classify(path)
+    async def acquire(self, path: str, method: str = 'GET'):
+        category = self._classify(path, method.upper())
         max_calls, window = self.ENDPOINT_LIMITS.get(category, (1, 5))
         min_interval = window / max_calls
 
@@ -130,7 +133,7 @@ class Trading212Client:
 
     async def _request(self, method: str, path: str, json_data: dict = None, params: dict = None) -> Dict[str, Any]:
         session = await self._ensure_session()
-        await self._rate_limiter.acquire(path)
+        await self._rate_limiter.acquire(path, method)
 
         url = f'{self._base_url}{path}'
         start = time.monotonic()
