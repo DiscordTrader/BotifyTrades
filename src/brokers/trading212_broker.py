@@ -429,6 +429,7 @@ class Trading212Broker(BrokerInterface):
                 status = order_data.get('status', 'UNKNOWN')
 
                 self._schedule_post_order_refresh()
+                print(f"[T212] ✅ Order PLACED: {action} {abs(int(quantity))} {symbol} — order_id={order_id}, status={status}", flush=True)
 
                 return OrderResult(
                     success=True,
@@ -441,6 +442,7 @@ class Trading212Broker(BrokerInterface):
                 )
             else:
                 error = result.get('error', 'Unknown error')
+                print(f"[T212] ❌ Order FAILED: {action} {quantity} {symbol} — {error}", flush=True)
                 return OrderResult(
                     success=False,
                     symbol=symbol,
@@ -449,6 +451,11 @@ class Trading212Broker(BrokerInterface):
                 )
 
         except Exception as e:
+            error_type = type(e).__name__
+            if 'timeout' in error_type.lower() or 'timeout' in str(e).lower():
+                print(f"[T212] ❌ Order TIMEOUT: {action} {quantity} {symbol} — T212 API unresponsive (rate limit saturation likely)", flush=True)
+            else:
+                print(f"[T212] ❌ Order EXCEPTION: {action} {quantity} {symbol} — {error_type}: {e}", flush=True)
             return OrderResult(
                 success=False,
                 symbol=symbol,

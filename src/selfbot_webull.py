@@ -1904,9 +1904,9 @@ try:
     print(f"[CONFIG] Paper trading: {PAPER_TRADE}")
     
     if PAPER_TRADE:
-        print("[CONFIG] ⚠️  PAPER TRADING MODE ENABLED - No real trades will be executed")
+        print("[CONFIG] ⚠️  WEBULL PAPER MODE - Webull trades simulated (other brokers unaffected)")
     else:
-        print("[CONFIG] ⚠️  LIVE TRADING MODE - Real trades will be executed!")
+        print("[CONFIG] ⚠️  WEBULL LIVE MODE - Real Webull trades will be executed!")
         
 except KeyError as e:
     raise SystemExit(f"Missing [webull] key in config.ini: {e}")
@@ -8491,6 +8491,11 @@ class SelfClient(discord.Client):
         else:
             _original_print("[WATCHDOG] ⚠️ Watchdog already started - skipping", flush=True)
         
+        global _telegram_signal_queue
+        if _telegram_signal_queue is None:
+            import queue as _q
+            _telegram_signal_queue = _q.Queue()
+            print("[ASYNC] ✓ Signal queue initialized (pre-Telegram — conditional orders ready)", flush=True)
         telegram_bridge_task = asyncio.create_task(self.telegram_signal_bridge())
         await asyncio.sleep(0)
         
@@ -10272,13 +10277,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     import sys
                     from gui_app.database import get_channel_by_discord_id, get_channel_by_telegram_id
                     try:
-                        sys.stderr.write(f"[CONDITIONAL EXEC] Starting execution for order: {order.get('id')}\n")
-                        sys.stderr.flush()
+                        print(f"[CONDITIONAL EXEC] Starting execution for order: {order.get('id')}", flush=True)
                         symbol = order['symbol']
                         broker_name = order.get('broker_primary')
                         if not broker_name:
-                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Order #{order.get('id')} has no broker_primary - SKIPPING\n")
-                            sys.stderr.flush()
+                            print(f"[CONDITIONAL EXEC] ❌ Order #{order.get('id')} has no broker_primary - SKIPPING", flush=True)
                             return False
                         market = order.get('market', 'US')
                         currency = '₹' if market == 'INDIA' else '$'
@@ -10287,8 +10290,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         channel_id = order.get('channel_id')
                         execution_price = triggered_price
                         
-                        sys.stderr.write(f"[CONDITIONAL EXEC] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{execution_price:.2f}\n")
-                        sys.stderr.flush()
+                        print(f"[CONDITIONAL EXEC] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{execution_price:.2f} on {broker_name}", flush=True)
                         
                         # Build a BTO signal from the conditional order
                         # Limit Cap Protection: Use limit order with capped price to prevent chasing
@@ -10370,12 +10372,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 all_brokers = None
                         if isinstance(all_brokers, list) and len(all_brokers) > 1:
                             signal['_enabled_brokers'] = all_brokers
-                            sys.stderr.write(f"[CONDITIONAL EXEC] Multi-broker execution: {all_brokers}\n")
-                            sys.stderr.flush()
+                            print(f"[CONDITIONAL EXEC] Multi-broker execution: {all_brokers}", flush=True)
                         else:
                             signal['_broker_override'] = broker_name
-                        sys.stderr.write(f"[CONDITIONAL EXEC] Executing on broker_primary: {broker_name}\n")
-                        sys.stderr.flush()
+                        print(f"[CONDITIONAL EXEC] Broker: {broker_name}", flush=True)
                         
                         # Add limit price cap for broker execution
                         if effective_limit_price:
@@ -10673,21 +10673,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             sys.stderr.flush()
                         
                         # Use sync signal queue (thread-safe, same as Telegram)
-                        sys.stderr.write(f"[CONDITIONAL EXEC] Checking sync queue: {_telegram_signal_queue is not None}\n")
-                        sys.stderr.flush()
                         if _telegram_signal_queue is not None:
                             _telegram_signal_queue.put_nowait(signal)
-                            sys.stderr.write(f"[CONDITIONAL EXEC] ✓ Signal queued via sync queue: {symbol}{option_info} @ {currency}{triggered_price:.2f}\n")
-                            sys.stderr.flush()
+                            print(f"[CONDITIONAL EXEC] ✓ Signal queued: {symbol}{option_info} @ {currency}{triggered_price:.2f} → {broker_name}", flush=True)
                             return True
                         else:
-                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Sync signal queue not available!\n")
-                            sys.stderr.flush()
+                            print(f"[CONDITIONAL EXEC] ❌ Sync signal queue not available!", flush=True)
                             return False
                         
                     except Exception as e:
-                        sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Execution error: {e}\n")
-                        sys.stderr.flush()
+                        print(f"[CONDITIONAL EXEC] ❌ Execution error: {e}", flush=True)
                         import traceback
                         traceback.print_exc()
                         return False
@@ -12628,11 +12623,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         try:
                                                             from src.services.signal_conversation_state import get_conversation_state_manager
                                                             state_mgr = get_conversation_state_manager()
-                                                            state_mgr.register_signal(
-                                                                message_id=int(message.id),
+                                                            state_mgr.register_signal_context(
                                                                 channel_id=int(message.channel.id),
                                                                 author_id=int(message.author.id),
-                                                                timestamp=message.created_at,
                                                                 symbol=h_sig['symbol'],
                                                                 order_id=order_id
                                                             )
@@ -12686,11 +12679,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         try:
                                                             from src.services.signal_conversation_state import get_conversation_state_manager
                                                             state_mgr = get_conversation_state_manager()
-                                                            state_mgr.register_signal(
-                                                                message_id=int(message.id),
+                                                            state_mgr.register_signal_context(
                                                                 channel_id=int(message.channel.id),
                                                                 author_id=int(message.author.id),
-                                                                timestamp=message.created_at,
                                                                 symbol=eg_sig['symbol'],
                                                                 order_id=order_id
                                                             )
@@ -12879,11 +12870,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             try:
                                                 from src.services.signal_conversation_state import get_conversation_state_manager
                                                 state_mgr = get_conversation_state_manager()
-                                                state_mgr.register_signal(
-                                                    message_id=int(message.id),
+                                                state_mgr.register_signal_context(
                                                     channel_id=int(message.channel.id),
                                                     author_id=int(message.author.id),
-                                                    timestamp=message.created_at,
                                                     symbol=parsed_cond['symbol'],
                                                     order_id=order_id
                                                 )
@@ -13201,11 +13190,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     try:
                                                         from src.services.signal_conversation_state import get_conversation_state_manager
                                                         state_mgr = get_conversation_state_manager()
-                                                        state_mgr.register_signal(
-                                                            message_id=int(message.id),
+                                                        state_mgr.register_signal_context(
                                                             channel_id=int(message.channel.id),
                                                             author_id=int(message.author.id),
-                                                            timestamp=message.created_at,
                                                             symbol=h_sig['symbol'],
                                                             order_id=order_id
                                                         )
@@ -13335,11 +13322,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             try:
                                                 from src.services.signal_conversation_state import get_conversation_state_manager
                                                 state_mgr = get_conversation_state_manager()
-                                                state_mgr.register_signal(
-                                                    message_id=int(message.id),
+                                                state_mgr.register_signal_context(
                                                     channel_id=int(message.channel.id),
                                                     author_id=int(message.author.id),
-                                                    timestamp=message.created_at,
                                                     symbol=parsed_cond['symbol'],
                                                     order_id=order_id
                                                 )
