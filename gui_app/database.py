@@ -3742,7 +3742,11 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
         entry_price = float(bto_broker_fill) if bto_broker_fill and float(bto_broker_fill) > 0 else float(bto.get('executed_price') or bto.get('intended_price') or 0)
         current_price = float(bto.get('current_price') or 0) or entry_price
         bto_orig_qty = int(bto.get('original_quantity') or 0)
-        bto_qty = bto_orig_qty if bto_orig_qty > int(bto.get('quantity') or 0) else int(bto.get('quantity') or 0)
+        bto_raw_qty = int(bto.get('quantity') or 0)
+        if bto_orig_qty > 0:
+            bto_qty = bto_orig_qty
+        else:
+            bto_qty = bto_raw_qty
         
         desc_parts = [bto['symbol']]
         if bto.get('strike'):
@@ -3875,6 +3879,9 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
         entry_fill = lc.get('entry_fill_price')
         if entry_fill and float(entry_fill) > 0:
             entry_price = float(entry_fill)
+
+        if entry_price > 0 and exit_price / entry_price < 0.05:
+            continue
 
         multiplier = 100 if pos['asset_type'] == 'option' else 1
         closure_pnl = (exit_price - entry_price) * lc_qty * multiplier
@@ -4843,6 +4850,14 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
             print(f"[LOT_MATCHER] ⚠️ close_price is None for lot {lot_id} — skipping P&L calculation")
             conn.rollback()
             return None
+        
+        lot_entry = lot['entry_fill_price'] if lot['entry_fill_price'] is not None else lot['open_price']
+        if lot_entry and lot_entry > 0 and close_price > 0:
+            price_ratio = close_price / lot_entry
+            if price_ratio < 0.05:
+                print(f"[LOT_MATCHER] ⚠️ Rejecting suspicious close_price ${close_price:.4f} for lot #{lot_id} (entry=${lot_entry:.4f}, ratio={price_ratio:.4f}) — likely bad tick")
+                conn.rollback()
+                return None
         
         if lot['remaining_qty'] <= 0:
             print(f"[LOT_MATCHER] ⚠️ Lot #{lot_id} already fully closed (remaining=0) — skipping duplicate close")
