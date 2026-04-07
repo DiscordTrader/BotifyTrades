@@ -180,6 +180,20 @@ class UnfilledOrderChaser:
         
         print(f"[ORDER_CHASER] Initialized (timeout={chase_timeout_seconds}s, max_attempts={max_chase_attempts}, cancel_on_fail={cancel_entry_on_max_attempts})")
 
+    def _get_position_lock(self, position_key: str):
+        try:
+            bot = self.broker_manager
+            rm = None
+            if bot:
+                rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
+            if rm and hasattr(rm, '_broker_stop_locks'):
+                if position_key not in rm._broker_stop_locks:
+                    rm._broker_stop_locks[position_key] = asyncio.Lock()
+                return rm._broker_stop_locks[position_key]
+        except Exception:
+            pass
+        return None
+
     def _sync_broker_pt_order_id(self, position_key: str, old_order_id: str, new_order_id: str):
         try:
             bot = self.broker_manager
@@ -187,9 +201,6 @@ class UnfilledOrderChaser:
             if bot:
                 rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
             if rm and hasattr(rm, 'cache'):
-                _lock = None
-                if hasattr(rm, '_broker_stop_locks') and position_key in rm._broker_stop_locks:
-                    _lock = rm._broker_stop_locks[position_key]
                 pos_cache = rm.cache.get(position_key)
                 if pos_cache:
                     current_id = getattr(pos_cache, 'broker_pt_order_id', None)
@@ -201,7 +212,31 @@ class UnfilledOrderChaser:
         except Exception as e:
             print(f"[ORDER_CHASER] ⚠️ Could not sync broker_pt_order_id: {e}")
 
-    def _clear_broker_pt_order_id(self, position_key: str, order_id: str):
+    async def _atomic_pt_id_swap(self, position_key: str, old_order_id: str, new_order_id: str):
+        pos_lock = self._get_position_lock(position_key)
+        if pos_lock:
+            async with pos_lock:
+                self._sync_broker_pt_order_id(position_key, old_order_id, new_order_id)
+        else:
+            self._sync_broker_pt_order_id(position_key, old_order_id, new_order_id)
+
+    async def _atomic_pt_id_clear_and_cancel(self, position_key: str, order_id: str, broker, asset_type: str, broker_id: str) -> bool:
+        pos_lock = self._get_position_lock(position_key)
+        if pos_lock:
+            async with pos_lock:
+                self._set_pt_order_id(position_key, order_id, '_CHASER_CANCELLING_')
+                cancel_ok = await self._cancel_broker_order(broker, order_id, asset_type, broker_id)
+                if not cancel_ok:
+                    self._set_pt_order_id(position_key, '_CHASER_CANCELLING_', order_id)
+                return cancel_ok
+        else:
+            self._set_pt_order_id(position_key, order_id, '_CHASER_CANCELLING_')
+            cancel_ok = await self._cancel_broker_order(broker, order_id, asset_type, broker_id)
+            if not cancel_ok:
+                self._set_pt_order_id(position_key, '_CHASER_CANCELLING_', order_id)
+            return cancel_ok
+
+    def _set_pt_order_id(self, position_key: str, expected_current: str, new_value: str):
         try:
             bot = self.broker_manager
             rm = None
@@ -209,11 +244,32 @@ class UnfilledOrderChaser:
                 rm = getattr(bot, '_risk_manager', None) or getattr(bot, 'risk_manager', None)
             if rm and hasattr(rm, 'cache'):
                 pos_cache = rm.cache.get(position_key)
-                if pos_cache and getattr(pos_cache, 'broker_pt_order_id', None) == order_id:
-                    pos_cache.broker_pt_order_id = None
-                    print(f"[ORDER_CHASER] ✓ Cleared broker_pt_order_id {order_id} for {position_key} (pre-cancel)")
-        except Exception as e:
-            print(f"[ORDER_CHASER] ⚠️ Could not clear broker_pt_order_id: {e}")
+                if pos_cache:
+                    current = getattr(pos_cache, 'broker_pt_order_id', None)
+                    if current == expected_current or current is None:
+                        pos_cache.broker_pt_order_id = new_value if new_value != '_CHASER_CANCELLING_' else None
+        except Exception:
+            pass
+
+    async def _wait_for_cancel_settlement(self, broker, order_id: str, max_checks: int = 3) -> tuple:
+        for i in range(max_checks):
+            await asyncio.sleep(0.2)
+            pending = []
+            if hasattr(broker, 'get_pending_orders'):
+                _result = broker.get_pending_orders()
+                if inspect.iscoroutine(_result):
+                    pending = await _result
+                else:
+                    pending = _result
+            still_active = any(
+                str(po.get('order_id', '')) == str(order_id)
+                for po in (pending or [])
+            )
+            if not still_active:
+                return pending, True
+            if i < max_checks - 1:
+                print(f"[ORDER_CHASER] ⚠️ Order {order_id} still active after cancel (check {i+1}/{max_checks}) — retrying")
+        return pending, False
 
     def _get_remaining_qty(self, pending_orders: list, order_id: str, original_qty: int) -> int:
         """Extract remaining unfilled quantity from pending order data.
@@ -853,36 +909,41 @@ class UnfilledOrderChaser:
                 print(f"[ORDER_CHASER]   Exit Price: ${mid_price:.2f} (attempt {order.chase_attempts})")
 
             if order.position_key and order.is_risk_order:
-                self._clear_broker_pt_order_id(order.position_key, order.order_id)
-
-            cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
+                cancel_ok = await self._atomic_pt_id_clear_and_cancel(order.position_key, order.order_id, broker, order.asset_type, order.broker_id)
+            else:
+                cancel_ok = await self._cancel_broker_order(broker, order.order_id, order.asset_type, order.broker_id)
             if not cancel_ok:
                 print(f"[ORDER_CHASER] ❌ Failed to cancel exit order — keeping existing order")
-                if order.position_key and order.is_risk_order:
-                    self._sync_broker_pt_order_id(order.position_key, order.order_id, order.order_id)
                 order.status = OrderChaseStatus.PENDING
                 return
             
             print(f"[ORDER_CHASER] ✓ Cancelled original order")
-            
-            await asyncio.sleep(0.2)
 
-            post_cancel_pending = []
-            if hasattr(broker, 'get_pending_orders'):
-                _pc_result = broker.get_pending_orders()
-                if inspect.iscoroutine(_pc_result):
-                    post_cancel_pending = await _pc_result
-                else:
-                    post_cancel_pending = _pc_result
-            still_active = any(
+            post_cancel_pending, settled = await self._wait_for_cancel_settlement(broker, order.order_id, max_checks=3)
+            if not settled:
+                print(f"[ORDER_CHASER] ⚠️ Order {order.order_id} still active after 3 settlement checks — aborting replacement to prevent duplicate")
+                order.status = OrderChaseStatus.PENDING
+                return
+
+            original_total_qty = int(order.quantity)
+            order_in_pending = any(
                 str(po.get('order_id', '')) == str(order.order_id)
                 for po in (post_cancel_pending or [])
             )
-            if still_active:
-                print(f"[ORDER_CHASER] ⚠️ Order {order.order_id} still active after cancel — waiting 0.3s for settlement")
-                await asyncio.sleep(0.3)
+            if not order_in_pending:
+                verified = await self._verify_order_fill(broker, order.order_id, order.symbol, order.asset_type, order.action)
+                if verified == 'PENDING_ACTIVATION':
+                    print(f"[ORDER_CHASER] Order {order.order_id} is PENDING_ACTIVATION during cancel window — not replacing")
+                    order.status = OrderChaseStatus.PENDING
+                    return
+                if verified and verified not in ('CANCELLED', 'UNKNOWN'):
+                    print(f"[ORDER_CHASER] Order {order.order_id} verified as filled during cancel window")
+                    await self.mark_filled(order.order_id)
+                    return
+                replace_qty = original_total_qty
+            else:
+                replace_qty = self._get_remaining_qty(post_cancel_pending, order.order_id, original_total_qty)
 
-            replace_qty = self._get_remaining_qty(post_cancel_pending, order.order_id, remaining_qty)
             if replace_qty <= 0:
                 print(f"[ORDER_CHASER] Order fully filled during cancel window — marking filled")
                 await self.mark_filled(order.order_id)
@@ -904,7 +965,8 @@ class UnfilledOrderChaser:
                 except Exception:
                     pass
                 
-                self._sync_broker_pt_order_id(order.position_key, order.order_id, new_order_id)
+                if order.position_key and order.is_risk_order:
+                    await self._atomic_pt_id_swap(order.position_key, order.order_id, new_order_id)
 
                 async with self._lock:
                     if order.order_id in self._tracked_orders:
@@ -939,7 +1001,8 @@ class UnfilledOrderChaser:
                     print(f"[ORDER_CHASER] ✓ Retry succeeded: {retry_order_id} @ {_retry_price_str}")
                     order.replacement_order_id = retry_order_id
                     order.status = OrderChaseStatus.REPLACED
-                    self._sync_broker_pt_order_id(order.position_key, order.order_id, retry_order_id)
+                    if order.position_key and order.is_risk_order:
+                        await self._atomic_pt_id_swap(order.position_key, order.order_id, retry_order_id)
                     async with self._lock:
                         if order.order_id in self._tracked_orders:
                             del self._tracked_orders[order.order_id]
@@ -1380,7 +1443,8 @@ class UnfilledOrderChaser:
             mkt_order_id = self._extract_order_id(result)
             if mkt_order_id:
                 print(f"[ORDER_CHASER] ✅ Market fallback order placed: {mkt_order_id} for {order.symbol}")
-                self._sync_broker_pt_order_id(order.position_key, order.order_id, mkt_order_id)
+                if order.position_key and order.is_risk_order:
+                    await self._atomic_pt_id_swap(order.position_key, order.order_id, mkt_order_id)
                 try:
                     from gui_app.database import record_order_event
                     record_order_event('CHASER_MARKET_FALLBACK', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=qty, price=0, order_id=mkt_order_id, reason=f"Market fallback after {order.chase_attempts} chase attempts", severity='warning', source='order_chaser', position_key=order.position_key)
@@ -1578,25 +1642,32 @@ class UnfilledOrderChaser:
                 return
             
             print(f"[ORDER_CHASER] ✓ Cancelled original entry order")
-            
-            await asyncio.sleep(0.2)
 
-            post_cancel_pending = []
-            if hasattr(broker, 'get_pending_orders'):
-                _pc_result = broker.get_pending_orders()
-                if inspect.iscoroutine(_pc_result):
-                    post_cancel_pending = await _pc_result
-                else:
-                    post_cancel_pending = _pc_result
-            still_active = any(
+            post_cancel_pending, settled = await self._wait_for_cancel_settlement(broker, order.order_id, max_checks=3)
+            if not settled:
+                print(f"[ORDER_CHASER] ⚠️ Entry order {order.order_id} still active after 3 settlement checks — aborting replacement")
+                order.status = OrderChaseStatus.PENDING
+                return
+
+            original_total_qty = int(order.quantity)
+            order_in_pending = any(
                 str(po.get('order_id', '')) == str(order.order_id)
                 for po in (post_cancel_pending or [])
             )
-            if still_active:
-                print(f"[ORDER_CHASER] ⚠️ Entry order {order.order_id} still active after cancel — waiting 0.3s for settlement")
-                await asyncio.sleep(0.3)
+            if not order_in_pending:
+                verified = await self._verify_order_fill(broker, order.order_id, order.symbol, order.asset_type, order.action)
+                if verified == 'PENDING_ACTIVATION':
+                    print(f"[ORDER_CHASER] Entry order {order.order_id} is PENDING_ACTIVATION during cancel window — not replacing")
+                    order.status = OrderChaseStatus.PENDING
+                    return
+                if verified and verified not in ('CANCELLED', 'UNKNOWN'):
+                    print(f"[ORDER_CHASER] Entry order {order.order_id} verified as filled during cancel window")
+                    await self.mark_entry_filled(order.order_id)
+                    return
+                replace_qty = original_total_qty
+            else:
+                replace_qty = self._get_remaining_qty(post_cancel_pending, order.order_id, original_total_qty)
 
-            replace_qty = self._get_remaining_qty(post_cancel_pending, order.order_id, remaining_qty)
             if replace_qty <= 0:
                 print(f"[ORDER_CHASER] Entry order fully filled during cancel window — marking filled")
                 await self.mark_entry_filled(order.order_id)

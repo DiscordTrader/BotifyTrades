@@ -153,6 +153,15 @@ Entry timeline: ~1s stale → ~1.2s mid → ~2.2s ask → cancel (no market for 
 - **Lease Management**: Chaser releases `ExitLeaseManager` locks on completion/failure, allowing the risk engine to retry.
 - **Startup Recovery**: `_restore_pending_orders()` queries `trades` table for `PENDING` orders to resume chasing after reboot.
 
+### Cancel-Replace Race Protection
+
+The chaser implements strict cancel-replace safety to prevent duplicates:
+
+1. **Strict Cancel Settlement**: `_wait_for_cancel_settlement()` loops up to 3 re-fetches (0.2s apart) confirming the old order is gone. If still active after all checks → **abort replacement entirely** (no duplicate risk).
+2. **Fill Verification on Disappearance**: If order disappears from pending during cancel window, `_verify_order_fill()` checks broker status. If `PENDING_ACTIVATION` → skip replacement (market not open). If verified filled → mark filled. Only replace on `CANCELLED`/`UNKNOWN`.
+3. **Correct Qty Recompute**: Post-cancel replacement uses `original_total_qty = int(order.quantity)` (never pre-subtracted remaining), preventing double-subtraction on cumulative-fill brokers.
+4. **Atomic PT ID Swap**: `_atomic_pt_id_clear_and_cancel()` acquires per-position lock (`_broker_stop_locks`) before clearing PT order ID and cancelling. `_atomic_pt_id_swap()` acquires same lock before syncing new ID. Lock auto-created if absent. This prevents position_monitor from reading stale or None PT IDs during the swap window.
+
 ### Chaser + Progressive Bracket Alignment
 
 When PT1 is placed on the broker and registered with the chaser:
