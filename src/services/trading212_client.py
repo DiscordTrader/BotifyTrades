@@ -34,6 +34,8 @@ class Trading212RateLimiter:
     def _classify(self, path: str, method: str = 'GET') -> str:
         if '/portfolio' in path or '/positions' in path:
             return 'portfolio'
+        if '/history' in path:
+            return 'history'
         if '/orders' in path:
             if method == 'POST':
                 return 'order_placement'
@@ -42,8 +44,6 @@ class Trading212RateLimiter:
             return 'account'
         if '/instruments' in path or '/metadata' in path:
             return 'instruments'
-        if '/history' in path:
-            return 'history'
         return 'default'
 
     async def acquire(self, path: str, method: str = 'GET'):
@@ -200,7 +200,7 @@ class Trading212Client:
         return await self.get('/equity/positions')
 
     async def get_position(self, ticker: str) -> Dict[str, Any]:
-        return await self.get(f'/equity/positions?ticker={ticker}')
+        return await self.get(f'/equity/positions/{ticker}')
 
     async def get_orders(self) -> Dict[str, Any]:
         return await self.get('/equity/orders')

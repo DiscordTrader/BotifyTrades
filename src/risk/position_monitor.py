@@ -5846,9 +5846,8 @@ class RiskManager:
                 print(f"[RISK] 📊 Penny stock (${position.current_price:.4f}) — using limit order per channel settings")
 
             if not use_market and 'TRADING212' in position.broker.upper():
-                if is_sl_type_exit or decision.risk_trigger in ('ema_exit', 'ema_no_trend', 'profit_target'):
-                    use_market = True
-                    print(f"[RISK] 📊 Trading212 has no bid/ask streaming — using market order for {decision.risk_trigger}")
+                use_market = True
+                print(f"[RISK] 📊 Trading212 exit → market order (trigger: {decision.risk_trigger or 'unknown'})")
 
             if use_market:
                 stc_signal['_use_market_order'] = True
