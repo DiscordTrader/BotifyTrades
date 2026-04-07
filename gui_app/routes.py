@@ -7801,7 +7801,50 @@ def register_routes(app):
                     
                     pos_broker = pos.get('broker', 'Webull')
                     
+                    recovered_channel = None
+                    recovered_channel_info = None
+                    try:
+                        conn_ch = db.get_connection()
+                        cur_ch = conn_ch.cursor()
+                        if pos_asset == 'option':
+                            cur_ch.execute('''
+                                SELECT t.channel_id, c.name as channel_name, c.profit_target_1_pct, c.profit_target_2_pct, 
+                                       c.profit_target_3_pct, c.stop_loss_pct
+                                FROM trades t
+                                LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                                    OR t.channel_id = CAST(c.id AS TEXT)
+                                    OR t.channel_id = c.telegram_chat_id)
+                                WHERE t.symbol = ? AND t.asset_type = 'option' AND LOWER(t.broker) = LOWER(?)
+                                AND t.direction = 'BTO'
+                                ORDER BY t.id DESC LIMIT 1
+                            ''', (pos['symbol'], pos_broker))
+                        else:
+                            cur_ch.execute('''
+                                SELECT t.channel_id, c.name as channel_name, c.profit_target_1_pct, c.profit_target_2_pct, 
+                                       c.profit_target_3_pct, c.stop_loss_pct
+                                FROM trades t
+                                LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                                    OR t.channel_id = CAST(c.id AS TEXT)
+                                    OR t.channel_id = c.telegram_chat_id)
+                                WHERE t.symbol = ? AND t.asset_type = 'stock' AND LOWER(t.broker) = LOWER(?)
+                                AND t.direction = 'BTO'
+                                ORDER BY t.id DESC LIMIT 1
+                            ''', (pos['symbol'], pos_broker))
+                        recovered_channel = cur_ch.fetchone()
+                        if recovered_channel and recovered_channel[1]:
+                            recovered_channel_info = {
+                                'channel_id': recovered_channel[0],
+                                'channel_name': recovered_channel[1],
+                                'profit_target_1_pct': recovered_channel[2] or 20,
+                                'profit_target_2_pct': recovered_channel[3] or 50,
+                                'profit_target_3_pct': recovered_channel[4] or 100,
+                                'stop_loss_pct': recovered_channel[5] or 10,
+                            }
+                    except Exception:
+                        pass
+                    
                     untracked_qty = pos['quantity']
+                    ch_name = recovered_channel_info['channel_name'] if recovered_channel_info else 'Global'
                     live_pos_trade = {
                         'id': stable_id,
                         'symbol': pos['symbol'],
@@ -7821,18 +7864,22 @@ def register_routes(app):
                         'option_id': pos.get('option_id'),
                         'source': 'sync',
                         'fill_status': 'Filled',
-                        'channel_name': 'Global',
-                        'profit_target_1_pct': 20,
-                        'profit_target_2_pct': 50,
-                        'profit_target_3_pct': 100,
-                        'stop_loss_pct': 10,
+                        'channel_id': recovered_channel_info['channel_id'] if recovered_channel_info else None,
+                        'channel_name': ch_name,
+                        'profit_target_1_pct': recovered_channel_info['profit_target_1_pct'] if recovered_channel_info else 20,
+                        'profit_target_2_pct': recovered_channel_info['profit_target_2_pct'] if recovered_channel_info else 50,
+                        'profit_target_3_pct': recovered_channel_info['profit_target_3_pct'] if recovered_channel_info else 100,
+                        'stop_loss_pct': recovered_channel_info['stop_loss_pct'] if recovered_channel_info else 10,
                     }
-                    live_pos_trade['source_display'] = {
-                        'name': f'{pos_broker} Sync',
-                        'color': 'gray',
-                        'icon': '🔄',
-                        'full_name': f'Position from {pos_broker}'
-                    }
+                    if recovered_channel_info:
+                        live_pos_trade['source_display'] = db.get_trade_source_display(live_pos_trade)
+                    else:
+                        live_pos_trade['source_display'] = {
+                            'name': f'{pos_broker} Sync',
+                            'color': 'gray',
+                            'icon': '🔄',
+                            'full_name': f'Position from {pos_broker}'
+                        }
                     merged.append(live_pos_trade)
             
             # Add pending Webull orders not tracked in database (only if status filter allows)
