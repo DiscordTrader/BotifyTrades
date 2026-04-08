@@ -16,6 +16,12 @@ def get_position_cache() -> 'PositionCache':
     """Get the global PositionCache instance from the active RiskManager.
     This is the singleton accessor used by partial exit and other modules.
     Returns a fallback PositionCache if RiskManager not yet initialized."""
+    import sys
+    for mod_name in ('src.risk.position_monitor', 'risk.position_monitor'):
+        mod = sys.modules.get(mod_name)
+        rm = getattr(mod, 'risk_manager_instance', None) if mod else None
+        if rm and hasattr(rm, 'cache'):
+            return rm.cache
     try:
         from .position_monitor import risk_manager_instance
         if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
@@ -906,8 +912,26 @@ class PositionCache:
             state_key = str(trade_id) if trade_id else pos_key
             
             cs = entry.channel_settings
-            has_stop_loss = entry.stop_loss_price is not None
-            has_profit_target = entry.profit_target_price is not None
+            
+            sl_price = entry.stop_loss_price
+            pt_price = entry.profit_target_price
+            ep = entry.entry_price
+            if ep and ep > 0 and cs:
+                if sl_price is None and hasattr(cs, 'stop_loss_pct') and cs.stop_loss_pct and cs.stop_loss_pct > 0:
+                    sl_price = ep * (1 - cs.stop_loss_pct / 100.0)
+                if pt_price is None and hasattr(cs, 'profit_target_1_pct') and cs.profit_target_1_pct and cs.profit_target_1_pct > 0:
+                    _next_pct = cs.profit_target_1_pct
+                    if entry.tier1_hit and hasattr(cs, 'profit_target_2_pct') and cs.profit_target_2_pct and cs.profit_target_2_pct > 0:
+                        _next_pct = cs.profit_target_2_pct
+                    if entry.tier2_hit and hasattr(cs, 'profit_target_3_pct') and cs.profit_target_3_pct and cs.profit_target_3_pct > 0:
+                        _next_pct = cs.profit_target_3_pct
+                    if entry.tier3_hit and hasattr(cs, 'profit_target_4_pct') and cs.profit_target_4_pct and cs.profit_target_4_pct > 0:
+                        _next_pct = cs.profit_target_4_pct
+                    pt_price = ep * (1 + _next_pct / 100.0)
+            
+            _effective_sl = entry.dynamic_sl_price or entry.early_stop_price or sl_price
+            has_stop_loss = _effective_sl is not None
+            has_profit_target = pt_price is not None
             
             early_trail_enabled = bool(cs and cs.enable_early_trailing) if cs else False
             giveback_enabled = bool(cs and cs.enable_giveback_guard) if cs else False
@@ -915,8 +939,8 @@ class PositionCache:
             dynamic_sl_enabled = bool(cs and cs.enable_dynamic_sl) if cs else False
             
             current_pnl_pct = 0.0
-            if entry.entry_price and entry.entry_price > 0 and entry.last_evaluated_price:
-                current_pnl_pct = ((entry.last_evaluated_price - entry.entry_price) / entry.entry_price) * 100
+            if ep and ep > 0 and entry.last_evaluated_price:
+                current_pnl_pct = ((entry.last_evaluated_price - ep) / ep) * 100
             
             tiers_hit = []
             if entry.tier1_hit:
@@ -931,15 +955,21 @@ class PositionCache:
             result[state_key] = {
                 'position_key': pos_key,
                 'monitoring': True,
-                'entry_price': entry.entry_price,
+                'entry_price': ep,
                 'highest_price': entry.highest_price,
                 'current_price': entry.last_evaluated_price,
                 'current_pnl_pct': round(current_pnl_pct, 2),
                 'max_pnl_seen': round(entry.max_pnl_seen, 2),
                 'stop_loss_active': has_stop_loss,
-                'stop_loss_price': entry.stop_loss_price,
+                'stop_loss_price': _effective_sl if _effective_sl else sl_price,
+                'stop_loss_pct': cs.stop_loss_pct if cs and hasattr(cs, 'stop_loss_pct') else None,
                 'profit_target_active': has_profit_target,
-                'profit_target_price': entry.profit_target_price,
+                'profit_target_price': pt_price,
+                'profit_target_pcts': [
+                    cs.profit_target_1_pct if cs and hasattr(cs, 'profit_target_1_pct') else None,
+                    cs.profit_target_2_pct if cs and hasattr(cs, 'profit_target_2_pct') else None,
+                    cs.profit_target_3_pct if cs and hasattr(cs, 'profit_target_3_pct') else None,
+                ],
                 'trailing_enabled': trailing_enabled,
                 'trailing_activated': entry.trailing_activated,
                 'trailing_stop_price': entry.trailing_stop_price,
@@ -956,6 +986,8 @@ class PositionCache:
                 'dynamic_sl_price': entry.dynamic_sl_price,
                 'tiers_hit': tiers_hit,
                 'closing': entry.closing,
+                'channel_name': cs.channel_name if cs and hasattr(cs, 'channel_name') else None,
+                'exit_mode': cs.exit_strategy_mode if cs and hasattr(cs, 'exit_strategy_mode') else None,
             }
         return result
 

@@ -7095,8 +7095,18 @@ def register_routes(app):
     def api_get_risk_status():
         """Get live risk engine state for all monitored positions."""
         try:
-            from src.risk.position_cache import get_position_cache
-            cache = get_position_cache()
+            import sys
+            cache = None
+            for mod_name in ('src.risk.position_monitor', 'risk.position_monitor'):
+                mod = sys.modules.get(mod_name)
+                rm = getattr(mod, 'risk_manager_instance', None) if mod else None
+                if rm and hasattr(rm, 'cache'):
+                    cache = rm.cache
+                    break
+            if cache is None:
+                from src.risk.position_cache import get_position_cache
+                cache = get_position_cache()
+            
             states = cache.get_all_risk_states()
             return jsonify({'success': True, 'risk_states': states})
         except Exception as e:
