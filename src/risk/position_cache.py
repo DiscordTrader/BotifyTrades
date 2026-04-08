@@ -211,6 +211,10 @@ class PositionCache:
             traceback.print_exc()
             return 0
     
+    def get_all_trade_id_keys(self) -> set:
+        """Return set of position keys that have trade_id mappings (actively risk-managed)."""
+        return set(self._trade_id_map.keys())
+
     def get_trade_id(self, position_key: str) -> Optional[int]:
         """Get trade_id for a position key, used for database persistence."""
         return self._trade_id_map.get(position_key)

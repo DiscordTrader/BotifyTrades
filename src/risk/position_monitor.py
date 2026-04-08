@@ -6809,9 +6809,24 @@ class RiskManager:
         _MAX_REST_REPAIRS_PER_CYCLE = 3
         rest_repairs_this_cycle = 0
 
+        _tracked_keys = set(self.cache.get_all_trade_id_keys())
+
         stuck_candidates = []
         for pos in positions:
             key = self._pos_tracking_key(pos)
+            _pos_key = pos.position_key
+            if _pos_key not in _tracked_keys:
+                tracker = self._stuck_price_tracker.get(key)
+                if tracker is None:
+                    self._stuck_price_tracker[key] = {
+                        'last_price': pos.current_price,
+                        'last_changed': now,
+                        'rest_refreshed': 0
+                    }
+                elif abs(pos.current_price - tracker['last_price']) > 0.0001:
+                    tracker['last_price'] = pos.current_price
+                    tracker['last_changed'] = now
+                continue
             tracker = self._stuck_price_tracker.get(key)
             if tracker is None:
                 self._stuck_price_tracker[key] = {
