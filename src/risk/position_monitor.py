@@ -2910,9 +2910,8 @@ class RiskManager:
                 except (ImportError, Exception):
                     pass
                 if _schwab_streaming:
-                    if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < 120:
+                    if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
                         return list(self._last_schwab_positions)
-                    return []
                 if not _has_open and not self._has_active_fill_watches():
                     _disc_age = _time.time() - getattr(self, '_schwab_discovery_ts', 0)
                     if _disc_age < 60:
