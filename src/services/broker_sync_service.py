@@ -2807,9 +2807,28 @@ class BrokerSyncService:
                             risk_manager.cache.confirm_order_fill(position_key, order_id, filled_qty)
                             print(f"[SYNC] ✅ Risk order {order_id} FILLED - Tier {tier} confirmed")
                         elif status in ('CANCELLED', 'REJECTED', 'EXPIRED'):
-                            # Order failed - clear pending so tier can retry
                             risk_manager.cache.fail_pending_order(position_key, order_id)
                             print(f"[SYNC] ❌ Risk order {order_id} {status} - Tier {tier} will retry")
+                            try:
+                                from gui_app.database import get_connection as _sync_gc
+                                _sc = _sync_gc()
+                                _scur = _sc.cursor()
+                                _scur.execute(
+                                    "SELECT id, origin_trade_id FROM trades WHERE order_id = ? AND direction = 'STC' AND status = 'CLOSED'",
+                                    (str(order_id),)
+                                )
+                                for _pr in _scur.fetchall():
+                                    _scur.execute("DELETE FROM trades WHERE id = ?", (_pr['id'],))
+                                    print(f"[SYNC] 🗑️ Deleted phantom STC trade #{_pr['id']} (order {order_id} was {status})")
+                                    if _pr['origin_trade_id']:
+                                        _scur.execute("SELECT status FROM trades WHERE id = ? AND direction = 'BTO'", (_pr['origin_trade_id'],))
+                                        _orow = _scur.fetchone()
+                                        if _orow and _orow['status'] == 'CLOSED':
+                                            _scur.execute("UPDATE trades SET status = 'OPEN', closed_at = NULL WHERE id = ?", (_pr['origin_trade_id'],))
+                                            print(f"[SYNC] ✅ Reopened origin BTO trade #{_pr['origin_trade_id']} (was closed by phantom STC)")
+                                _sc.commit()
+                            except Exception as _sdb_err:
+                                print(f"[SYNC] ⚠️ Could not clean up phantom trades: {_sdb_err}")
                         elif status == 'PARTIALLY_FILLED' and filled_qty > 0:
                             # Partial fill - update tracking via cache entry
                             entry = risk_manager.cache.get(position_key)

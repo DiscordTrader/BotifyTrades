@@ -873,6 +873,35 @@ class UnfilledOrderChaser:
                                     print(f"[ORDER_CHASER] ✓ Cleared stale broker_pt_order_id for {order.position_key}")
                         except Exception as e:
                             print(f"[ORDER_CHASER] ⚠️ Could not clear exit lock after rejection: {e}")
+                        try:
+                            from gui_app.database import get_connection as _oc_gc
+                            _oc_conn = _oc_gc()
+                            _oc_cur = _oc_conn.cursor()
+                            _oc_cur.execute(
+                                "SELECT id, origin_trade_id FROM trades WHERE order_id = ? AND direction = 'STC' AND status = 'CLOSED'",
+                                (str(order.order_id),)
+                            )
+                            phantom_rows = _oc_cur.fetchall()
+                            for phantom in phantom_rows:
+                                phantom_id = phantom['id']
+                                origin_id = phantom['origin_trade_id']
+                                _oc_cur.execute("DELETE FROM trades WHERE id = ?", (phantom_id,))
+                                print(f"[ORDER_CHASER] 🗑️ Deleted phantom STC trade #{phantom_id} (order {order.order_id} was rejected)")
+                                if origin_id:
+                                    _oc_cur.execute(
+                                        "SELECT id, status FROM trades WHERE id = ? AND direction = 'BTO'",
+                                        (origin_id,)
+                                    )
+                                    origin_row = _oc_cur.fetchone()
+                                    if origin_row and origin_row['status'] == 'CLOSED':
+                                        _oc_cur.execute(
+                                            "UPDATE trades SET status = 'OPEN', closed_at = NULL WHERE id = ?",
+                                            (origin_id,)
+                                        )
+                                        print(f"[ORDER_CHASER] ✅ Reopened origin BTO trade #{origin_id} (was closed by phantom STC)")
+                            _oc_conn.commit()
+                        except Exception as db_err:
+                            print(f"[ORDER_CHASER] ⚠️ Could not clean up phantom trades after rejection: {db_err}")
                     return
                 if verified == 'UNKNOWN':
                     print(f"[ORDER_CHASER] Order {order.order_id} status UNKNOWN — treating as cancelled (safe default, will retry)")
