@@ -86,21 +86,23 @@ class PositionCache:
             return 0
     
     def _normalize_broker_name(self, broker: str) -> str:
-        """Normalize broker name to match cache format (e.g., WEBULL -> Webull)."""
+        """Normalize broker name to match cache format used by sync service."""
         broker_map = {
             'WEBULL': 'Webull',
             'ALPACA_PAPER': 'ALPACA_PAPER',
             'ALPACA_LIVE': 'ALPACA_LIVE',
             'ROBINHOOD': 'Robinhood',
-            'SCHWAB': 'Schwab',
+            'SCHWAB': 'SCHWAB',
             'IBKR': 'IBKR',
-            'TASTYTRADE': 'Tastytrade',
+            'TASTYTRADE': 'TASTYTRADE_LIVE',
+            'TASTYTRADE_LIVE': 'TASTYTRADE_LIVE',
+            'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
             'QUESTRADE': 'Questrade',
             'UPSTOX': 'Upstox',
             'ZERODHA': 'Zerodha',
             'DHANQ': 'DhanQ',
-            'TRADING212': 'Trading212',
-            'TRADING212_PAPER': 'Trading212_Paper',
+            'TRADING212': 'TRADING212',
+            'TRADING212_PAPER': 'TRADING212_PAPER',
         }
         return broker_map.get(broker.upper(), broker)
     
@@ -1036,11 +1038,13 @@ class PositionCache:
             added = 0
             
             for trade in trades:
-                broker = trade['broker'] or 'UNKNOWN'
+                raw_broker = trade['broker'] or 'UNKNOWN'
+                broker = self._normalize_broker_name(raw_broker)
                 asset_type = trade['asset_type'] or 'stock'
                 
                 if asset_type == 'option' and trade['strike']:
-                    pos_key = f"{broker}_{trade['symbol']}_{trade['strike']}_{trade['expiry']}_{trade['call_put']}"
+                    expiry = self._normalize_expiry(trade['expiry'] or '')
+                    pos_key = f"{broker}_{trade['symbol']}_{trade['strike']}_{expiry}_{trade['call_put']}"
                 else:
                     pos_key = f"{broker}_{trade['symbol']}_stock"
                 
