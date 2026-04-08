@@ -90,3 +90,9 @@ id = "ZHxT-JqT_3OeB6Wq0Rz7u"
 uri = "file://docs/ema_stop_loss_bug_analysis.md"
 type = "text"
 title = "EMA Stop Loss Bug Analysis & Fix — Full Document"
+
+[[outputs]]
+id = "nzA2eWeyPfoH4P-wZfWNr"
+uri = "file://docs/risk_features_comparison.md"
+type = "text"
+title = "Risk Features Comparison: Early Trailing vs Dynamic SL vs Escalation Only"
