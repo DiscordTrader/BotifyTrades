@@ -2372,10 +2372,25 @@ class RiskManager:
                         print(f"[RISK] 🆕 NEW POSITION DETECTED: {p.symbol} on {p.broker} "
                               f"(qty={p.quantity}, avg_cost=${p.avg_cost}, current=${p.current_price}) — "
                               f"risk engine will evaluate immediately")
+                    if not hasattr(self, '_removal_debounce'):
+                        self._removal_debounce = {}
+                    self._removal_debounce.pop(nk, None)
             
+            if not hasattr(self, '_removal_debounce'):
+                self._removal_debounce = {}
             if real_removed_keys:
+                import time as _dbt
+                _db_now = _dbt.time()
                 for rk in real_removed_keys:
-                    print(f"[RISK] 📤 Position closed externally: {rk}")
+                    if rk not in self._removal_debounce:
+                        self._removal_debounce[rk] = _db_now
+                    elif (_db_now - self._removal_debounce[rk]) >= 5.0:
+                        print(f"[RISK] 📤 Position closed externally: {rk}")
+                        self._removal_debounce.pop(rk, None)
+                canonical_keys = canonical_keys | {rk for rk in real_removed_keys if rk in self._removal_debounce}
+            _stale_debounce = [k for k in self._removal_debounce if k not in (real_removed_keys or set()) and k not in canonical_keys]
+            for sk in _stale_debounce:
+                self._removal_debounce.pop(sk, None)
             
             self._prev_position_keys = canonical_keys
             
@@ -2440,6 +2455,14 @@ class RiskManager:
                     stale_imports = self._auto_imported_keys - broker_position_keys
                     if stale_imports:
                         self._auto_imported_keys -= stale_imports
+                if hasattr(self, '_pending_trade_match_keys'):
+                    stale_pending = self._pending_trade_match_keys - broker_position_keys
+                    if stale_pending:
+                        self._pending_trade_match_keys -= stale_pending
+                if hasattr(self, '_skipped_external_logged'):
+                    stale_skipped = self._skipped_external_logged - broker_position_keys
+                    if stale_skipped:
+                        self._skipped_external_logged -= stale_skipped
             elif len(self.cache) > 0:
                 self._zero_position_cleanup_count += 1
                 if self._zero_position_cleanup_count >= 3:
@@ -3441,6 +3464,17 @@ class RiskManager:
                 call_put=call_put
             )
             if trade_id:
+                if not hasattr(self, '_pending_trade_match_keys'):
+                    self._pending_trade_match_keys = set()
+                was_pending = pos_key in self._pending_trade_match_keys
+                if was_pending:
+                    self._pending_trade_match_keys.discard(pos_key)
+                    if hasattr(self, '_skipped_external_logged'):
+                        self._skipped_external_logged.discard(pos_key)
+                    print(f"[RISK] 🆕 TRADE MATCHED: {position.symbol} on {position.broker} "
+                          f"now linked to trade #{trade_id} "
+                          f"(qty={position.quantity}, avg_cost=${position.avg_cost}, current=${position.current_price}) — "
+                          f"risk engine activating")
                 enriched = self._enrich_position_from_trade(position, trade_id, pos_key, broker_position_keys)
                 if enriched:
                     position = enriched[0]
@@ -3451,6 +3485,10 @@ class RiskManager:
                     )
                 self.cache.set_trade_id(pos_key, trade_id)
             else:
+                if not hasattr(self, '_pending_trade_match_keys'):
+                    self._pending_trade_match_keys = set()
+                self._pending_trade_match_keys.add(pos_key)
+                
                 auto_import_enabled = False
                 try:
                     import time as _ai_time
@@ -3471,7 +3509,7 @@ class RiskManager:
                         self._skipped_external_logged = set()
                     if pos_key not in self._skipped_external_logged:
                         self._skipped_external_logged.add(pos_key)
-                        print(f"[RISK] ⏭️ Skipping external position {pos_key} — auto-import disabled")
+                        print(f"[RISK] ⏭️ Skipping external position {pos_key} — auto-import disabled (will re-check for trade match)")
                     return
                 
                 if not hasattr(self, '_auto_imported_keys'):
