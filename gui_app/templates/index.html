@@ -1334,8 +1334,13 @@ async function fetchDashboardRiskStates() {
         const states = data.risk_states || {};
         dashboardRiskStates = states;
         
+        const stateKeys = Object.keys(states);
+        console.log('[RISK-DEBUG] state keys:', stateKeys.slice(0, 10), 'total:', stateKeys.length);
         document.querySelectorAll('.risk-engine-strip').forEach(strip => {
+            const _tid = strip.getAttribute('data-re-trade-id');
+            const _pk = strip.getAttribute('data-re-pos-key');
             const rs = matchRiskStateForCard(strip, states);
+            if (!rs) console.log('[RISK-DEBUG] NO MATCH for trade_id=', _tid, 'pos_key=', _pk);
             
             const badgesContainer = strip.querySelector('.re-badges');
             if (!badgesContainer) return;

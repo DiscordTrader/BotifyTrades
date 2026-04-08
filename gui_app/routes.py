@@ -938,6 +938,8 @@ def register_routes(app):
         # Allow conditional orders status API (for debugging)
         if request.path == '/api/conditional_orders/status':
             return None
+        if request.path == '/api/debug-risk-keys':
+            return None
         # Allow user dashboard routes (handled by user_login_required decorator)
         if request.path.startswith('/user/') or request.path.startswith('/api/user/'):
             return None
@@ -7090,6 +7092,30 @@ def register_routes(app):
             print(f"[API] Error updating risk settings: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/debug-risk-keys', methods=['GET'])
+    def api_debug_risk_keys():
+        """Temporary debug: show risk state keys and position keys."""
+        try:
+            import sys
+            cache = None
+            for mod_name in ('src.risk.position_monitor', 'risk.position_monitor'):
+                mod = sys.modules.get(mod_name)
+                rm = getattr(mod, 'risk_manager_instance', None) if mod else None
+                if rm and hasattr(rm, 'cache'):
+                    cache = rm.cache
+                    break
+            if cache is None:
+                return jsonify({'error': 'no cache found'})
+            states = cache.get_all_risk_states()
+            summary = {}
+            for k, v in states.items():
+                summary[k] = {'position_key': v.get('position_key'), 'monitoring': v.get('monitoring'), 'entry_price': v.get('entry_price')}
+            cache_keys = list(cache._cache.keys()) if hasattr(cache, '_cache') else []
+            schwab_cache = [k for k in cache_keys if 'SCHWAB' in k.upper()]
+            return jsonify({'total': len(states), 'cache_size': len(cache_keys), 'schwab_cache_keys': schwab_cache, 'states': summary})
+        except Exception as e:
+            return jsonify({'error': str(e)})
+
     @app.route('/api/risk-status', methods=['GET'])
     @login_required
     def api_get_risk_status():
@@ -7108,6 +7134,12 @@ def register_routes(app):
                 cache = get_position_cache()
             
             states = cache.get_all_risk_states()
+            schwab_keys = [k for k in states.keys() if 'SCHWAB' in k.upper() or (states[k].get('position_key','') and 'SCHWAB' in states[k]['position_key'].upper())]
+            if schwab_keys:
+                print(f"[API DEBUG] Schwab risk state keys: {schwab_keys}")
+                for sk in schwab_keys:
+                    print(f"[API DEBUG]   {sk} -> pos_key={states[sk].get('position_key')}")
+            print(f"[API DEBUG] Total risk states: {len(states)}, keys sample: {list(states.keys())[:5]}")
             return jsonify({'success': True, 'risk_states': states})
         except Exception as e:
             print(f"[API] Error fetching risk status: {e}")
