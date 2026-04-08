@@ -84,7 +84,10 @@ def smart_print(*args, **kwargs) -> None:
     - Logs ALL messages to rotating files for admin debugging
     - Verbose details ([CONFIG], [LICENSE]) only shown when debug mode ON
     """
-    message = ' '.join(str(arg) for arg in args)
+    try:
+        message = ' '.join(str(arg) for arg in args)
+    except Exception:
+        message = repr(args)
     logger = _get_logger()
     
     if any(tag in message for tag in ['[ERROR]', '[CRITICAL]']):

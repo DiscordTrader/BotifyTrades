@@ -74,6 +74,17 @@ def rotate_logs_on_startup():
 rotate_logs_on_startup()
 
 
+def _safe_str(msg):
+    """Ensure string is safe for any output encoding (replace unencodable chars)."""
+    if isinstance(msg, bytes):
+        return msg.decode('utf-8', errors='replace')
+    try:
+        msg.encode('utf-8')
+        return msg
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return msg.encode('ascii', errors='replace').decode('ascii')
+
+
 class CleanConsoleFormatter(logging.Formatter):
     """Custom formatter for clean console output - trading signals, broker status, errors"""
     
@@ -86,7 +97,7 @@ class CleanConsoleFormatter(logging.Formatter):
         # Order execution
         '[ORDER]', '[FILLED]', '[CANCELLED]', '[QUEUE]',
         # Errors/Warnings
-        '[ERROR]', '[CRITICAL]', '[WARNING]', '⚠️',
+        '[ERROR]', '[CRITICAL]', '[WARNING]',
         # Broker initialization
         '[Webull]', '[WEBULL]', '[PAPER]', '[LIVE]', '[ASYNC]', '[Init]', '[Discord]',
         '[ALPACA]', '[TASTYTRADE]', '[ROBINHOOD]', '[IBKR]', '[SCHWAB]',
@@ -109,16 +120,20 @@ class CleanConsoleFormatter(logging.Formatter):
         '[EMA]',
         # Unified Price Hub
         '[UPH]',
+        # IBKR Data Hub
+        '[IBKR_HUB]',
         # Debug (when enabled)
         '[DEBUG]', '[API]', '[ROUTE]'
     ]
     
     def format(self, record):
-        msg = record.getMessage()
+        try:
+            msg = _safe_str(record.getMessage())
+        except Exception:
+            msg = str(record.msg)
         
         # STRICT: Only show whitelisted messages in console
         if any(msg.startswith(prefix) for prefix in self.CONSOLE_WHITELIST):
-            # Add EST timestamp to console output
             est_time = datetime.now(EST).strftime('%H:%M:%S')
             return f"[{est_time} EST] {msg}"
         
@@ -130,8 +145,12 @@ class DetailedFileFormatter(logging.Formatter):
     """Formatter for detailed file logs with EST timestamps"""
     
     def format(self, record):
-        est_time = datetime.now(EST).strftime('%Y-%m-%d %H:%M:%S')
-        return f"{est_time} EST - {record.levelname} - {record.getMessage()}"
+        try:
+            est_time = datetime.now(EST).strftime('%Y-%m-%d %H:%M:%S')
+            msg = _safe_str(record.getMessage())
+            return f"{est_time} EST - {record.levelname} - {msg}"
+        except Exception:
+            return f"LOG_FORMAT_ERROR - {record.msg}"
 
 
 def setup_logging():
@@ -147,8 +166,13 @@ def setup_logging():
     # ========================================
     # CONSOLE HANDLER (Debug mode enabled)
     # ========================================
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)  # Changed to DEBUG for detailed output
+    try:
+        import io
+        console_stream = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        console_handler = logging.StreamHandler(console_stream)
+    except (AttributeError, Exception):
+        console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(CleanConsoleFormatter())
     
     # Custom filter to suppress verbose messages
