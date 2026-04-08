@@ -73,16 +73,19 @@ class USConditionalOrderService(BaseConditionalOrderService):
         alt_hub_name = None
         alt_hub_streaming = False
         alt_hub_broker = None
-        for alt_key in ['schwab', 'webull', 'ibkr', 'trading212']:
+        alt_hub_can_stream = False
+        for alt_key in ['webull', 'schwab', 'ibkr', 'tastytrade', 'trading212']:
             if alt_key == broker_key:
                 continue
             alt = self.get_data_hub(alt_key)
             if alt:
                 alt_streaming = self.is_hub_streaming(alt_key)
-                if alt_hub is None or (alt_streaming and not alt_hub_streaming):
+                alt_has_streaming = hasattr(alt, 'is_streaming')
+                if alt_hub is None or (alt_streaming and not alt_hub_streaming) or (alt_has_streaming and not alt_hub_can_stream and not alt_hub_streaming):
                     alt_hub = alt
                     alt_hub_name = alt_key
                     alt_hub_streaming = alt_streaming
+                    alt_hub_can_stream = alt_has_streaming
                     alt_hub_broker = self.broker_instances.get(alt_key)
                 if alt_hub_streaming:
                     break
@@ -115,7 +118,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
             self._log(f"[P3] REST API for {symbol} via {broker_name}")
             monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)
         
-        elif hub:
+        elif hub and hasattr(hub, 'is_streaming'):
             data_source = f"{broker_key}_stream"
             self._log(f"[P4] Hub (pending stream) for {symbol} via {broker_name} (will auto-upgrade)")
             monitor = StreamingPriceMonitor(
@@ -126,12 +129,21 @@ class USConditionalOrderService(BaseConditionalOrderService):
         
         elif alt_hub:
             data_source = f"{alt_hub_name}_stream"
-            self._log(f"[P5] Alt hub (pending stream) for {symbol} via {alt_hub_name} (will auto-upgrade, order broker={broker_name})")
+            self._log(f"[P5] Alt hub for {symbol} via {alt_hub_name} (order broker={broker_name})")
             monitor = StreamingPriceMonitor(
                 symbol, price_callback, alt_hub, alt_hub_name,
                 broker_instance=alt_hub_broker,
                 alt_broker_instances=alt_brokers,
                 order_broker=broker_name
+            )
+        
+        elif hub:
+            data_source = f"{broker_key}_rest"
+            self._log(f"[P5b] REST-only hub for {symbol} via {broker_name} (no streaming capability)")
+            monitor = StreamingPriceMonitor(
+                symbol, price_callback, hub, broker_name,
+                broker_instance=broker_instance,
+                alt_broker_instances=alt_brokers
             )
         
         else:
