@@ -363,8 +363,6 @@ class PositionCache:
                 original_qty=int(position.quantity)
             )
             self._cache[pos_key] = entry
-            if 'SCHWAB' in pos_key.upper():
-                print(f"[CACHE DEBUG] Created entry for {pos_key}, cache size={len(self._cache)}, entry_price={entry.entry_price}")
             
             trade_id = self._trade_id_map.get(pos_key)
             if trade_id:
@@ -1156,9 +1154,6 @@ class PositionCache:
         """Remove cache entries not in active positions. Returns count removed."""
         with self._cache_lock:
             stale = [k for k in self._cache.keys() if k not in active_keys]
-            schwab_stale = [k for k in stale if 'SCHWAB' in k.upper()]
-            if schwab_stale:
-                print(f"[CACHE DEBUG] cleanup_stale removing Schwab keys: {schwab_stale}, active_keys has SCHWAB: {[k for k in active_keys if 'SCHWAB' in k.upper()]}")
             for key in stale:
                 del self._cache[key]
                 old_trade_id = self._trade_id_map.pop(key, None)

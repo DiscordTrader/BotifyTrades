@@ -3599,15 +3599,22 @@ class RiskManager:
             return
 
         if channel_settings and not cache.broker_orders_placed:
-            _exit_mode = channel_settings.exit_strategy_mode
-            _has_levels = (channel_settings.stop_loss_pct > 0 or channel_settings.profit_target_1_pct > 0)
-            if _has_levels:
-                try:
-                    await self._place_initial_broker_bracket(position, cache, channel_settings)
-                except Exception as e:
-                    print(f"[RISK] ⚠️ Initial broker bracket failed (non-blocking): {e}")
-            elif not _has_levels:
-                print(f"[RISK] ⏭ No SL/PT levels configured — skipping broker bracket (exit_mode={_exit_mode})")
+            _bracket_attempts = getattr(cache, '_bracket_attempt_count', 0)
+            if _bracket_attempts >= 3:
+                if _bracket_attempts == 3:
+                    print(f"[RISK] ⚠️ Bracket placement failed 3 times for {position.symbol} on {position.broker} — giving up (risk engine will manage exits)")
+                    cache._bracket_attempt_count = _bracket_attempts + 1
+            else:
+                _exit_mode = channel_settings.exit_strategy_mode
+                _has_levels = (channel_settings.stop_loss_pct > 0 or channel_settings.profit_target_1_pct > 0)
+                if _has_levels:
+                    try:
+                        cache._bracket_attempt_count = _bracket_attempts + 1
+                        await self._place_initial_broker_bracket(position, cache, channel_settings)
+                    except Exception as e:
+                        print(f"[RISK] ⚠️ Initial broker bracket failed attempt {_bracket_attempts + 1}/3 (non-blocking): {e}")
+                elif not _has_levels:
+                    print(f"[RISK] ⏭ No SL/PT levels configured — skipping broker bracket (exit_mode={_exit_mode})")
 
         # Check exit_strategy_mode - if 'signal', skip automated risk evaluation
         # 'signal' mode = follow trader exit signals only, no automated exits
@@ -4391,11 +4398,6 @@ class RiskManager:
             else:
                 tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
                 pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
-
-            _trim_mode = getattr(channel_settings, 'trim_order_mode', 'limit') or 'limit'
-            if _trim_mode == 'market':
-                pt1_qty = 0
-                pt1_price = None
 
             _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
             _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
