@@ -7636,47 +7636,70 @@ class SelfClient(discord.Client):
         # Start broker initialization in background - Discord stays responsive
         asyncio.create_task(self._init_brokers_background())
     
+    def _is_broker_disabled(self, broker_name: str) -> bool:
+        """Check if a broker is in the disabled_brokers setting."""
+        try:
+            from gui_app.database import get_setting
+            disabled = get_setting('disabled_brokers', '')
+            if disabled:
+                disabled_list = [b.strip().upper() for b in disabled.split(',')]
+                return broker_name.upper() in disabled_list
+        except Exception:
+            pass
+        return False
+
     async def _init_brokers_background(self):
         """Initialize all brokers in background - Discord connection is NOT blocked."""
         print("[BROKERS] Starting background broker initialization...")
         
-        self.broker = WebullBroker(loop=self.loop, name="WEBULL", paper_trade=PAPER_TRADE)
-        try:
-            await self.broker.login()
-            if self.broker._logged_in:
-                mode_str = "PAPER" if PAPER_TRADE else "LIVE"
-                print(f"[Webull] ✓ Login successful ({mode_str} account)", flush=True)
-                self.broker_ready.set()
-                self.broker._start_streaming()
-                try:
-                    from gui_app.broker_credentials_service import set_broker_status
-                    set_broker_status('webull_live', True, 'connected', account_info={'mode': 'live'})
-                except Exception:
-                    pass
-                try:
-                    from gui_app.discord_notifier import notify_broker_reconnected
-                    notify_broker_reconnected('Webull')
-                except Exception:
-                    pass
-            else:
-                print("[Webull] ⚠️  Broker not configured - configure via GUI (see startup logs for port)", flush=True)
-                try:
-                    from gui_app.broker_credentials_service import set_broker_status
-                    set_broker_status('webull_live', False, 'disconnected', error='Credentials not configured')
-                except Exception:
-                    pass
-        except Exception as e:
-            print("[Webull] ✗ Login failed:", e, flush=True)
+        if self._is_broker_disabled('WEBULL'):
+            print("[BROKERS] ⏭️ Webull DISABLED by user — skipping initialization")
+            self.broker = None
             try:
                 from gui_app.broker_credentials_service import set_broker_status
-                set_broker_status('webull_live', False, 'disconnected', error=str(e))
+                set_broker_status('webull_live', False, 'disconnected', error='Disabled by user')
             except Exception:
                 pass
+        else:
+            self.broker = WebullBroker(loop=self.loop, name="WEBULL", paper_trade=PAPER_TRADE)
+
+        if self.broker:
             try:
-                from gui_app.discord_notifier import notify_broker_disconnected
-                notify_broker_disconnected('Webull', str(e))
-            except Exception:
-                pass
+                await self.broker.login()
+                if self.broker._logged_in:
+                    mode_str = "PAPER" if PAPER_TRADE else "LIVE"
+                    print(f"[Webull] ✓ Login successful ({mode_str} account)", flush=True)
+                    self.broker_ready.set()
+                    self.broker._start_streaming()
+                    try:
+                        from gui_app.broker_credentials_service import set_broker_status
+                        set_broker_status('webull_live', True, 'connected', account_info={'mode': 'live'})
+                    except Exception:
+                        pass
+                    try:
+                        from gui_app.discord_notifier import notify_broker_reconnected
+                        notify_broker_reconnected('Webull')
+                    except Exception:
+                        pass
+                else:
+                    print("[Webull] ⚠️  Broker not configured - configure via GUI (see startup logs for port)", flush=True)
+                    try:
+                        from gui_app.broker_credentials_service import set_broker_status
+                        set_broker_status('webull_live', False, 'disconnected', error='Credentials not configured')
+                    except Exception:
+                        pass
+            except Exception as e:
+                print("[Webull] ✗ Login failed:", e, flush=True)
+                try:
+                    from gui_app.broker_credentials_service import set_broker_status
+                    set_broker_status('webull_live', False, 'disconnected', error=str(e))
+                except Exception:
+                    pass
+                try:
+                    from gui_app.discord_notifier import notify_broker_disconnected
+                    notify_broker_disconnected('Webull', str(e))
+                except Exception:
+                    pass
         
         self.webull_paper_broker = None
         _original_print("[WEBULL_PAPER] Paper trading disabled — skipping initialization", flush=True)
@@ -7688,10 +7711,10 @@ class SelfClient(discord.Client):
         
         # Initialize Alpaca paper trading broker for tracking channels
         try:
-            _original_print("[ALPACA] Starting paper broker initialization...", flush=True)
-            _original_print(f"[ALPACA] ALPACA_AVAILABLE: {ALPACA_AVAILABLE}", flush=True)
-            
-            if not ALPACA_AVAILABLE:
+            if self._is_broker_disabled('ALPACA'):
+                _original_print("[BROKERS] ⏭️ Alpaca DISABLED by user — skipping initialization", flush=True)
+                self.paper_broker = None
+            elif not ALPACA_AVAILABLE:
                 _original_print("[ALPACA] ⚠️ AlpacaBroker not available - paper trading disabled", flush=True)
                 self.paper_broker = None
             else:
@@ -7777,7 +7800,9 @@ class SelfClient(discord.Client):
         # Initialize Tastytrade broker
         self.tastytrade_broker = None
         try:
-            if TASTYTRADE_AVAILABLE:
+            if self._is_broker_disabled('TASTYTRADE'):
+                _original_print("[BROKERS] ⏭️ TastyTrade DISABLED by user — skipping initialization", flush=True)
+            elif TASTYTRADE_AVAILABLE:
                 _original_print("[TASTYTRADE] Starting broker initialization...", flush=True)
                 from gui_app.broker_credentials_service import get_tastytrade_credentials
                 tt_creds = get_tastytrade_credentials()
@@ -7863,7 +7888,9 @@ class SelfClient(discord.Client):
         # Initialize Robinhood broker (WARNING: No paper trading - all trades are LIVE)
         self.robinhood_broker = None
         try:
-            if ROBINHOOD_AVAILABLE:
+            if self._is_broker_disabled('ROBINHOOD'):
+                _original_print("[BROKERS] ⏭️ Robinhood DISABLED by user — skipping initialization", flush=True)
+            elif ROBINHOOD_AVAILABLE:
                 _original_print("[ROBINHOOD] Starting broker initialization...", flush=True)
                 _original_print("[ROBINHOOD] ⚠️  WARNING: Robinhood has NO paper trading mode", flush=True)
                 _original_print("[ROBINHOOD] ⚠️  ALL trades will be executed with REAL money", flush=True)
@@ -7976,7 +8003,9 @@ class SelfClient(discord.Client):
         # Initialize IBKR broker (requires TWS or IB Gateway running)
         self.ibkr_broker = None
         try:
-            if IBKR_AVAILABLE:
+            if self._is_broker_disabled('IBKR'):
+                _original_print("[BROKERS] ⏭️ IBKR DISABLED by user — skipping initialization", flush=True)
+            elif IBKR_AVAILABLE:
                 from gui_app.broker_credentials_service import get_ibkr_credentials, set_broker_status
                 from gui_app.broker_credentials_service import load_config as _load_broker_config
                 _ibkr_raw = _load_broker_config('ibkr_credentials')
@@ -8317,12 +8346,16 @@ class SelfClient(discord.Client):
         # Initialize Charles Schwab broker (OAuth2 API)
         self.schwab_broker = None
         try:
-            _original_print("[SCHWAB] Starting broker initialization...", flush=True)
-            
-            from gui_app.schwab_auth import get_schwab_credentials
-            from src.brokers.schwab_broker import SchwabBroker
-            
-            schwab_creds = get_schwab_credentials()
+            if self._is_broker_disabled('SCHWAB'):
+                _original_print("[BROKERS] ⏭️ Schwab DISABLED by user — skipping initialization", flush=True)
+                schwab_creds = None
+            else:
+                _original_print("[SCHWAB] Starting broker initialization...", flush=True)
+                
+                from gui_app.schwab_auth import get_schwab_credentials
+                from src.brokers.schwab_broker import SchwabBroker
+                
+                schwab_creds = get_schwab_credentials()
             
             if schwab_creds and schwab_creds.get('client_id') and schwab_creds.get('client_secret'):
                 _original_print(f"[SCHWAB] ✓ Loaded credentials from DATABASE", flush=True)
