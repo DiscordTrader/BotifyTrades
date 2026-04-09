@@ -19834,7 +19834,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     channel_record_id = signal.get('channel_record_id')
                     channel_id_str = str(signal.get('channel_id', '')) if signal.get('channel_id') else ''
                     if not channel_record_id:
-                        _original_print(f"[DATABASE] ⚠️ No channel_record_id - trade will be saved without channel linkage (RiskManager may not monitor)")
+                        print(f"[DATABASE] ⚠️ No channel_record_id - trade will be saved without channel linkage (RiskManager may not monitor)")
                     if DATABASE_MODULE_AVAILABLE:
                         try:
                             from gui_app import database as db
@@ -19861,7 +19861,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if multi_broker_results:
                                     # Save ONE trade entry PER successful broker
                                     successful_results = [r for r in multi_broker_results if r.get('success') == True or (r.get('orderId') and r.get('success') is not False)]
-                                    _original_print(f"[DATABASE] Multi-broker execution - saving {len(successful_results)} trade entries")
+                                    print(f"[DATABASE] Multi-broker execution - saving {len(successful_results)} trade entries")
                                     # Lookup routing_mapping_id for signal routing risk discrimination
                                     routing_mapping_id = signal.get('routing_mapping_id')
                                     if not routing_mapping_id and channel_id_str:
@@ -19899,7 +19899,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     for t in existing_trades
                                                 )
                                                 if already_exists:
-                                                    _original_print(f"[DATABASE] ⚠️ DUPLICATE PREVENTED: {signal['symbol']} {signal['action']} on {broker_name_upper} (msg={msg_id_str[:15]}...) already exists")
+                                                    print(f"[DATABASE] ⚠️ DUPLICATE PREVENTED: {signal['symbol']} {signal['action']} on {broker_name_upper} (msg={msg_id_str[:15]}...) already exists")
                                                     continue
                                             
                                             trade_data = {
@@ -19922,9 +19922,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'conditional_order_id': signal.get('_conditional_order_id'),
                                                 'routing_mapping_id': routing_mapping_id
                                             }
-                                            _original_print(f"[DATABASE] Saving trade: broker={broker_name_upper} order_id={broker_resp.get('orderId')} (from broker_resp, not shared)")
+                                            print(f"[DATABASE] Saving trade: broker={broker_name_upper} order_id={broker_resp.get('orderId')} SL={signal.get('stop_loss_price')} PT={signal.get('profit_target_price')}")
                                             trade_id = db.add_trade(trade_data)
-                                            _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                            print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                                             
                                             # For conditional orders: Create signal_lot for Signal P&L tracking
                                             cond_order_id = signal.get('_conditional_order_id')
@@ -19999,7 +19999,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             for t in existing_check
                                         )
                                         if skip_single_save:
-                                            _original_print(f"[DATABASE] ⚠️ DUPLICATE PREVENTED: {signal['symbol']} {signal['action']} on {single_broker_name} already exists")
+                                            print(f"[DATABASE] ⚠️ DUPLICATE PREVENTED: {signal['symbol']} {signal['action']} on {single_broker_name} already exists")
                                     
                                     if not skip_single_save:
                                         trade_data = {
@@ -20023,7 +20023,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'routing_mapping_id': routing_mapping_id
                                         }
                                         trade_id = db.add_trade(trade_data)
-                                        _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                        print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                                     
                                         # For conditional orders: Create signal_lot for Signal P&L tracking
                                         cond_order_id = signal.get('_conditional_order_id')

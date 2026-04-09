@@ -724,7 +724,21 @@ class RiskDBAdapter:
                             ema_no_trend_candles=row[43] if len(row) > 43 and row[43] is not None else 3,
                             escalation_only_mode=bool(row[44]) if len(row) > 44 and row[44] else False,
                         )
-                    return None
+                    channel_name = row[7] or 'Unknown'
+                    channel_exit_mode = row[18] if len(row) > 18 and row[18] else 'hybrid'
+                    print(f"[RISK] ⚠️ Channel '{channel_name}' has risk_enabled=0, use_global=1, "
+                          f"but no SL/PT found (trade SL={row[27]}, PT={row[28]}, entry={row[29]}, "
+                          f"ch_sl={ch_sl}%, ch_pt1={ch_pt1}%, exit_mode={channel_exit_mode}) — "
+                          f"returning channel-attributed settings with global trailing stop")
+                    return ChannelRiskSettings(
+                        channel_id=str(row[0]),
+                        channel_name=channel_name,
+                        profit_target_1_pct=0,
+                        stop_loss_pct=0,
+                        trailing_stop_pct=row[5] or 0,
+                        trailing_activation_pct=row[6] or 15.0,
+                        exit_strategy_mode=channel_exit_mode,
+                    )
                 else:
                     return None
                 
@@ -3622,8 +3636,8 @@ class RiskManager:
         # 'hybrid' mode = both trader signals AND automated exits
         # Exception: EMA risk still runs in 'signal' mode when explicitly enabled
         if channel_settings and channel_settings.exit_strategy_mode == 'signal':
+            self._log_position_status(position, cache, channel_settings, pct_change)
             if channel_settings.ema_risk_enabled:
-                self._log_position_status(position, cache, channel_settings, pct_change)
                 ema_decision = self._evaluate_enhanced_risk(position, cache, channel_settings, position_snapshot=position, ema_only=True)
                 if ema_decision and ema_decision.should_exit:
                     from src.services.market_hours import is_regular_market_hours, is_extended_hours
@@ -3642,7 +3656,6 @@ class RiskManager:
                     if hasattr(self, '_after_hours_logged'):
                         self._after_hours_logged.discard(pos_key)
                     await self._execute_exit(position, cache, ema_decision, channel_settings)
-                return
             return
         
         self._log_position_status(position, cache, channel_settings, pct_change)
