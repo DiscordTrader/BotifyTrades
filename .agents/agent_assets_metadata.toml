@@ -108,3 +108,9 @@ id = "93YZW-5zJ6ykBeFUTV8-_"
 uri = "file://attached_assets/Channel_Settings_Validation_v8.1.8.md"
 type = "text"
 title = "Channel Settings Validation — All 4 Tabs (v8.1.8)"
+
+[[outputs]]
+id = "q03FsHDAyev3PVY3OL1z-"
+uri = "file://attached_assets/Risk_Management_Validation_v8.1.8.md"
+type = "text"
+title = "Risk Management Full Stack Validation (v8.1.8)"
