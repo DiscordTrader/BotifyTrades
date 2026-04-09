@@ -96,3 +96,9 @@ id = "nzA2eWeyPfoH4P-wZfWNr"
 uri = "file://docs/risk_features_comparison.md"
 type = "text"
 title = "Risk Features Comparison: Early Trailing vs Dynamic SL vs Escalation Only"
+
+[[outputs]]
+id = "QsgHQhqT7mrAIJpXFhyZj"
+uri = "file://attached_assets/DKI_Analysis_v8.1.8.md"
+type = "text"
+title = "DKI Trade Analysis — BotifyTrades v8.1.8"
