@@ -102,3 +102,9 @@ id = "QsgHQhqT7mrAIJpXFhyZj"
 uri = "file://attached_assets/DKI_Analysis_v8.1.8.md"
 type = "text"
 title = "DKI Trade Analysis — BotifyTrades v8.1.8"
+
+[[outputs]]
+id = "93YZW-5zJ6ykBeFUTV8-_"
+uri = "file://attached_assets/Channel_Settings_Validation_v8.1.8.md"
+type = "text"
+title = "Channel Settings Validation — All 4 Tabs (v8.1.8)"
