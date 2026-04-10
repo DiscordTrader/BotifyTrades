@@ -2341,7 +2341,7 @@
   },
   "Webull_VRAX_stock": {
     "entry_price": 0.173,
-    "highest_price": 0.1874,
+    "highest_price": 0.1939,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
