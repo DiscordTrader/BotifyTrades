@@ -114,3 +114,9 @@ id = "q03FsHDAyev3PVY3OL1z-"
 uri = "file://attached_assets/Risk_Management_Validation_v8.1.8.md"
 type = "text"
 title = "Risk Management Full Stack Validation (v8.1.8)"
+
+[[outputs]]
+id = "LdTwhLYab3vdnT5RQnC4B"
+uri = "file://docs/Multi_Broker_Smart_Routing.md"
+type = "text"
+title = "Multi-Broker Smart Routing Guide"
