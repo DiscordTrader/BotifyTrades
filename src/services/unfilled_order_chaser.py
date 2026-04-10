@@ -1215,52 +1215,66 @@ class UnfilledOrderChaser:
         'DJX': ['DJX', 'DJXW'], 'DJXW': ['DJXW', 'DJX'],
     }
 
-    def _check_streaming_hubs_stock(self, symbol: str) -> Optional[dict]:
+    def _check_streaming_hubs_stock(self, symbol: str, order_broker: str = None) -> Optional[dict]:
         syms = self._INDEX_VARIANTS.get(symbol.upper(), [symbol])
+        broker_upper = (order_broker or '').upper()
+        hub_list = []
         try:
             from src.services.webull_data_hub import get_webull_data_hub
             hub = get_webull_data_hub()
             if hub.is_streaming():
-                for _s in syms:
-                    data = hub.get_quote_detailed(_s)
-                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
-                        print(f"[ORDER_CHASER] ⚡ Got stock quote from Webull hub")
-                        return data
+                hub_list.append(('Webull', hub, 'WEBULL' in broker_upper))
         except Exception:
             pass
         try:
             from src.services.schwab_data_hub import get_schwab_data_hub
             hub = get_schwab_data_hub()
             if hub.is_streaming():
-                for _s in syms:
-                    data = hub.get_quote_detailed(_s)
-                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
-                        print(f"[ORDER_CHASER] ⚡ Got stock quote from Schwab hub")
-                        return data
+                hub_list.append(('Schwab', hub, 'SCHWAB' in broker_upper))
         except Exception:
             pass
         try:
             from src.services.ibkr_data_hub import get_ibkr_data_hub
             hub = get_ibkr_data_hub()
             if hub.is_streaming():
-                for _s in syms:
-                    data = hub.get_quote_detailed(_s)
-                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
-                        print(f"[ORDER_CHASER] ⚡ Got stock quote from IBKR hub")
-                        return data
+                hub_list.append(('IBKR', hub, 'IBKR' in broker_upper))
         except Exception:
             pass
         try:
             from src.services.tastytrade_data_hub import get_tastytrade_data_hub
             hub = get_tastytrade_data_hub()
             if hub and hub.is_streaming():
-                for _s in syms:
-                    data = hub.get_quote_detailed(_s)
-                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
-                        print(f"[ORDER_CHASER] ⚡ Got stock quote from Tastytrade hub")
-                        return data
+                hub_list.append(('Tastytrade', hub, 'TASTYTRADE' in broker_upper or 'TASTY' in broker_upper))
         except Exception:
             pass
+        best_bid_ask = None
+        best_bid_ask_name = None
+        best_last_only = None
+        best_last_only_name = None
+        for hub_name, hub, is_own_broker in hub_list:
+            for _s in syms:
+                data = hub.get_quote_detailed(_s)
+                if not data:
+                    continue
+                has_bid = data.get('bid', 0) > 0
+                has_last = data.get('last', 0) > 0
+                if has_bid:
+                    if not is_own_broker:
+                        print(f"[ORDER_CHASER] ⚡ Got stock quote from {hub_name} hub (cross-broker)")
+                        return data
+                    if best_bid_ask is None:
+                        best_bid_ask = data
+                        best_bid_ask_name = hub_name
+                elif has_last:
+                    if best_last_only is None or (not is_own_broker and best_last_only_name and '(cross-broker)' not in best_last_only_name):
+                        best_last_only = data
+                        best_last_only_name = f"{hub_name} (cross-broker)" if not is_own_broker else hub_name
+        if best_bid_ask:
+            print(f"[ORDER_CHASER] ⚡ Got stock quote from {best_bid_ask_name} hub")
+            return best_bid_ask
+        if best_last_only:
+            print(f"[ORDER_CHASER] ⚡ Got stock quote from {best_last_only_name} hub")
+            return best_last_only
         return None
 
     async def _get_exit_bid_ask(self, broker, order: TrackedExitOrder) -> dict:
@@ -1282,7 +1296,7 @@ class UnfilledOrderChaser:
                     result['ask'] = _to_price(quote.get('ask')) or result['ask']
                     result['last'] = _to_price(quote.get('last')) or result['last']
             else:
-                hub_data = self._check_streaming_hubs_stock(order.symbol)
+                hub_data = self._check_streaming_hubs_stock(order.symbol, order.broker_id)
                 if hub_data:
                     result['bid'] = _to_price(hub_data.get('bid')) or None
                     result['ask'] = _to_price(hub_data.get('ask')) or None
@@ -1843,7 +1857,7 @@ class UnfilledOrderChaser:
                     return quote.get('last')
                 return None
             else:
-                hub_data = self._check_streaming_hubs_stock(order.symbol)
+                hub_data = self._check_streaming_hubs_stock(order.symbol, order.broker_id)
                 if hub_data:
                     ask = float(hub_data.get('ask', 0) or 0)
                     close = float(hub_data.get('close', 0) or 0)
