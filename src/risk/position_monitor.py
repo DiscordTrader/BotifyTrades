@@ -627,8 +627,79 @@ class RiskDBAdapter:
                 # PRIORITY 2: Channel-level risk settings
                 # If risk management is explicitly enabled at channel level, use channel settings
                 # This takes priority over use_global_risk_settings flag
+                channel_name_from_join = row[7] if len(row) > 7 else None
                 risk_enabled = row[8] if len(row) > 8 else 0
                 use_global = row[34] if (len(row) > 34 and row[34] is not None) else 1  # Default: use global (backwards compat, handles NULL from LEFT JOIN)
+                
+                if channel_name_from_join is None and row[0]:
+                    try:
+                        channel_id_val = str(row[0])
+                        cursor.execute('''
+                            SELECT risk_management_enabled, use_global_risk_settings, name,
+                                   profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
+                                   stop_loss_pct, trailing_stop_pct, trailing_activation_pct,
+                                   leave_runner_enabled, leave_runner_pct, profit_target_4_pct,
+                                   profit_target_qty_1, profit_target_qty_2, profit_target_qty_3, profit_target_qty_4,
+                                   trim_order_mode, trim_limit_offset, exit_strategy_mode,
+                                   enable_dynamic_sl, enable_giveback_guard, giveback_allowed_pct, dynamic_sl_profile,
+                                   enable_early_trailing, early_trailing_activation_pct, early_trailing_step_pct,
+                                   sl_order_mode, sl_limit_offset, trim_limit_offset_mode, trim_limit_offset_pct,
+                                   ema_risk_enabled, ema_period, ema_timeframe_minutes, ema_buffer_pct,
+                                   ema_exit_enabled, ema_escalation_enabled, ema_extended_hours,
+                                   ema_use_underlying, ema_no_trend_candles, escalation_only_mode
+                            FROM channels
+                            WHERE discord_channel_id = ? OR CAST(id AS TEXT) = ? OR telegram_chat_id = ?
+                            LIMIT 1
+                        ''', (channel_id_val, channel_id_val, channel_id_val))
+                        ch_row = cursor.fetchone()
+                        if ch_row:
+                            risk_enabled = ch_row[0] if ch_row[0] is not None else 0
+                            use_global = ch_row[1] if ch_row[1] is not None else 1
+                            channel_name_from_join = ch_row[2]
+                            row = list(row)
+                            row[7] = ch_row[2]   # name
+                            row[8] = ch_row[0]   # risk_management_enabled
+                            row[1] = ch_row[3]   # profit_target_1_pct
+                            row[2] = ch_row[4]   # profit_target_2_pct
+                            row[3] = ch_row[5]   # profit_target_3_pct
+                            row[4] = ch_row[6]   # stop_loss_pct
+                            row[5] = ch_row[7]   # trailing_stop_pct
+                            row[6] = ch_row[8]   # trailing_activation_pct
+                            row[9] = ch_row[9]   # leave_runner_enabled
+                            row[10] = ch_row[10]  # leave_runner_pct
+                            row[11] = ch_row[11]  # profit_target_4_pct
+                            row[12] = ch_row[12]  # profit_target_qty_1
+                            row[13] = ch_row[13]  # profit_target_qty_2
+                            row[14] = ch_row[14]  # profit_target_qty_3
+                            row[15] = ch_row[15]  # profit_target_qty_4
+                            row[16] = ch_row[16]  # trim_order_mode
+                            row[17] = ch_row[17]  # trim_limit_offset
+                            row[18] = ch_row[18]  # exit_strategy_mode
+                            row[19] = ch_row[19]  # enable_dynamic_sl
+                            row[20] = ch_row[20]  # enable_giveback_guard
+                            row[21] = ch_row[21]  # giveback_allowed_pct
+                            row[22] = ch_row[22]  # dynamic_sl_profile
+                            row[24] = ch_row[23]  # enable_early_trailing
+                            row[25] = ch_row[24]  # early_trailing_activation_pct
+                            row[26] = ch_row[25]  # early_trailing_step_pct
+                            row[30] = ch_row[26]  # sl_order_mode
+                            row[31] = ch_row[27]  # sl_limit_offset
+                            row[32] = ch_row[28]  # trim_limit_offset_mode
+                            row[33] = ch_row[29]  # trim_limit_offset_pct
+                            row[34] = ch_row[1]   # use_global_risk_settings
+                            if len(row) > 35: row[35] = ch_row[30]  # ema_risk_enabled
+                            if len(row) > 36: row[36] = ch_row[31]  # ema_period
+                            if len(row) > 37: row[37] = ch_row[32]  # ema_timeframe_minutes
+                            if len(row) > 38: row[38] = ch_row[33]  # ema_buffer_pct
+                            if len(row) > 39: row[39] = ch_row[34]  # ema_exit_enabled
+                            if len(row) > 40: row[40] = ch_row[35]  # ema_escalation_enabled
+                            if len(row) > 41: row[41] = ch_row[36]  # ema_extended_hours
+                            if len(row) > 42: row[42] = ch_row[37]  # ema_use_underlying
+                            if len(row) > 43: row[43] = ch_row[38]  # ema_no_trend_candles
+                            if len(row) > 44: row[44] = ch_row[39]  # escalation_only_mode
+                            print(f"[RISK] ✓ Channel settings recovered via direct lookup for '{channel_name_from_join}' (LEFT JOIN fallback)")
+                    except Exception as e:
+                        print(f"[RISK] ⚠️ Direct channel lookup fallback failed: {e}")
                 
                 if risk_enabled:
                     pass
