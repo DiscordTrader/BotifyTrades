@@ -1242,6 +1242,17 @@ class UnfilledOrderChaser:
                         return data
         except Exception:
             pass
+        try:
+            from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+            hub = get_tastytrade_data_hub()
+            if hub and hub.is_streaming():
+                for _s in syms:
+                    data = hub.get_quote_detailed(_s)
+                    if data and (data.get('bid', 0) > 0 or data.get('last', 0) > 0):
+                        print(f"[ORDER_CHASER] ⚡ Got stock quote from Tastytrade hub")
+                        return data
+        except Exception:
+            pass
         return None
 
     async def _get_exit_bid_ask(self, broker, order: TrackedExitOrder) -> dict:

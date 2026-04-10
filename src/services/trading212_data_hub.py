@@ -148,6 +148,7 @@ class Trading212DataHub:
             ('src.services.webull_data_hub', 'get_webull_data_hub'),
             ('src.services.schwab_data_hub', 'get_schwab_data_hub'),
             ('src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+            ('src.services.tastytrade_data_hub', 'get_tastytrade_data_hub'),
         ]:
             try:
                 import importlib
