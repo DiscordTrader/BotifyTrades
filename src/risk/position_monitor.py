@@ -7167,6 +7167,14 @@ class RiskManager:
                     alt_hubs.append(('IBKR', ib_hub))
             except Exception:
                 pass
+        if 'TASTYTRADE' not in broker_upper and 'TASTY' not in broker_upper:
+            try:
+                from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                tt_hub = get_tastytrade_data_hub()
+                if tt_hub and tt_hub.is_streaming() and self._is_hub_live(tt_hub):
+                    alt_hubs.append(('Tastytrade', tt_hub))
+            except Exception:
+                pass
         for hub_name, hub in alt_hubs:
             if is_option:
                 opt_keys = self._get_option_hub_keys(pos, hub_name)

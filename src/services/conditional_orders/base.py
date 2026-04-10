@@ -541,16 +541,19 @@ class StreamingPriceMonitor(PriceMonitor):
     _cross_hub_cache_ts: float = 0
     _CROSS_HUB_CACHE_TTL: float = 30.0
 
+    _CROSS_HUB_REGISTRY = [
+        ('webull', 'src.services.webull_data_hub', 'get_webull_data_hub'),
+        ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
+        ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
+        ('tastytrade', 'src.services.tastytrade_data_hub', 'get_tastytrade_data_hub'),
+        ('trading212', 'src.services.trading212_data_hub', 'get_trading212_data_hub'),
+    ]
+
     def _try_cross_broker_hubs(self) -> Optional[float]:
         now = time.time()
         if now - StreamingPriceMonitor._cross_hub_cache_ts > StreamingPriceMonitor._CROSS_HUB_CACHE_TTL:
             StreamingPriceMonitor._cross_hub_cache = {}
-            for broker_key, mod_path, func_name in [
-                ('webull', 'src.services.webull_data_hub', 'get_webull_data_hub'),
-                ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
-                ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
-                ('trading212', 'src.services.trading212_data_hub', 'get_trading212_data_hub'),
-            ]:
+            for broker_key, mod_path, func_name in StreamingPriceMonitor._CROSS_HUB_REGISTRY:
                 try:
                     import importlib
                     mod = importlib.import_module(mod_path)
@@ -724,12 +727,7 @@ class BrokerPriceMonitor(PriceMonitor):
         now = time.time()
         if now - StreamingPriceMonitor._cross_hub_cache_ts > StreamingPriceMonitor._CROSS_HUB_CACHE_TTL:
             StreamingPriceMonitor._cross_hub_cache = {}
-            for broker_key, mod_path, func_name in [
-                ('webull', 'src.services.webull_data_hub', 'get_webull_data_hub'),
-                ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
-                ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
-                ('trading212', 'src.services.trading212_data_hub', 'get_trading212_data_hub'),
-            ]:
+            for broker_key, mod_path, func_name in StreamingPriceMonitor._CROSS_HUB_REGISTRY:
                 try:
                     import importlib
                     mod = importlib.import_module(mod_path)
