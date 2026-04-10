@@ -248,16 +248,23 @@ class PositionCache:
                     data = json.load(f)
                 
                 closing_reset = 0
+                bracket_reset = 0
                 for key, entry_data in data.items():
                     entry = PositionCacheEntry.from_dict(entry_data)
                     if entry.closing:
                         entry.closing = False
                         entry.closing_cycles = 0
                         closing_reset += 1
+                    if entry.broker_orders_placed and not entry.broker_stop_order_id and not entry.broker_pt_order_id:
+                        entry.broker_orders_placed = False
+                        entry._bracket_attempt_count = 0
+                        bracket_reset += 1
                     self._cache[key] = entry
                 
                 if closing_reset > 0:
                     print(f"[RISK] ♻️ Cleared {closing_reset} stale closing flag(s) from previous session")
+                if bracket_reset > 0:
+                    print(f"[RISK] ♻️ Reset {bracket_reset} bracket flag(s) with no actual broker orders — will re-attempt")
                 
                 return len(self._cache)
         except Exception as e:

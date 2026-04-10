@@ -4433,7 +4433,9 @@ class RiskManager:
 
         broker_instance = self._get_broker_instance_for_bracket(broker_name)
         if not broker_instance:
-            cache.broker_orders_placed = True
+            print(f"[RISK] ⚠️ No broker instance for {broker_name} — bracket placement deferred (will retry)")
+            if hasattr(cache, '_bracket_attempt_count') and cache._bracket_attempt_count > 0:
+                cache._bracket_attempt_count -= 1
             return
 
         pos_key = cache.position_key if hasattr(cache, 'position_key') else f"{position.symbol}_{position.broker}"
@@ -4860,7 +4862,6 @@ class RiskManager:
                                     print(f"[RISK] ⚠️ Webull SL order failed: {_err} — SL will be monitored locally")
                         if not _wb_sl_placed:
                             cache._webull_stp_unsupported = True
-                            cache.broker_orders_placed = True
                     elif sl_price and sl_price > 0 and is_option:
                         print(f"[RISK] ⚠️ Webull does not support stop orders for options — SL will be monitored locally")
 
@@ -4902,13 +4903,18 @@ class RiskManager:
                                     outsideRegularTradingHour=True
                                 )
                             pt_resp = await asyncio.to_thread(_wb_pt_order)
+                            print(f"[RISK] [DEBUG] Webull PT1 response: {pt_resp}")
                             if pt_resp and not pt_resp.get('msg'):
-                                _pt_oid = str(pt_resp.get('orderId', ''))
+                                _pt_oid = str(pt_resp.get('data', {}).get('orderId', '')) if isinstance(pt_resp.get('data'), dict) else str(pt_resp.get('orderId', ''))
+                                if not _pt_oid:
+                                    _pt_oid = str(pt_resp.get('orderId', ''))
                                 if _pt_oid:
                                     cache.broker_pt_order_id = _pt_oid
                                     cache.broker_pt_tier = 1
                                     print(f"[RISK] ✅ Broker PT1 placed: Webull limit #{_pt_oid} at ${pt1_price:.2f} (qty={pt1_qty})")
                                     await self._register_pt_with_chaser(_pt_oid, broker_name, position, cache, pt1_qty, pt1_price, is_option)
+                                else:
+                                    print(f"[RISK] ⚠️ Webull PT1 placed but no orderId in response: {pt_resp}")
                             else:
                                 print(f"[RISK] ⚠️ Webull PT1 order failed: {pt_resp.get('msg', 'unknown') if pt_resp else 'no response'}")
 
