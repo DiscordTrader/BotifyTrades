@@ -372,7 +372,7 @@ async function loadChannels() {
                                     </div>
                                     <div style="display: ${(channel.sl_order_mode || 'limit') === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; margin-top: 8px;" id="sl-limit-offset-container-${channel.id}">
                                         <label style="font-size: 11px; color: #8E8E93;">Limit Offset %:</label>
-                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset || 0.03) * 100}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset != null ? channel.sl_limit_offset : 0.03) * 100}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
                                         <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
                                     </div>
                                 </div>
@@ -1471,7 +1471,7 @@ async function saveRiskManagement(channelId) {
                 trim_limit_offset_mode: trimOffsetMode,
                 trim_limit_offset_pct: trimOffsetPct ? parseFloat(trimOffsetPct) : 2.0,
                 sl_order_mode: slOrderMode,
-                sl_limit_offset: slLimitOffset ? parseFloat(slLimitOffset) / 100 : 0.03,
+                sl_limit_offset: slLimitOffset != null && slLimitOffset !== '' ? parseFloat(slLimitOffset) / 100 : 0.03,
                 trade_summary_enabled: tradeSummaryEnabled,
                 enable_dynamic_sl: enableDynamicSl,
                 dynamic_sl_profile: dynamicSlProfile,
