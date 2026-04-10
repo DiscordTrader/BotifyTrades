@@ -6000,6 +6000,29 @@ def parse_option_signal(text: str) -> Optional[dict]:
                 "_stack_tickerless": True
             }
         
+        spx_ndx_match = SPX_NDX_SHORTHAND_REGEX.search(text.strip())
+        if spx_ndx_match:
+            action, qty_str, strike_str, opt_type = spx_ndx_match.groups()
+            strike = float(strike_str)
+            symbol = "NDX" if strike >= 10000 else "SPX"
+            action = (action or "BTO").upper()
+            qty = int(qty_str) if qty_str else 1
+            from datetime import datetime
+            expiry = datetime.now().strftime("%m/%d")
+            print(f"[Discord] ✓ Matched SPX/NDX shorthand in parser: {action} {qty} {symbol} {strike}{opt_type.upper()} {expiry} @ MARKET")
+            return {
+                "asset": "option",
+                "action": action,
+                "qty": qty,
+                "symbol": symbol,
+                "strike": strike,
+                "opt_type": opt_type.upper(),
+                "expiry": expiry,
+                "price": None,
+                "is_market_order": True,
+                "_spx_ndx_shorthand": True
+            }
+
         # Try STACK$ 0DTE format (no expiry): BTO 1 SPX 6925c @ 1.90
         stack_0dte_match = STACK_0DTE_REGEX.search(text.strip())
         if stack_0dte_match:
