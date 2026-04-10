@@ -70,9 +70,17 @@ class WebullStreamingClient:
                 if 'volume' in deal:
                     quote_update['deal_volume'] = int(deal['volume'])
 
+            _has_pPrice = 'pPrice' in data and float(data.get('pPrice', 0) or 0) > 0
             if 'close' in data:
-                quote_update['last'] = float(data['close'])
-                quote_update['price'] = float(data['close'])
+                quote_update['close'] = float(data['close'])
+                if not _has_pPrice:
+                    if 'deal' not in data:
+                        quote_update.setdefault('last', float(data['close']))
+                        quote_update.setdefault('price', float(data['close']))
+                    else:
+                        pass
+                else:
+                    pass
             if 'high' in data:
                 quote_update['high'] = float(data['high'])
             if 'low' in data:
@@ -85,7 +93,7 @@ class WebullStreamingClient:
                 quote_update['change'] = float(data['change'])
             if 'changeRatio' in data:
                 quote_update['changeRatio'] = float(data['changeRatio'])
-            if 'pPrice' in data:
+            if _has_pPrice:
                 pp = float(data['pPrice'])
                 if 0 < pp < 500000:
                     quote_update['last'] = pp
