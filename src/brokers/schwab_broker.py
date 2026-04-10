@@ -1103,7 +1103,8 @@ class SchwabBroker(BrokerInterface):
                     action=action
                 )
             
-            if action.upper() in ("STC", "SELL"):
+            _skip_cancel = kwargs.get('_skip_cancel_check', False)
+            if action.upper() in ("STC", "SELL") and not _skip_cancel:
                 await self._cancel_conflicting_sell_orders(symbol, 'EQUITY')
             
             if action.upper() == "BTO":
@@ -1147,7 +1148,7 @@ class SchwabBroker(BrokerInterface):
             
             print(f"[{self.name}] 📋 Stock order: {instruction} {quantity} {symbol} | type={order_type} | session={session} | duration={duration}" + (f" | price=${price:.4f}" if price else ""))
             
-            if is_exit:
+            if is_exit and not _skip_cancel:
                 max_cancel_attempts = 2
                 for cancel_attempt in range(max_cancel_attempts):
                     try:
@@ -1339,9 +1340,10 @@ class SchwabBroker(BrokerInterface):
             instruction = "BUY_TO_OPEN" if action.upper() == "BTO" else "SELL_TO_CLOSE"
             
             _fallback_price = kwargs.get('_signal_price_fallback')
+            _skip_cancel = kwargs.get('_skip_cancel_check', False)
             is_stc = action.upper() in ('STC', 'SELL_TO_CLOSE')
             
-            if is_stc:
+            if is_stc and not _skip_cancel:
                 await self._cancel_conflicting_sell_orders(symbol, 'OPTION', option_symbol=option_symbol)
             
             if not price:

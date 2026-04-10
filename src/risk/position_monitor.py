@@ -4508,12 +4508,14 @@ class RiskManager:
                             option_type=position.direction or 'C',
                             action='STC',
                             quantity=pt1_qty,
-                            price=pt1_price
+                            price=pt1_price,
+                            _skip_cancel_check=True
                         ) if is_option else await self.schwab_broker.place_stock_order(
                             symbol=symbol,
                             action='STC',
                             quantity=pt1_qty,
-                            price=pt1_price
+                            price=pt1_price,
+                            _skip_cancel_check=True
                         )
                         if pt_result and pt_result.success and pt_result.order_id:
                             cache.broker_pt_order_id = str(pt_result.order_id)
