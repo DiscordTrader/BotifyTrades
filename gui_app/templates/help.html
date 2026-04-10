@@ -623,6 +623,7 @@
     <a href="#exit-deep-dive" class="toc-item"><span class="toc-icon">📊</span> Exit Strategy Deep Dive</a>
     <a href="#notifications" class="toc-item"><span class="toc-icon">🔔</span> Notifications</a>
     <a href="#advanced" class="toc-item"><span class="toc-icon">🔧</span> Advanced Settings</a>
+    <a href="#smart-routing" class="toc-item"><span class="toc-icon">🔀</span> Multi-Broker Smart Routing</a>
 </div>
 
 <!-- ========== SECTION 1: ONBOARDING ========== -->
@@ -3068,6 +3069,191 @@
     </div>
 </div>
 
+</div>
+
+<!-- ========== SECTION: MULTI-BROKER SMART ROUTING ========== -->
+<div class="help-section" id="smart-routing">
+    <div class="help-section-header">
+        <span class="section-badge">🔀</span>
+        <h2>Multi-Broker Smart Routing</h2>
+    </div>
+
+    <div class="help-card">
+        <h3>How Your Brokers Work Together</h3>
+        <p>When you connect multiple brokers, BotifyTrades doesn't treat them as separate accounts. Instead, it creates a <strong>shared intelligence network</strong> where all your brokers collaborate &mdash; even when only one broker executes a trade.</p>
+        <p>The broker watching the price <strong>doesn't have to be the same broker</strong> executing the order. The bot automatically picks the fastest available data source to monitor prices, then routes the trade to your chosen broker when conditions are met.</p>
+    </div>
+
+    <div class="help-card">
+        <h3>Every Broker Plays Two Roles</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+            <div style="background: rgba(26,188,156,0.08); border: 1px solid rgba(26,188,156,0.2); border-radius: 12px; padding: 20px; text-align: center;">
+                <div style="font-size: 2rem; margin-bottom: 10px;">👁️</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 1rem; margin-bottom: 8px;">Price Watcher</div>
+                <p style="font-size: 0.82rem;">Provides fast, real-time price data that monitors your conditional orders and active trades continuously.</p>
+            </div>
+            <div style="background: rgba(233,69,96,0.08); border: 1px solid rgba(233,69,96,0.2); border-radius: 12px; padding: 20px; text-align: center;">
+                <div style="font-size: 2rem; margin-bottom: 10px;">⚡</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 1rem; margin-bottom: 8px;">Trade Executor</div>
+                <p style="font-size: 0.82rem;">Receives and places the actual buy or sell order on your chosen broker account when a signal or trigger fires.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Architecture &mdash; How Brokers Connect</h3>
+        <p style="margin-bottom: 16px;">All price feeds from your connected brokers flow into a shared Smart Price Hub. When your target price is hit, the order routes to your chosen execution broker.</p>
+
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--help-card-border); border-radius: 12px; padding: 24px; margin: 12px 0;">
+
+            <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+                <div style="background: rgba(26,188,156,0.1); border: 1px solid rgba(26,188,156,0.3); border-radius: 10px; padding: 12px 20px; text-align: center; min-width: 110px;">
+                    <div style="font-weight: 700; color: #1abc9c; font-size: 0.88rem;">Webull</div>
+                    <div style="font-size: 0.7rem; color: var(--help-muted); margin-top: 4px;">WATCHING</div>
+                </div>
+                <div style="background: rgba(26,188,156,0.1); border: 1px solid rgba(26,188,156,0.3); border-radius: 10px; padding: 12px 20px; text-align: center; min-width: 110px;">
+                    <div style="font-weight: 700; color: #1abc9c; font-size: 0.88rem;">Schwab</div>
+                    <div style="font-size: 0.7rem; color: var(--help-muted); margin-top: 4px;">WATCHING</div>
+                </div>
+                <div style="background: rgba(26,188,156,0.1); border: 1px solid rgba(26,188,156,0.3); border-radius: 10px; padding: 12px 20px; text-align: center; min-width: 110px;">
+                    <div style="font-weight: 700; color: #1abc9c; font-size: 0.88rem;">IBKR</div>
+                    <div style="font-size: 0.7rem; color: var(--help-muted); margin-top: 4px;">WATCHING</div>
+                </div>
+                <div style="background: rgba(26,188,156,0.1); border: 1px solid rgba(26,188,156,0.3); border-radius: 10px; padding: 12px 20px; text-align: center; min-width: 110px;">
+                    <div style="font-weight: 700; color: #1abc9c; font-size: 0.88rem;">TastyTrade</div>
+                    <div style="font-size: 0.7rem; color: var(--help-muted); margin-top: 4px;">WATCHING</div>
+                </div>
+            </div>
+
+            <div style="text-align: center; color: var(--help-accent); font-size: 1.5rem; margin: 8px 0;">&#8595;</div>
+            <div style="text-align: center; font-size: 0.72rem; color: var(--help-muted); margin-bottom: 8px;">Live price streams merge into one hub</div>
+
+            <div style="width: 140px; height: 140px; border-radius: 50%; background: linear-gradient(135deg, rgba(15,240,179,0.15), rgba(99,102,241,0.15)); border: 2px solid rgba(15,240,179,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 12px auto;">
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem; text-align: center; line-height: 1.3;">Smart Price<br>Hub</div>
+                <div style="font-size: 0.65rem; color: var(--help-muted); margin-top: 4px;">Best source wins</div>
+            </div>
+
+            <div style="text-align: center; color: var(--help-accent); font-size: 1.5rem; margin: 8px 0;">&#8595;</div>
+            <div style="text-align: center; font-size: 0.72rem; color: var(--help-muted); margin-bottom: 8px;">Price target hit &rarr; trigger fires</div>
+
+            <div style="text-align: center;">
+                <div style="display: inline-block; background: linear-gradient(135deg, rgba(233,69,96,0.15), rgba(233,69,96,0.25)); border: 1px solid rgba(233,69,96,0.5); border-radius: 12px; padding: 16px 32px; text-align: center;">
+                    <div style="font-weight: 700; color: #e94560; font-size: 1rem;">Trading212</div>
+                    <div style="font-size: 0.72rem; color: var(--help-muted); margin-top: 4px;">EXECUTES YOUR ORDER</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Real-World Example &mdash; AAPL Conditional Buy at $185</h3>
+        <p style="margin-bottom: 16px;">You set a conditional buy order on Trading212 for AAPL at $185. Here's what happens behind the scenes:</p>
+
+        <div class="step-flow">
+            <div class="step-item" style="border-radius: 10px 0 0 10px;">
+                <div class="step-num">1</div>
+                <div class="step-title">Best Feed Selected</div>
+                <div class="step-desc">The bot detects Webull has the fastest live stream for AAPL and starts watching</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-title">Price Monitored</div>
+                <div class="step-desc">Webull's feed is checked multiple times per second, watching for $185</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-title">Trigger Fires</div>
+                <div class="step-desc">AAPL hits $185 on Webull's feed. The bot instantly sends the buy command</div>
+            </div>
+            <span class="step-arrow">&#8594;</span>
+            <div class="step-item" style="border-radius: 0 10px 10px 0;">
+                <div class="step-num">4</div>
+                <div class="step-title">Order Executed</div>
+                <div class="step-desc">The buy order is placed on your Trading212 account. Trade confirmed.</div>
+            </div>
+        </div>
+
+        <div class="example-box" style="margin-top: 16px;">
+            <div class="ex-title">Result</div>
+            <p>You got the speed of Webull's real-time data with the execution on Trading212 &mdash; the best of both worlds. No extra setup needed.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Automatic Failover &mdash; Built-In Safety Net</h3>
+        <p style="margin-bottom: 16px;">The bot continuously ranks your connected brokers by data quality and speed. If the primary source goes down, it instantly switches to the next best source.</p>
+
+        <div style="display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 16px 0;">
+            <div style="flex: 1; min-width: 110px; text-align: center; padding: 16px 10px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 10px 0 0 10px;">
+                <div style="font-size: 0.65rem; font-weight: 700; color: var(--help-success); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Primary</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem;">Webull</div>
+                <div style="font-size: 0.72rem; color: var(--help-muted);">Fastest stream</div>
+            </div>
+            <div style="padding: 0 6px; color: var(--help-accent); font-size: 1rem;">&#8594;</div>
+            <div style="flex: 1; min-width: 110px; text-align: center; padding: 16px 10px; background: rgba(30, 41, 59, 0.3); border: 1px solid rgba(71,85,105,0.15); ">
+                <div style="font-size: 0.65rem; font-weight: 700; color: var(--help-info); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Backup 1</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem;">Schwab</div>
+                <div style="font-size: 0.72rem; color: var(--help-muted);">Fast stream</div>
+            </div>
+            <div style="padding: 0 6px; color: var(--help-accent); font-size: 1rem;">&#8594;</div>
+            <div style="flex: 1; min-width: 110px; text-align: center; padding: 16px 10px; background: rgba(30, 41, 59, 0.3); border: 1px solid rgba(71,85,105,0.15);">
+                <div style="font-size: 0.65rem; font-weight: 700; color: var(--help-info); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Backup 2</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem;">IBKR</div>
+                <div style="font-size: 0.72rem; color: var(--help-muted);">Reliable stream</div>
+            </div>
+            <div style="padding: 0 6px; color: var(--help-accent); font-size: 1rem;">&#8594;</div>
+            <div style="flex: 1; min-width: 110px; text-align: center; padding: 16px 10px; background: rgba(30, 41, 59, 0.3); border: 1px solid rgba(71,85,105,0.15);">
+                <div style="font-size: 0.65rem; font-weight: 700; color: var(--help-info); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Backup 3</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem;">TastyTrade</div>
+                <div style="font-size: 0.72rem; color: var(--help-muted);">Reliable stream</div>
+            </div>
+            <div style="padding: 0 6px; color: var(--help-accent); font-size: 1rem;">&#8594;</div>
+            <div style="flex: 1; min-width: 110px; text-align: center; padding: 16px 10px; background: rgba(233,69,96,0.06); border: 1px solid rgba(233,69,96,0.2); border-radius: 0 10px 10px 0;">
+                <div style="font-size: 0.65rem; font-weight: 700; color: #e94560; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Last Resort</div>
+                <div style="font-weight: 700; color: var(--help-text); font-size: 0.9rem;">Direct Check</div>
+                <div style="font-size: 0.72rem; color: var(--help-muted);">Broker API query</div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <div class="info-title">Instant and Invisible</div>
+            <p>Failover happens in milliseconds. You never need to intervene &mdash; the bot switches sources automatically without any disruption to your orders.</p>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Key Benefits</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 14px 0;">
+            <div style="background: rgba(26,188,156,0.06); border: 1px solid rgba(26,188,156,0.15); border-radius: 10px; padding: 18px 16px;">
+                <div style="font-weight: 700; color: #1abc9c; font-size: 0.92rem; margin-bottom: 6px;">Faster Triggers</div>
+                <p style="font-size: 0.82rem;">Conditional orders fire the instant the price is hit, using the fastest available data feed across all your brokers.</p>
+            </div>
+            <div style="background: rgba(52,152,219,0.06); border: 1px solid rgba(52,152,219,0.15); border-radius: 10px; padding: 18px 16px;">
+                <div style="font-weight: 700; color: #3498db; font-size: 0.92rem; margin-bottom: 6px;">More Reliable</div>
+                <p style="font-size: 0.82rem;">If one broker's data goes offline, the bot seamlessly switches to another. No missed triggers, no manual fixes needed.</p>
+            </div>
+            <div style="background: rgba(245,166,35,0.06); border: 1px solid rgba(245,166,35,0.15); border-radius: 10px; padding: 18px 16px;">
+                <div style="font-weight: 700; color: #f5a623; font-size: 0.92rem; margin-bottom: 6px;">Zero Extra Cost</div>
+                <p style="font-size: 0.82rem;">Smart routing works automatically using your existing broker connections. No extra subscriptions or data fees required.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h3>Setup</h3>
+        <div class="info-box">
+            <div class="info-title">Nothing to Configure</div>
+            <p>Simply connect your brokers and the bot handles everything automatically. Smart routing activates the moment you have more than one broker connected. The more brokers you connect, the more resilient your price monitoring becomes.</p>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px;">
+        <a href="/static/smart_routing_presentation.html" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 28px; background: linear-gradient(135deg, rgba(15,240,179,0.15), rgba(99,102,241,0.15)); border: 1px solid rgba(15,240,179,0.3); border-radius: 10px; color: var(--help-accent); font-weight: 700; font-size: 0.9rem; text-decoration: none; transition: all 0.2s;">
+            <span style="font-size: 1.1rem;">📊</span> View Full Interactive Presentation
+        </a>
+    </div>
 </div>
 
 <button class="back-to-top" id="backToTop" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">&#8593;</button>
