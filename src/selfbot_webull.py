@@ -18461,7 +18461,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         'opt_type': signal.get('opt_type'),
                                                         'channel_id': signal['channel_id'],
                                                         'received_at': datetime.now(),
-                                                        'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
+                                                        'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT'),
+                                                        'broker': 'ALPACA_PAPER'
                                                     }
                                                     lot_result = matcher.process_signal(lot_signal)
                                                     if lot_result:
@@ -18577,7 +18578,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     'price': signal.get('price'), 'strike': signal.get('strike'),
                                                     'expiry': signal.get('expiry'), 'opt_type': signal.get('opt_type'),
                                                     'channel_id': signal['channel_id'], 'received_at': datetime.now(),
-                                                    'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
+                                                    'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT'),
+                                                    'broker': broker_label
                                                 }
                                                 _tt_lot_result = _tt_matcher.process_signal(_tt_lot_signal)
                                                 if _tt_lot_result:
@@ -19737,7 +19739,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'opt_type': signal.get('opt_type'),
                                     'channel_id': signal['channel_id'],
                                     'received_at': datetime.now(),
-                                    'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
+                                    'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT'),
+                                    'broker': _risk_broker_used
                                 }
                                 _rm_lot_result = _rm_matcher.process_signal(_rm_lot_signal)
                                 if _rm_lot_result:
@@ -20199,7 +20202,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'opt_type': signal.get('opt_type'),
                                             'channel_id': signal['channel_id'],
                                             'received_at': datetime.now(),
-                                            'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
+                                            'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT'),
+                                            'broker': (resp.get('broker', '') if isinstance(resp, dict) else signal.get('broker', ''))
                                         }
                                         lot_result = matcher.process_signal(lot_signal)
                                         if lot_result:

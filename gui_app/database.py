@@ -4036,7 +4036,7 @@ def sync_positions_with_broker(broker_name: str, active_position_keys: set, user
         params.append(user_id)
     
     cursor.execute(f'''
-        SELECT id, symbol, strike, expiry, call_put, asset_type, executed_price, quantity
+        SELECT id, symbol, strike, expiry, call_put, asset_type, executed_price, quantity, pnl
         FROM trades
         WHERE status = 'OPEN' AND LOWER(broker) = LOWER(?) {user_clause}
     ''', params)
@@ -4063,14 +4063,19 @@ def sync_positions_with_broker(broker_name: str, active_position_keys: set, user
             position_key = symbol
         
         if position_key not in active_position_keys:
-            pnl = 0.0
-            pnl_percent = 0.0
-            
-            cursor.execute('''
-                UPDATE trades
-                SET status = 'CLOSED', closed_at = ?, pnl = ?, pnl_percent = ?
-                WHERE id = ?
-            ''', (datetime.now(), pnl, pnl_percent, trade_id))
+            existing_pnl = trade['pnl'] if 'pnl' in trade.keys() else None
+            if existing_pnl and float(existing_pnl) != 0:
+                cursor.execute('''
+                    UPDATE trades
+                    SET status = 'CLOSED', closed_at = ?
+                    WHERE id = ?
+                ''', (datetime.now(), trade_id))
+            else:
+                cursor.execute('''
+                    UPDATE trades
+                    SET status = 'CLOSED', closed_at = ?, pnl = 0, pnl_percent = 0
+                    WHERE id = ?
+                ''', (datetime.now(), trade_id))
             closed_count += 1
             closed_trades.append({
                 'id': trade_id,
@@ -4630,13 +4635,15 @@ def get_orphaned_lots(max_age_minutes: int = 30):
     return cursor.fetchall()
 
 
-def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float = None, expiry: str = None, call_put: str = None, check_executed_symbol: bool = True):
+def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float = None, expiry: str = None, call_put: str = None, check_executed_symbol: bool = True, broker: str = None):
     """Get open lots for a symbol (FIFO order).
     
     If check_executed_symbol is True (default), also checks executed_symbol and original_symbol for matches.
     This handles NDX→QQQ conversions where:
     - signal was NDX but execution was QQQ (check executed_symbol)
     - STC signal is for NDX but lot is QQQ with original_symbol='NDX' (check original_symbol)
+    
+    If broker is provided, only returns lots linked to trades on that broker (prevents cross-broker contamination).
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -4715,7 +4722,23 @@ def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float =
                 ORDER BY opened_at ASC
             ''', (channel_id, asset_type, symbol))
     
-    return cursor.fetchall()
+    rows = cursor.fetchall()
+    
+    if broker and rows:
+        broker_upper = broker.upper()
+        filtered = []
+        for lot in rows:
+            lot_trade_id = lot.get('trade_id') if hasattr(lot, 'get') else lot['trade_id']
+            if lot_trade_id:
+                cursor.execute('SELECT broker FROM trades WHERE id = ?', (lot_trade_id,))
+                trade_row = cursor.fetchone()
+                if trade_row and trade_row['broker'] and trade_row['broker'].upper() == broker_upper:
+                    filtered.append(lot)
+            else:
+                filtered.append(lot)
+        return filtered
+    
+    return rows
 
 
 def get_most_recent_open_lot(channel_id: int, asset_type: str = None):
@@ -5172,9 +5195,11 @@ def process_filled_order_event(broker: str, broker_order_id: str, symbol: str,
             else:
                 closure_query = '''SELECT lc.id FROM lot_closures lc
                                   JOIN signal_lots sl ON lc.lot_id = sl.id
-                                  WHERE UPPER(sl.symbol) = UPPER(?) AND UPPER(lc.broker) = UPPER(?)
+                                  LEFT JOIN trades t ON sl.trade_id = t.id
+                                  WHERE UPPER(sl.symbol) = UPPER(?)
+                                  AND (UPPER(COALESCE(lc.exit_fill_broker, '')) = UPPER(?) OR UPPER(COALESCE(t.broker, '')) = UPPER(?) OR lc.exit_fill_broker IS NULL)
                                   AND lc.exit_fill_price IS NULL AND sl.channel_id = ?'''
-                closure_params = [symbol, broker, channel_id]
+                closure_params = [symbol, broker, broker, channel_id]
                 if strike:
                     closure_query += ' AND sl.strike = ?'
                     closure_params.append(str(strike))

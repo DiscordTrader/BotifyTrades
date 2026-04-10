@@ -1525,7 +1525,8 @@ class BrokerSyncService:
                                                 'channel_id': discord_channel_id,
                                                 'db_channel_id': channel_row['id'],
                                                 'received_at': datetime.now(),
-                                                'exit_reason': 'BROKER_CLOSED'
+                                                'exit_reason': 'BROKER_CLOSED',
+                                                'broker': broker_name
                                             }
                                             lot_result = matcher.process_signal(lot_signal)
                                             if lot_result:
@@ -2000,7 +2001,8 @@ class BrokerSyncService:
                                     'channel_id': discord_channel_id,
                                     'db_channel_id': db_channel_id,
                                     'received_at': datetime.now(),
-                                    'exit_reason': 'BROKER_CLOSED'
+                                    'exit_reason': 'BROKER_CLOSED',
+                                    'broker': broker_name
                                 }
                                 lot_result = matcher.process_signal(lot_signal)
                                 if lot_result:

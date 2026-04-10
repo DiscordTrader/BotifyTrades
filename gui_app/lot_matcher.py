@@ -86,13 +86,15 @@ class LotMatcher:
             channel_id = channel['id']
         
         # Get open lots for this symbol (FIFO order)
+        # Pass broker to scope lot matching per-broker (prevents cross-broker PNL contamination)
         open_lots = db.get_open_lots(
             channel_id=channel_id,
             asset_type=signal['asset'],
             symbol=signal['symbol'],
             strike=signal.get('strike'),
             expiry=signal.get('expiry'),
-            call_put=signal.get('opt_type')
+            call_put=signal.get('opt_type'),
+            broker=signal.get('broker')
         )
         
         if not open_lots:
