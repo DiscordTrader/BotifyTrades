@@ -932,6 +932,14 @@ class UnfilledOrderChaser:
             is_market = (chase_price == 0)
             mid_price = chase_price
 
+            if not is_market and order.is_risk_order and order.original_price is not None:
+                _orig = _to_price(order.original_price)
+                if _orig and _orig > 0 and mid_price < _orig * 0.90:
+                    print(f"[ORDER_CHASER] ⚠️ Chase price ${mid_price:.4f} is >10% below PT price ${_orig:.4f} for {order.symbol} — skipping chase (stale/after-hours quote)")
+                    order.status = OrderChaseStatus.PENDING
+                    order.chase_attempts = max(0, order.chase_attempts - 1)
+                    return
+
             if is_market:
                 print(f"[ORDER_CHASER]   Strategy: MARKET ORDER (attempt {order.chase_attempts})")
             else:
