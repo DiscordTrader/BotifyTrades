@@ -505,15 +505,19 @@ class SchwabBroker(BrokerInterface):
         return True
 
     @staticmethod
-    def _round_to_cboe_increment(price: float, is_sell: bool = False) -> float:
+    def _round_to_cboe_increment(price: float, is_sell: bool = False, is_stop_trigger: bool = False) -> float:
         """Round option price to valid CBOE penny increment.
         
         CBOE rules:
         - Options priced UNDER $3.00: $0.05 increments (e.g. 1.45, 1.50, 1.55)
         - Options priced AT/OVER $3.00: $0.10 increments (e.g. 3.10, 3.20, 3.30)
         
-        For sell orders, round DOWN to nearest valid increment to improve fill probability.
-        For buy orders, round UP to nearest valid increment.
+        For limit prices:
+          - Sell orders: round DOWN to improve fill probability
+          - Buy orders: round UP to improve fill probability
+        For stop trigger prices (protective direction):
+          - Sell-stop (protecting long): round UP so stop triggers sooner
+          - Buy-stop (protecting short): round DOWN so stop triggers sooner
         """
         import math
         if price <= 0:
@@ -526,10 +530,16 @@ class SchwabBroker(BrokerInterface):
         
         ticks = round(price / increment, 8)
         
-        if is_sell:
-            rounded = math.floor(ticks) * increment
+        if is_stop_trigger:
+            if is_sell:
+                rounded = math.ceil(ticks) * increment
+            else:
+                rounded = math.floor(ticks) * increment
         else:
-            rounded = math.ceil(ticks) * increment
+            if is_sell:
+                rounded = math.floor(ticks) * increment
+            else:
+                rounded = math.ceil(ticks) * increment
         
         rounded = round(rounded, 2)
         if rounded <= 0:
@@ -1037,7 +1047,7 @@ class SchwabBroker(BrokerInterface):
                 lookup_symbol = option_symbol.upper()
             
             for order in orders:
-                all_matches = self._extract_orders_recursive(order, lookup_symbol if asset_type == 'EQUITY' else symbol)
+                all_matches = self._extract_orders_recursive(order, lookup_symbol)
                 for match in all_matches:
                     match_status = match.get('status', '')
                     match_id = str(match.get('id', ''))
@@ -1067,8 +1077,8 @@ class SchwabBroker(BrokerInterface):
             if cancelled_count > 0:
                 if self._data_hub:
                     self._data_hub.invalidate_all()
-                print(f"[{self.name}] ✓ Cleared {cancelled_count} conflicting sell order(s) for {symbol}")
-                await asyncio.sleep(0.5)
+                print(f"[{self.name}] ✓ Cleared {cancelled_count} conflicting sell order(s) for {symbol} — waiting 2s for Schwab to process")
+                await asyncio.sleep(2.0)
                 
         except asyncio.TimeoutError:
             print(f"[{self.name}] ⚠️ Timeout cancelling conflicting orders for {symbol} — will retry in pre-exit block")
@@ -2419,6 +2429,13 @@ class SchwabBroker(BrokerInterface):
                 print(f"[{self.name}] ℹ️ STOP order forced to NORMAL session (SEAMLESS doesn't support STOP orders)")
             order_duration = self._get_duration(duration_hint=duration, is_exit=True)
 
+            if asset_type.upper() == 'OPTION':
+                original_stop = stop_price
+                is_sell = instruction in ('SELL', 'SELL_TO_CLOSE')
+                stop_price = self._round_to_cboe_increment(stop_price, is_sell=is_sell, is_stop_trigger=True)
+                if stop_price != original_stop:
+                    print(f"[{self.name}] 📐 STOP CBOE snap: ${original_stop:.4f} → ${stop_price:.2f} (protective {'up' if is_sell else 'down'})")
+
             order_payload = {
                 "orderStrategyType": "SINGLE",
                 "orderType": "STOP",
@@ -2507,6 +2524,14 @@ class SchwabBroker(BrokerInterface):
 
             session = self._get_session_type()
             order_duration = self._get_duration(duration_hint=duration, is_exit=True)
+
+            if asset_type.upper() == 'OPTION':
+                is_sell = instruction in ('SELL', 'SELL_TO_CLOSE')
+                original_stop, original_limit = stop_price, limit_price
+                stop_price = self._round_to_cboe_increment(stop_price, is_sell=is_sell, is_stop_trigger=True)
+                limit_price = self._round_to_cboe_increment(limit_price, is_sell=is_sell)
+                if stop_price != original_stop or limit_price != original_limit:
+                    print(f"[{self.name}] 📐 STOP_LIMIT CBOE snap: stop ${original_stop:.4f}→${stop_price:.2f}, limit ${original_limit:.4f}→${limit_price:.2f}")
 
             order_payload = {
                 "orderStrategyType": "SINGLE",
@@ -2693,6 +2718,16 @@ class SchwabBroker(BrokerInterface):
             instruction = instruction_map.get(side.lower(), 'SELL')
             session = self._get_session_type()
 
+            if asset_type.upper() == 'OPTION':
+                is_sell = instruction in ('SELL', 'SELL_TO_CLOSE')
+                original_sl, original_pt = stop_loss_price, profit_target_price
+                stop_loss_price = self._round_to_cboe_increment(stop_loss_price, is_sell=is_sell, is_stop_trigger=True)
+                profit_target_price = self._round_to_cboe_increment(profit_target_price, is_sell=is_sell)
+                if stop_limit_price:
+                    stop_limit_price = self._round_to_cboe_increment(stop_limit_price, is_sell=is_sell)
+                if stop_loss_price != original_sl or profit_target_price != original_pt:
+                    print(f"[{self.name}] 📐 OCO CBOE snap: SL ${original_sl:.4f}→${stop_loss_price:.2f}, PT ${original_pt:.4f}→${profit_target_price:.2f}")
+
             profit_leg = {
                 "orderStrategyType": "SINGLE",
                 "orderType": "LIMIT",
@@ -2839,6 +2874,23 @@ class SchwabBroker(BrokerInterface):
                 instrument_asset_type = "EQUITY"
 
             session = self._get_session_type()
+            if is_option:
+                if entry_price:
+                    original_entry = entry_price
+                    entry_price = self._round_to_cboe_increment(entry_price, is_sell=(entry_instruction in ('SELL_TO_OPEN',)))
+                    if entry_price != original_entry:
+                        print(f"[{self.name}] 📐 BRACKET entry CBOE snap: ${original_entry:.4f}→${entry_price:.2f}")
+                if stop_loss_price is not None:
+                    original_sl = stop_loss_price
+                    stop_loss_price = self._round_to_cboe_increment(stop_loss_price, is_sell=(exit_instruction in ('SELL_TO_CLOSE',)), is_stop_trigger=True)
+                    if stop_loss_price != original_sl:
+                        print(f"[{self.name}] 📐 BRACKET SL CBOE snap: ${original_sl:.4f}→${stop_loss_price:.2f}")
+                if profit_target_price is not None:
+                    original_pt = profit_target_price
+                    profit_target_price = self._round_to_cboe_increment(profit_target_price, is_sell=(exit_instruction in ('SELL_TO_CLOSE',)))
+                    if profit_target_price != original_pt:
+                        print(f"[{self.name}] 📐 BRACKET PT CBOE snap: ${original_pt:.4f}→${profit_target_price:.2f}")
+
             entry_order_type = "LIMIT" if entry_price else "MARKET"
             entry_duration = "DAY"
 
