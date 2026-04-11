@@ -2374,7 +2374,7 @@
     "ema_last_eval_candle_ts": null,
     "ema_post_entry_candles": 0,
     "broker_stop_order_id": null,
-    "broker_pt_order_id": null,
+    "broker_pt_order_id": "04GE47D6ICD86F93E7ITFN48NB",
     "broker_pt_tier": 1,
     "broker_orders_placed": true
   },
@@ -2419,7 +2419,7 @@
   },
   "Webull_RMSG_stock": {
     "entry_price": 0.64,
-    "highest_price": 0.6057,
+    "highest_price": 0.63,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2431,9 +2431,9 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "original_qty": 56,
+    "original_qty": 42,
     "pending_orders": {},
-    "created_at": "2026-04-10T22:57:53.161627",
+    "created_at": "2026-04-11T01:05:49.677766",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
@@ -2452,8 +2452,8 @@
     "ema_last_eval_candle_ts": null,
     "ema_post_entry_candles": 0,
     "broker_stop_order_id": null,
-    "broker_pt_order_id": "0FI0SJAVL64OBM66OHTN9T7819",
-    "broker_pt_tier": 1,
-    "broker_orders_placed": true
+    "broker_pt_order_id": null,
+    "broker_pt_tier": 0,
+    "broker_orders_placed": false
   }
 }

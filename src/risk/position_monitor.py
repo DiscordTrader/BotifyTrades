@@ -6986,7 +6986,8 @@ class RiskManager:
                             _sanity_rejected = True
                     if fresh_price and fresh_price > 0 and pos.current_price > 0:
                         price_jump = abs(fresh_price - pos.current_price) / pos.current_price
-                        if price_jump > 0.30:
+                        _jump_threshold = 0.30 if session == 'regular' else 0.80
+                        if price_jump > _jump_threshold:
                             print(f"[RISK] 🛡️ REST SANITY REJECT: {pos.symbol} REST=${fresh_price:.2f} "
                                   f"is {price_jump*100:.0f}% jump from streaming ${pos.current_price:.2f} — "
                                   f"rejecting suspicious REST price (session={session})")
