@@ -73,7 +73,6 @@ _HUB_REGISTRY = [
     ('schwab', 'src.services.schwab_data_hub', 'get_schwab_data_hub'),
     ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
     ('tastytrade', 'src.services.tastytrade_data_hub', 'get_tastytrade_data_hub'),
-    ('trading212', 'src.services.trading212_data_hub', 'get_trading212_data_hub'),
 ]
 
 
