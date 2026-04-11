@@ -7196,6 +7196,19 @@ class RiskManager:
                 price = self._get_fresh_hub_price(hub, norm_sym, max_age=2)
                 if price and price > 0:
                     return price
+        if not is_option and 'TRADING212' not in broker_upper:
+            try:
+                from src.services.trading212_data_hub import get_trading212_data_hub
+                t212_hub = get_trading212_data_hub()
+                if t212_hub:
+                    import time as _t
+                    norm_sym = self._normalize_symbol_for_hub(pos.symbol, 'T212')
+                    t212_price = t212_hub.get_quote_price(norm_sym)
+                    t212_ts = t212_hub.get_quote_timestamp(norm_sym)
+                    if t212_price and t212_price > 0 and t212_ts and (_t.time() - t212_ts) < 2:
+                        return t212_price
+            except Exception:
+                pass
         return None
 
     async def _try_rest_quote(self, pos):
@@ -7604,8 +7617,6 @@ class RiskManager:
             if id(pos) in _hub_updated_ids:
                 continue
             _broker_upper = pos.broker.upper()
-            if 'TRADING212' in _broker_upper:
-                continue
             _is_opt = pos.asset == 'option'
             _cross_candidates = []
             if 'WEBULL' not in _broker_upper:
@@ -7683,21 +7694,23 @@ class RiskManager:
                                 _cross_candidates.append((_p, _tt_ts, 'Tastytrade'))
                 except Exception:
                     pass
+            if not _is_opt and 'TRADING212' not in _broker_upper:
+                try:
+                    import time as _cx_time
+                    from src.services.trading212_data_hub import get_trading212_data_hub
+                    t212_hub = get_trading212_data_hub()
+                    if t212_hub and not t212_hub.is_stale:
+                        _cx_now = _cx_time.time()
+                        _lk = self._normalize_symbol_for_hub(pos.symbol, 'T212')
+                        t212_price = t212_hub.get_quote_price(_lk)
+                        t212_ts = t212_hub.get_quote_timestamp(_lk)
+                        if t212_price and t212_price > 0 and t212_ts and (_cx_now - t212_ts) < self._HUB_PRICE_MAX_AGE:
+                            _cross_candidates.append((t212_price, t212_ts, 'T212'))
+                except Exception:
+                    pass
             _cross_applied = False
             _repair_key = self._pos_tracking_key(pos)
-            _CROSS_HUB_MAX_DIVERGENCE = 0.15
             for _cp, _ct, _cs in _cross_candidates:
-                if pos.current_price and pos.current_price > 0:
-                    _div = abs(_cp - pos.current_price) / pos.current_price
-                    if _div > _CROSS_HUB_MAX_DIVERGENCE:
-                        if not hasattr(self, '_cross_div_logged'):
-                            self._cross_div_logged = {}
-                        _div_key = f"{pos.symbol}_{pos.broker}_{_cs}"
-                        _div_now = time.time() if 'time' in dir() else __import__('time').time()
-                        if _div_key not in self._cross_div_logged or (_div_now - self._cross_div_logged[_div_key]) > 120:
-                            self._cross_div_logged[_div_key] = _div_now
-                            print(f"[RISK] ⛔ CROSS-HUB REJECTED: {pos.broker} {pos.symbol} | {_cs}=${_cp:.4f} vs current=${pos.current_price:.4f} | divergence={_div:.1%} > {_CROSS_HUB_MAX_DIVERGENCE:.0%} limit", flush=True)
-                        continue
                 if self._is_rest_repair_active(pos, hub_quote_ts=_ct):
                     repair = self._rest_repaired_prices.get(_repair_key)
                     if repair and abs(_cp - repair['price']) > max(0.02, repair['price'] * 0.005):
