@@ -452,6 +452,7 @@ class UnifiedPriceHub:
                 self._stats['shadow_matches'] += 1
 
         if pct > 1.0:
+            now = time.time()
             result = {
                 'symbol': symbol,
                 'uph_price': quote.last,
@@ -460,13 +461,20 @@ class UnifiedPriceHub:
                 'consumer_price': consumer_price,
                 'consumer_source': consumer_source,
                 'diff_pct': round(pct, 2),
-                'timestamp': time.time(),
+                'timestamp': now,
             }
             with self._shadow_lock:
                 self._shadow_discrepancies.append(result)
                 if len(self._shadow_discrepancies) > 500:
                     self._shadow_discrepancies = self._shadow_discrepancies[-250:]
-            print(f"[UPH] ⚠️ Shadow discrepancy: {symbol} | {consumer_source}=${consumer_price:.4f} vs UPH=${quote.last:.4f} ({quote.source_hub}/{quote.freshness}) | diff={pct:.2f}%", flush=True)
+            if not hasattr(self, '_shadow_log_throttle'):
+                self._shadow_log_throttle = {}
+            _throttle_key = f"{symbol}_{consumer_source}"
+            _last = self._shadow_log_throttle.get(_throttle_key)
+            _pct_bucket = round(pct, 0)
+            if not _last or (now - _last.get('ts', 0)) > 60 or abs(_last.get('pct', 0) - _pct_bucket) > 2:
+                self._shadow_log_throttle[_throttle_key] = {'ts': now, 'pct': _pct_bucket}
+                print(f"[UPH] ⚠️ Shadow discrepancy: {symbol} | {consumer_source}=${consumer_price:.4f} vs UPH=${quote.last:.4f} ({quote.source_hub}/{quote.freshness}) | diff={pct:.2f}%", flush=True)
             return result
         return None
 
