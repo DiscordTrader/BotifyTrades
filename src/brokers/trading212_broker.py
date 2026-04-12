@@ -295,13 +295,6 @@ class Trading212Broker(BrokerInterface):
         if not self._client or not self.connected:
             return OrderResult(success=False, message="Not connected to Trading 212")
 
-        if self.is_live:
-            print(f"[T212] ⚠️ LIVE environment: stop orders not supported via API — rejecting stop order for {symbol}")
-            return OrderResult(
-                success=False, symbol=symbol, action=action,
-                message=f"T212 LIVE API does not support stop orders. Use software-based risk monitoring instead."
-            )
-
         if not self._instruments_ready:
             return OrderResult(success=False, message="Instrument cache still loading. Try again in a few seconds.")
 
@@ -345,13 +338,6 @@ class Trading212Broker(BrokerInterface):
     ) -> OrderResult:
         if not self._client or not self.connected:
             return OrderResult(success=False, message="Not connected to Trading 212")
-
-        if self.is_live:
-            print(f"[T212] ⚠️ LIVE environment: stop-limit orders not supported via API — rejecting for {symbol}")
-            return OrderResult(
-                success=False, symbol=symbol, action=action,
-                message=f"T212 LIVE API does not support stop-limit orders. Use software-based risk monitoring instead."
-            )
 
         if not self._instruments_ready:
             return OrderResult(success=False, message="Instrument cache still loading. Try again in a few seconds.")
@@ -419,15 +405,7 @@ class Trading212Broker(BrokerInterface):
         try:
             ext_hours = self._get_extended_hours_enabled()
 
-            if self.is_live:
-                if stop_price and stop_price > 0:
-                    print(f"[T212] ⚠️ LIVE: stop/stop-limit not supported — downgrading to market order for {symbol}")
-                elif price and price > 0:
-                    print(f"[T212] ⚠️ LIVE: limit orders not supported — downgrading to market order for {symbol}")
-                if ext_hours:
-                    _t212_print(f"[T212] Extended hours ENABLED for {symbol}", flush=True)
-                result = await self._client.place_market_order(ticker, qty, extended_hours=ext_hours)
-            elif stop_price and stop_price > 0 and limit_price and limit_price > 0:
+            if stop_price and stop_price > 0 and limit_price and limit_price > 0:
                 return await self.place_stop_limit_order(symbol, action, quantity, stop_price, limit_price)
             elif stop_price and stop_price > 0:
                 return await self.place_stop_order(symbol, action, quantity, stop_price)

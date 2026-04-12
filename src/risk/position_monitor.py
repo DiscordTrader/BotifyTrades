@@ -4336,7 +4336,7 @@ class RiskManager:
             from tastytrade.instruments import Equity as _TTEq
             from tastytrade.order import NewOrder as _TTOrder, OrderAction as _TTAction, OrderTimeInForce as _TTTIF, OrderType as _TTType
             from decimal import Decimal as _TTDec
-            from src.brokers.base_broker import OrderResult
+            from src.broker_interface import OrderResult
             if not broker_instance._ensure_session_valid():
                 return OrderResult(success=False, message='TastyTrade session invalid', symbol=symbol, action=action)
             tt_eq = await _await_if_needed(
@@ -4361,7 +4361,7 @@ class RiskManager:
                 return OrderResult(success=True, order_id=str(response.order.id), symbol=symbol, action=action, quantity=qty, price=price)
             return OrderResult(success=True, order_id=None, symbol=symbol, action=action, quantity=qty, price=price, message='TastyTrade GTC order submitted but no order ID returned')
         except Exception as e:
-            from src.brokers.base_broker import OrderResult
+            from src.broker_interface import OrderResult
             return OrderResult(success=False, message=str(e), symbol=symbol, action=action)
 
     def _resolve_webull_option_id(self, broker_instance, position):
@@ -4596,26 +4596,29 @@ class RiskManager:
                         contract = IBStock(symbol, 'SMART', 'USD')
                     await self.ibkr_broker.ib.qualifyContractsAsync(contract)
 
+                    _ibkr_ok_statuses = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
                     if sl_price and sl_price > 0:
                         sl_order = StopOrder('SELL', qty, sl_price)
+                        sl_order.tif = 'GTC'
                         sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
                         sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
                         await asyncio.sleep(1)
-                        if sl_trade and sl_trade.orderStatus.status != 'Cancelled':
+                        if sl_trade and sl_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_stop_order_id = str(sl_trade.order.orderId)
-                            print(f"[RISK] ✅ Broker SL placed: IBKR stop #{sl_trade.order.orderId} at ${sl_price:.2f} (qty={qty})")
+                            print(f"[RISK] ✅ Broker SL placed: IBKR stop #{sl_trade.order.orderId} at ${sl_price:.2f} (qty={qty}) [GTC]")
                         else:
                             print(f"[RISK] ⚠️ IBKR SL order failed: {sl_trade.orderStatus.status if sl_trade else 'no trade'}")
 
                     if pt1_price and pt1_price > 0 and pt1_qty > 0:
                         pt_order = IBLimitOrder('SELL', pt1_qty, pt1_price)
+                        pt_order.tif = 'GTC'
                         pt_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
                         pt_trade = self.ibkr_broker.ib.placeOrder(contract, pt_order)
                         await asyncio.sleep(1)
-                        if pt_trade and pt_trade.orderStatus.status != 'Cancelled':
+                        if pt_trade and pt_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_pt_order_id = str(pt_trade.order.orderId)
                             cache.broker_pt_tier = 1
-                            print(f"[RISK] ✅ Broker PT1 placed: IBKR limit #{pt_trade.order.orderId} at ${pt1_price:.2f} (qty={pt1_qty})")
+                            print(f"[RISK] ✅ Broker PT1 placed: IBKR limit #{pt_trade.order.orderId} at ${pt1_price:.2f} (qty={pt1_qty}) [GTC]")
                             await self._register_pt_with_chaser(str(pt_trade.order.orderId), broker_name, position, cache, pt1_qty, pt1_price, is_option)
                         else:
                             print(f"[RISK] ⚠️ IBKR PT1 order failed: {pt_trade.orderStatus.status if pt_trade else 'no trade'}")
@@ -4720,12 +4723,6 @@ class RiskManager:
 
                     if is_option:
                         print(f"[RISK] ⚠️ Trading212 does not support options — bracket orders for stocks only")
-                        cache.broker_orders_placed = True
-                        return
-
-                    _t212_is_live = getattr(self.trading212_broker, 'is_live', False)
-                    if _t212_is_live:
-                        print(f"[RISK] ℹ️ Trading212 LIVE: broker-side SL/PT not supported — relying on software risk monitoring for {symbol}")
                         cache.broker_orders_placed = True
                         return
 
@@ -5139,11 +5136,11 @@ class RiskManager:
         elif 'WEBULL' in broker_name:
             _wb_c = getattr(broker_instance, '_client', None) or getattr(broker_instance, 'wb', None)
             if not _wb_c:
-                from src.brokers.base_broker import OrderResult
+                from src.broker_interface import OrderResult
                 return OrderResult(success=False, message='Webull client not connected', symbol=symbol, action='STC')
             _wb_tid = await asyncio.to_thread(self._resolve_webull_ticker_id, _wb_c, symbol)
             if not _wb_tid:
-                from src.brokers.base_broker import OrderResult
+                from src.broker_interface import OrderResult
                 return OrderResult(success=False, message=f'Webull ticker ID not found for {symbol}', symbol=symbol, action='STC')
             _pt_p = round(price, 4 if price < 1.0 else 2)
             def _wb_pt(_c=_wb_c, _s=symbol, _p=_pt_p, _q=qty, _t=_wb_tid):
@@ -5155,10 +5152,10 @@ class RiskManager:
             resp = await asyncio.to_thread(_wb_pt)
             if resp and not resp.get('msg'):
                 _oid = str(resp.get('orderId', ''))
-                from src.brokers.base_broker import OrderResult
+                from src.broker_interface import OrderResult
                 return OrderResult(success=True, order_id=_oid, symbol=symbol, action='STC', quantity=qty, price=price)
             else:
-                from src.brokers.base_broker import OrderResult
+                from src.broker_interface import OrderResult
                 return OrderResult(success=False, message=resp.get('msg', 'unknown') if resp else 'no response', symbol=symbol, action='STC')
         return None
 
@@ -5380,12 +5377,14 @@ class RiskManager:
                         contract = _IBStock(symbol, 'SMART', 'USD')
                     await self.ibkr_broker.ib.qualifyContractsAsync(contract)
                     sl_order = IBStopOrder('SELL', qty, new_stop_price)
+                    sl_order.tif = 'GTC'
                     sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
                     sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
                     await asyncio.sleep(1)
-                    if sl_trade and sl_trade.orderStatus.status != 'Cancelled':
+                    _ibkr_sync_ok = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
+                    if sl_trade and sl_trade.orderStatus.status in _ibkr_sync_ok:
                         cache.broker_stop_order_id = str(sl_trade.order.orderId)
-                        print(f"[RISK] ✅ Broker stop synced: IBKR stop #{sl_trade.order.orderId} at ${new_stop_price:.2f}")
+                        print(f"[RISK] ✅ Broker stop synced: IBKR stop #{sl_trade.order.orderId} at ${new_stop_price:.2f} [GTC]")
                     else:
                         print(f"[RISK] ⚠️ IBKR stop sync failed: {sl_trade.orderStatus.status if sl_trade else 'no trade'}")
 
@@ -5432,8 +5431,6 @@ class RiskManager:
 
                 elif 'TRADING212' in broker_name:
                     if _is_opt:
-                        return
-                    if getattr(self.trading212_broker, 'is_live', False):
                         return
                     sl_result = await self.trading212_broker.place_stop_order(
                         symbol=symbol, action='STC', quantity=qty, stop_price=new_stop_price
@@ -5997,8 +5994,11 @@ class RiskManager:
                 print(f"[RISK] 📊 Penny stock (${position.current_price:.4f}) — using limit order per channel settings")
 
             if not use_market and 'TRADING212' in position.broker.upper():
-                use_market = True
-                print(f"[RISK] 📊 Trading212 exit → market order (trigger: {decision.risk_trigger or 'unknown'})")
+                if getattr(self.trading212_broker, 'is_live', False):
+                    pass
+                else:
+                    use_market = True
+                    print(f"[RISK] 📊 Trading212 DEMO exit → market order (trigger: {decision.risk_trigger or 'unknown'})")
 
             if use_market:
                 stc_signal['_use_market_order'] = True

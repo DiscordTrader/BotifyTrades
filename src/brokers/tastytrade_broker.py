@@ -634,7 +634,7 @@ class TastytradeBroker(BrokerInterface):
         action: str,
         quantity: int,
         price: Optional[float] = None,
-        stop_price: Optional[float] = None
+        **kwargs
     ) -> OrderResult:
         """Place a stock order"""
         try:
