@@ -1574,9 +1574,6 @@ function validateRiskSettings(channelId) {
     for (let i = 1; i < activePTs.length; i++) {
         if (activePTs[i] <= activePTs[i-1]) { warnings.push('Profit targets must be in ascending order.'); break; }
     }
-    if (sl > 0 && activePTs.length > 0 && sl >= activePTs[0]) {
-        warnings.push(`Stop loss (${sl}%) is >= your lowest PT (${activePTs[0]}%). The SL could trigger before any profit target.`);
-    }
     if (earlyOn && trail > 0) {
         warnings.push('Both Early Trailing and Legacy Trailing are configured. Early Trailing takes priority.');
     }

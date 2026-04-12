@@ -1604,9 +1604,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        if (sl > 0 && activePTs.length > 0 && sl >= activePTs[0]) {
-            warnings.push('Stop loss (' + sl + '%) is >= your lowest PT (' + activePTs[0] + '%). The SL could trigger before any profit target.');
-        }
 
         if (earlyOn && trail > 0) {
             warnings.push('Both Early Trailing and Legacy Trailing are configured. Early Trailing takes priority — Legacy Trailing will be ignored.');
