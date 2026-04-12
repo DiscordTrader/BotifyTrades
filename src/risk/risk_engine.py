@@ -241,6 +241,73 @@ def calculate_auto_tier_quantities(
     return tier_qtys
 
 
+def calculate_tier_quantities(
+    total_qty: int,
+    leave_runner_pct: float,
+    enabled_tiers: List[int],
+    custom_qtys: Optional[Dict[int, Optional[int]]] = None,
+    custom_trim_pcts: Optional[Dict[int, Optional[float]]] = None,
+) -> Dict[int, int]:
+    """
+    Unified tier quantity allocator. Priority: custom_qty > custom_trim_pct > auto_split.
+    
+    Args:
+        total_qty: Total position size (contracts/shares)
+        leave_runner_pct: Runner percentage (0 if disabled)
+        enabled_tiers: List of enabled tier numbers [1,2,3,4]
+        custom_qtys: Per-tier custom quantities {1: 5, 2: None, ...}
+        custom_trim_pcts: Per-tier trim percentages {1: 80.0, 2: 10.0, ...}
+    
+    Returns:
+        Dict mapping tier number to quantity to sell
+    """
+    if not enabled_tiers or total_qty <= 0:
+        return {}
+
+    custom_qtys = custom_qtys or {}
+    custom_trim_pcts = custom_trim_pcts or {}
+
+    runner_qty = math.floor(total_qty * (leave_runner_pct / 100))
+    if leave_runner_pct > 0 and total_qty > 1 and runner_qty < 1:
+        runner_qty = 1
+    sellable_qty = total_qty - runner_qty
+
+    if sellable_qty <= 0:
+        return {tier: 0 for tier in enabled_tiers}
+
+    tier_qtys = {}
+    allocated = 0
+    auto_tiers = []
+
+    for tier in sorted(enabled_tiers):
+        cq = custom_qtys.get(tier)
+        cp = custom_trim_pcts.get(tier)
+
+        if cq is not None and cq > 0:
+            qty = min(cq, sellable_qty - allocated)
+            tier_qtys[tier] = max(0, qty)
+            allocated += tier_qtys[tier]
+        elif cp is not None and cp > 0:
+            qty = math.floor(sellable_qty * (cp / 100.0))
+            qty = min(qty, sellable_qty - allocated)
+            tier_qtys[tier] = max(0, qty)
+            allocated += tier_qtys[tier]
+        else:
+            auto_tiers.append(tier)
+
+    remaining = sellable_qty - allocated
+    if auto_tiers and remaining > 0:
+        base = remaining // len(auto_tiers)
+        rem = remaining % len(auto_tiers)
+        for i, tier in enumerate(auto_tiers):
+            tier_qtys[tier] = base + (1 if i < rem else 0)
+    elif not auto_tiers and remaining > 0:
+        first_tier = sorted(enabled_tiers)[0]
+        tier_qtys[first_tier] = tier_qtys.get(first_tier, 0) + remaining
+
+    return tier_qtys
+
+
 def evaluate_exit_actions(
     state: TradeState,
     config: ChannelRiskSettings,
@@ -521,7 +588,15 @@ def evaluate_exit_actions(
     if enabled_tiers:
         escalation_only = getattr(config, 'escalation_only_mode', False)
         leave_runner = config.leave_runner_pct if config.leave_runner_enabled else 0
-        tier_qtys = calculate_auto_tier_quantities(state.qty, leave_runner, enabled_tiers) if not escalation_only else {}
+        custom_qtys = {
+            t: getattr(config, f'profit_target_qty_{t}', None)
+            for t in enabled_tiers
+        }
+        custom_trim_pcts = {
+            t: getattr(config, f'profit_target_trim_pct_{t}', None)
+            for t in enabled_tiers
+        }
+        tier_qtys = calculate_tier_quantities(state.qty, leave_runner, enabled_tiers, custom_qtys, custom_trim_pcts) if not escalation_only else {}
         
         for tier in enabled_tiers:
             tier_hit_attr = f'pt{tier}_hit'

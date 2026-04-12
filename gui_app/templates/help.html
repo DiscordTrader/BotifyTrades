@@ -1412,6 +1412,13 @@
             <p>By default, the bot auto-calculates how many contracts to sell at each tier (divides evenly). You can override this by specifying exact quantities for P1-P4 Qty. Leave empty for auto-calculation.</p>
             <p style="margin-top: 6px;"><strong>Example:</strong> 10 contracts with P1 Qty=1, P2 Qty=2, P3 Qty=3, P4 Qty=4 &mdash; sells 1 at PT1, 2 at PT2, 3 at PT3, 4 at PT4. If the total exceeds your position, the bot caps at available quantity.</p>
         </div>
+
+        <div class="info-box">
+            <div class="info-title">Custom Trim Percentages</div>
+            <p>Instead of exact quantities, you can specify what percentage of the sellable position to trim at each tier. Percentages don't need to total 100%. Leave empty for auto-calculation.</p>
+            <p style="margin-top: 6px;"><strong>Priority:</strong> Custom Qty > Custom Trim % > Auto-split. If both qty and trim % are set for the same tier, the qty takes precedence.</p>
+            <p style="margin-top: 6px;"><strong>Example:</strong> 10 contracts, Runner 20%, P1 Trim=80%, P2 Trim=20% &mdash; sellable is 8 (2 runner). Sells floor(8*0.80)=6 at PT1, floor(8*0.20)=1 at PT2, 1 remaining auto-allocated.</p>
+        </div>
     </div>
 
     <div class="help-card">

@@ -284,6 +284,16 @@ async function loadChannels() {
                                         <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P4 Qty</label><input type="number" id="risk-qty-4-${channel.id}" value="${channel.profit_target_qty_4 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     </div>
                                 </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(234, 179, 8, 0.05); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #eab308; margin-bottom: 8px;">Custom Trim Percentages (optional)</label>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Specify % of position to trim at each target. Overridden by custom qty if both set. Leave empty for auto.</p>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P1 Trim %</label><input type="number" id="risk-trim-pct-1-${channel.id}" value="${channel.profit_target_trim_pct_1 || ''}" placeholder="Auto" step="1" min="0" max="100" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P2 Trim %</label><input type="number" id="risk-trim-pct-2-${channel.id}" value="${channel.profit_target_trim_pct_2 || ''}" placeholder="Auto" step="1" min="0" max="100" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P3 Trim %</label><input type="number" id="risk-trim-pct-3-${channel.id}" value="${channel.profit_target_trim_pct_3 || ''}" placeholder="Auto" step="1" min="0" max="100" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P4 Trim %</label><input type="number" id="risk-trim-pct-4-${channel.id}" value="${channel.profit_target_trim_pct_4 || ''}" placeholder="Auto" step="1" min="0" max="100" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    </div>
+                                </div>
                                 <h5 style="margin: 16px 0 10px; color: #EF4444; font-size: 12px;">🛑 Stop Loss & Trailing</h5>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -1407,6 +1417,10 @@ async function saveRiskManagement(channelId) {
         const qty2 = document.getElementById(`risk-qty-2-${channelId}`).value;
         const qty3 = document.getElementById(`risk-qty-3-${channelId}`).value;
         const qty4 = document.getElementById(`risk-qty-4-${channelId}`).value;
+        const trimPct1 = document.getElementById(`risk-trim-pct-1-${channelId}`).value;
+        const trimPct2 = document.getElementById(`risk-trim-pct-2-${channelId}`).value;
+        const trimPct3 = document.getElementById(`risk-trim-pct-3-${channelId}`).value;
+        const trimPct4 = document.getElementById(`risk-trim-pct-4-${channelId}`).value;
         const stopLoss = document.getElementById(`risk-stop-loss-${channelId}`).value;
         const trailingStop = document.getElementById(`risk-trailing-stop-${channelId}`).value;
         const trailingActivation = document.getElementById(`risk-trailing-activation-${channelId}`).value;
@@ -1463,6 +1477,10 @@ async function saveRiskManagement(channelId) {
                 profit_target_qty_2: qty2 ? parseInt(qty2) : null,
                 profit_target_qty_3: qty3 ? parseInt(qty3) : null,
                 profit_target_qty_4: qty4 ? parseInt(qty4) : null,
+                profit_target_trim_pct_1: trimPct1 ? parseFloat(trimPct1) : null,
+                profit_target_trim_pct_2: trimPct2 ? parseFloat(trimPct2) : null,
+                profit_target_trim_pct_3: trimPct3 ? parseFloat(trimPct3) : null,
+                profit_target_trim_pct_4: trimPct4 ? parseFloat(trimPct4) : null,
                 stop_loss_pct: stopLoss ? parseFloat(stopLoss) : null,
                 trailing_stop_pct: trailingStop ? parseFloat(trailingStop) : null,
                 trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null,
@@ -1625,6 +1643,10 @@ function applyRiskPreset(channelId, preset) {
     setVal(`risk-qty-2-${channelId}`, '');
     setVal(`risk-qty-3-${channelId}`, '');
     setVal(`risk-qty-4-${channelId}`, '');
+    setVal(`risk-trim-pct-1-${channelId}`, '');
+    setVal(`risk-trim-pct-2-${channelId}`, '');
+    setVal(`risk-trim-pct-3-${channelId}`, '');
+    setVal(`risk-trim-pct-4-${channelId}`, '');
     setVal(`risk-stop-loss-${channelId}`, p.sl || '');
     setVal(`risk-trailing-stop-${channelId}`, p.trail || '');
     setVal(`risk-trailing-activation-${channelId}`, p.trail_act || '');

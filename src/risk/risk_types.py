@@ -82,6 +82,10 @@ class ChannelRiskSettings:
     profit_target_qty_2: Optional[int] = None  # Custom qty for T2
     profit_target_qty_3: Optional[int] = None  # Custom qty for T3
     profit_target_qty_4: Optional[int] = None  # Custom qty for T4
+    profit_target_trim_pct_1: Optional[float] = None  # Custom trim % for T1 (None = auto)
+    profit_target_trim_pct_2: Optional[float] = None  # Custom trim % for T2
+    profit_target_trim_pct_3: Optional[float] = None  # Custom trim % for T3
+    profit_target_trim_pct_4: Optional[float] = None  # Custom trim % for T4
     stop_loss_pct: float = 0.0
     trailing_stop_pct: float = 0.0
     trailing_activation_pct: float = 15.0
@@ -145,6 +149,8 @@ class ChannelRiskSettings:
             self.profit_target_3_pct, self.profit_target_4_pct,
             self.profit_target_qty_1, self.profit_target_qty_2,
             self.profit_target_qty_3, self.profit_target_qty_4,
+            self.profit_target_trim_pct_1, self.profit_target_trim_pct_2,
+            self.profit_target_trim_pct_3, self.profit_target_trim_pct_4,
             self.stop_loss_pct, self.trailing_stop_pct,
             self.trailing_activation_pct, self.leave_runner_enabled,
             self.leave_runner_pct, self.exit_strategy_mode,

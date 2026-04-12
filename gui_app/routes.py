@@ -2032,6 +2032,8 @@ def register_routes(app):
             'profit_target_3_pct': (0, 1000), 'profit_target_4_pct': (0, 1000),
             'profit_target_qty_1': (0, 100), 'profit_target_qty_2': (0, 100),
             'profit_target_qty_3': (0, 100), 'profit_target_qty_4': (0, 100),
+            'profit_target_trim_pct_1': (0, 100), 'profit_target_trim_pct_2': (0, 100),
+            'profit_target_trim_pct_3': (0, 100), 'profit_target_trim_pct_4': (0, 100),
             'position_size_pct': (0, 100), 'leave_runner_pct': (1, 100),
             'sl_limit_offset': (0, 1), 'giveback_allowed_pct': (0, 100),
             'early_trailing_activation_pct': (0, 100), 'early_trailing_step_pct': (0, 100),
@@ -2134,7 +2136,9 @@ def register_routes(app):
                        'profit_target_3_pct', 'profit_target_4_pct', 'stop_loss_pct', 
                        'trailing_stop_pct', 'trailing_activation_pct', 'leave_runner_enabled',
                        'leave_runner_pct', 'profit_target_qty_1', 'profit_target_qty_2',
-                       'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode',
+                       'profit_target_qty_3', 'profit_target_qty_4',
+                       'profit_target_trim_pct_1', 'profit_target_trim_pct_2',
+                       'profit_target_trim_pct_3', 'profit_target_trim_pct_4', 'exit_strategy_mode',
                        'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile', 'escalation_only_mode',
                        'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                        'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
@@ -2542,6 +2546,10 @@ def register_routes(app):
                     'trim_limit_offset_mode': mapping.get('trim_limit_offset_mode', 'dollar'),
                     'trim_limit_offset_pct': mapping.get('trim_limit_offset_pct', 2.0),
                     'sl_limit_offset': mapping.get('sl_limit_offset', 0.03),
+                    'pt1_trim_pct': mapping.get('pt1_trim_pct'),
+                    'pt2_trim_pct': mapping.get('pt2_trim_pct'),
+                    'pt3_trim_pct': mapping.get('pt3_trim_pct'),
+                    'pt4_trim_pct': mapping.get('pt4_trim_pct'),
                 }
                 return jsonify({'success': True, 'settings': settings})
             else:
@@ -2560,7 +2568,8 @@ def register_routes(app):
                     'ema_buffer_pct': 0.1, 'ema_exit_enabled': 1, 'ema_escalation_enabled': 1,
                     'ema_extended_hours': 0, 'ema_use_underlying': 1, 'ema_no_trend_candles': 3,
                     'trim_limit_offset': 0.01, 'trim_limit_offset_mode': 'dollar',
-                    'trim_limit_offset_pct': 2.0, 'sl_limit_offset': 0.03
+                    'trim_limit_offset_pct': 2.0, 'sl_limit_offset': 0.03,
+                    'pt1_trim_pct': None, 'pt2_trim_pct': None, 'pt3_trim_pct': None, 'pt4_trim_pct': None
                 }})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -2625,6 +2634,10 @@ def register_routes(app):
                 trim_limit_offset_mode=data.get('trim_limit_offset_mode', 'dollar'),
                 trim_limit_offset_pct=data.get('trim_limit_offset_pct', 2.0),
                 sl_limit_offset=data.get('sl_limit_offset', 0.03),
+                pt1_trim_pct=data.get('pt1_trim_pct'),
+                pt2_trim_pct=data.get('pt2_trim_pct'),
+                pt3_trim_pct=data.get('pt3_trim_pct'),
+                pt4_trim_pct=data.get('pt4_trim_pct'),
             )
             
             if success:

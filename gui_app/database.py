@@ -693,6 +693,17 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added entry_confirmation_pct column to channels")
 
+    # Migrate: Add custom trim percentage columns for per-tier position % trimming
+    try:
+        cursor.execute('SELECT profit_target_trim_pct_1 FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_trim_pct_1 REAL DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_trim_pct_2 REAL DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_trim_pct_3 REAL DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_trim_pct_4 REAL DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added per-tier trim percentage columns to channels")
+
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -1771,6 +1782,10 @@ def init_db():
         ('trim_limit_offset_mode', "TEXT DEFAULT 'dollar'"),
         ('trim_limit_offset_pct', 'REAL DEFAULT 2.0'),
         ('sl_limit_offset', 'REAL DEFAULT 0.03'),
+        ('pt1_trim_pct', 'REAL DEFAULT NULL'),
+        ('pt2_trim_pct', 'REAL DEFAULT NULL'),
+        ('pt3_trim_pct', 'REAL DEFAULT NULL'),
+        ('pt4_trim_pct', 'REAL DEFAULT NULL'),
     ]
     for col_name, col_type in migration_columns:
         try:
@@ -2854,6 +2869,7 @@ def update_channel(channel_id: int, **kwargs):
         if key in ['name', 'category', 'execute_enabled', 'track_enabled', 'broker_override', 'is_active', 
                    'paper_trade_enabled', 'profit_target_pct', 'profit_target_1_pct', 'profit_target_2_pct', 'profit_target_3_pct',
                    'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
+                   'profit_target_trim_pct_1', 'profit_target_trim_pct_2', 'profit_target_trim_pct_3', 'profit_target_trim_pct_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'tracking_default_quantity', 'channel_max_position_size', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
                    'trim_order_mode', 'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct', 'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
@@ -3106,7 +3122,8 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'ema_risk_enabled', 'ema_period', 'ema_timeframe_minutes', 'ema_buffer_pct',
         'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
         'escalation_only_mode',
-        'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct', 'sl_limit_offset'
+        'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct', 'sl_limit_offset',
+        'pt1_trim_pct', 'pt2_trim_pct', 'pt3_trim_pct', 'pt4_trim_pct'
     ]
     
     updates = []

@@ -294,7 +294,8 @@ class RiskDBAdapter:
                        ema_exit_enabled, ema_escalation_enabled, ema_extended_hours,
                        ema_use_underlying, ema_no_trend_candles,
                        trim_limit_offset, trim_limit_offset_mode, trim_limit_offset_pct,
-                       sl_limit_offset
+                       sl_limit_offset,
+                       pt1_trim_pct, pt2_trim_pct, pt3_trim_pct, pt4_trim_pct
                 FROM signal_routing_mappings
                 WHERE id = ?
                 LIMIT 1
@@ -342,6 +343,10 @@ class RiskDBAdapter:
             r_trim_limit_offset_mode = row[38] if len(row) > 38 and row[38] else 'dollar'
             r_trim_limit_offset_pct = row[39] if len(row) > 39 and row[39] is not None else 2.0
             r_sl_limit_offset = row[40] if len(row) > 40 and row[40] is not None else 0.03
+            r_pt1_trim_pct = row[41] if len(row) > 41 else None
+            r_pt2_trim_pct = row[42] if len(row) > 42 else None
+            r_pt3_trim_pct = row[43] if len(row) > 43 else None
+            r_pt4_trim_pct = row[44] if len(row) > 44 else None
             
             exit_strategy = row[21] if len(row) > 21 and row[21] else 'risk'
             has_any_risk_config = (
@@ -365,6 +370,10 @@ class RiskDBAdapter:
                 profit_target_qty_2=pt2_qty,
                 profit_target_qty_3=pt3_qty,
                 profit_target_qty_4=pt4_qty,
+                profit_target_trim_pct_1=r_pt1_trim_pct,
+                profit_target_trim_pct_2=r_pt2_trim_pct,
+                profit_target_trim_pct_3=r_pt3_trim_pct,
+                profit_target_trim_pct_4=r_pt4_trim_pct,
                 stop_loss_pct=sl,
                 trailing_stop_pct=trail,
                 trailing_activation_pct=trail_activation,
@@ -487,7 +496,9 @@ class RiskDBAdapter:
                                    c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                    c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                    c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                                   c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                                   c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
+                                   c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
+                                   c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -511,7 +522,9 @@ class RiskDBAdapter:
                                    c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                    c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                    c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                                   c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                                   c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
+                                   c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
+                                   c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -539,7 +552,9 @@ class RiskDBAdapter:
                                c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
+                               c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -571,7 +586,9 @@ class RiskDBAdapter:
                                c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
+                               c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -595,7 +612,9 @@ class RiskDBAdapter:
                                c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
+                               c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -620,7 +639,9 @@ class RiskDBAdapter:
                                c.trim_limit_offset_mode, c.trim_limit_offset_pct, c.use_global_risk_settings,
                                c.ema_risk_enabled, c.ema_period, c.ema_timeframe_minutes, c.ema_buffer_pct,
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
-                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode
+                               c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
+                               c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -670,7 +691,9 @@ class RiskDBAdapter:
                                    sl_order_mode, sl_limit_offset, trim_limit_offset_mode, trim_limit_offset_pct,
                                    ema_risk_enabled, ema_period, ema_timeframe_minutes, ema_buffer_pct,
                                    ema_exit_enabled, ema_escalation_enabled, ema_extended_hours,
-                                   ema_use_underlying, ema_no_trend_candles, escalation_only_mode
+                                   ema_use_underlying, ema_no_trend_candles, escalation_only_mode,
+                                   profit_target_trim_pct_1, profit_target_trim_pct_2,
+                                   profit_target_trim_pct_3, profit_target_trim_pct_4
                             FROM channels
                             WHERE discord_channel_id = ? OR CAST(id AS TEXT) = ? OR telegram_chat_id = ?
                             LIMIT 1
@@ -721,6 +744,12 @@ class RiskDBAdapter:
                             if len(row) > 42: row[42] = ch_row[37]  # ema_use_underlying
                             if len(row) > 43: row[43] = ch_row[38]  # ema_no_trend_candles
                             if len(row) > 44: row[44] = ch_row[39]  # escalation_only_mode
+                            while len(row) < 49:
+                                row.append(None)
+                            row[45] = ch_row[40]  # profit_target_trim_pct_1
+                            row[46] = ch_row[41]  # profit_target_trim_pct_2
+                            row[47] = ch_row[42]  # profit_target_trim_pct_3
+                            row[48] = ch_row[43]  # profit_target_trim_pct_4
                             print(f"[RISK] ✓ Channel settings recovered via direct lookup for '{channel_name_from_join}' (LEFT JOIN fallback)")
                     except Exception as e:
                         print(f"[RISK] ⚠️ Direct channel lookup fallback failed: {e}")
@@ -789,6 +818,10 @@ class RiskDBAdapter:
                             profit_target_qty_2=row[13] if len(row) > 13 else None,
                             profit_target_qty_3=row[14] if len(row) > 14 else None,
                             profit_target_qty_4=row[15] if len(row) > 15 else None,
+                            profit_target_trim_pct_1=row[45] if len(row) > 45 else None,
+                            profit_target_trim_pct_2=row[46] if len(row) > 46 else None,
+                            profit_target_trim_pct_3=row[47] if len(row) > 47 else None,
+                            profit_target_trim_pct_4=row[48] if len(row) > 48 else None,
                             stop_loss_pct=ch_sl,
                             trailing_stop_pct=row[5] or 0,
                             trailing_activation_pct=row[6] or 15.0,
@@ -871,6 +904,11 @@ class RiskDBAdapter:
                 qty3 = row[14] if len(row) > 14 else None
                 qty4 = row[15] if len(row) > 15 else None
                 
+                trim_pct1 = row[45] if len(row) > 45 else None
+                trim_pct2 = row[46] if len(row) > 46 else None
+                trim_pct3 = row[47] if len(row) > 47 else None
+                trim_pct4 = row[48] if len(row) > 48 else None
+                
                 # Extract trim order settings
                 trim_mode = row[16] if len(row) > 16 and row[16] else 'market'
                 trim_offset = row[17] if len(row) > 17 and row[17] is not None else 0.01
@@ -919,6 +957,10 @@ class RiskDBAdapter:
                     profit_target_qty_2=qty2,
                     profit_target_qty_3=qty3,
                     profit_target_qty_4=qty4,
+                    profit_target_trim_pct_1=trim_pct1,
+                    profit_target_trim_pct_2=trim_pct2,
+                    profit_target_trim_pct_3=trim_pct3,
+                    profit_target_trim_pct_4=trim_pct4,
                     stop_loss_pct=sl,
                     trailing_stop_pct=trail,
                     trailing_activation_pct=row[6] or 15.0,
@@ -4477,7 +4519,7 @@ class RiskManager:
             sl_price = round(entry_price * (1 - sl_pct / 100), 4) if sl_pct > 0 else None
             pt1_price = round(entry_price * (1 + pt1_pct / 100), 4) if pt1_pct > 0 else None
 
-            from src.risk.risk_engine import calculate_auto_tier_quantities
+            from src.risk.risk_engine import calculate_tier_quantities
             enabled_tiers = []
             for tier, attr in [(1, 'profit_target_1_pct'), (2, 'profit_target_2_pct'),
                                (3, 'profit_target_3_pct'), (4, 'profit_target_4_pct')]:
@@ -4488,14 +4530,10 @@ class RiskManager:
             leave_runner = channel_settings.leave_runner_pct if channel_settings.leave_runner_enabled else 0
             escalation_only = getattr(channel_settings, 'escalation_only_mode', False)
 
-            _custom_pt1_qty = getattr(channel_settings, 'profit_target_qty_1', None)
-            if _custom_pt1_qty and _custom_pt1_qty > 0 and not escalation_only:
-                import math as _math
-                runner_qty = max(1, _math.floor(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
-                pt1_qty = min(_custom_pt1_qty, qty - runner_qty)
-            else:
-                tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
-                pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
+            custom_qtys = {t: getattr(channel_settings, f'profit_target_qty_{t}', None) for t in enabled_tiers}
+            custom_trim_pcts = {t: getattr(channel_settings, f'profit_target_trim_pct_{t}', None) for t in enabled_tiers}
+            tier_qtys = calculate_tier_quantities(qty, leave_runner, enabled_tiers, custom_qtys, custom_trim_pcts) if not escalation_only else {}
+            pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
 
             _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
             _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
@@ -5057,7 +5095,7 @@ class RiskManager:
             print(f"[RISK] 📋 PROGRESSIVE: PT{next_tier} skipped — trim_order_mode is 'market', risk engine will handle exit")
             return
 
-        from src.risk.risk_engine import calculate_auto_tier_quantities
+        from src.risk.risk_engine import calculate_tier_quantities
         enabled_tiers = []
         for tier, attr in [(1, 'profit_target_1_pct'), (2, 'profit_target_2_pct'),
                            (3, 'profit_target_3_pct'), (4, 'profit_target_4_pct')]:
@@ -5069,18 +5107,10 @@ class RiskManager:
         leave_runner = channel_settings.leave_runner_pct if channel_settings.leave_runner_enabled else 0
         escalation_only = getattr(channel_settings, 'escalation_only_mode', False)
 
-        _custom_qty_attr = f'profit_target_qty_{next_tier}'
-        _custom_qty = getattr(channel_settings, _custom_qty_attr, None)
-        if _custom_qty and _custom_qty > 0 and not escalation_only:
-            import math as _math
-            runner_qty = max(1, _math.floor(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
-            max_sellable = qty - runner_qty
-            already_sold = max(0, qty - int(position.quantity))
-            max_additional = max(0, max_sellable - already_sold)
-            next_qty = min(_custom_qty, max_additional)
-        else:
-            tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
-            next_qty = tier_qtys.get(next_tier, 0) if not escalation_only else 0
+        custom_qtys = {t: getattr(channel_settings, f'profit_target_qty_{t}', None) for t in enabled_tiers}
+        custom_trim_pcts = {t: getattr(channel_settings, f'profit_target_trim_pct_{t}', None) for t in enabled_tiers}
+        tier_qtys = calculate_tier_quantities(qty, leave_runner, enabled_tiers, custom_qtys, custom_trim_pcts) if not escalation_only else {}
+        next_qty = tier_qtys.get(next_tier, 0) if not escalation_only else 0
 
         if next_qty <= 0:
             print(f"[RISK] 📋 PROGRESSIVE: PT{next_tier} qty=0, skipping broker order")

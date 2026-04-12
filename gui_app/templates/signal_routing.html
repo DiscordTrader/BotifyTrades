@@ -668,6 +668,29 @@
                     </div>
                 </div>
 
+                <div style="margin-top: 15px; padding: 12px; background: rgba(234, 179, 8, 0.05); border: 1px solid rgba(234, 179, 8, 0.15); border-radius: 8px;">
+                    <label style="font-weight: 600; color: #eab308; font-size: 0.85rem;">Custom Trim Percentages</label>
+                    <p style="color: var(--text-muted); margin: 0 0 10px; font-size: 0.8rem;">Specify % of position to trim at each target. Overridden by custom qty if both set. Leave empty for auto.</p>
+                    <div class="form-grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.75rem;">PT1 Trim %</label>
+                            <input type="number" id="risk-pt1-trim-pct" class="form-input" min="0" max="100" placeholder="Auto">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.75rem;">PT2 Trim %</label>
+                            <input type="number" id="risk-pt2-trim-pct" class="form-input" min="0" max="100" placeholder="Auto">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.75rem;">PT3 Trim %</label>
+                            <input type="number" id="risk-pt3-trim-pct" class="form-input" min="0" max="100" placeholder="Auto">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 0.75rem;">PT4 Trim %</label>
+                            <input type="number" id="risk-pt4-trim-pct" class="form-input" min="0" max="100" placeholder="Auto">
+                        </div>
+                    </div>
+                </div>
+
                 <h4 style="margin: 25px 0 15px; color: var(--danger); font-size: 0.95rem;">🛑 Stop Loss & Trailing</h4>
                 <div class="form-grid" style="grid-template-columns: repeat(3, 1fr); gap: 15px;">
                     <div class="form-group">
@@ -1266,6 +1289,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-pt2-qty').value = s.pt2_qty || '';
                 document.getElementById('risk-pt3-qty').value = s.pt3_qty || '';
                 document.getElementById('risk-pt4-qty').value = s.pt4_qty || '';
+                document.getElementById('risk-pt1-trim-pct').value = s.pt1_trim_pct || '';
+                document.getElementById('risk-pt2-trim-pct').value = s.pt2_trim_pct || '';
+                document.getElementById('risk-pt3-trim-pct').value = s.pt3_trim_pct || '';
+                document.getElementById('risk-pt4-trim-pct').value = s.pt4_trim_pct || '';
                 document.getElementById('risk-stop-loss').value = s.stop_loss_pct || '';
                 document.getElementById('risk-trailing-stop').value = s.trailing_stop_pct || '';
                 document.getElementById('risk-trailing-activation').value = s.trailing_activation_pct || '';
@@ -1362,6 +1389,10 @@ document.addEventListener('DOMContentLoaded', function() {
             pt2_qty: parseInt(document.getElementById('risk-pt2-qty').value) || null,
             pt3_qty: parseInt(document.getElementById('risk-pt3-qty').value) || null,
             pt4_qty: parseInt(document.getElementById('risk-pt4-qty').value) || null,
+            pt1_trim_pct: parseFloat(document.getElementById('risk-pt1-trim-pct').value) || null,
+            pt2_trim_pct: parseFloat(document.getElementById('risk-pt2-trim-pct').value) || null,
+            pt3_trim_pct: parseFloat(document.getElementById('risk-pt3-trim-pct').value) || null,
+            pt4_trim_pct: parseFloat(document.getElementById('risk-pt4-trim-pct').value) || null,
             stop_loss_pct: parseFloat(document.getElementById('risk-stop-loss').value) || 0,
             trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
             trailing_activation_pct: parseFloat(document.getElementById('risk-trailing-activation').value) || 15,
@@ -1525,6 +1556,10 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('risk-pt2-qty').value = '';
         document.getElementById('risk-pt3-qty').value = '';
         document.getElementById('risk-pt4-qty').value = '';
+        document.getElementById('risk-pt1-trim-pct').value = '';
+        document.getElementById('risk-pt2-trim-pct').value = '';
+        document.getElementById('risk-pt3-trim-pct').value = '';
+        document.getElementById('risk-pt4-trim-pct').value = '';
         document.getElementById('risk-stop-loss').value = p.sl || '';
         document.getElementById('risk-trailing-stop').value = p.trail || '';
         document.getElementById('risk-trailing-activation').value = p.trail_act || '';
