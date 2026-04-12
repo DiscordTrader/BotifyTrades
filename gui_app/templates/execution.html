@@ -3,59 +3,6 @@
 {% block title %}Channel Management - Ψ∿ BotifyTrades{% endblock %}
 
 {% block content %}
-<!-- Multi-Broker Account Overview Section -->
-<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 32px;">
-    <!-- Webull LIVE Account -->
-    <div class="table-container" style="background: linear-gradient(135deg, #1a0a0a 0%, #2a1515 100%); border-radius: 12px; border: 1px solid rgba(255, 100, 100, 0.3);">
-        <div class="table-header" style="border-bottom: 1px solid rgba(255,100,100,0.2); display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="table-title" style="color: #ff6464; margin: 0;">🔥 Webull LIVE</h3>
-            <button onclick="loadAllAccounts()" style="background: none; border: none; color: #ff6464; cursor: pointer; font-size: 16px; padding: 4px 8px;" title="Refresh">🔄</button>
-        </div>
-        <div style="padding: 20px;">
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
-                <div style="background: rgba(255,50,50,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 100, 100, 0.2);">
-                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Buying Power</div>
-                    <div id="webull-buying-power" style="font-size: 18px; font-weight: bold; color: #ff6464;">$0.00</div>
-                </div>
-                <div style="background: rgba(255,50,50,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 100, 100, 0.2);">
-                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Net Liq</div>
-                    <div id="webull-net-liq" style="font-size: 18px; font-weight: bold; color: #ff6464;">$0.00</div>
-                </div>
-            </div>
-            <div style="font-size: 11px; color: #999; border-top: 1px solid rgba(255,100,100,0.1); padding-top: 12px;">
-                <span id="webull-status">⚠️ Checking connection...</span>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Alpaca PAPER Account -->
-    <div class="table-container" style="background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%); border-radius: 12px; border: 1px solid rgba(0, 212, 255, 0.3);">
-        <div class="table-header" style="border-bottom: 1px solid rgba(0,212,255,0.2); display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="table-title" style="color: #00d4ff; margin: 0;">📊 Alpaca PAPER</h3>
-            <button onclick="loadAllAccounts()" style="background: none; border: none; color: #00d4ff; cursor: pointer; font-size: 16px; padding: 4px 8px;" title="Refresh">🔄</button>
-        </div>
-        <div style="padding: 20px;">
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
-                <div style="background: rgba(0,50,80,0.6); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Buying Power</div>
-                    <div id="alpaca-buying-power" style="font-size: 18px; font-weight: bold; color: #15b5d4;">$0.00</div>
-                </div>
-                <div style="background: rgba(0,50,80,0.6); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Net Liq</div>
-                    <div id="alpaca-net-liq" style="font-size: 18px; font-weight: bold; color: #00ff88;">$0.00</div>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666; border-top: 1px solid rgba(0,212,255,0.1); padding-top: 12px;">
-                <span>Positions: <span id="alpaca-positions-count" style="color: #00ff88;">0</span></span>
-                <span>Orders: <span id="alpaca-orders-count" style="color: #ffb700;">0</span></span>
-            </div>
-            <div style="font-size: 11px; color: #999; margin-top: 8px;">
-                <span id="alpaca-status">⚠️ Checking connection...</span>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Channel Type Tabs -->
 <div class="table-container" style="margin-bottom: 32px;">
     <div class="table-header">
@@ -230,58 +177,6 @@ document.getElementById('channel-type-select').addEventListener('change', functi
     switchChannelType(selectedType);
 });
 
-// Load All Broker Accounts (Webull LIVE + Alpaca PAPER)
-async function loadAllAccounts() {
-    try {
-        const response = await fetch('/api/brokers/all_accounts');
-        const data = await response.json();
-        
-        // Update Webull LIVE account
-        if (data.webull_live) {
-            const webull = data.webull_live;
-            document.getElementById('webull-buying-power').textContent = '$' + parseFloat(webull.buying_power || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            document.getElementById('webull-net-liq').textContent = '$' + parseFloat(webull.net_liquidation || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            
-            // Update status
-            if (webull.status === 'ok') {
-                document.getElementById('webull-status').innerHTML = '✅ Connected';
-            } else if (webull.status === 'initializing' || webull.status === 'loading') {
-                document.getElementById('webull-status').innerHTML = '⏳ Initializing...';
-            } else {
-                document.getElementById('webull-status').innerHTML = '❌ Not connected';
-            }
-        }
-        
-        // Update Alpaca PAPER account
-        if (data.alpaca_paper) {
-            const alpaca = data.alpaca_paper;
-            if (alpaca.status === 'ok' && alpaca.balance) {
-                const balance = alpaca.balance;
-                document.getElementById('alpaca-buying-power').textContent = '$' + parseFloat(balance.buying_power || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                document.getElementById('alpaca-net-liq').textContent = '$' + parseFloat(balance.net_liquidation || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                
-                // Update counts
-                document.getElementById('alpaca-positions-count').textContent = (alpaca.positions || []).length;
-                document.getElementById('alpaca-orders-count').textContent = (alpaca.orders || []).length;
-                
-                document.getElementById('alpaca-status').innerHTML = '✅ Connected';
-            } else if (alpaca.status === 'loading' || alpaca.status === 'not_initialized') {
-                document.getElementById('alpaca-status').innerHTML = '⏳ Initializing...';
-            } else {
-                document.getElementById('alpaca-status').innerHTML = '❌ Not connected';
-            }
-        }
-    } catch (error) {
-        console.error('Error loading broker accounts:', error);
-        document.getElementById('webull-status').innerHTML = '❌ Error loading';
-        document.getElementById('alpaca-status').innerHTML = '❌ Error loading';
-    }
-}
 
-// Load all accounts on page load and refresh every 5 seconds
-document.addEventListener('DOMContentLoaded', function() {
-    loadAllAccounts();
-    setInterval(loadAllAccounts, 5000);
-});
 </script>
 {% endblock %}
