@@ -1129,6 +1129,47 @@ class SignalFormatRegistry:
             ]
         )
 
+        # QUICK-SWING-ALERTS FORMAT (Embed-based: Title="NOTE", Entry: range (...), Target: (...), Stop loss: Below X)
+        self.register(
+            name="quick_swing_entry",
+            description="Quick-Swing-Alerts: Ticker/Entry range/Target/Stop loss",
+            priority=74,
+            pattern=r'(?:Swing\s*:\s*)?Ticker\s*:\s*\$?([A-Z]{1,5})\s*\n\s*Entry\s*:\s*range\s*\((.+?)\)',
+            parser=self._parse_quick_swing_entry,
+            examples=[
+                "Ticker: $TDOC\nEntry: range (4.90-4.50/4.00-3.90)\nTarget: (5.30-5.50-5.75-6.00+)\nStop loss: Below  3.50",
+                "Ticker: $TURB\nEntry: range (3.82-3.71)\nTarget:  (3.90-4.00-4.10-4.20-4.30++)\nStop loss: Below  3.50",
+                "Swing : Ticker: $CETX\nEntry: range (Add half size -100 shares 1.76-1.60/ Add another half size 100 shares 1.45-1.35)\nTarget: (1.85-1.90-2.00-2.10-2.10+)\nStop loss: Below 1.20",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="quick_swing_cancel",
+            description="Quick-Swing-Alerts cancel: Cancel/remove SYMBOL alert",
+            priority=73,
+            pattern=r'(?:cancel|remove)\s+(?:the\s+)?\$?([A-Z]{1,5})\s+(?:alert|swing)',
+            parser=self._parse_quick_swing_cancel,
+            flags=re.IGNORECASE,
+            examples=[
+                "Cancel the TDOC alert",
+                "Remove the MARA swing",
+            ]
+        )
+
+        self.register(
+            name="quick_swing_exit",
+            description="Quick-Swing-Alerts exit: sold/out of SYMBOL",
+            priority=56,
+            pattern=r'(?:sold\s+(?:all|out)|(?:all\s+)?out\s+of|exited?|we\s+are\s+out)\s+(?:of\s+)?\$?([A-Z]{1,5})',
+            parser=self._parse_quick_swing_exit,
+            flags=re.IGNORECASE,
+            examples=[
+                "Sold all TDOC",
+                "Out of MARA",
+            ]
+        )
+
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
@@ -2880,6 +2921,144 @@ class SignalFormatRegistry:
             'ticker': symbol,
             'sell_pct': exit_pct,
             '_protrader': True,
+            '_protrader_exit': True,
+            'is_market_order': True,
+            'confidence': 0.9,
+        }
+
+    def _extract_quick_swing_sl(self, text: str) -> Optional[float]:
+        sl_match = re.search(r'Stop\s+loss\s*:\s*(?:Below\s+)?\$?([\d.]+)', text, re.IGNORECASE)
+        if sl_match:
+            try:
+                return float(sl_match.group(1))
+            except ValueError:
+                pass
+        return self._extract_protrader_sl(text)
+
+    def _extract_quick_swing_targets(self, text: str) -> list:
+        targets = []
+        targ_match = re.search(r'Target\s*:\s*\(?([\d.,\s\-+]+)', text, re.IGNORECASE)
+        if targ_match:
+            raw = targ_match.group(1)
+            for val in re.findall(r'([\d.]+)', raw):
+                try:
+                    targets.append(float(val))
+                except ValueError:
+                    pass
+        if not targets:
+            targets = self._extract_protrader_targets(text)
+        return targets
+
+    def _extract_quick_swing_shares(self, text: str) -> Optional[int]:
+        share_match = re.search(r'[Bb]uy\s+(\d+)\s+shares?\s+total', text)
+        if share_match:
+            try:
+                return int(share_match.group(1))
+            except ValueError:
+                pass
+        return self._extract_protrader_shares(text)
+
+    def _parse_quick_swing_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol = match.group(1).upper()
+        entry_text = match.group(2).strip()
+
+        cleaned_entry = re.sub(r'\b(\d+)\s+shares?\b', '', entry_text, flags=re.IGNORECASE)
+        cleaned_entry = re.sub(r'\b(?:Add|half|another|full|size)\b', '', cleaned_entry, flags=re.IGNORECASE)
+        prices = re.findall(r'(\d+\.?\d*)', cleaned_entry)
+        if not prices:
+            return None
+        float_prices = []
+        for p in prices:
+            try:
+                v = float(p)
+                if v > 0.001:
+                    float_prices.append(v)
+            except ValueError:
+                pass
+        if not float_prices:
+            return None
+        if len(float_prices) > 1:
+            median = sorted(float_prices)[len(float_prices) // 2]
+            actual_prices = [p for p in float_prices if 0.1 * median <= p <= 10 * median]
+        else:
+            actual_prices = float_prices
+        if not actual_prices:
+            return None
+
+        entry_high = max(actual_prices)
+        entry_low = min(actual_prices) if len(actual_prices) > 1 else None
+
+        stop_loss = self._extract_quick_swing_sl(text)
+        targets = self._extract_quick_swing_targets(text)
+        shares = self._extract_quick_swing_shares(text)
+
+        trigger_price = entry_low if entry_low else entry_high
+        result = {
+            'format': 'QUICK_SWING',
+            'is_conditional': True,
+            '_conditional_order': True,
+            '_quick_swing': True,
+            'asset': 'stock',
+            'asset_type': 'stock',
+            'action': 'BTO',
+            'ticker': symbol,
+            'symbol': symbol,
+            'trigger_type': 'over',
+            'trigger_price': trigger_price,
+            'entry_high': entry_high,
+            'entry_low': entry_low,
+            'stop_loss_type': 'fixed' if stop_loss else None,
+            'stop_loss_value': stop_loss,
+            'stop_loss_fixed': stop_loss,
+            'stop_loss_pct': None,
+            'profit_targets': targets,
+            'target_ranges': [],
+            'position_size_pct': None,
+            'fixed_qty': shares,
+            'size_mode': 'fixed_qty' if shares else None,
+            'qty': shares or 1,
+            'qty_specified': shares is not None,
+            'price': entry_high,
+            'confidence': 1.0,
+        }
+        return result
+
+    def _parse_quick_swing_cancel(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol = match.group(1).upper()
+        if not self._is_valid_ticker(symbol):
+            return None
+        return {
+            'format': 'QUICK_SWING',
+            'action': 'CANCEL',
+            'symbol': symbol,
+            'ticker': symbol,
+            '_quick_swing': True,
+            '_protrader_cancel': True,
+            'confidence': 1.0,
+        }
+
+    def _parse_quick_swing_exit(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol = match.group(1).upper()
+        if not self._is_valid_ticker(symbol):
+            return None
+        if self._EXIT_REJECT_KEYWORDS.search(text):
+            return None
+        text_lower = text.lower()
+        if 'sold all' in text_lower or 'out of' in text_lower or 'we are out' in text_lower:
+            exit_pct = 100
+        elif 'scale out' in text_lower or 'take profits' in text_lower:
+            exit_pct = 50
+        else:
+            exit_pct = 100
+        return {
+            'format': 'QUICK_SWING',
+            'asset': 'stock',
+            'asset_type': 'stock',
+            'action': 'STC',
+            'symbol': symbol,
+            'ticker': symbol,
+            'sell_pct': exit_pct,
+            '_quick_swing': True,
             '_protrader_exit': True,
             'is_market_order': True,
             'confidence': 0.9,

@@ -905,9 +905,12 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     if re.search(r'\bWATCHING\b', text_upper) and re.search(r'\bOV(?:ER|EE|ER)\b', text_upper):
         return False
     
-    # Exclude protrader structured format — these have their own parser in the format registry
+    # Exclude protrader/quick-swing structured format — these have their own parser in the format registry
     # Examples: "Ticker: CYCN\nEntry range: 3.2-3.30\nSL below 3.00"
+    #           "Ticker: $TDOC\nEntry: range (4.90-4.50)\nTarget: (...)\nStop loss: Below 3.50"
     if re.search(r'Ticker\s*:\s*\$?[A-Z]{1,5}\s*\n\s*Ent(?:e|r)y\s+range\s*:', text, re.IGNORECASE):
+        return False
+    if re.search(r'Ticker\s*:\s*\$?[A-Z]{1,5}\s*\n\s*Entry\s*:\s*range\s*\(', text, re.IGNORECASE):
         return False
     
     # Exclude market commentary patterns — these describe price action, not trade signals
