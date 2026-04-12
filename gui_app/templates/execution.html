@@ -17,9 +17,6 @@
                 </button>
             </div>
         </div>
-        <button onclick="document.getElementById('add-channel-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary btn-small">
-            ➕ Add Channel
-        </button>
     </div>
     
     <div id="channels-list">
@@ -30,117 +27,6 @@
     </div>
 </div>
 
-<!-- Add New Channel Form -->
-<div class="card" style="margin-top: 32px;">
-    <div class="card-header">➕ Add New Channel</div>
-    <div class="card-body">
-        <form id="add-channel-form" class="form-horizontal" style="max-width: 600px;">
-            <div class="form-group">
-                <label for="channel-type-select" class="form-label">Channel Type</label>
-                <select id="channel-type-select" class="form-control" required>
-                    <option value="EXECUTE">🎯 Execution Channel (Live Trading)</option>
-                    <option value="TRACK">📊 Tracking Channel (Paper Trading / Analysis)</option>
-                </select>
-                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 4px; display: block;">
-                    Execution channels execute trades, Tracking channels simulate/track performance
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label for="channel-name" class="form-label">Channel Name</label>
-                <input type="text" id="channel-name" class="form-control" placeholder="Premium Signals" required>
-                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 4px; display: block;">
-                    A friendly name to identify this channel
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label for="channel-id" class="form-label">Discord Channel ID</label>
-                <input type="text" id="channel-id" class="form-control" placeholder="551065756557639680" required>
-                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 4px; display: block;">
-                    Right-click the channel in Discord and select "Copy ID"
-                </small>
-            </div>
-            
-            <div class="form-group" id="broker-select-group">
-                <label class="form-label">Select Brokers for Execution</label>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px;">
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-WEBULL" value="WEBULL" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #ff6b6b; font-size: 12px;">🔥 Webull LIVE</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Real money</div>
-                        </div>
-                    </label>
-                    <!-- Webull Paper disabled -->
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-ALPACA" value="ALPACA" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #ff6b6b; font-size: 12px;">🦙 Alpaca LIVE</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Real money</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-ALPACA_PAPER" value="ALPACA_PAPER" style="width: 16px; height: 16px; cursor: pointer;" checked>
-                        <div>
-                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">🦙 Alpaca PAPER</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Paper trading</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-IBKR" value="IBKR" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #ff6b6b; font-size: 12px;">🏛️ IBKR LIVE</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Real money</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-IBKR_PAPER" value="IBKR_PAPER" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">🏛️ IBKR PAPER</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Paper trading</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-TASTYTRADE_LIVE" value="TASTYTRADE_LIVE" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #ff6b6b; font-size: 12px;">🍒 Tastytrade LIVE</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Real money</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-TASTYTRADE_PAPER" value="TASTYTRADE_PAPER" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">🍒 Tastytrade PAPER</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Paper trading</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 82, 255, 0.15); border: 1px solid rgba(0, 163, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-TRADING212" value="TRADING212" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #00A3FF; font-size: 12px;">📊 Trading 212 LIVE</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Stocks only (UK/EU)</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 82, 255, 0.1); border: 1px solid rgba(0, 163, 255, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-TRADING212_PAPER" value="TRADING212_PAPER" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">📊 Trading 212 PAPER</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Demo account</div>
-                        </div>
-                    </label>
-                </div>
-                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 8px; display: block;">
-                    🔴 LIVE = Real money &nbsp;&nbsp; 🟢 PAPER = Testing. Select multiple to execute on multiple accounts.
-                </small>
-            </div>
-            
-            <button type="submit" class="btn btn-primary" style="margin-top: 16px;">
-                ➕ Add Channel
-            </button>
-        </form>
-    </div>
-</div>
 
 {% endblock %}
 
@@ -164,18 +50,9 @@ function switchChannelType(type) {
     document.getElementById('channel-type-track').style.background = type === 'TRACK' ? 'var(--accent-gradient)' : 'transparent';
     document.getElementById('channel-type-track').style.color = type === 'TRACK' ? 'white' : 'var(--text-secondary)';
     
-    // Update channel type dropdown to match
-    document.getElementById('channel-type-select').value = type;
-    
     // Reload channels
     loadChannels();
 }
-
-// Update channel type dropdown when changed
-document.getElementById('channel-type-select').addEventListener('change', function() {
-    const selectedType = this.value;
-    switchChannelType(selectedType);
-});
 
 
 </script>

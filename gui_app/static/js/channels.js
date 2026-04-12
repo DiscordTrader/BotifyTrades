@@ -42,11 +42,13 @@ function initChannelManagement(category) {
     channelCategory = category;
     loadChannels();
     
-    // Setup form submission
-    document.getElementById('add-channel-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await addChannel();
-    });
+    const addForm = document.getElementById('add-channel-form');
+    if (addForm) {
+        addForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await addChannel();
+        });
+    }
 }
 
 async function loadChannels() {
