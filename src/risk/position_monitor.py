@@ -5510,7 +5510,12 @@ class RiskManager:
                     else:
                         contract = _IBStock(symbol, 'SMART', 'USD')
                     await self.ibkr_broker.ib.qualifyContractsAsync(contract)
-                    sl_order = IBStopOrder('SELL', qty, new_stop_price)
+                    _ibkr_sync_stop = new_stop_price
+                    if _is_opt:
+                        _ibkr_sync_stop = _round_to_cboe_increment(new_stop_price, is_sell=True, is_stop_trigger=True)
+                        if _ibkr_sync_stop != new_stop_price:
+                            print(f"[RISK] 📐 IBKR option stop sync CBOE snap: ${new_stop_price:.2f} → ${_ibkr_sync_stop:.2f} (stop trigger: round up)")
+                    sl_order = IBStopOrder('SELL', qty, _ibkr_sync_stop)
                     sl_order.tif = 'GTC'
                     sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
                     sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
@@ -5552,10 +5557,13 @@ class RiskManager:
                         else:
                             print(f"[RISK] ⚠️ TastyTrade stop sync submitted but no order ID returned — cannot track for cancel")
                     else:
+                        _tt_sync_sl = _round_to_cboe_increment(new_stop_price, is_sell=True)
+                        if _tt_sync_sl != new_stop_price:
+                            print(f"[RISK] 📐 TastyTrade option stop sync CBOE snap: ${new_stop_price:.2f} → ${_tt_sync_sl:.2f}")
                         sl_result = await self.tastytrade_broker.place_option_order(
                             symbol=position.symbol, strike=position.strike,
                             expiry=position.expiry or '', option_type=position.direction or 'C',
-                            action='STC', quantity=qty, price=new_stop_price
+                            action='STC', quantity=qty, price=_tt_sync_sl
                         )
                         if sl_result and sl_result.success:
                             _sl_oid = getattr(sl_result, 'order_id', None)

@@ -120,3 +120,9 @@ id = "LdTwhLYab3vdnT5RQnC4B"
 uri = "file://docs/Multi_Broker_Smart_Routing.md"
 type = "text"
 title = "Multi-Broker Smart Routing Guide"
+
+[[outputs]]
+id = "SUr9MYzLRyDaTPHDtdT-K"
+uri = "file://docs/bracket_order_deep_analysis.md"
+type = "text"
+title = "Bracket Order Deep Analysis — All 7 Brokers"
