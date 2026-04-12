@@ -223,6 +223,8 @@ def calculate_auto_tier_quantities(
         return {}
     
     runner_qty = math.floor(total_qty * (leave_runner_pct / 100))
+    if leave_runner_pct > 0 and total_qty > 1 and runner_qty < 1:
+        runner_qty = 1
     sellable_qty = total_qty - runner_qty
     
     if sellable_qty <= 0:

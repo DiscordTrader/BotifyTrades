@@ -1160,7 +1160,7 @@ class SignalFormatRegistry:
         self.register(
             name="quick_swing_exit",
             description="Quick-Swing-Alerts exit: sold/out of SYMBOL",
-            priority=56,
+            priority=38,
             pattern=r'(?:sold\s+(?:all|out)|(?:all\s+)?out\s+of|exited?|we\s+are\s+out)\s+(?:of\s+)?\$?([A-Z]{1,5})',
             parser=self._parse_quick_swing_exit,
             flags=re.IGNORECASE,
@@ -2954,6 +2954,12 @@ class SignalFormatRegistry:
         if share_match:
             try:
                 return int(share_match.group(1))
+            except ValueError:
+                pass
+        size_match = re.search(r'[-–]?\s*(\d+)\s+shares?', text, re.IGNORECASE)
+        if size_match:
+            try:
+                return int(size_match.group(1))
             except ValueError:
                 pass
         return self._extract_protrader_shares(text)

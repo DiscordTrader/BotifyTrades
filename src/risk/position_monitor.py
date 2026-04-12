@@ -4490,7 +4490,8 @@ class RiskManager:
 
             _custom_pt1_qty = getattr(channel_settings, 'profit_target_qty_1', None)
             if _custom_pt1_qty and _custom_pt1_qty > 0 and not escalation_only:
-                runner_qty = max(1, int(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
+                import math as _math
+                runner_qty = max(1, _math.floor(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
                 pt1_qty = min(_custom_pt1_qty, qty - runner_qty)
             else:
                 tier_qtys = calculate_auto_tier_quantities(qty, leave_runner, enabled_tiers) if not escalation_only else {}
@@ -5071,7 +5072,8 @@ class RiskManager:
         _custom_qty_attr = f'profit_target_qty_{next_tier}'
         _custom_qty = getattr(channel_settings, _custom_qty_attr, None)
         if _custom_qty and _custom_qty > 0 and not escalation_only:
-            runner_qty = max(1, int(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
+            import math as _math
+            runner_qty = max(1, _math.floor(qty * (leave_runner / 100.0))) if leave_runner > 0 and qty > 1 else 0
             max_sellable = qty - runner_qty
             already_sold = max(0, qty - int(position.quantity))
             max_additional = max(0, max_sellable - already_sold)

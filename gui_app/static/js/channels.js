@@ -58,7 +58,7 @@ async function loadChannels() {
         const channels = await fetch(`/api/channels?category=${channelCategory}`).then(r => r.json());
         
         if (channels.length === 0) {
-            container.innerHTML = '<div class="no-data">No channels added yet. Add one below!</div>';
+            container.innerHTML = '<div class="no-data">No channels added yet. Add one from the Channels page.</div>';
             return;
         }
         
