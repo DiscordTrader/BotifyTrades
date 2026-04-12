@@ -1289,10 +1289,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-pt2-qty').value = s.pt2_qty || '';
                 document.getElementById('risk-pt3-qty').value = s.pt3_qty || '';
                 document.getElementById('risk-pt4-qty').value = s.pt4_qty || '';
-                document.getElementById('risk-pt1-trim-pct').value = s.pt1_trim_pct || '';
-                document.getElementById('risk-pt2-trim-pct').value = s.pt2_trim_pct || '';
-                document.getElementById('risk-pt3-trim-pct').value = s.pt3_trim_pct || '';
-                document.getElementById('risk-pt4-trim-pct').value = s.pt4_trim_pct || '';
+                document.getElementById('risk-pt1-trim-pct').value = s.pt1_trim_pct != null ? s.pt1_trim_pct : '';
+                document.getElementById('risk-pt2-trim-pct').value = s.pt2_trim_pct != null ? s.pt2_trim_pct : '';
+                document.getElementById('risk-pt3-trim-pct').value = s.pt3_trim_pct != null ? s.pt3_trim_pct : '';
+                document.getElementById('risk-pt4-trim-pct').value = s.pt4_trim_pct != null ? s.pt4_trim_pct : '';
                 document.getElementById('risk-stop-loss').value = s.stop_loss_pct || '';
                 document.getElementById('risk-trailing-stop').value = s.trailing_stop_pct || '';
                 document.getElementById('risk-trailing-activation').value = s.trailing_activation_pct || '';
@@ -1389,10 +1389,10 @@ document.addEventListener('DOMContentLoaded', function() {
             pt2_qty: parseInt(document.getElementById('risk-pt2-qty').value) || null,
             pt3_qty: parseInt(document.getElementById('risk-pt3-qty').value) || null,
             pt4_qty: parseInt(document.getElementById('risk-pt4-qty').value) || null,
-            pt1_trim_pct: parseFloat(document.getElementById('risk-pt1-trim-pct').value) || null,
-            pt2_trim_pct: parseFloat(document.getElementById('risk-pt2-trim-pct').value) || null,
-            pt3_trim_pct: parseFloat(document.getElementById('risk-pt3-trim-pct').value) || null,
-            pt4_trim_pct: parseFloat(document.getElementById('risk-pt4-trim-pct').value) || null,
+            pt1_trim_pct: document.getElementById('risk-pt1-trim-pct').value !== '' ? parseFloat(document.getElementById('risk-pt1-trim-pct').value) : null,
+            pt2_trim_pct: document.getElementById('risk-pt2-trim-pct').value !== '' ? parseFloat(document.getElementById('risk-pt2-trim-pct').value) : null,
+            pt3_trim_pct: document.getElementById('risk-pt3-trim-pct').value !== '' ? parseFloat(document.getElementById('risk-pt3-trim-pct').value) : null,
+            pt4_trim_pct: document.getElementById('risk-pt4-trim-pct').value !== '' ? parseFloat(document.getElementById('risk-pt4-trim-pct').value) : null,
             stop_loss_pct: parseFloat(document.getElementById('risk-stop-loss').value) || 0,
             trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
             trailing_activation_pct: parseFloat(document.getElementById('risk-trailing-activation').value) || 15,

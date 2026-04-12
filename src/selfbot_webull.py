@@ -15016,6 +15016,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
                         'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
                         'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
+                        'profit_target_trim_pct_1': channel_info.get('profit_target_trim_pct_1'),
+                        'profit_target_trim_pct_2': channel_info.get('profit_target_trim_pct_2'),
+                        'profit_target_trim_pct_3': channel_info.get('profit_target_trim_pct_3'),
+                        'profit_target_trim_pct_4': channel_info.get('profit_target_trim_pct_4'),
                     }
                     print(f"[RISK CONFIG] ✓ Channel risk settings attached for LIVE execution")
                     opt['_exit_strategy_mode'] = channel_info.get('exit_strategy_mode', 'signal')
@@ -15211,9 +15215,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
                         'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
                         'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
+                        'profit_target_trim_pct_1': channel_info.get('profit_target_trim_pct_1'),
+                        'profit_target_trim_pct_2': channel_info.get('profit_target_trim_pct_2'),
+                        'profit_target_trim_pct_3': channel_info.get('profit_target_trim_pct_3'),
+                        'profit_target_trim_pct_4': channel_info.get('profit_target_trim_pct_4'),
                     }
                     
-                    # Add channel_record_id and channel_id for database saving after execution
                     if channel_info:
                         opt['channel_record_id'] = channel_info.get('id')
                         opt['channel_id'] = str(message.channel.id)
@@ -15654,6 +15661,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
                         'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
                         'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
+                        'profit_target_trim_pct_1': channel_info.get('profit_target_trim_pct_1'),
+                        'profit_target_trim_pct_2': channel_info.get('profit_target_trim_pct_2'),
+                        'profit_target_trim_pct_3': channel_info.get('profit_target_trim_pct_3'),
+                        'profit_target_trim_pct_4': channel_info.get('profit_target_trim_pct_4'),
                     }
                     print(f"[RISK CONFIG] ✓ Channel risk settings attached for LIVE stock execution")
                 
@@ -15816,9 +15827,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'enable_dynamic_sl': channel_info.get('enable_dynamic_sl', 0),
                         'enable_giveback_guard': channel_info.get('enable_giveback_guard', 0),
                         'giveback_allowed_pct': channel_info.get('giveback_allowed_pct', 30.0),
+                        'profit_target_trim_pct_1': channel_info.get('profit_target_trim_pct_1'),
+                        'profit_target_trim_pct_2': channel_info.get('profit_target_trim_pct_2'),
+                        'profit_target_trim_pct_3': channel_info.get('profit_target_trim_pct_3'),
+                        'profit_target_trim_pct_4': channel_info.get('profit_target_trim_pct_4'),
                     }
                     
-                    # Add channel_record_id and channel_id for database saving after execution
                     if channel_info:
                         stk['channel_record_id'] = channel_info.get('id')
                         stk['channel_id'] = str(message.channel.id)

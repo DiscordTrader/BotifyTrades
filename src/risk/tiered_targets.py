@@ -30,7 +30,6 @@ def calculate_tier_exit_qty(
     Returns:
         Tuple of (exit_qty, is_partial)
     """
-    # Get custom quantity for this tier (if set)
     qty_map = {
         1: channel_settings.profit_target_qty_1,
         2: channel_settings.profit_target_qty_2,
@@ -38,20 +37,33 @@ def calculate_tier_exit_qty(
         4: channel_settings.profit_target_qty_4,
     }
     custom_qty = qty_map.get(tier)
+
+    trim_pct_map = {
+        1: channel_settings.profit_target_trim_pct_1,
+        2: channel_settings.profit_target_trim_pct_2,
+        3: channel_settings.profit_target_trim_pct_3,
+        4: channel_settings.profit_target_trim_pct_4,
+    }
+    custom_trim_pct = trim_pct_map.get(tier)
     
-    # Calculate runner quantity if Leave Runner is enabled
     runner_qty = 0
     if channel_settings.leave_runner_enabled and current_qty > 1:
         runner_pct = channel_settings.leave_runner_pct / 100.0
         runner_qty = max(1, int(current_qty * runner_pct))
     
-    # Maximum we can sell (respecting runner)
     max_sellable = current_qty - runner_qty
     
-    # If custom qty is set and valid, use it (but respect runner)
     if custom_qty is not None and custom_qty > 0:
         exit_qty = min(custom_qty, max_sellable)
-        # Don't sell if nothing left after runner
+        if exit_qty <= 0:
+            return 0, False
+        is_partial = exit_qty < current_qty
+        return exit_qty, is_partial
+
+    if custom_trim_pct is not None and custom_trim_pct > 0:
+        import math
+        exit_qty = math.floor(max_sellable * (custom_trim_pct / 100.0))
+        exit_qty = min(exit_qty, max_sellable)
         if exit_qty <= 0:
             return 0, False
         is_partial = exit_qty < current_qty

@@ -287,11 +287,15 @@ def calculate_tier_quantities(
             qty = min(cq, sellable_qty - allocated)
             tier_qtys[tier] = max(0, qty)
             allocated += tier_qtys[tier]
+        elif cq is not None and cq == 0:
+            tier_qtys[tier] = 0
         elif cp is not None and cp > 0:
             qty = math.floor(sellable_qty * (cp / 100.0))
             qty = min(qty, sellable_qty - allocated)
             tier_qtys[tier] = max(0, qty)
             allocated += tier_qtys[tier]
+        elif cp is not None and cp == 0:
+            tier_qtys[tier] = 0
         else:
             auto_tiers.append(tier)
 
