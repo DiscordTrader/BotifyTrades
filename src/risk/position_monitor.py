@@ -21,6 +21,30 @@ async def _await_if_needed(result):
         return await result
     return result
 
+def _round_to_cboe_increment(price: float, is_sell: bool = False, is_stop_trigger: bool = False) -> float:
+    import math
+    if price <= 0:
+        return 0.05
+    if price < 3.00:
+        increment = 0.05
+    else:
+        increment = 0.10
+    ticks = round(price / increment, 8)
+    if is_stop_trigger:
+        if is_sell:
+            rounded = math.ceil(ticks) * increment
+        else:
+            rounded = math.floor(ticks) * increment
+    else:
+        if is_sell:
+            rounded = math.floor(ticks) * increment
+        else:
+            rounded = math.ceil(ticks) * increment
+    rounded = round(rounded, 2)
+    if rounded <= 0:
+        rounded = increment
+    return rounded
+
 from .risk_types import (
     PositionSnapshot,
     RiskSettings,
@@ -4485,10 +4509,45 @@ class RiskManager:
                         return
 
                     _asset_type = 'OPTION' if is_option else 'EQUITY'
+                    _schwab_stop_symbol = symbol
+                    if is_option and hasattr(self.schwab_broker, '_build_option_symbol'):
+                        _opt_expiry = getattr(position, 'expiry', '') or ''
+                        _opt_strike = getattr(position, 'strike', 0) or 0
+                        _opt_dir = (getattr(position, 'direction', '') or 'C').upper()
+                        _opt_cp = 'C' if _opt_dir in ('C', 'CALL') else 'P'
+                        try:
+                            from datetime import datetime as _dt
+                            if '/' in _opt_expiry:
+                                _parts = _opt_expiry.split('/')
+                                if len(_parts) == 2:
+                                    _m, _d = _parts
+                                    _opt_expiry_fmt = f"{_dt.now().year}-{int(_m):02d}-{int(_d):02d}"
+                                elif len(_parts) == 3:
+                                    _m, _d, _y = _parts
+                                    if len(_y) == 2:
+                                        _y = f"20{_y}"
+                                    _opt_expiry_fmt = f"{_y}-{int(_m):02d}-{int(_d):02d}"
+                                else:
+                                    _opt_expiry_fmt = _opt_expiry
+                            elif len(_opt_expiry) == 10 and '-' in _opt_expiry:
+                                _opt_expiry_fmt = _opt_expiry
+                            else:
+                                _opt_expiry_fmt = _opt_expiry
+                            _schwab_stop_symbol = self.schwab_broker._build_option_symbol(
+                                position.symbol, _opt_expiry_fmt, _opt_strike, _opt_cp
+                            )
+                            if 'INVALID_EXPIRY' in _schwab_stop_symbol:
+                                print(f"[RISK] ⚠️ Schwab OCC build returned invalid: {_schwab_stop_symbol} — skipping option stop order")
+                                _schwab_stop_symbol = None
+                            else:
+                                print(f"[RISK] 📐 Schwab option SL: built OCC symbol {_schwab_stop_symbol}")
+                        except Exception as _occ_err:
+                            print(f"[RISK] ⚠️ Schwab OCC build failed: {_occ_err} — skipping option stop order")
+                            _schwab_stop_symbol = None
 
-                    if sl_price and sl_price > 0:
+                    if sl_price and sl_price > 0 and _schwab_stop_symbol:
                         sl_result = await self.schwab_broker.place_stop_order(
-                            symbol=symbol,
+                            symbol=_schwab_stop_symbol,
                             quantity=qty,
                             stop_price=sl_price,
                             side='sell_to_close' if is_option else 'sell',
@@ -4542,18 +4601,29 @@ class RiskManager:
 
                     if hasattr(self.alpaca_broker, 'trading_client'):
                         from alpaca.trading.requests import StopOrderRequest, LimitOrderRequest
-                        from alpaca.trading.enums import OrderSide, TimeInForce
+                        from alpaca.trading.enums import OrderSide, TimeInForce, PositionIntent
+
+                        _alpaca_index_syms = {'SPX', 'SPXW', 'NDX', 'NDXP', 'RUT', 'RUTW', 'VIX', 'VIXW', 'XSP', 'DJX'}
+                        _alpaca_underlying = (getattr(position, 'symbol', '') or symbol).upper().strip()
+                        if is_option and _alpaca_underlying in _alpaca_index_syms:
+                            print(f"[RISK] ⚠️ Alpaca does not support index options ({symbol}) — bracket placement skipped")
+                            cache.broker_orders_placed = True
+                            return
 
                         _alpaca_tif = TimeInForce.DAY if is_option else TimeInForce.GTC
+                        _alpaca_intent = PositionIntent.SELL_TO_CLOSE if is_option else None
                         if sl_price and sl_price > 0:
                             _alpaca_sl = round(sl_price, 2)
-                            sl_req = StopOrderRequest(
+                            _sl_kwargs = dict(
                                 symbol=symbol,
                                 qty=qty,
                                 side=OrderSide.SELL,
                                 stop_price=_alpaca_sl,
                                 time_in_force=_alpaca_tif
                             )
+                            if _alpaca_intent:
+                                _sl_kwargs['position_intent'] = _alpaca_intent
+                            sl_req = StopOrderRequest(**_sl_kwargs)
                             sl_order = self.alpaca_broker.trading_client.submit_order(sl_req)
                             if sl_order and sl_order.id:
                                 cache.broker_stop_order_id = str(sl_order.id)
@@ -4561,13 +4631,16 @@ class RiskManager:
 
                         if pt1_price and pt1_price > 0 and pt1_qty > 0:
                             _alpaca_pt = round(pt1_price, 2)
-                            pt_req = LimitOrderRequest(
+                            _pt_kwargs = dict(
                                 symbol=symbol,
                                 qty=pt1_qty,
                                 side=OrderSide.SELL,
                                 limit_price=_alpaca_pt,
                                 time_in_force=_alpaca_tif
                             )
+                            if _alpaca_intent:
+                                _pt_kwargs['position_intent'] = _alpaca_intent
+                            pt_req = LimitOrderRequest(**_pt_kwargs)
                             pt_order = self.alpaca_broker.trading_client.submit_order(pt_req)
                             if pt_order and pt_order.id:
                                 cache.broker_pt_order_id = str(pt_order.id)
@@ -4597,20 +4670,31 @@ class RiskManager:
                     await self.ibkr_broker.ib.qualifyContractsAsync(contract)
 
                     _ibkr_ok_statuses = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
-                    if sl_price and sl_price > 0:
-                        sl_order = StopOrder('SELL', qty, sl_price)
+                    _ibkr_sl = sl_price
+                    _ibkr_pt1 = pt1_price
+                    if is_option:
+                        if _ibkr_sl and _ibkr_sl > 0:
+                            _ibkr_sl = _round_to_cboe_increment(_ibkr_sl, is_sell=True, is_stop_trigger=True)
+                            if _ibkr_sl != sl_price:
+                                print(f"[RISK] 📐 IBKR option SL CBOE snap: ${sl_price:.2f} → ${_ibkr_sl:.2f} (stop trigger: round up)")
+                        if _ibkr_pt1 and _ibkr_pt1 > 0:
+                            _ibkr_pt1 = _round_to_cboe_increment(_ibkr_pt1, is_sell=True)
+                            if _ibkr_pt1 != pt1_price:
+                                print(f"[RISK] 📐 IBKR option PT1 CBOE snap: ${pt1_price:.2f} → ${_ibkr_pt1:.2f}")
+                    if _ibkr_sl and _ibkr_sl > 0:
+                        sl_order = StopOrder('SELL', qty, _ibkr_sl)
                         sl_order.tif = 'GTC'
                         sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
                         sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
                         await asyncio.sleep(1)
                         if sl_trade and sl_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_stop_order_id = str(sl_trade.order.orderId)
-                            print(f"[RISK] ✅ Broker SL placed: IBKR stop #{sl_trade.order.orderId} at ${sl_price:.2f} (qty={qty}) [GTC]")
+                            print(f"[RISK] ✅ Broker SL placed: IBKR stop #{sl_trade.order.orderId} at ${_ibkr_sl:.2f} (qty={qty}) [GTC]")
                         else:
                             print(f"[RISK] ⚠️ IBKR SL order failed: {sl_trade.orderStatus.status if sl_trade else 'no trade'}")
 
-                    if pt1_price and pt1_price > 0 and pt1_qty > 0:
-                        pt_order = IBLimitOrder('SELL', pt1_qty, pt1_price)
+                    if _ibkr_pt1 and _ibkr_pt1 > 0 and pt1_qty > 0:
+                        pt_order = IBLimitOrder('SELL', pt1_qty, _ibkr_pt1)
                         pt_order.tif = 'GTC'
                         pt_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
                         pt_trade = self.ibkr_broker.ib.placeOrder(contract, pt_order)
@@ -4662,6 +4746,9 @@ class RiskManager:
                             print(f"[RISK] ⚠️ TastyTrade SL order submitted but no order ID returned — cannot track for cancel")
 
                     if sl_price and sl_price > 0 and is_option:
+                        _tt_sl = _round_to_cboe_increment(sl_price, is_sell=True)
+                        if _tt_sl != sl_price:
+                            print(f"[RISK] 📐 TastyTrade option SL CBOE snap: ${sl_price:.2f} → ${_tt_sl:.2f}")
                         sl_result = await self.tastytrade_broker.place_option_order(
                             symbol=position.symbol,
                             strike=position.strike,
@@ -4669,19 +4756,22 @@ class RiskManager:
                             option_type=position.direction or 'C',
                             action='STC',
                             quantity=qty,
-                            price=sl_price
+                            price=_tt_sl
                         )
                         if sl_result and sl_result.success:
                             _sl_oid = getattr(sl_result, 'order_id', None)
                             if _sl_oid:
                                 cache.broker_stop_order_id = str(_sl_oid)
-                            print(f"[RISK] ✅ Broker SL placed: TastyTrade option limit #{_sl_oid or 'submitted'} at ${sl_price:.2f} (qty={qty}) [limit used - options don't support stop orders on TastyTrade]")
+                            print(f"[RISK] ✅ Broker SL placed: TastyTrade option limit #{_sl_oid or 'submitted'} at ${_tt_sl:.2f} (qty={qty}) [limit used - options don't support stop orders on TastyTrade]")
                         else:
                             msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
                             print(f"[RISK] ⚠️ TastyTrade option SL order failed: {msg}")
 
                     if pt1_price and pt1_price > 0 and pt1_qty > 0:
                         if is_option:
+                            _tt_pt = _round_to_cboe_increment(pt1_price, is_sell=True)
+                            if _tt_pt != pt1_price:
+                                print(f"[RISK] 📐 TastyTrade option PT1 CBOE snap: ${pt1_price:.2f} → ${_tt_pt:.2f}")
                             pt_result = await self.tastytrade_broker.place_option_order(
                                 symbol=position.symbol,
                                 strike=position.strike,
@@ -4689,7 +4779,7 @@ class RiskManager:
                                 option_type=position.direction or 'C',
                                 action='STC',
                                 quantity=pt1_qty,
-                                price=pt1_price
+                                price=_tt_pt
                             )
                         else:
                             pt_result = await self._place_tastytrade_stock_limit_gtc(
@@ -5292,8 +5382,43 @@ class RiskManager:
                         return
 
                 _is_opt = asset_type.lower() in ('option', 'options')
+                _schwab_sync_symbol = symbol
+                if _is_opt and hasattr(self.schwab_broker, '_build_option_symbol'):
+                    try:
+                        from datetime import datetime as _dt
+                        _opt_expiry = getattr(position, 'expiry', '') or ''
+                        _opt_strike = getattr(position, 'strike', 0) or 0
+                        _opt_dir = (getattr(position, 'direction', '') or 'C').upper()
+                        _opt_cp = 'C' if _opt_dir in ('C', 'CALL') else 'P'
+                        if '/' in _opt_expiry:
+                            _parts = _opt_expiry.split('/')
+                            if len(_parts) == 2:
+                                _m, _d = _parts
+                                _opt_expiry_fmt = f"{_dt.now().year}-{int(_m):02d}-{int(_d):02d}"
+                            elif len(_parts) == 3:
+                                _m, _d, _y = _parts
+                                if len(_y) == 2:
+                                    _y = f"20{_y}"
+                                _opt_expiry_fmt = f"{_y}-{int(_m):02d}-{int(_d):02d}"
+                            else:
+                                _opt_expiry_fmt = _opt_expiry
+                        elif len(_opt_expiry) == 10 and '-' in _opt_expiry:
+                            _opt_expiry_fmt = _opt_expiry
+                        else:
+                            _opt_expiry_fmt = _opt_expiry
+                        _schwab_sync_symbol = self.schwab_broker._build_option_symbol(
+                            position.symbol, _opt_expiry_fmt, _opt_strike, _opt_cp
+                        )
+                        if 'INVALID_EXPIRY' in _schwab_sync_symbol:
+                            print(f"[RISK] ⚠️ Schwab OCC build returned invalid in stop sync: {_schwab_sync_symbol} — skipping")
+                            return
+                        print(f"[RISK] 📐 Schwab option stop sync: OCC symbol {_schwab_sync_symbol}")
+                    except Exception as _occ_err:
+                        print(f"[RISK] ⚠️ Schwab OCC build failed in stop sync: {_occ_err} — skipping")
+                        return
+
                 result = await self.schwab_broker.place_stop_order(
-                    symbol=symbol,
+                    symbol=_schwab_sync_symbol,
                     quantity=qty,
                     stop_price=new_stop_price,
                     side='sell_to_close' if _is_opt else 'sell',
@@ -5329,17 +5454,26 @@ class RiskManager:
 
                 if hasattr(self.alpaca_broker, 'trading_client'):
                     from alpaca.trading.requests import StopOrderRequest
-                    from alpaca.trading.enums import OrderSide, TimeInForce
+                    from alpaca.trading.enums import OrderSide, TimeInForce, PositionIntent
                     _is_opt = asset_type.lower() in ('option', 'options')
+                    if _is_opt:
+                        _alpaca_idx = {'SPX', 'SPXW', 'NDX', 'NDXP', 'RUT', 'RUTW', 'VIX', 'VIXW', 'XSP', 'DJX'}
+                        _alpaca_und = (getattr(position, 'symbol', '') or symbol).upper().strip()
+                        if _alpaca_und in _alpaca_idx:
+                            print(f"[RISK] ⚠️ Alpaca does not support index options ({_alpaca_und}) — stop sync skipped")
+                            return
                     _tif = TimeInForce.DAY if _is_opt else TimeInForce.GTC
                     _alpaca_stp = round(new_stop_price, 2)
-                    req = StopOrderRequest(
+                    _sync_kwargs = dict(
                         symbol=symbol,
                         qty=qty,
                         side=OrderSide.SELL,
                         stop_price=_alpaca_stp,
                         time_in_force=_tif
                     )
+                    if _is_opt:
+                        _sync_kwargs['position_intent'] = PositionIntent.SELL_TO_CLOSE
+                    req = StopOrderRequest(**_sync_kwargs)
                     order = self.alpaca_broker.trading_client.submit_order(req)
                     if order and order.id:
                         cache.broker_stop_order_id = str(order.id)
