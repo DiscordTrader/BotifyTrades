@@ -1248,6 +1248,29 @@ class SchwabBroker(BrokerInterface):
                                 legs = status_result.get('orderLegCollection', [])
                                 for leg in legs:
                                     print(f"[{self.name}]   leg: {leg.get('instruction')} {leg.get('quantity')} {leg.get('instrument', {}).get('symbol')} assetType={leg.get('instrument', {}).get('assetType')}")
+
+                                if not kwargs.get('_price_band_retry') and 'significantly higher or lower' in reject_reason.lower():
+                                    print(f"[{self.name}] 🔄 PRICE BAND RETRY: Fetching fresh quote for {symbol}...")
+                                    retry_price = None
+                                    try:
+                                        if is_exit:
+                                            retry_price = await self._get_aggressive_exit_price(symbol, 'stock')
+                                        else:
+                                            fresh_quote = await self.get_quote(symbol)
+                                            if fresh_quote and fresh_quote > 0:
+                                                retry_price = round(fresh_quote * 1.005, 4) if instruction == "BUY" else round(fresh_quote * 0.995, 4)
+                                    except Exception as rq_err:
+                                        print(f"[{self.name}] ⚠️ Fresh quote failed: {rq_err}")
+
+                                    if retry_price and retry_price > 0:
+                                        print(f"[{self.name}] 🔄 PRICE BAND RETRY: old=${price:.4f} → new=${retry_price:.4f}")
+                                        return await self.place_stock_order(
+                                            symbol=symbol, action=action, quantity=quantity,
+                                            price=retry_price, _price_band_retry=True,
+                                            _skip_cancel_check=True, **{k: v for k, v in kwargs.items() if k not in ('_price_band_retry', '_skip_cancel_check')}
+                                        )
+                                    print(f"[{self.name}] ⚠️ Price band retry skipped — no fresh quote available")
+
                                 return OrderResult(
                                     success=False,
                                     order_id=order_id,
@@ -1278,6 +1301,27 @@ class SchwabBroker(BrokerInterface):
                 )
             else:
                 error_msg = response.text
+
+                if not kwargs.get('_price_band_retry') and 'significantly higher or lower' in error_msg.lower():
+                    print(f"[{self.name}] 🔄 STOCK PRICE BAND RETRY (HTTP {response.status_code}): Fetching fresh quote for {symbol}...")
+                    retry_price = None
+                    try:
+                        if is_exit:
+                            retry_price = await self._get_aggressive_exit_price(symbol, 'stock')
+                        else:
+                            fresh_quote = await self.get_quote(symbol)
+                            if fresh_quote and fresh_quote > 0:
+                                retry_price = round(fresh_quote * 1.005, 4) if instruction == "BUY" else round(fresh_quote * 0.995, 4)
+                    except Exception as rq_err:
+                        print(f"[{self.name}] ⚠️ Fresh quote failed: {rq_err}")
+                    if retry_price and retry_price > 0:
+                        print(f"[{self.name}] 🔄 STOCK PRICE BAND RETRY: old=${price:.4f} → new=${retry_price:.4f}")
+                        return await self.place_stock_order(
+                            symbol=symbol, action=action, quantity=quantity,
+                            price=retry_price, _price_band_retry=True,
+                            _skip_cancel_check=True, **{k: v for k, v in kwargs.items() if k not in ('_price_band_retry', '_skip_cancel_check')}
+                        )
+
                 return OrderResult(
                     success=False,
                     message=f"Order failed: {response.status_code} - {error_msg}",
@@ -1517,6 +1561,95 @@ class SchwabBroker(BrokerInterface):
                     self._position_cache_invalidated = True
                     self._consecutive_zero_positions = 0
 
+                is_exit_opt = (instruction == "SELL_TO_CLOSE")
+                if is_exit_opt and order_id:
+                    try:
+                        await asyncio.sleep(1.5)
+                        status_result = await self.get_order_status(order_id)
+                        if status_result and isinstance(status_result, dict):
+                            schwab_status = str(status_result.get('status', '')).upper()
+                            if schwab_status == 'REJECTED':
+                                reject_reason = status_result.get('status_description', '') or status_result.get('statusDescription', 'unknown')
+                                print(f"[{self.name}] ❌ OPTION EXCHANGE REJECTED order {order_id}: {reject_reason}")
+
+                                if not kwargs.get('_price_band_retry') and 'significantly higher or lower' in reject_reason.lower():
+                                    print(f"[{self.name}] 🔄 OPTION PRICE BAND RETRY: Fetching fresh quote for {symbol} ${strike}{call_put} {expiry_formatted}...")
+                                    retry_price = None
+                                    try:
+                                        retry_price = await self._get_aggressive_exit_price(
+                                            symbol, 'option', strike=strike, expiry=expiry_formatted, call_put=option_type)
+                                    except Exception as rq_err:
+                                        print(f"[{self.name}] ⚠️ Fresh option quote failed: {rq_err}")
+
+                                    if retry_price and retry_price > 0:
+                                        print(f"[{self.name}] 🔄 OPTION PRICE BAND RETRY: old=${price:.2f} → new=${retry_price:.2f}")
+                                        return await self.place_option_order(
+                                            symbol=symbol, strike=strike, expiry=expiry,
+                                            option_type=option_type, action=action, quantity=quantity,
+                                            price=retry_price, _price_band_retry=True,
+                                            _skip_cancel_check=True,
+                                            **{k: v for k, v in kwargs.items() if k not in ('_price_band_retry', '_skip_cancel_check')}
+                                        )
+                                    print(f"[{self.name}] ⚠️ Option price band retry skipped — no fresh quote available")
+
+                                return OrderResult(
+                                    success=False,
+                                    order_id=order_id,
+                                    message=f"Exchange rejected: {reject_reason}",
+                                    symbol=symbol,
+                                    action=action
+                                )
+                            elif schwab_status == 'FILLED':
+                                fill_price = status_result.get('price', price)
+                                print(f"[{self.name}] ✅ Option order {order_id} FILLED immediately @ ${fill_price:.2f}")
+                    except Exception as verify_err:
+                        print(f"[{self.name}] ⚠️ Option post-order verify failed (non-critical): {verify_err}")
+
+                if not is_exit_opt and order_id:
+                    try:
+                        await asyncio.sleep(1.5)
+                        status_result = await self.get_order_status(order_id)
+                        if status_result and isinstance(status_result, dict):
+                            schwab_status = str(status_result.get('status', '')).upper()
+                            if schwab_status == 'REJECTED':
+                                reject_reason = status_result.get('status_description', '') or status_result.get('statusDescription', 'unknown')
+                                print(f"[{self.name}] ❌ OPTION ENTRY REJECTED order {order_id}: {reject_reason}")
+
+                                if not kwargs.get('_price_band_retry') and 'significantly higher or lower' in reject_reason.lower():
+                                    print(f"[{self.name}] 🔄 OPTION ENTRY PRICE BAND RETRY: Fetching fresh quote...")
+                                    retry_price = None
+                                    try:
+                                        quote = await self.get_option_quote(symbol, strike, expiry_formatted, option_type, max_age=5)
+                                        if quote:
+                                            ask = float(quote.get('ask', 0) or 0)
+                                            mid = round((float(quote.get('bid', 0) or 0) + ask) / 2, 2) if ask > 0 else 0
+                                            retry_price = mid if mid > 0 else ask
+                                            if retry_price > 0:
+                                                retry_price = self._round_to_cboe_increment(retry_price, is_sell=False)
+                                    except Exception as rq_err:
+                                        print(f"[{self.name}] ⚠️ Fresh option entry quote failed: {rq_err}")
+
+                                    if retry_price and retry_price > 0:
+                                        print(f"[{self.name}] 🔄 OPTION ENTRY PRICE BAND RETRY: old=${price:.2f} → new=${retry_price:.2f}")
+                                        return await self.place_option_order(
+                                            symbol=symbol, strike=strike, expiry=expiry,
+                                            option_type=option_type, action=action, quantity=quantity,
+                                            price=retry_price, _price_band_retry=True,
+                                            _skip_cancel_check=True,
+                                            **{k: v for k, v in kwargs.items() if k not in ('_price_band_retry', '_skip_cancel_check')}
+                                        )
+                                    print(f"[{self.name}] ⚠️ Option entry price band retry skipped — no fresh quote")
+
+                                return OrderResult(
+                                    success=False,
+                                    order_id=order_id,
+                                    message=f"Exchange rejected: {reject_reason}",
+                                    symbol=symbol,
+                                    action=action
+                                )
+                    except Exception as verify_err:
+                        print(f"[{self.name}] ⚠️ Option entry verify failed (non-critical): {verify_err}")
+
                 _pos_key = kwargs.get('position_key') or kwargs.get('_exit_marker_key')
                 _verify_coro = self._background_verify_order(order_id, action, option_symbol, symbol, price, quantity, position_key=_pos_key)
                 _scheduled = False
@@ -1636,7 +1769,35 @@ class SchwabBroker(BrokerInterface):
                             )
                     
                     print(f"[{self.name}] ❌ All nearby strikes also failed for {symbol}")
-                
+
+                if not kwargs.get('_price_band_retry') and 'significantly higher or lower' in error_msg.lower():
+                    print(f"[{self.name}] 🔄 OPTION PRICE BAND RETRY (HTTP {response.status_code}): Fetching fresh quote...")
+                    retry_price = None
+                    is_exit_http = (instruction == "SELL_TO_CLOSE")
+                    try:
+                        if is_exit_http:
+                            retry_price = await self._get_aggressive_exit_price(
+                                symbol, 'option', strike=strike, expiry=expiry_formatted, call_put=option_type)
+                        else:
+                            quote = await self.get_option_quote(symbol, strike, expiry_formatted, option_type, max_age=5)
+                            if quote:
+                                ask = float(quote.get('ask', 0) or 0)
+                                mid = round((float(quote.get('bid', 0) or 0) + ask) / 2, 2) if ask > 0 else 0
+                                retry_price = mid if mid > 0 else ask
+                                if retry_price > 0:
+                                    retry_price = self._round_to_cboe_increment(retry_price, is_sell=is_exit_http)
+                    except Exception as rq_err:
+                        print(f"[{self.name}] ⚠️ Fresh option quote failed: {rq_err}")
+                    if retry_price and retry_price > 0:
+                        print(f"[{self.name}] 🔄 OPTION PRICE BAND RETRY: old=${price:.2f} → new=${retry_price:.2f}")
+                        return await self.place_option_order(
+                            symbol=symbol, strike=strike, expiry=expiry,
+                            option_type=option_type, action=action, quantity=quantity,
+                            price=retry_price, _price_band_retry=True,
+                            _skip_cancel_check=True,
+                            **{k: v for k, v in kwargs.items() if k not in ('_price_band_retry', '_skip_cancel_check')}
+                        )
+
                 return OrderResult(
                     success=False,
                     message=f"Order failed: {response.status_code} - {error_msg}",
