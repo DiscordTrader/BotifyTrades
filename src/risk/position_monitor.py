@@ -6615,7 +6615,7 @@ class RiskManager:
             open_trade_symbols = set()
             try:
                 cursor.execute('''
-                    SELECT UPPER(symbol) as symbol, broker, id as trade_id
+                    SELECT UPPER(symbol) as symbol, UPPER(broker) as broker, id as trade_id
                     FROM trades WHERE status = 'OPEN'
                 ''')
                 for row in cursor.fetchall():
@@ -6630,7 +6630,7 @@ class RiskManager:
                 broker = order['broker_primary']
                 group_key = f"{broker}_{symbol}"
                 
-                has_open_trade = (symbol, broker) in open_trade_symbols
+                has_open_trade = (symbol, (broker or '').upper()) in open_trade_symbols
                 
                 if group_key not in best_orders:
                     best_orders[group_key] = (order, has_open_trade)
