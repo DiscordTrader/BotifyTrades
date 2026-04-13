@@ -19436,8 +19436,54 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as chaser_err:
                             _original_print(f"[EXIT-CHASER] ⚠️ Could not handle conflicting order: {chaser_err}", flush=True)
                     
+                    _position_already_closed = False
+                    if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
+                        _err_lower = error_msg.lower() if error_msg else ''
+                        if ('selling-equity-not-owned' in _err_lower or 
+                            'owned: 0' in _err_lower or
+                            'not enough shares' in _err_lower or
+                            'insufficient shares' in _err_lower or
+                            'no position' in _err_lower or
+                            'position not found' in _err_lower):
+                            _position_already_closed = True
+                            _original_print(f"[RISK-EXIT] ✓ Broker confirms position already closed for {signal.get('_position_key', signal['symbol'])} — marking trade as closed externally", flush=True)
+                            try:
+                                _origin_tid = signal.get('origin_trade_id')
+                                if _origin_tid:
+                                    from gui_app.database import get_connection as _get_close_conn
+                                    _close_conn = _get_close_conn()
+                                    _close_cur = _close_conn.cursor()
+                                    _close_cur.execute('SELECT executed_price, quantity, current_price, asset_type FROM trades WHERE id = ?', (_origin_tid,))
+                                    _close_row = _close_cur.fetchone()
+                                    if _close_row:
+                                        _entry_p = float(_close_row['executed_price'] or 0)
+                                        _exit_p = float(_close_row['current_price'] or 0) or float(signal.get('price', 0))
+                                        _qty = float(_close_row['quantity'] or 0)
+                                        _mult = 100 if _close_row['asset_type'] == 'option' else 1
+                                        _pnl = (_exit_p - _entry_p) * _qty * _mult if _entry_p > 0 else 0
+                                        _pnl_pct = ((_exit_p - _entry_p) / _entry_p) * 100 if _entry_p > 0 else 0
+                                        from datetime import datetime as _dt_close
+                                        _close_conn.execute('''
+                                            UPDATE trades SET status = 'CLOSED', close_reason = 'broker_closed_position',
+                                                             closed_at = ?, pnl = ?, pnl_percent = ?, current_price = ?
+                                            WHERE id = ? AND status = 'OPEN'
+                                        ''', (_dt_close.now().isoformat(), round(_pnl, 2), round(_pnl_pct, 2), _exit_p, _origin_tid))
+                                        _close_conn.commit()
+                                        _original_print(f"[RISK-EXIT] ✓ Trade #{_origin_tid} closed: PNL=${_pnl:+.2f} ({_pnl_pct:+.2f}%) — position was already sold on broker", flush=True)
+                                from src.risk.position_monitor import risk_manager_instance as _rm_close
+                                if _rm_close and signal.get('_position_key'):
+                                    _pk = signal['_position_key']
+                                    if hasattr(_rm_close, '_exit_executed_keys') and hasattr(_rm_close, '_exit_executed_lock'):
+                                        with _rm_close._exit_executed_lock:
+                                            _rm_close._exit_executed_keys.discard(_pk)
+                                    if hasattr(_rm_close, 'cache'):
+                                        _rm_close.cache.remove(_pk)
+                                        _rm_close.cache.clear_trade_id(_pk)
+                            except Exception as _close_err:
+                                _original_print(f"[RISK-EXIT] ⚠️ Auto-close error: {_close_err}", flush=True)
+
                     # Record failure for risk management orders (enables retry with backoff)
-                    if signal.get('_risk_management_order') and signal.get('_position_key'):
+                    if not _position_already_closed and signal.get('_risk_management_order') and signal.get('_position_key'):
                         try:
                             from src.risk.position_monitor import risk_manager_instance
                             if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
