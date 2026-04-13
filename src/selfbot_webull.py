@@ -20318,6 +20318,28 @@ def run_discord_bot_thread():
                 traceback.print_exc()
                 logging.error(f"[Discord Thread] Traceback:\n{traceback.format_exc()}")
             _discord_error_queue.put(e)
+
+            if not client._on_ready_completed:
+                _original_print("[Discord Thread] Discord failed before broker init — starting brokers independently...")
+                try:
+                    if client.broker_ready is None:
+                        client.order_queue = _PriorityOrderQueue()
+                        client.broker_ready = asyncio.Event()
+                        client.sync_ready = asyncio.Event()
+                        client.processing_ready = asyncio.Event()
+                        client._send_lock = asyncio.Lock()
+                        client._message_dedupe_lock = asyncio.Lock()
+                        _original_print("[ASYNC] ✓ Queue, events, and locks created (fallback)")
+                    await client._init_brokers_background()
+                    _original_print("[Discord Thread] ✓ Brokers initialized without Discord — keeping loop alive")
+                    _discord_ready_event.set()
+                    while not _discord_shutdown_event.is_set():
+                        await asyncio.sleep(1)
+                    return
+                except Exception as broker_err:
+                    _original_print(f"[Discord Thread] Fallback broker init error: {broker_err}")
+                    import traceback
+                    traceback.print_exc()
             raise
     
     loop = None
