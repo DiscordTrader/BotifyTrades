@@ -269,7 +269,7 @@ async function loadChannels() {
                                 <div id="risk-tab-targets-${channel.id}" style="display: block;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;">
                                     <h5 style="margin:0;color:#00d4ff;font-size:12px;">📊 Profit Targets</h5>
-                                    <button type="button" onclick="showRiskHelp('profit-targets')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                    <button type="button" onclick="showRiskHelp('profit-targets')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                 </div>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P1 Target %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="e.g. 10" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -299,7 +299,7 @@ async function loadChannels() {
                                 </div>
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 10px;">
                                     <h5 style="margin:0;color:#EF4444;font-size:12px;">🛑 Stop Loss & Trailing</h5>
-                                    <button type="button" onclick="showRiskHelp('stop-loss-trailing')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                    <button type="button" onclick="showRiskHelp('stop-loss-trailing')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                 </div>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -313,7 +313,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('early-trailing')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('early-trailing')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                             <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
                                                 <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion('${channel.id}', this.checked)">
                                                 <span class="toggle-slider"></span>
@@ -336,7 +336,7 @@ async function loadChannels() {
                                 </div>
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 10px;">
                                     <h5 style="margin:0;color:#10B981;font-size:12px;">🎯 Exit Strategy Mode</h5>
-                                    <button type="button" onclick="showRiskHelp('exit-strategy')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                    <button type="button" onclick="showRiskHelp('exit-strategy')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                 </div>
                                 <div style="padding: 12px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;">
                                     <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">Choose how positions are exited when both trader signals and risk management are active.</p>
@@ -360,7 +360,7 @@ async function loadChannels() {
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
                                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                                         <label style="font-size:12px;font-weight:600;color:#ffb700;">Trim Order Type</label>
-                                        <button type="button" onclick="showRiskHelp('trim-order-type')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                        <button type="button" onclick="showRiskHelp('trim-order-type')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                     </div>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
@@ -388,7 +388,7 @@ async function loadChannels() {
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
                                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                                         <label style="font-size:12px;font-weight:600;color:#ff5252;">Stop Loss Order Type</label>
-                                        <button type="button" onclick="showRiskHelp('sl-order-type')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                        <button type="button" onclick="showRiskHelp('sl-order-type')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                     </div>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
@@ -413,7 +413,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #a78bfa;">Order Chase</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('order-chase')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('order-chase')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                             <select id="risk-chase-mode-${channel.id}" style="width: 130px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
                                                 <option value="off" ${!channel.entry_chase_enabled && !channel.order_chase_enabled ? 'selected' : ''}>Off</option>
                                                 <option value="entry" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled !== 1 ? 'selected' : ''}>Entry Only</option>
@@ -432,7 +432,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #00ff88;">Leave Runner</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('leave-runner')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('leave-runner')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                             <label class="toggle-switch" title="Keep a portion of your position to ride further gains">
                                                 <input type="checkbox" id="risk-leave-runner-enabled-${channel.id}" ${channel.leave_runner_enabled ? 'checked' : ''}>
                                                 <span class="toggle-slider"></span>
@@ -458,7 +458,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #ff6b6b;">Dynamic Stop Loss Escalation</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('dynamic-sl')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('dynamic-sl')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                             <label class="toggle-switch" title="Automatically move stop loss after hitting profit targets">
                                                 <input type="checkbox" id="risk-dynamic-sl-${channel.id}" ${channel.enable_dynamic_sl ? 'checked' : ''}>
                                                 <span class="toggle-slider"></span>
@@ -495,7 +495,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #ffc800;">Max Profit Giveback Guard</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('giveback-guard')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('giveback-guard')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                             <label class="toggle-switch" title="Exit if profit drops too much from peak">
                                                 <input type="checkbox" id="risk-giveback-guard-${channel.id}" ${channel.enable_giveback_guard ? 'checked' : ''}>
                                                 <span class="toggle-slider"></span>
@@ -516,7 +516,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #00bcd4;">EMA Risk Management</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('ema-risk')" style="background:none;border:1px solid #3A3A3C;border-radius:6px;color:#8E8E93;font-size:10px;padding:2px 8px;cursor:pointer;white-space:nowrap;">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('ema-risk')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
                                             <label class="toggle-switch" title="Monitor EMA crossovers for exit/escalation signals">
                                                 <input type="checkbox" id="risk-ema-enabled-${channel.id}" ${channel.ema_risk_enabled ? 'checked' : ''} onchange="document.getElementById('ema-settings-grid-${channel.id}').style.display = this.checked ? 'block' : 'none';">
                                                 <span class="toggle-slider"></span>
@@ -1875,21 +1875,21 @@ const RISK_HELP_CONTENT = {
         sections: [
             {
                 heading: 'What It Does',
-                body: 'Automatically sells portions of your position as the price moves in your favor. You can set up to 4 profit targets (P1-P4). When price reaches each target, the system trims (sells) part of your position to lock in gains.'
+                body: 'Automatically sells portions of your position as the price moves in your favor. You can set up to 4 profit targets (P1\u2013P4). When price reaches each target, the system trims (sells) part of your position to lock in gains.'
             },
             {
                 heading: 'How Targets Work',
                 body: 'Each target is a <strong>percentage gain from your entry price</strong>. Targets are triggered sequentially: P1 must hit before P2 can trigger, P2 before P3, and so on.',
-                diagram: `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0;">
-                    <div style="padding:6px 12px;border-radius:6px;background:#1a1a2e;border:1px solid #3A3A3C;font-size:11px;color:#8E8E93;">Entry</div>
-                    <span style="color:#3A3A3C;">---</span>
-                    <div style="padding:6px 12px;border-radius:6px;background:rgba(0,212,255,0.1);border:1px solid #00d4ff;font-size:11px;color:#00d4ff;">P1: +10%<br><span style="font-size:10px;color:#8E8E93;">Sell portion</span></div>
-                    <span style="color:#3A3A3C;">---</span>
-                    <div style="padding:6px 12px;border-radius:6px;background:rgba(0,212,255,0.15);border:1px solid #00d4ff;font-size:11px;color:#00d4ff;">P2: +20%<br><span style="font-size:10px;color:#8E8E93;">Sell portion</span></div>
-                    <span style="color:#3A3A3C;">---</span>
-                    <div style="padding:6px 12px;border-radius:6px;background:rgba(0,212,255,0.2);border:1px solid #00d4ff;font-size:11px;color:#00d4ff;">P3: +30%<br><span style="font-size:10px;color:#8E8E93;">Sell portion</span></div>
-                    <span style="color:#3A3A3C;">---</span>
-                    <div style="padding:6px 12px;border-radius:6px;background:rgba(0,212,255,0.25);border:1px solid #00d4ff;font-size:11px;color:#00d4ff;">P4: +40%<br><span style="font-size:10px;color:#8E8E93;">Sell rest</span></div>
+                diagram: `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0;">
+                    <div style="padding:10px 16px;border-radius:10px;background:#1E1E24;border:1px solid #3A3A3C;font-size:14px;color:#A1A1AA;font-weight:500;">Entry</div>
+                    <span style="color:#52525B;font-size:16px;">→</span>
+                    <div style="padding:10px 16px;border-radius:10px;background:rgba(0,212,255,0.1);border:1px solid #00d4ff;font-size:14px;color:#22D3EE;font-weight:600;">P1: +10%<br><span style="font-size:12px;color:#A1A1AA;font-weight:400;">Sell portion</span></div>
+                    <span style="color:#52525B;font-size:16px;">→</span>
+                    <div style="padding:10px 16px;border-radius:10px;background:rgba(0,212,255,0.15);border:1px solid #00d4ff;font-size:14px;color:#22D3EE;font-weight:600;">P2: +20%<br><span style="font-size:12px;color:#A1A1AA;font-weight:400;">Sell portion</span></div>
+                    <span style="color:#52525B;font-size:16px;">→</span>
+                    <div style="padding:10px 16px;border-radius:10px;background:rgba(0,212,255,0.2);border:1px solid #00d4ff;font-size:14px;color:#22D3EE;font-weight:600;">P3: +30%<br><span style="font-size:12px;color:#A1A1AA;font-weight:400;">Sell portion</span></div>
+                    <span style="color:#52525B;font-size:16px;">→</span>
+                    <div style="padding:10px 16px;border-radius:10px;background:rgba(0,212,255,0.25);border:1px solid #00d4ff;font-size:14px;color:#22D3EE;font-weight:600;">P4: +40%<br><span style="font-size:12px;color:#A1A1AA;font-weight:400;">Sell rest</span></div>
                 </div>`
             },
             {
@@ -1898,17 +1898,17 @@ const RISK_HELP_CONTENT = {
                     '<strong>Auto-Split:</strong> Position is divided equally among configured targets.<br>' +
                     '<strong>Custom Qty:</strong> Sell exactly N contracts/shares at that target.<br>' +
                     '<strong>Custom Trim %:</strong> Sell a percentage of the sellable position at that target.',
-                diagram: `<div style="margin:8px 0;padding:10px;background:#1a1a2e;border-radius:8px;border:1px solid #3A3A3C;">
-                    <div style="font-size:11px;font-weight:600;color:#818cf8;margin-bottom:8px;">Example: Options - 10 contracts, P1=10%, P2=25%, P3=50%</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;">
-                        <div style="padding:6px;background:rgba(99,102,241,0.1);border-radius:4px;text-align:center;"><strong style="color:#818cf8;">Auto-Split</strong><br>P1: sell 3<br>P2: sell 3<br>P3: sell 4</div>
-                        <div style="padding:6px;background:rgba(234,179,8,0.1);border-radius:4px;text-align:center;"><strong style="color:#eab308;">Trim 40/30/30%</strong><br>P1: sell 4<br>P2: sell 3<br>P3: sell 3</div>
-                        <div style="padding:6px;background:rgba(16,185,129,0.1);border-radius:4px;text-align:center;"><strong style="color:#10B981;">Custom 5/3/2</strong><br>P1: sell 5<br>P2: sell 3<br>P3: sell 2</div>
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <div style="font-size:13px;font-weight:600;color:#818CF8;margin-bottom:10px;">Example: Options \u2014 10 contracts, P1=10%, P2=25%, P3=50%</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px;color:#D4D4D8;">
+                        <div style="padding:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;text-align:center;"><strong style="color:#818CF8;">Auto-Split</strong><br>P1: sell 3<br>P2: sell 3<br>P3: sell 4</div>
+                        <div style="padding:10px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.2);border-radius:8px;text-align:center;"><strong style="color:#FACC15;">Trim 40/30/30%</strong><br>P1: sell 4<br>P2: sell 3<br>P3: sell 3</div>
+                        <div style="padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;text-align:center;"><strong style="color:#34D399;">Custom 5/3/2</strong><br>P1: sell 5<br>P2: sell 3<br>P3: sell 2</div>
                     </div>
-                    <div style="font-size:11px;font-weight:600;color:#818cf8;margin:12px 0 8px;">Example: Stocks - 100 shares, P1=5%, P2=10%</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;">
-                        <div style="padding:6px;background:rgba(99,102,241,0.1);border-radius:4px;text-align:center;"><strong style="color:#818cf8;">Auto-Split</strong><br>P1: sell 50 shares<br>P2: sell 50 shares</div>
-                        <div style="padding:6px;background:rgba(234,179,8,0.1);border-radius:4px;text-align:center;"><strong style="color:#eab308;">Trim 60/40%</strong><br>P1: sell 60 shares<br>P2: sell 40 shares</div>
+                    <div style="font-size:13px;font-weight:600;color:#818CF8;margin:16px 0 10px;">Example: Stocks \u2014 100 shares, P1=5%, P2=10%</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;color:#D4D4D8;">
+                        <div style="padding:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;text-align:center;"><strong style="color:#818CF8;">Auto-Split</strong><br>P1: sell 50 shares<br>P2: sell 50 shares</div>
+                        <div style="padding:10px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.2);border-radius:8px;text-align:center;"><strong style="color:#FACC15;">Trim 60/40%</strong><br>P1: sell 60 shares<br>P2: sell 40 shares</div>
                     </div>
                 </div>`
             }
@@ -1920,39 +1920,39 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'Stop Loss',
                 body: 'Automatically sells your entire position if the price drops by the specified percentage from your entry price. This protects against large losses.',
-                diagram: `<div style="margin:8px 0;padding:10px;background:#1a1a2e;border-radius:8px;border:1px solid #3A3A3C;">
-                    <div style="font-size:11px;font-weight:600;color:#EF4444;margin-bottom:6px;">Options Example: Entry $2.50, Stop Loss = 25%</div>
-                    <div style="display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:8px;">
-                        <div style="padding:4px 10px;border-radius:4px;background:rgba(239,68,68,0.15);border:1px solid #EF4444;color:#EF4444;">SL triggers at $1.875 (-25%)</div>
-                        <span style="color:#8E8E93;">Position closed</span>
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <div style="font-size:13px;font-weight:600;color:#F87171;margin-bottom:8px;">Options Example: Entry $2.50, Stop Loss = 25%</div>
+                    <div style="display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:12px;">
+                        <div style="padding:6px 12px;border-radius:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#F87171;font-weight:500;">SL triggers at $1.875 (-25%)</div>
+                        <span style="color:#A1A1AA;">→ Position closed</span>
                     </div>
-                    <div style="font-size:11px;font-weight:600;color:#EF4444;margin-bottom:6px;">Stocks Example: Entry $150.00, Stop Loss = 10%</div>
-                    <div style="display:flex;align-items:center;gap:8px;font-size:11px;">
-                        <div style="padding:4px 10px;border-radius:4px;background:rgba(239,68,68,0.15);border:1px solid #EF4444;color:#EF4444;">SL triggers at $135.00 (-10%)</div>
-                        <span style="color:#8E8E93;">Position closed</span>
+                    <div style="font-size:13px;font-weight:600;color:#F87171;margin-bottom:8px;">Stocks Example: Entry $150.00, Stop Loss = 10%</div>
+                    <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+                        <div style="padding:6px 12px;border-radius:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#F87171;font-weight:500;">SL triggers at $135.00 (-10%)</div>
+                        <span style="color:#A1A1AA;">→ Position closed</span>
                     </div>
                 </div>`
             },
             {
                 heading: 'Trailing Stop',
                 body: 'A dynamic stop that moves UP as your position gains value, but never moves down. It only activates after the price rises by the <strong>Trailing Activation %</strong>. Once active, the stop follows the price at a distance equal to the <strong>Trailing Stop %</strong>.',
-                diagram: `<div style="margin:8px 0;padding:10px;background:#1a1a2e;border-radius:8px;border:1px solid #3A3A3C;">
-                    <div style="font-size:11px;font-weight:600;color:#f59e0b;margin-bottom:8px;">Example: Entry $3.00, Trailing Stop = 15%, Activation = 30%</div>
-                    <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price hits $3.90</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(16,185,129,0.1);color:#10B981;">+30% = Trailing activates</div>
-                            <span style="color:#8E8E93;">Floor: $3.315 (3.90 x 0.85)</span>
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <div style="font-size:13px;font-weight:600;color:#FBBF24;margin-bottom:10px;">Example: Entry $3.00, Trailing Stop = 15%, Activation = 30%</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price hits $3.90</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:#34D399;font-weight:500;">+30% → Trailing activates</div>
+                            <span style="color:#D4D4D8;">Floor: $3.315</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price rises to $4.50</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(0,212,255,0.1);color:#00d4ff;">Floor moves up</div>
-                            <span style="color:#8E8E93;">Floor: $3.825 (4.50 x 0.85)</span>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price → $4.50</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.25);color:#22D3EE;font-weight:500;">Floor moves up</div>
+                            <span style="color:#D4D4D8;">Floor: $3.825</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price drops to $3.80</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(239,68,68,0.1);color:#EF4444;">Below floor $3.825</div>
-                            <span style="color:#8E8E93;">EXIT - Locked in +26.7% gain</span>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price → $3.80</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#F87171;font-weight:500;">Below floor $3.825</div>
+                            <span style="color:#D4D4D8;">EXIT \u2014 Locked in +26.7%</span>
                         </div>
                     </div>
                 </div>`
@@ -1970,35 +1970,35 @@ const RISK_HELP_CONTENT = {
                 heading: 'How It Works',
                 body: '<strong>Step 1:</strong> When price gains the <em>Breakeven At</em> percentage, the stop moves to your entry price (breakeven).<br>' +
                     '<strong>Step 2:</strong> For each additional <em>Lock Profit Every</em> percentage gained, the stop moves up by that same amount.',
-                diagram: `<div style="margin:8px 0;padding:10px;background:#1a1a2e;border-radius:8px;border:1px solid #3A3A3C;">
-                    <div style="font-size:11px;font-weight:600;color:#00c896;margin-bottom:8px;">Options: Entry $4.00, Breakeven at 5%, Lock every 3%</div>
-                    <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price +5% ($4.20)</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(0,200,150,0.15);color:#00c896;">Stop moves to $4.00 (breakeven)</div>
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <div style="font-size:13px;font-weight:600;color:#34D399;margin-bottom:10px;">Options: Entry $4.00, Breakeven at 5%, Lock every 3%</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price +5% ($4.20)</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(0,200,150,0.12);border:1px solid rgba(0,200,150,0.25);color:#34D399;font-weight:500;">Stop → $4.00 (breakeven)</div>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price +8% ($4.32)</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(0,200,150,0.2);color:#00c896;">Stop moves to $4.12 (+3% locked)</div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price +8% ($4.32)</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(0,200,150,0.15);border:1px solid rgba(0,200,150,0.25);color:#34D399;font-weight:500;">Stop → $4.12 (+3% locked)</div>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price +11% ($4.44)</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(0,200,150,0.25);color:#00c896;">Stop moves to $4.24 (+6% locked)</div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price +11% ($4.44)</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(0,200,150,0.18);border:1px solid rgba(0,200,150,0.25);color:#34D399;font-weight:500;">Stop → $4.24 (+6% locked)</div>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price drops to $4.20</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(239,68,68,0.1);color:#EF4444;">Below stop $4.24 = EXIT with +5% gain</div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price drops → $4.20</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#F87171;font-weight:500;">Below $4.24 → EXIT +5%</div>
                         </div>
                     </div>
-                    <div style="font-size:11px;font-weight:600;color:#00c896;margin:12px 0 8px;">Stocks: Entry $50.00, Breakeven at 5%, Lock every 3%</div>
-                    <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price +5% ($52.50)</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(0,200,150,0.15);color:#00c896;">Stop moves to $50.00 (breakeven)</div>
+                    <div style="font-size:13px;font-weight:600;color:#34D399;margin:16px 0 10px;">Stocks: Entry $50.00, Breakeven at 5%, Lock every 3%</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price +5% ($52.50)</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(0,200,150,0.12);border:1px solid rgba(0,200,150,0.25);color:#34D399;font-weight:500;">Stop → $50.00 (breakeven)</div>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:100px;">Price +8% ($54.00)</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(0,200,150,0.2);color:#00c896;">Stop moves to $51.50 (+3% locked)</div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:120px;font-weight:500;">Price +8% ($54.00)</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(0,200,150,0.15);border:1px solid rgba(0,200,150,0.25);color:#34D399;font-weight:500;">Stop → $51.50 (+3% locked)</div>
                         </div>
                     </div>
                 </div>`
@@ -2015,29 +2015,29 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'The Three Modes',
                 body: '',
-                diagram: `<div style="margin:8px 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-                    <div style="padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#10B981;margin-bottom:6px;">Signal Mode</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                diagram: `<div style="margin:12px 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                    <div style="padding:14px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#34D399;margin-bottom:8px;">Signal Mode</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Exits <strong>only</strong> when the original trader sends a sell signal.<br><br>
                             Automated profit targets and stop losses are <strong>disabled</strong>. Exception: EMA Risk still evaluates if enabled separately.<br><br>
-                            <span style="color:#8E8E93;">Best for: Trusting the trader's judgment completely.</span>
+                            <span style="color:#A1A1AA;">Best for: Trusting the trader\u2019s judgment completely.</span>
                         </div>
                     </div>
-                    <div style="padding:10px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.3);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#00d4ff;margin-bottom:6px;">Risk Mode</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                    <div style="padding:14px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#22D3EE;margin-bottom:8px;">Risk Mode</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Exits <strong>only</strong> via automated targets and stop losses.<br><br>
                             Trader sell signals are <strong>ignored</strong>.<br><br>
-                            <span style="color:#8E8E93;">Best for: Full automated risk control, ignoring signal exits.</span>
+                            <span style="color:#A1A1AA;">Best for: Full automated risk control, ignoring signal exits.</span>
                         </div>
                     </div>
-                    <div style="padding:10px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#eab308;margin-bottom:6px;">Hybrid Mode</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                    <div style="padding:14px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.25);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#FACC15;margin-bottom:8px;">Hybrid Mode</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             <strong>Both</strong> trader signals and automated exits are active.<br><br>
                             Whichever triggers first wins.<br><br>
-                            <span style="color:#8E8E93;">Best for: Maximum protection with trader guidance.</span>
+                            <span style="color:#A1A1AA;">Best for: Maximum protection with trader guidance.</span>
                         </div>
                     </div>
                 </div>`
@@ -2054,29 +2054,29 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'Market vs Limit',
                 body: '',
-                diagram: `<div style="margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div style="padding:10px;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.2);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#ffb700;margin-bottom:6px;">Market Order</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                diagram: `<div style="margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div style="padding:14px;background:rgba(255,183,0,0.06);border:1px solid rgba(255,183,0,0.2);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#FBBF24;margin-bottom:8px;">Market Order</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Sells immediately at the best available price.<br><br>
-                            <span style="color:#10B981;">Pros:</span> Fastest execution, guaranteed fill.<br>
-                            <span style="color:#EF4444;">Cons:</span> May get a slightly worse price in fast markets.<br><br>
-                            <span style="color:#8E8E93;">Best for: Fast-moving options, 0DTE trades.</span>
+                            <span style="color:#34D399;font-weight:500;">Pros:</span> Fastest execution, guaranteed fill.<br>
+                            <span style="color:#F87171;font-weight:500;">Cons:</span> May get a slightly worse price in fast markets.<br><br>
+                            <span style="color:#A1A1AA;">Best for: Fast-moving options, 0DTE trades.</span>
                         </div>
                     </div>
-                    <div style="padding:10px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#00d4ff;margin-bottom:6px;">Limit Order</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                    <div style="padding:14px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#22D3EE;margin-bottom:8px;">Limit Order</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Places a limit order slightly below current price for better fills.<br><br>
                             <strong>Offset</strong> controls how far below:<br>
-                            <span style="color:#8E8E93;">Dollar mode:</span> e.g. $0.01 below bid<br>
-                            <span style="color:#8E8E93;">Percent mode:</span> e.g. 2% below bid<br><br>
-                            <span style="color:#8E8E93;">Best for: Swing trades, higher-priced options.</span>
+                            <span style="color:#A1A1AA;">Dollar mode:</span> e.g. $0.01 below bid<br>
+                            <span style="color:#A1A1AA;">Percent mode:</span> e.g. 2% below bid<br><br>
+                            <span style="color:#A1A1AA;">Best for: Swing trades, higher-priced options.</span>
                         </div>
                     </div>
                 </div>
-                <div style="margin-top:8px;padding:8px;background:#1a1a2e;border-radius:6px;font-size:11px;">
-                    <strong style="color:#ffb700;">Example:</strong> Option at $5.20, Limit with $0.01 offset = Limit sell at $5.19
+                <div style="margin-top:10px;padding:10px 14px;background:#1E1E24;border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Example:</strong> Option at $5.20, Limit with $0.01 offset = Limit sell at $5.19
                 </div>`
             }
         ]
@@ -2091,29 +2091,28 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'Market vs Limit',
                 body: '',
-                diagram: `<div style="margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div style="padding:10px;background:rgba(255,82,82,0.06);border:1px solid rgba(255,82,82,0.2);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#ff5252;margin-bottom:6px;">Limit (Default)</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                diagram: `<div style="margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div style="padding:14px;background:rgba(255,82,82,0.06);border:1px solid rgba(255,82,82,0.2);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#F87171;margin-bottom:8px;">Limit (Default)</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Places a limit sell order with an offset below the trigger price.<br><br>
                             The <strong>Limit Offset %</strong> controls how far below: if SL triggers at -10% and offset is 3%, the limit price is set at -13%.<br><br>
-                            <span style="color:#10B981;">Pros:</span> More control over fill price.<br>
-                            <span style="color:#EF4444;">Cons:</span> May not fill in a fast crash.
+                            <span style="color:#34D399;font-weight:500;">Pros:</span> More control over fill price.<br>
+                            <span style="color:#F87171;font-weight:500;">Cons:</span> May not fill in a fast crash.
                         </div>
                     </div>
-                    <div style="padding:10px;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.2);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#ffb700;margin-bottom:6px;">Market</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                    <div style="padding:14px;background:rgba(255,183,0,0.06);border:1px solid rgba(255,183,0,0.2);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#FBBF24;margin-bottom:8px;">Market</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Sells immediately at market price when SL triggers.<br><br>
-                            <span style="color:#10B981;">Pros:</span> Guaranteed exit, no risk of unfilled order.<br>
-                            <span style="color:#EF4444;">Cons:</span> May get worse price due to slippage.<br><br>
-                            <span style="color:#8E8E93;">Best for: Volatile or low-liquidity positions.</span>
+                            <span style="color:#34D399;font-weight:500;">Pros:</span> Guaranteed exit, no risk of unfilled order.<br>
+                            <span style="color:#F87171;font-weight:500;">Cons:</span> May get worse price due to slippage.<br><br>
+                            <span style="color:#A1A1AA;">Best for: Volatile or low-liquidity positions.</span>
                         </div>
                     </div>
                 </div>
-                <div style="margin-top:8px;padding:8px;background:#1a1a2e;border-radius:6px;font-size:11px;">
-                    <strong style="color:#ff5252;">Example:</strong> Option entry $2.00, SL 25%, Offset 3%<br>
-                    SL triggers at $1.50 (-25%), limit sell placed at $1.44 (-28%). Stock entry $100, SL 10%, Offset 3% = triggers at $90, limit at $87.
+                <div style="margin-top:10px;padding:10px 14px;background:#1E1E24;border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#F87171;">Example:</strong> Option entry $2.00, SL 25%, Offset 3% → SL triggers at $1.50 (-25%), limit sell at $1.44 (-28%).<br>Stock entry $100, SL 10%, Offset 3% → triggers at $90, limit at $87.
                 </div>`
             }
         ]
@@ -2128,26 +2127,26 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'Chase Modes',
                 body: '',
-                diagram: `<div style="margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div style="padding:10px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:6px;">Entry Chase</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                diagram: `<div style="margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div style="padding:14px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#A78BFA;margin-bottom:8px;">Entry Chase</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Chases unfilled <strong>buy</strong> orders by adjusting toward the ask price.<br><br>
                             Uses progressively aggressive pricing to get filled quickly.
                         </div>
                     </div>
-                    <div style="padding:10px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:8px;">
-                        <div style="font-size:12px;font-weight:700;color:#00d4ff;margin-bottom:6px;">Exit Chase</div>
-                        <div style="font-size:11px;color:#ccc;line-height:1.5;">
+                    <div style="padding:14px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:12px;">
+                        <div style="font-size:14px;font-weight:700;color:#22D3EE;margin-bottom:8px;">Exit Chase</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.6;">
                             Chases unfilled <strong>sell</strong> orders through 3 stages:<br><br>
-                            <span style="color:#10B981;">Round 1:</span> Mid/Last/Bid price<br>
-                            <span style="color:#eab308;">Round 2:</span> Bid/Last price<br>
-                            <span style="color:#EF4444;">Round 3+:</span> Market order
+                            <span style="color:#34D399;font-weight:500;">Round 1:</span> Mid/Last/Bid price<br>
+                            <span style="color:#FACC15;font-weight:500;">Round 2:</span> Bid/Last price<br>
+                            <span style="color:#F87171;font-weight:500;">Round 3+:</span> Market order
                         </div>
                     </div>
                 </div>
-                <div style="margin-top:8px;padding:8px;background:#1a1a2e;border-radius:6px;font-size:11px;">
-                    <strong style="color:#a78bfa;">Example:</strong> You sell 5 SPY $450C at $3.20 limit. If unfilled after a few seconds, the chaser replaces at $3.15 (bid), then $3.10, then converts to market order to guarantee exit.
+                <div style="margin-top:10px;padding:10px 14px;background:#1E1E24;border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#A78BFA;">Example:</strong> You sell 5 SPY $450C at $3.20 limit. If unfilled after a few seconds, the chaser replaces at $3.15 (bid), then $3.10, then converts to market order to guarantee exit.
                 </div>`
             }
         ]
@@ -2162,23 +2161,23 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'How It Works',
                 body: 'The <strong>Runner Size %</strong> determines what percentage of your original position is reserved. This portion is excluded from profit target trim calculations. A minimum of 1 contract/share is always kept.',
-                diagram: `<div style="margin:8px 0;padding:10px;background:#1a1a2e;border-radius:8px;border:1px solid #3A3A3C;">
-                    <div style="font-size:11px;font-weight:600;color:#00ff88;margin-bottom:8px;">Options: 10 contracts, Runner = 20%, P1=10%, P2=25%, P3=50%</div>
-                    <div style="display:flex;align-items:center;gap:6px;font-size:11px;flex-wrap:wrap;">
-                        <div style="padding:4px 8px;border-radius:4px;background:rgba(99,102,241,0.1);color:#818cf8;">Sellable: 8 contracts</div>
-                        <span style="color:#3A3A3C;">|</span>
-                        <div style="padding:4px 8px;border-radius:4px;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:#00ff88;">Runner: 2 contracts (reserved)</div>
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <div style="font-size:13px;font-weight:600;color:#4ADE80;margin-bottom:10px;">Options: 10 contracts, Runner = 20%, P1=10%, P2=25%, P3=50%</div>
+                    <div style="display:flex;align-items:center;gap:10px;font-size:13px;flex-wrap:wrap;margin-bottom:12px;">
+                        <div style="padding:6px 12px;border-radius:8px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);color:#818CF8;font-weight:500;">Sellable: 8 contracts</div>
+                        <span style="color:#52525B;font-size:16px;">|</span>
+                        <div style="padding:6px 12px;border-radius:8px;background:rgba(0,255,136,0.08);border:1px solid rgba(74,222,128,0.3);color:#4ADE80;font-weight:500;">Runner: 2 contracts (reserved)</div>
                     </div>
-                    <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px;font-size:11px;">
+                    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#D4D4D8;">
                         <div>P1 hits +10%: Sell 3 of 8 sellable</div>
                         <div>P2 hits +25%: Sell 3 of remaining 5</div>
                         <div>P3 hits +50%: Sell remaining 2</div>
-                        <div style="color:#00ff88;font-weight:600;">Runner (2 contracts) rides with trailing stop protection</div>
+                        <div style="color:#4ADE80;font-weight:600;margin-top:4px;">Runner (2 contracts) rides with trailing stop protection</div>
                     </div>
-                    <div style="font-size:11px;font-weight:600;color:#00ff88;margin:12px 0 6px;">Stocks: 100 shares, Runner = 25%</div>
-                    <div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">
+                    <div style="font-size:13px;font-weight:600;color:#4ADE80;margin:16px 0 8px;">Stocks: 100 shares, Runner = 25%</div>
+                    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#D4D4D8;">
                         <div>Sellable: 75 shares across targets</div>
-                        <div style="color:#00ff88;font-weight:600;">Runner: 25 shares reserved for extended gains</div>
+                        <div style="color:#4ADE80;font-weight:600;">Runner: 25 shares reserved for extended gains</div>
                     </div>
                 </div>`
             }
@@ -2194,43 +2193,43 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'Escalation Profiles',
                 body: 'Each profile defines how much the stop loss moves after each target:',
-                diagram: `<div style="margin:8px 0;padding:10px;background:#1a1a2e;border-radius:8px;border:1px solid #3A3A3C;">
-                    <table style="width:100%;font-size:11px;border-collapse:collapse;">
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <table style="width:100%;font-size:13px;border-collapse:collapse;color:#D4D4D8;">
                         <thead>
                             <tr style="border-bottom:1px solid #3A3A3C;">
-                                <th style="text-align:left;padding:4px 6px;color:#8E8E93;">Profile</th>
-                                <th style="text-align:center;padding:4px 6px;color:#00d4ff;">After P1</th>
-                                <th style="text-align:center;padding:4px 6px;color:#00d4ff;">After P2</th>
-                                <th style="text-align:center;padding:4px 6px;color:#00d4ff;">After P3</th>
-                                <th style="text-align:center;padding:4px 6px;color:#00d4ff;">After P4</th>
+                                <th style="text-align:left;padding:8px 10px;color:#A1A1AA;font-weight:600;">Profile</th>
+                                <th style="text-align:center;padding:8px 10px;color:#22D3EE;font-weight:600;">After P1</th>
+                                <th style="text-align:center;padding:8px 10px;color:#22D3EE;font-weight:600;">After P2</th>
+                                <th style="text-align:center;padding:8px 10px;color:#22D3EE;font-weight:600;">After P3</th>
+                                <th style="text-align:center;padding:8px 10px;color:#22D3EE;font-weight:600;">After P4</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr style="border-bottom:1px solid #2A2A2C;">
-                                <td style="padding:4px 6px;color:#10B981;">Conservative</td>
-                                <td style="text-align:center;padding:4px 6px;">Breakeven</td>
-                                <td style="text-align:center;padding:4px 6px;">+3%</td>
-                                <td style="text-align:center;padding:4px 6px;">+8%</td>
-                                <td style="text-align:center;padding:4px 6px;">+15%</td>
+                            <tr style="border-bottom:1px solid #27272A;">
+                                <td style="padding:8px 10px;color:#34D399;font-weight:600;">Conservative</td>
+                                <td style="text-align:center;padding:8px 10px;">Breakeven</td>
+                                <td style="text-align:center;padding:8px 10px;">+3%</td>
+                                <td style="text-align:center;padding:8px 10px;">+8%</td>
+                                <td style="text-align:center;padding:8px 10px;">+15%</td>
                             </tr>
-                            <tr style="border-bottom:1px solid #2A2A2C;">
-                                <td style="padding:4px 6px;color:#eab308;">Standard</td>
-                                <td style="text-align:center;padding:4px 6px;">Breakeven</td>
-                                <td style="text-align:center;padding:4px 6px;">+5%</td>
-                                <td style="text-align:center;padding:4px 6px;">+10%</td>
-                                <td style="text-align:center;padding:4px 6px;">+17%</td>
+                            <tr style="border-bottom:1px solid #27272A;">
+                                <td style="padding:8px 10px;color:#FACC15;font-weight:600;">Standard</td>
+                                <td style="text-align:center;padding:8px 10px;">Breakeven</td>
+                                <td style="text-align:center;padding:8px 10px;">+5%</td>
+                                <td style="text-align:center;padding:8px 10px;">+10%</td>
+                                <td style="text-align:center;padding:8px 10px;">+17%</td>
                             </tr>
                             <tr>
-                                <td style="padding:4px 6px;color:#EF4444;">Aggressive</td>
-                                <td style="text-align:center;padding:4px 6px;">-2%</td>
-                                <td style="text-align:center;padding:4px 6px;">Breakeven</td>
-                                <td style="text-align:center;padding:4px 6px;">+8%</td>
-                                <td style="text-align:center;padding:4px 6px;">+15%</td>
+                                <td style="padding:8px 10px;color:#F87171;font-weight:600;">Aggressive</td>
+                                <td style="text-align:center;padding:8px 10px;">-2%</td>
+                                <td style="text-align:center;padding:8px 10px;">Breakeven</td>
+                                <td style="text-align:center;padding:8px 10px;">+8%</td>
+                                <td style="text-align:center;padding:8px 10px;">+15%</td>
                             </tr>
                         </tbody>
                     </table>
-                    <div style="margin-top:10px;font-size:11px;font-weight:600;color:#ff6b6b;">Example: Options entry $3.00, Standard profile</div>
-                    <div style="font-size:11px;margin-top:4px;">
+                    <div style="margin-top:14px;font-size:13px;font-weight:600;color:#FB7185;">Example: Options entry $3.00, Standard profile</div>
+                    <div style="font-size:13px;margin-top:6px;color:#D4D4D8;line-height:1.7;">
                         P1 hits at +15%: SL moves to $3.00 (breakeven)<br>
                         P2 hits at +30%: SL moves to $3.15 (+5%)<br>
                         P3 hits at +50%: SL moves to $3.30 (+10%)
@@ -2239,7 +2238,7 @@ const RISK_HELP_CONTENT = {
             },
             {
                 heading: 'Escalation Only Mode',
-                body: 'When enabled, hitting a profit target <strong>only moves the stop loss</strong> - it does <strong>not</strong> sell any contracts. This lets you ride the full position while progressively tightening your safety net.'
+                body: 'When enabled, hitting a profit target <strong>only moves the stop loss</strong> \u2014 it does <strong>not</strong> sell any contracts. This lets you ride the full position while progressively tightening your safety net.'
             }
         ]
     },
@@ -2253,25 +2252,25 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'How It Works',
                 body: 'The system tracks the highest unrealized profit your position reaches. If the current profit drops below a percentage of that peak, it triggers an exit. It activates after P2 is hit, or after the trailing activation threshold is reached.',
-                diagram: `<div style="margin:8px 0;padding:10px;background:#1a1a2e;border-radius:8px;border:1px solid #3A3A3C;">
-                    <div style="font-size:11px;font-weight:600;color:#ffc800;margin-bottom:8px;">Options: Entry $2.00, Giveback = 30%, peak reached +60%</div>
-                    <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:130px;">Peak profit: +60%</span>
-                            <span style="color:#10B981;">Price at $3.20</span>
+                diagram: `<div style="margin:12px 0;padding:14px;background:#1E1E24;border-radius:12px;border:1px solid #2D2D30;">
+                    <div style="font-size:13px;font-weight:600;color:#FBBF24;margin-bottom:10px;">Options: Entry $2.00, Giveback = 30%, peak reached +60%</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:140px;font-weight:500;">Peak profit: +60%</span>
+                            <span style="color:#34D399;font-weight:500;">Price at $3.20</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:130px;">Giveback threshold</span>
-                            <span style="color:#ffc800;">60% x (1 - 0.30) = +42%</span>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:140px;font-weight:500;">Giveback threshold</span>
+                            <span style="color:#FBBF24;font-weight:500;">60% \u00d7 (1 - 0.30) = +42%</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#8E8E93;min-width:130px;">Price drops to +40%</span>
-                            <div style="padding:3px 8px;border-radius:4px;background:rgba(239,68,68,0.1);color:#EF4444;">Below 42% threshold = EXIT</div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="color:#A1A1AA;min-width:140px;font-weight:500;">Price drops to +40%</span>
+                            <div style="padding:5px 10px;border-radius:6px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#F87171;font-weight:500;">Below 42% threshold → EXIT</div>
                         </div>
                     </div>
-                    <div style="margin-top:6px;font-size:10px;color:#8E8E93;">Result: Exited with +40% instead of watching it fall further. Still a great trade!</div>
-                    <div style="font-size:11px;font-weight:600;color:#ffc800;margin:12px 0 6px;">Stocks: Entry $100, Giveback = 30%, peak +20%</div>
-                    <div style="font-size:11px;">Threshold: 20% x 0.70 = +14%. If profit drops below +14%, position is closed.</div>
+                    <div style="margin-top:10px;font-size:13px;color:#A1A1AA;font-style:italic;">Result: Exited with +40% instead of watching it fall further. Still a great trade!</div>
+                    <div style="font-size:13px;font-weight:600;color:#FBBF24;margin:16px 0 8px;">Stocks: Entry $100, Giveback = 30%, peak +20%</div>
+                    <div style="font-size:13px;color:#D4D4D8;">Threshold: 20% \u00d7 0.70 = +14%. If profit drops below +14%, position is closed.</div>
                 </div>`
             }
         ]
@@ -2286,37 +2285,37 @@ const RISK_HELP_CONTENT = {
             {
                 heading: 'Key Settings',
                 body: '',
-                diagram: `<div style="margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                    <div style="padding:8px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:6px;">
-                        <div style="font-size:11px;font-weight:600;color:#00bcd4;margin-bottom:4px;">EMA Period</div>
-                        <div style="font-size:10px;color:#ccc;">Number of candles used. Lower = more sensitive (3=fast, 21=slow).</div>
+                diagram: `<div style="margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div style="padding:12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#22D3EE;margin-bottom:6px;">EMA Period</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">Number of candles used. Lower = more sensitive (3=fast, 21=slow).</div>
                     </div>
-                    <div style="padding:8px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:6px;">
-                        <div style="font-size:11px;font-weight:600;color:#00bcd4;margin-bottom:4px;">Candle Timeframe</div>
-                        <div style="font-size:10px;color:#ccc;">Duration of each candle (1-5 min). Shorter = faster reaction.</div>
+                    <div style="padding:12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#22D3EE;margin-bottom:6px;">Candle Timeframe</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">Duration of each candle (1\u20135 min). Shorter = faster reaction.</div>
                     </div>
-                    <div style="padding:8px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:6px;">
-                        <div style="font-size:11px;font-weight:600;color:#00bcd4;margin-bottom:4px;">Buffer %</div>
-                        <div style="font-size:10px;color:#ccc;">Price must cross EMA by this % to trigger. Prevents false signals from noise.</div>
+                    <div style="padding:12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#22D3EE;margin-bottom:6px;">Buffer %</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">Price must cross EMA by this % to trigger. Prevents false signals from noise.</div>
                     </div>
-                    <div style="padding:8px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:6px;">
-                        <div style="font-size:11px;font-weight:600;color:#00bcd4;margin-bottom:4px;">No-Trend Candles</div>
-                        <div style="font-size:10px;color:#ccc;">Consecutive candles below EMA needed before action (default 3).</div>
+                    <div style="padding:12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.2);border-radius:10px;">
+                        <div style="font-size:13px;font-weight:600;color:#22D3EE;margin-bottom:6px;">No-Trend Candles</div>
+                        <div style="font-size:13px;color:#D4D4D8;line-height:1.5;">Consecutive candles below EMA needed before action (default 3).</div>
                     </div>
                 </div>
-                <div style="margin-top:8px;padding:8px;background:#1a1a2e;border-radius:6px;">
-                    <div style="font-size:11px;font-weight:600;color:#00bcd4;margin-bottom:6px;">How EMA Exit Works</div>
-                    <div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">
+                <div style="margin-top:10px;padding:12px;background:#1E1E24;border-radius:10px;">
+                    <div style="font-size:14px;font-weight:600;color:#22D3EE;margin-bottom:8px;">How EMA Exit Works</div>
+                    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#D4D4D8;">
                         <div>1. System builds live candles from the underlying asset price</div>
                         <div>2. EMA is calculated using the selected period</div>
                         <div>3. Waits for at least 2 candles after entry (warmup period)</div>
                         <div>4. If price closes below EMA (minus buffer) for N consecutive candles:</div>
-                        <div style="padding-left:16px;color:#EF4444;"><strong>Exit on Cross</strong> = Sell the position</div>
-                        <div style="padding-left:16px;color:#eab308;"><strong>Stop Escalation</strong> = Move stop loss to EMA-based level (stocks only; options use Exit on Cross)</div>
+                        <div style="padding-left:20px;color:#F87171;font-weight:500;"><strong>Exit on Cross</strong> = Sell the position</div>
+                        <div style="padding-left:20px;color:#FACC15;font-weight:500;"><strong>Stop Escalation</strong> = Move stop loss to EMA-based level (stocks only; options use Exit on Cross)</div>
                     </div>
                 </div>
-                <div style="margin-top:8px;padding:8px;background:#1a1a2e;border-radius:6px;font-size:11px;">
-                    <strong style="color:#00bcd4;">Tip for Options:</strong> Enable "Use Underlying" to compute EMA on the stock price (e.g., SPY) rather than the option price, which tends to be more reliable. EMA on option prices can be noisy due to bid-ask spreads.
+                <div style="margin-top:10px;padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Tip for Options:</strong> Enable \u201cUse Underlying\u201d to compute EMA on the stock price (e.g., SPY) rather than the option price, which tends to be more reliable. EMA on option prices can be noisy due to bid-ask spreads.
                 </div>`
             }
         ]
@@ -2330,27 +2329,68 @@ function showRiskHelp(topic) {
     const existing = document.getElementById('risk-help-modal');
     if (existing) existing.remove();
 
+    const styleTag = document.createElement('style');
+    styleTag.id = 'risk-help-modal-styles';
+    const existingStyle = document.getElementById('risk-help-modal-styles');
+    if (existingStyle) existingStyle.remove();
+    styleTag.textContent = `
+        #risk-help-modal { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);animation:riskHelpFadeIn 0.2s ease-out; }
+        @keyframes riskHelpFadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes riskHelpSlideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        .risk-help-panel { background:#18181B;border:1px solid #2D2D30;border-radius:20px;max-width:720px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 25px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.05) inset;animation:riskHelpSlideUp 0.25s ease-out; }
+        .risk-help-header { padding:20px 24px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2D2D30;flex-shrink:0; }
+        .risk-help-header h2 { font-size:18px;font-weight:700;color:#F4F4F5;margin:0;letter-spacing:-0.3px; }
+        .risk-help-close { width:32px;height:32px;border-radius:10px;border:1px solid #3A3A3C;background:rgba(255,255,255,0.04);color:#A1A1AA;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s; }
+        .risk-help-close:hover { background:rgba(255,255,255,0.1);color:#F4F4F5;border-color:#52525B; }
+        .risk-help-body { padding:24px;overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:#3A3A3C transparent; }
+        .risk-help-body::-webkit-scrollbar { width:6px; }
+        .risk-help-body::-webkit-scrollbar-track { background:transparent; }
+        .risk-help-body::-webkit-scrollbar-thumb { background:#3A3A3C;border-radius:3px; }
+        .risk-help-section { margin-bottom:24px; }
+        .risk-help-section:last-child { margin-bottom:0; }
+        .risk-help-section-heading { font-size:15px;font-weight:700;color:#E4E4E7;margin-bottom:10px;display:flex;align-items:center;gap:8px; }
+        .risk-help-section-heading::before { content:'';width:3px;height:16px;border-radius:2px;background:linear-gradient(180deg,#818CF8,#6366F1);flex-shrink:0; }
+        .risk-help-section-body { font-size:14px;color:#D4D4D8;line-height:1.7; }
+        .risk-help-section-body strong { color:#F4F4F5;font-weight:600; }
+        .risk-help-section-body em { color:#A78BFA;font-style:normal;font-weight:500; }
+        .risk-help-diagram { margin-top:12px; }
+        .risk-help-footer { padding:16px 24px;border-top:1px solid #2D2D30;flex-shrink:0; }
+        .risk-help-footer-text { font-size:12px;color:#71717A;text-align:center; }
+    `;
+    document.head.appendChild(styleTag);
+
     let sectionsHtml = '';
     for (const section of content.sections) {
-        sectionsHtml += `
-            <div style="margin-bottom:16px;">
-                ${section.heading ? `<div style="font-size:13px;font-weight:700;color:white;margin-bottom:6px;">${section.heading}</div>` : ''}
-                ${section.body ? `<div style="font-size:12px;color:#ccc;line-height:1.6;">${section.body}</div>` : ''}
-                ${section.diagram || ''}
-            </div>`;
+        sectionsHtml += `<div class="risk-help-section">`;
+        if (section.heading) {
+            sectionsHtml += `<div class="risk-help-section-heading">${section.heading}</div>`;
+        }
+        if (section.body) {
+            sectionsHtml += `<div class="risk-help-section-body">${section.body}</div>`;
+        }
+        if (section.diagram) {
+            sectionsHtml += `<div class="risk-help-diagram">${section.diagram}</div>`;
+        }
+        sectionsHtml += `</div>`;
     }
 
     const modal = document.createElement('div');
     modal.id = 'risk-help-modal';
-    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     modal.innerHTML = `
-        <div style="background:#1C1C1E;border:1px solid #3A3A3C;border-radius:16px;max-width:640px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
-            <div style="padding:16px 20px;border-bottom:1px solid #3A3A3C;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#1C1C1E;border-radius:16px 16px 0 0;z-index:1;">
-                <div style="font-size:15px;font-weight:700;color:white;">${content.title}</div>
-                <button onclick="document.getElementById('risk-help-modal').remove()" style="background:none;border:none;color:#8E8E93;font-size:20px;cursor:pointer;padding:0 4px;line-height:1;">&times;</button>
+        <div class="risk-help-panel">
+            <div class="risk-help-header">
+                <h2>${content.title}</h2>
+                <button class="risk-help-close" onclick="document.getElementById('risk-help-modal').remove()" aria-label="Close">&times;</button>
             </div>
-            <div style="padding:20px;">${sectionsHtml}</div>
+            <div class="risk-help-body">${sectionsHtml}</div>
+            <div class="risk-help-footer">
+                <div class="risk-help-footer-text">Click outside or press the X to close</div>
+            </div>
         </div>`;
     document.body.appendChild(modal);
+
+    modal.querySelector('.risk-help-panel').addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') modal.remove();
+    });
 }
