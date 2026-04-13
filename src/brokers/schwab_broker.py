@@ -2147,18 +2147,28 @@ class SchwabBroker(BrokerInterface):
                         y = f"20{y}"
                     expiry = f"{y}-{int(m):02d}-{int(d):02d}"
             
-            async def _async_quote_and_chain(h, sym, exp):
+            _INDEX_SYMBOLS = {'SPX', 'SPXW', 'NDX', 'NDXP', 'RUT', 'RUTW', 'DJX', 'DJXW', 'VIX', 'XSP'}
+            _CHAIN_SYMBOL_NORMALIZE = {'SPXW': 'SPX', 'NDXP': 'NDX', 'RUTW': 'RUT', 'DJXW': 'DJX'}
+            chain_symbol = symbol.upper()
+            quote_symbol = symbol.upper()
+            if chain_symbol in _INDEX_SYMBOLS or chain_symbol.startswith('$'):
+                clean = chain_symbol.lstrip('$')
+                clean = _CHAIN_SYMBOL_NORMALIZE.get(clean, clean)
+                chain_symbol = f"${clean}"
+                quote_symbol = f"${clean}"
+            
+            async def _async_quote_and_chain(h, q_sym, c_sym, exp):
                 async with httpx.AsyncClient(timeout=15.0) as c:
                     qr = await c.get("https://api.schwabapi.com/marketdata/v1/quotes", headers=h, params={
-                        'symbols': sym, 'indicative': 'false',
+                        'symbols': q_sym, 'indicative': 'false',
                         'needExtendedHoursData': 'true', 'needPreviousClose': 'true'})
                     cr = await c.get("https://api.schwabapi.com/marketdata/v1/chains", headers=h, params={
-                        'symbol': sym, 'contractType': 'ALL', 'fromDate': exp, 'toDate': exp, 'includeUnderlyingQuote': 'true'
+                        'symbol': c_sym, 'contractType': 'ALL', 'fromDate': exp, 'toDate': exp, 'includeUnderlyingQuote': 'true'
                     })
                     return qr, cr
             
             quote_response, response = await asyncio.wait_for(
-                _async_quote_and_chain(headers, symbol, expiry),
+                _async_quote_and_chain(headers, quote_symbol, chain_symbol, expiry),
                 timeout=20.0
             )
             
@@ -2166,8 +2176,10 @@ class SchwabBroker(BrokerInterface):
             if not isinstance(quote_response, Exception) and quote_response.status_code == 200:
                 try:
                     quote_data = quote_response.json()
-                    if symbol in quote_data:
-                        stock_price = float(quote_data[symbol].get('quote', {}).get('lastPrice', 0) or 0)
+                    for q_key in [quote_symbol, symbol, f"${symbol}"]:
+                        if q_key in quote_data:
+                            stock_price = float(quote_data[q_key].get('quote', {}).get('lastPrice', 0) or 0)
+                            break
                 except:
                     pass
             
