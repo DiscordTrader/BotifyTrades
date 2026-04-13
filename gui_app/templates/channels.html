@@ -1660,7 +1660,10 @@ function buildSizingTab(ch) {
         ${t212Note}
         <div class="settings-row">
             <div class="settings-section green">
-                <div class="settings-section-title">🚀 Execute</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div class="settings-section-title" style="margin-bottom:0;">🚀 Execute</div>
+                <button type="button" onclick="showSettingsHelp('execute')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                </div>
                 <div class="settings-toggle-row">
                     <span>Execute Trades</span>
                     <label class="toggle-switch">
@@ -1699,7 +1702,10 @@ function buildSizingTab(ch) {
                 </div>
             </div>
             <div class="settings-section mint">
-                <div class="settings-section-title">📈 Track</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div class="settings-section-title" style="margin-bottom:0;">📈 Track</div>
+                <button type="button" onclick="showSettingsHelp('track')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                </div>
                 <div class="settings-toggle-row">
                     <span>Track Signals</span>
                     <label class="toggle-switch">
@@ -1722,7 +1728,10 @@ function buildSizingTab(ch) {
             </div>
         </div>
         <div class="settings-section amber">
-            <div class="settings-section-title">💰 Position Limits</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">💰 Position Limits</div>
+            <button type="button" onclick="showSettingsHelp('position-limits')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-field" style="max-width: 280px;">
                 <label>Max Position $</label>
                 <input type="number" value="${ch.channel_max_position_size || ''}" placeholder="No limit" min="100" max="100000" step="100"
@@ -1739,7 +1748,10 @@ function buildRiskControlsTab(ch) {
     const ndxT212Note = t212Only ? ' <span style="color: #64B5F6; font-size: 10px;">(N/A for T212 — stocks only)</span>' : '';
     return `
         <div class="settings-section violet">
-            <div class="settings-section-title">🎯 Signal Handling</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">🎯 Signal Handling</div>
+            <button type="button" onclick="showSettingsHelp('signal-handling')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-row">
                 <div style="display: flex; align-items: flex-end;">
                     <div class="settings-toggle-row" style="width: 100%;">
@@ -1754,7 +1766,10 @@ function buildRiskControlsTab(ch) {
             <div class="settings-helper">Exit Mode & Order Chase have moved to the Risk Management section on the Execution page.</div>
         </div>
         <div class="settings-section cyan">
-            <div class="settings-section-title">🛡 Slippage Protection</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">🛡 Slippage Protection</div>
+            <button type="button" onclick="showSettingsHelp('slippage-protection')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-toggle-row">
                 <span>Enable Slippage Protection</span>
                 <label class="toggle-switch">
@@ -1777,7 +1792,10 @@ function buildRiskControlsTab(ch) {
             </div>
         </div>
         <div class="settings-section indigo">
-            <div class="settings-section-title">💲 Price Controls</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">💲 Price Controls</div>
+            <button type="button" onclick="showSettingsHelp('price-controls')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-row">
                 <div>
                     <div class="settings-toggle-row">
@@ -1797,7 +1815,10 @@ function buildRiskControlsTab(ch) {
             </div>
         </div>
         <div class="settings-section amber" ${ndxDisabledAttr}>
-            <div class="settings-section-title">🔄 Symbol Conversion${ndxT212Note}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">🔄 Symbol Conversion${ndxT212Note}</div>
+            <button type="button" onclick="showSettingsHelp('symbol-conversion')" style="pointer-events:auto;width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-toggle-row">
                 <span>NDX → QQQ Conversion</span>
                 <label class="toggle-switch">
@@ -1823,7 +1844,10 @@ function buildOrderTypesTab(ch) {
         ${t212OrderNote}
         <div class="settings-row three-col">
             <div class="settings-section green">
-                <div class="settings-section-title">📥 Entry Order</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div class="settings-section-title" style="margin-bottom:0;">📥 Entry Order</div>
+                <button type="button" onclick="showSettingsHelp('entry-order')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                </div>
                 <div class="settings-field">
                     <label>Order Type</label>
                     <select onchange="updateOrderType(${ch.id}, 'entry', this.value)">
@@ -1834,7 +1858,10 @@ function buildOrderTypesTab(ch) {
                 </div>
             </div>
             <div class="settings-section indigo">
-                <div class="settings-section-title">✂ Trim Order</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div class="settings-section-title" style="margin-bottom:0;">✂ Trim Order</div>
+                <button type="button" onclick="showSettingsHelp('trim-order')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                </div>
                 <div class="settings-field">
                     <label>Order Type</label>
                     <select onchange="updateOrderType(${ch.id}, 'trim', this.value)">
@@ -1845,7 +1872,10 @@ function buildOrderTypesTab(ch) {
                 </div>
             </div>
             <div class="settings-section red">
-                <div class="settings-section-title">🛑 Stop Loss Order</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div class="settings-section-title" style="margin-bottom:0;">🛑 Stop Loss Order</div>
+                <button type="button" onclick="showSettingsHelp('sl-order')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                </div>
                 <div class="settings-field">
                     <label>Order Type</label>
                     <select onchange="updateOrderType(${ch.id}, 'sl', this.value)">
@@ -1866,7 +1896,10 @@ function buildConditionalTab(ch) {
     return `
         ${t212CondNote}
         <div class="settings-section violet">
-            <div class="settings-section-title">⏱ Conditional Orders</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">⏱ Conditional Orders</div>
+            <button type="button" onclick="showSettingsHelp('conditional-orders')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-toggle-row">
                 <span>Enable Conditional Orders</span>
                 <label class="toggle-switch">
@@ -1891,7 +1924,10 @@ function buildConditionalTab(ch) {
             </div>
         </div>
         <div class="settings-section green">
-            <div class="settings-section-title">📈 Entry Confirmation</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">📈 Entry Confirmation</div>
+            <button type="button" onclick="showSettingsHelp('entry-confirmation')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-row">
                 <div class="settings-field">
                     <label>Confirmation Buffer (%)</label>
@@ -1904,7 +1940,10 @@ function buildConditionalTab(ch) {
             </div>
         </div>
         <div class="settings-section amber">
-            <div class="settings-section-title">🔄 Breakout Reset Guard</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">🔄 Breakout Reset Guard</div>
+            <button type="button" onclick="showSettingsHelp('breakout-reset')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-toggle-row">
                 <span>Require Pullback Before Trigger</span>
                 <label class="toggle-switch">
@@ -1915,7 +1954,10 @@ function buildConditionalTab(ch) {
             <div class="settings-helper">When price is already past the trigger at order creation, wait for a pullback before allowing trigger. Disable to trigger immediately.</div>
         </div>
         <div class="settings-section cyan">
-            <div class="settings-section-title">🎯 Trigger Offset</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="settings-section-title" style="margin-bottom:0;">🎯 Trigger Offset</div>
+            <button type="button" onclick="showSettingsHelp('trigger-offset')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+            </div>
             <div class="settings-row">
                 <div class="settings-field">
                     <label>Offset Mode</label>
@@ -3057,6 +3099,490 @@ function downloadExtractedJSON() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showNotification('Downloaded ' + extractedData.message_count + ' messages as JSON');
+}
+
+const SETTINGS_HELP_CONTENT = {
+    'execute': {
+        title: 'Execute Mode — Position Sizing',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'When Execute is enabled, signals from this channel will place real trades on all brokers assigned to the channel. The system automatically calculates position size based on your account balance and the settings below.'
+            },
+            {
+                heading: 'Settings Explained',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Position Size %</strong> — Percentage of your buying power to use per trade. Leave empty for auto-sizing from the signal provider.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Default Qty</strong> — Fixed number of contracts/shares per trade. Overrides percentage-based sizing when set.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Force My Size %</strong> — When ON, ignores the signal provider\u2019s suggested position size and always uses YOUR channel\u2019s size %.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Balance Mode',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Live (Real-time)</strong> — Uses your current buying power at the moment of trade. Balance updates with every trade.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Pre-Market (4:00 AM)</strong> — Locks in your balance at 4:00 AM. All trades during the day use this snapshot, preventing size changes as positions open/close.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Start-of-Day (9:30 AM)</strong> — Locks in your balance at market open. Similar to Pre-Market but captures the 9:30 AM snapshot.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Account balance: <strong style="color:#4ADE80;">$10,000</strong> | Position Size: <strong style="color:#22D3EE;">30%</strong><br>
+                \u2192 Each trade uses up to <strong style="color:#F4F4F5;">$3,000</strong> of buying power<br><br>
+                With Max Position $ set to <strong style="color:#FBBF24;">$2,000</strong>:<br>
+                \u2192 Capped at <strong style="color:#F4F4F5;">$2,000</strong> per trade regardless of percentage
+                </div>`
+            }
+        ]
+    },
+    'track': {
+        title: 'Track Mode — Signal Monitoring',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Track mode monitors signals without placing real trades. It records entries, exits, and performance metrics so you can evaluate a signal provider\u2019s quality before committing real capital.'
+            },
+            {
+                heading: 'Settings Explained',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Position Size %</strong> — Simulated percentage used for P&L tracking calculations. Leave empty for auto.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Default Qty</strong> — Simulated fixed quantity for tracking. Used to calculate hypothetical P&L.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'When to Use',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                \u2022 <strong style="color:#4ADE80;">New channel evaluation</strong> — Track first to see win rate and P&L before going live<br>
+                \u2022 <strong style="color:#4ADE80;">Dual mode</strong> — Enable both Execute and Track to trade live while building a performance history<br>
+                \u2022 Track mode applies the same risk management rules (profit targets, stop losses) as live execution
+                </div>`
+            }
+        ]
+    },
+    'position-limits': {
+        title: 'Position Limits',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Sets a maximum dollar amount for any single position opened from this channel. Acts as a safety cap that overrides percentage-based sizing if the calculated size exceeds the limit.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Max Position $</strong> — The absolute maximum dollar value for a position. If your percentage-based size calculates to $5,000 but Max Position is $2,000, the trade will be capped at $2,000.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Balance: $50,000 | Size %: 10% = <strong style="color:#22D3EE;">$5,000</strong><br>
+                Max Position: <strong style="color:#FBBF24;">$2,000</strong><br>
+                \u2192 Final position size: <strong style="color:#F4F4F5;">$2,000</strong> (capped)<br><br>
+                Leave empty for no limit \u2014 the percentage-based size is used directly.
+                </div>`
+            }
+        ]
+    },
+    'signal-handling': {
+        title: 'Signal Handling',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Controls how the system processes signal updates (edits/modifications) from the signal provider after the initial trade is placed.'
+            },
+            {
+                heading: 'Signal Update Automation',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#A78BFA;">Enabled</strong> — When the signal provider edits their message (e.g., updates a price target or changes direction), the system automatically adjusts your open position to match.
+                </div>
+                <div style="padding:8px 12px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#A78BFA;">Disabled</strong> — Signal edits are ignored. Your original trade stays unchanged regardless of provider updates.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Note',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Exit Mode and Order Chase settings have moved to the <strong style="color:#22D3EE;">Risk Management</strong> section on the Execution page for better organization.
+                </div>`
+            }
+        ]
+    },
+    'slippage-protection': {
+        title: 'Slippage Protection',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Prevents entering trades when the current price has moved too far from the signal\u2019s original price. This protects you from buying at inflated prices after a signal has already run up significantly.'
+            },
+            {
+                heading: 'Settings Explained',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Max Slippage %</strong> — Maximum allowed price deviation from the signal price. If the current price is more than X% above the signal price, the trade is paused.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Wait (minutes)</strong> — How long to wait for the price to return within the threshold before canceling the order entirely.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Signal price: <strong style="color:#22D3EE;">$5.00</strong> | Max Slippage: <strong style="color:#FBBF24;">3%</strong><br>
+                Current price: <strong style="color:#F87171;">$5.20</strong> (+4%) \u2192 <strong style="color:#F87171;">PAUSED</strong> (exceeds 3%)<br>
+                System waits up to X minutes for price to drop back to $5.15 or below.<br>
+                If it returns \u2192 trade executes. If timeout expires \u2192 trade canceled.
+                </div>`
+            }
+        ]
+    },
+    'price-controls': {
+        title: 'Price Controls — Limit Cap',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Sets a maximum price cap on limit orders for conditional (ABOVE/BELOW) triggers. Prevents the system from placing orders at extreme prices when a conditional trigger fires during volatile moves.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#818CF8;">Limit Cap Enabled</strong> — When a conditional order triggers, the limit price is capped at the trigger price + Cap %.
+                </div>
+                <div style="padding:8px 12px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#818CF8;">Cap %</strong> — Maximum percentage above the trigger price for the limit order. Default is 5%.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Conditional trigger at <strong style="color:#22D3EE;">$10.00</strong> | Cap: <strong style="color:#FBBF24;">1.5%</strong><br>
+                \u2192 Max limit price: <strong style="color:#F4F4F5;">$10.15</strong><br>
+                If the market spikes to $11.00 at trigger time, your order stays at $10.15 instead of chasing.
+                </div>`
+            }
+        ]
+    },
+    'symbol-conversion': {
+        title: 'NDX \u2192 QQQ Symbol Conversion',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Automatically converts NDX (Nasdaq-100 Index) options signals into equivalent QQQ (Invesco QQQ ETF) options. This is essential because most retail brokers cannot trade NDX index options directly.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Target Delta</strong> — The system finds a QQQ option with a delta closest to this value, matching the same direction (call/put) as the original NDX signal.
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Default: 0.3</strong> — A delta of 0.3 selects a slightly out-of-the-money option with good leverage and manageable risk.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Signal: <strong style="color:#22D3EE;">NDX 18000C 6/20</strong> | Target Delta: <strong style="color:#FBBF24;">0.3</strong><br>
+                \u2192 Converted to: <strong style="color:#4ADE80;">QQQ 440C 6/20</strong> (closest 0.3 delta call)<br><br>
+                \u2022 Not available for T212 (stocks only)
+                </div>`
+            }
+        ]
+    },
+    'entry-order': {
+        title: 'Entry Order Type',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Controls whether Buy-to-Open (BTO) entry orders are placed as Limit or Market orders.'
+            },
+            {
+                heading: 'Order Types',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Limit</strong> — Places the order at the signal\u2019s price (or calculated limit). May not fill if price moves away quickly, but protects against overpaying. <em>Recommended for most setups.</em>
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Market</strong> — Fills immediately at the best available price. Guarantees execution but may result in worse fill prices during volatile moments.
+                </div>
+                </div>`
+            }
+        ]
+    },
+    'trim-order': {
+        title: 'Trim Order Type',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Controls the order type used when the risk engine trims (sells partial positions) at profit targets.'
+            },
+            {
+                heading: 'Order Types',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#818CF8;">Market</strong> — Exits immediately at market price. Best for locking in profits quickly. <em>Default and recommended.</em>
+                </div>
+                <div style="padding:8px 12px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#818CF8;">Limit</strong> — Places a limit sell at the target price. May get a better fill but risks the order not filling if price reverses.
+                </div>
+                </div>`
+            }
+        ]
+    },
+    'sl-order': {
+        title: 'Stop Loss Order Type',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Controls the order type used when the stop loss triggers and the system exits to protect against further losses.'
+            },
+            {
+                heading: 'Order Types',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(255,107,107,0.06);border:1px solid rgba(255,107,107,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#F87171;">Limit</strong> — Places a limit sell at or near the stop price. Prevents selling at extremely bad prices during flash crashes, but may not fill if price gaps down. <em>Default.</em>
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,107,107,0.06);border:1px solid rgba(255,107,107,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#F87171;">Market</strong> — Exits immediately at whatever price is available. Guarantees exit but may fill at a much worse price during volatile drops.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Tip',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                For options trading, <strong style="color:#22D3EE;">Limit</strong> is usually preferred to avoid getting filled at $0.01 during fast moves. For stocks, <strong style="color:#22D3EE;">Market</strong> may be safer to guarantee the exit.
+                </div>`
+            }
+        ]
+    },
+    'conditional-orders': {
+        title: 'Conditional Orders',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Enables ABOVE/BELOW price triggers that create pending orders. Instead of executing immediately, the system watches the price and only enters when the specified condition is met.'
+            },
+            {
+                heading: 'Settings Explained',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#A78BFA;">Order Timeout</strong> — Auto-cancel ALL unfilled orders (including non-conditional) after X minutes. Leave empty for no timeout.
+                </div>
+                <div style="padding:8px 12px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#A78BFA;">Conditional Timeout</strong> — Separate timeout that applies ONLY to conditional (ABOVE/BELOW) orders. Useful when you want different timeout behavior for conditional vs. regular orders.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Signal: <strong style="color:#22D3EE;">BTO SPY 450C ABOVE $3.50</strong><br>
+                \u2192 System watches SPY 450C price. When it rises above $3.50, the order is placed.<br>
+                With Conditional Timeout of <strong style="color:#FBBF24;">3 minutes</strong>: if the condition isn\u2019t met within 3 minutes, the pending order is canceled.
+                </div>`
+            }
+        ]
+    },
+    'entry-confirmation': {
+        title: 'Entry Confirmation Buffer',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Adds a confirmation threshold before entering a trade. The system waits for the price to move +X% above the signal\u2019s watching price before actually placing the order. This helps confirm momentum before committing.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Buffer > 0</strong> — Only enter when price confirms upward momentum by moving +X% above the watching price.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#4ADE80;">Buffer = 0</strong> — Disabled. Trade enters immediately when the signal is received.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Signal price: <strong style="color:#22D3EE;">$5.00</strong> | Buffer: <strong style="color:#FBBF24;">1.25%</strong><br>
+                \u2192 System waits for price to reach <strong style="color:#4ADE80;">$5.0625</strong> before entering<br>
+                Works with all signal types including conditional orders and bracket orders.
+                </div>`
+            }
+        ]
+    },
+    'breakout-reset': {
+        title: 'Breakout Reset Guard',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Prevents false conditional triggers when price has already passed the trigger level at the time the order is created. Forces price to pull back below the trigger first, then cross above it again for a genuine breakout.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Enabled (default)</strong> — If price is already above the trigger when the conditional order is created, the system waits for a pullback below the trigger, then a re-cross above it.
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Disabled</strong> — If price is already past the trigger, the order triggers immediately without waiting for a pullback.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Signal: <strong style="color:#22D3EE;">BTO SPY 450C ABOVE $3.50</strong><br>
+                Current price: <strong style="color:#F87171;">$3.80</strong> (already past trigger)<br><br>
+                <strong style="color:#4ADE80;">Guard ON:</strong> Wait for price to drop below $3.50, then rise back above it \u2192 triggers<br>
+                <strong style="color:#FBBF24;">Guard OFF:</strong> Triggers immediately since price is already above $3.50
+                </div>`
+            }
+        ]
+    },
+    'trigger-offset': {
+        title: 'Trigger Offset',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Adjusts the conditional trigger price up or down from its original value. Lets you fine-tune exactly where the system considers the condition met.'
+            },
+            {
+                heading: 'Settings Explained',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Percent (%)</strong> — Offset as a percentage of the trigger price.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Dollar ($)</strong> — Offset as a fixed dollar amount.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,188,212,0.06);border:1px solid rgba(0,188,212,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Positive value</strong> = trigger further from current price (more conservative)<br>
+                    <strong style="color:#22D3EE;">Negative value</strong> = trigger closer to current price (more aggressive)
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Example',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                Signal trigger: <strong style="color:#22D3EE;">ABOVE $5.00</strong><br>
+                Offset: <strong style="color:#FBBF24;">+2%</strong> \u2192 Actual trigger becomes <strong style="color:#4ADE80;">$5.10</strong> (waits for stronger breakout)<br>
+                Offset: <strong style="color:#F87171;">-1%</strong> \u2192 Actual trigger becomes <strong style="color:#F87171;">$4.95</strong> (enters slightly earlier)
+                </div>`
+            }
+        ]
+    }
+};
+
+function showSettingsHelp(topic) {
+    const content = SETTINGS_HELP_CONTENT[topic];
+    if (!content) return;
+
+    let styleEl = document.getElementById('settings-help-modal-styles');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'settings-help-modal-styles';
+        styleEl.textContent = `
+            .settings-help-overlay {
+                position: fixed; inset: 0; z-index: 100000;
+                background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
+                display: flex; align-items: center; justify-content: center;
+                animation: settingsHelpFadeIn 0.18s ease-out;
+            }
+            @keyframes settingsHelpFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes settingsHelpSlideIn { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+            .settings-help-panel {
+                background: #18181B; border: 1px solid #3F3F46; border-radius: 14px;
+                width: 540px; max-width: 92vw; max-height: 82vh; display: flex; flex-direction: column;
+                box-shadow: 0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+                animation: settingsHelpSlideIn 0.22s ease-out;
+            }
+            .settings-help-header {
+                display: flex; align-items: center; justify-content: space-between;
+                padding: 18px 22px 14px; border-bottom: 1px solid #27272A;
+            }
+            .settings-help-header h3 { margin: 0; font-size: 16px; font-weight: 700; color: #F4F4F5; }
+            .settings-help-close {
+                width: 28px; height: 28px; border-radius: 8px; border: 1px solid #3F3F46;
+                background: #27272A; color: #A1A1AA; font-size: 16px; cursor: pointer;
+                display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+            }
+            .settings-help-close:hover { background: #3F3F46; color: #F4F4F5; }
+            .settings-help-body {
+                padding: 18px 22px 20px; overflow-y: auto; flex: 1;
+                scrollbar-width: thin; scrollbar-color: #3F3F46 transparent;
+            }
+            .settings-help-body::-webkit-scrollbar { width: 5px; }
+            .settings-help-body::-webkit-scrollbar-track { background: transparent; }
+            .settings-help-body::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 4px; }
+            .settings-help-section { margin-bottom: 16px; }
+            .settings-help-section:last-child { margin-bottom: 0; }
+            .settings-help-section-heading {
+                font-size: 13px; font-weight: 700; color: #22D3EE; margin-bottom: 6px;
+                text-transform: uppercase; letter-spacing: 0.4px;
+            }
+            .settings-help-section-body { font-size: 14px; line-height: 1.55; color: #D4D4D8; }
+            .settings-help-footer {
+                padding: 12px 22px; border-top: 1px solid #27272A; text-align: right;
+            }
+            .settings-help-footer button {
+                padding: 7px 18px; border-radius: 7px; border: 1px solid #3F3F46;
+                background: #27272A; color: #D4D4D8; font-size: 12px; font-weight: 600;
+                cursor: pointer; transition: all 0.15s;
+            }
+            .settings-help-footer button:hover { background: #3F3F46; color: #F4F4F5; }
+        `;
+        document.head.appendChild(styleEl);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'settings-help-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+    let sectionsHtml = content.sections.map(s => `
+        <div class="settings-help-section">
+            <div class="settings-help-section-heading">${s.heading}</div>
+            <div class="settings-help-section-body">${s.body}</div>
+        </div>
+    `).join('');
+
+    overlay.innerHTML = `
+        <div class="settings-help-panel">
+            <div class="settings-help-header">
+                <h3>${content.title}</h3>
+                <button class="settings-help-close" onclick="this.closest('.settings-help-overlay').remove()">&times;</button>
+            </div>
+            <div class="settings-help-body">${sectionsHtml}</div>
+            <div class="settings-help-footer">
+                <button onclick="this.closest('.settings-help-overlay').remove()">Got it</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
 }
 </script>
 {% endblock %}
