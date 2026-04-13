@@ -4070,6 +4070,21 @@ def register_routes(app):
             
             if live_broker and bot_loop and not bot_loop.is_closed():
                 async def _close_via_live():
+                    nonlocal quantity
+                    try:
+                        positions = await live_broker.get_positions()
+                        if positions:
+                            for pos in positions:
+                                pos_sym = (pos.get('symbol') or '').upper()
+                                if pos_sym == symbol.upper():
+                                    actual_qty = int(float(pos.get('quantity', 0)))
+                                    if actual_qty > 0 and quantity > actual_qty:
+                                        print(f"[API] ⚠️ Capping close qty from {quantity} to actual position {actual_qty} for {symbol}")
+                                        quantity = actual_qty
+                                    break
+                    except Exception as pex:
+                        print(f"[API] Warning: Could not verify position qty: {pex}")
+
                     cancelled = 0
                     try:
                         await live_broker._cancel_conflicting_sell_orders(symbol, 'EQUITY')
@@ -7844,9 +7859,12 @@ def register_routes(app):
                             pass
                     
                     live_qty = live_pos['quantity']
+                    live_qty_int = int(live_qty) if live_qty == int(live_qty) else live_qty
                     merged.append({
                         **first_trade,
-                        'quantity': int(live_qty) if live_qty == int(live_qty) else live_qty,
+                        'quantity': live_qty_int,
+                        'remaining_qty': live_qty_int,
+                        'original_qty': live_qty_int,
                         'entry_price': broker_avg_cost,
                         'current_price': live_pos['current_price'],
                         'pnl': live_pos['unrealized_pl'],

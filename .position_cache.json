@@ -2433,7 +2433,7 @@
     "tier4_hit": false,
     "original_qty": 42,
     "pending_orders": {},
-    "created_at": "2026-04-13T03:09:06.490188",
+    "created_at": "2026-04-13T03:16:06.349214",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
