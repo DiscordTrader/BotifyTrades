@@ -251,18 +251,18 @@ async function loadChannels() {
                                 <div style="margin-bottom: 14px;">
                                     <label style="font-size: 11px; color: #8E8E93; display: block; margin-bottom: 6px;">Quick Presets</label>
                                     <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'default')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Default</button>
-                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'swing')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Swing</button>
-                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'momentum')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Momentum</button>
-                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'trend')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #8E8E93; font-size: 11px; cursor: pointer; transition: all 0.15s;">Trend</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'default')" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #52525B; background: #27272A; color: #E4E4E7; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#3F3F46';this.style.borderColor='#71717A'" onmouseout="this.style.background='#27272A';this.style.borderColor='#52525B'">Default</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'swing')" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #52525B; background: #27272A; color: #E4E4E7; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#3F3F46';this.style.borderColor='#71717A'" onmouseout="this.style.background='#27272A';this.style.borderColor='#52525B'">Swing</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'momentum')" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #52525B; background: #27272A; color: #E4E4E7; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#3F3F46';this.style.borderColor='#71717A'" onmouseout="this.style.background='#27272A';this.style.borderColor='#52525B'">Momentum</button>
+                                        <button type="button" class="risk-preset-btn-${channel.id}" onclick="applyRiskPreset('${channel.id}', 'trend')" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #52525B; background: #27272A; color: #E4E4E7; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#3F3F46';this.style.borderColor='#71717A'" onmouseout="this.style.background='#27272A';this.style.borderColor='#52525B'">Trend</button>
                                     </div>
                                 </div>
                                 <div id="risk-validation-${channel.id}" style="display: none; margin-bottom: 12px; padding: 8px 12px; background: rgba(239,68,68,0.08); border-radius: 8px; border-left: 3px solid #EF4444;">
                                     <p id="risk-validation-msg-${channel.id}" style="color: #EF4444; margin: 0; font-size: 11px;"></p>
                                 </div>
-                                <div style="display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #3A3A3C; padding-bottom: 0;">
-                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="targets" onclick="switchRiskTab('${channel.id}', 'targets')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid #00d4ff; color: #00d4ff; font-size: 12px; font-weight: 600; cursor: pointer;">Targets & SL</button>
-                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="advanced" onclick="switchRiskTab('${channel.id}', 'advanced')" style="padding: 6px 14px; background: none; border: none; border-bottom: 2px solid transparent; color: #8E8E93; font-size: 12px; font-weight: 600; cursor: pointer;">Advanced</button>
+                                <div style="display: flex; gap: 0; margin-bottom: 14px; border-bottom: 2px solid #27272A; padding-bottom: 0;">
+                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="targets" onclick="switchRiskTab('${channel.id}', 'targets')" style="padding: 10px 20px; background: none; border: none; border-bottom: 3px solid #22D3EE; color: #F4F4F5; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: -2px; transition: all 0.15s;">Targets & SL</button>
+                                    <button type="button" class="risk-tab-btn-${channel.id}" data-risk-tab="advanced" onclick="switchRiskTab('${channel.id}', 'advanced')" style="padding: 10px 20px; background: none; border: none; border-bottom: 3px solid transparent; color: #A1A1AA; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: -2px; transition: all 0.15s;">Advanced</button>
                                 </div>
 
                                 <!-- TAB 1: Targets & SL -->
@@ -1571,7 +1571,7 @@ async function saveRiskManagement(channelId) {
 function switchRiskTab(channelId, tabName) {
     document.querySelectorAll(`.risk-tab-btn-${channelId}`).forEach(b => {
         b.style.borderBottomColor = 'transparent';
-        b.style.color = '#8E8E93';
+        b.style.color = '#A1A1AA';
     });
     ['targets', 'advanced'].forEach(t => {
         const pane = document.getElementById(`risk-tab-${t}-${channelId}`);
@@ -1579,8 +1579,8 @@ function switchRiskTab(channelId, tabName) {
     });
     const activeBtn = document.querySelector(`.risk-tab-btn-${channelId}[data-risk-tab="${tabName}"]`);
     if (activeBtn) {
-        activeBtn.style.borderBottomColor = '#00d4ff';
-        activeBtn.style.color = '#00d4ff';
+        activeBtn.style.borderBottomColor = '#22D3EE';
+        activeBtn.style.color = '#F4F4F5';
     }
     const activePane = document.getElementById(`risk-tab-${tabName}-${channelId}`);
     if (activePane) activePane.style.display = 'block';
