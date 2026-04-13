@@ -3621,32 +3621,83 @@ class RiskManager:
                     )
                 self.cache.set_trade_id(pos_key, trade_id)
             else:
-                if not hasattr(self, '_pending_trade_match_keys'):
-                    self._pending_trade_match_keys = set()
-                self._pending_trade_match_keys.add(pos_key)
-                
-                auto_import_enabled = False
+                _recovered = False
                 try:
-                    import time as _ai_time
-                    _ai_now = _ai_time.monotonic()
-                    _ai_cached = getattr(self, '_auto_import_cache', None)
-                    if _ai_cached and (_ai_now - _ai_cached[1]) < 10:
-                        auto_import_enabled = _ai_cached[0]
-                    else:
-                        from gui_app.database import get_setting as _get_setting_ai
-                        auto_import_setting = _get_setting_ai('auto_import_external', 'false')
-                        auto_import_enabled = auto_import_setting.lower() == 'true'
-                        self._auto_import_cache = (auto_import_enabled, _ai_now)
-                except Exception:
-                    pass
+                    from gui_app.database import get_connection as _get_recover_conn
+                    _rc = _get_recover_conn()
+                    _rcur = _rc.cursor()
+                    _rcur.execute('''
+                        SELECT id, executed_price, quantity, original_quantity, stop_loss_price, 
+                               profit_target_price, conditional_order_id, channel_id, source,
+                               risk_settings_hash, closed_at
+                        FROM trades
+                        WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                          AND status = 'CLOSED' AND close_reason = 'broker_closed_position'
+                          AND asset_type = ?
+                          AND closed_at >= datetime('now', '-30 minutes')
+                        ORDER BY closed_at DESC LIMIT 1
+                    ''', (position.symbol, position.broker, position.asset))
+                    _false_closed = _rcur.fetchone()
+                    if _false_closed:
+                        _fc_id = _false_closed['id']
+                        _fc_closed_at = _false_closed['closed_at'] or ''
+                        _rc.execute('''
+                            UPDATE trades SET status = 'OPEN', close_reason = NULL, closed_at = NULL,
+                                             pnl = NULL, pnl_percent = NULL
+                            WHERE id = ?
+                        ''', (_fc_id,))
+                        _rc.commit()
+                        trade_id = _fc_id
+                        self.cache.set_trade_id(pos_key, trade_id)
+                        if hasattr(self, '_skipped_external_logged'):
+                            self._skipped_external_logged.discard(pos_key)
+                        if hasattr(self, '_pending_trade_match_keys'):
+                            self._pending_trade_match_keys.discard(pos_key)
+                        print(f"[RISK] 🔄 FALSE CLOSE RECOVERY: Re-opened trade #{_fc_id} for {pos_key} "
+                              f"(was falsely closed as broker_closed_position at {_fc_closed_at}, "
+                              f"position still exists on broker: qty={position.quantity}, price=${position.current_price})")
+                        _recovered = True
+                        try:
+                            _rcur.execute('''
+                                DELETE FROM lot_closures WHERE lot_id IN (
+                                    SELECT sl.id FROM signal_lots sl WHERE sl.trade_id = ?
+                                ) AND exit_reason = 'broker_closed_position'
+                            ''', (_fc_id,))
+                            _rc.commit()
+                        except Exception:
+                            pass
+                except Exception as _recover_err:
+                    print(f"[RISK] ⚠️ False close recovery check error: {_recover_err}")
                 
-                if not auto_import_enabled:
-                    if not hasattr(self, '_skipped_external_logged'):
-                        self._skipped_external_logged = set()
-                    if pos_key not in self._skipped_external_logged:
-                        self._skipped_external_logged.add(pos_key)
-                        print(f"[RISK] ⏭️ Skipping external position {pos_key} — auto-import disabled (will re-check for trade match)")
-                    return
+                if _recovered:
+                    pass
+                else:
+                    if not hasattr(self, '_pending_trade_match_keys'):
+                        self._pending_trade_match_keys = set()
+                    self._pending_trade_match_keys.add(pos_key)
+                    
+                    auto_import_enabled = False
+                    try:
+                        import time as _ai_time
+                        _ai_now = _ai_time.monotonic()
+                        _ai_cached = getattr(self, '_auto_import_cache', None)
+                        if _ai_cached and (_ai_now - _ai_cached[1]) < 10:
+                            auto_import_enabled = _ai_cached[0]
+                        else:
+                            from gui_app.database import get_setting as _get_setting_ai
+                            auto_import_setting = _get_setting_ai('auto_import_external', 'false')
+                            auto_import_enabled = auto_import_setting.lower() == 'true'
+                            self._auto_import_cache = (auto_import_enabled, _ai_now)
+                    except Exception:
+                        pass
+                    
+                    if not auto_import_enabled:
+                        if not hasattr(self, '_skipped_external_logged'):
+                            self._skipped_external_logged = set()
+                        if pos_key not in self._skipped_external_logged:
+                            self._skipped_external_logged.add(pos_key)
+                            print(f"[RISK] ⏭️ Skipping external position {pos_key} — auto-import disabled (will re-check for trade match)")
+                        return
                 
                 if not hasattr(self, '_auto_imported_keys'):
                     self._auto_imported_keys = set()

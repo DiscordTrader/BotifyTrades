@@ -1270,20 +1270,30 @@ class BrokerSyncService:
             else:
                 self._consecutive_empty_counts[broker_name] = self._consecutive_empty_counts.get(broker_name, 0) + 1
                 empty_count = self._consecutive_empty_counts[broker_name]
-                required_consecutive = 3
-                if empty_count < required_consecutive:
+                if not hasattr(self, '_first_empty_times'):
+                    self._first_empty_times = {}
+                if broker_name not in self._first_empty_times:
+                    import time as _empty_time
+                    self._first_empty_times[broker_name] = _empty_time.time()
+                import time as _empty_time2
+                _empty_elapsed = _empty_time2.time() - self._first_empty_times.get(broker_name, _empty_time2.time())
+                required_consecutive = 10
+                required_time_seconds = 300
+                if empty_count < required_consecutive or _empty_elapsed < required_time_seconds:
                     statuses_deferred = []
                     if has_pending_trades:
                         statuses_deferred.append('PENDING')
                     if has_open_trades:
                         statuses_deferred.append('OPEN')
-                    print(f"[SYNC] ⚠️ {broker_name} returned empty with {'+'.join(statuses_deferred)} trades (empty_count={empty_count}/{required_consecutive}) — deferring closures for re-verify")
+                    print(f"[SYNC] ⚠️ {broker_name} returned empty with {'+'.join(statuses_deferred)} trades (empty_count={empty_count}/{required_consecutive}, elapsed={_empty_elapsed:.0f}s/{required_time_seconds}s) — deferring closures for re-verify")
                     active_trades = [t for t in active_trades if t['status'] not in statuses_deferred]
                 else:
-                    print(f"[SYNC] {broker_name} returned empty for {empty_count} consecutive cycles — proceeding with trade reconciliation")
+                    print(f"[SYNC] {broker_name} returned empty for {empty_count} consecutive cycles ({_empty_elapsed:.0f}s) — proceeding with trade reconciliation")
         else:
             if broker_name in self._consecutive_empty_counts:
                 self._consecutive_empty_counts[broker_name] = 0
+            if hasattr(self, '_first_empty_times') and broker_name in self._first_empty_times:
+                del self._first_empty_times[broker_name]
         
         # Pre-pass: count how many OPEN trades share each position key
         # When multiple BTO trades exist for the same symbol (e.g. runner + new entry),
@@ -1785,6 +1795,20 @@ class BrokerSyncService:
                 elif current_status == 'OPEN':
                     order_id_val = trade.get('order_id', '') or ''
                     if order_id_val.startswith('PAPER_SIM'):
+                        continue
+
+                    _trade_age_guard = False
+                    try:
+                        _exec_at = trade.get('executed_at') or trade.get('created_at') or ''
+                        if _exec_at:
+                            _exec_dt = datetime.fromisoformat(_exec_at.replace('Z', '+00:00'))
+                            _age_minutes = (datetime.now() - _exec_dt.replace(tzinfo=None)).total_seconds() / 60
+                            if _age_minutes < 15:
+                                print(f"[SYNC] ⚠️ RECENT TRADE GUARD: Trade #{trade_id} ({symbol}) opened {_age_minutes:.1f}min ago — skipping closure (protect <15min trades from transient API failures)")
+                                _trade_age_guard = True
+                    except Exception as _age_err:
+                        print(f"[SYNC] ⚠️ Trade age check error: {_age_err}")
+                    if _trade_age_guard:
                         continue
 
                     if hasattr(self, '_risk_manager') and self._risk_manager:
