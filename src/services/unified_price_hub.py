@@ -440,6 +440,8 @@ class UnifiedPriceHub:
         quote = self.get_quote(symbol)
         if not quote or quote.last <= 0 or consumer_price <= 0:
             return None
+        if quote.freshness in ('unverified', 'degraded', 'stale'):
+            return None
 
         diff = abs(quote.last - consumer_price)
         pct = (diff / consumer_price) * 100 if consumer_price > 0 else 0
@@ -451,7 +453,7 @@ class UnifiedPriceHub:
                 self._stats.setdefault('shadow_matches', 0)
                 self._stats['shadow_matches'] += 1
 
-        if pct > 1.0:
+        if pct > 5.0:
             result = {
                 'symbol': symbol,
                 'uph_price': quote.last,

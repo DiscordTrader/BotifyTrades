@@ -7944,6 +7944,9 @@ class RiskManager:
             if uph._shadow_mode and uph._poll_running:
                 for pos in positions:
                     if pos.current_price and pos.current_price > 0:
+                        broker_upper = (pos.broker or '').upper()
+                        if broker_upper in ('TRADING212',):
+                            continue
                         uph.shadow_compare(pos.symbol, pos.current_price, f"{pos.broker}_risk")
         except Exception:
             pass
