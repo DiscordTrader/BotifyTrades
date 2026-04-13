@@ -4071,56 +4071,59 @@ def register_routes(app):
             if live_broker and bot_loop and not bot_loop.is_closed():
                 async def _close_via_live():
                     nonlocal quantity
-                    try:
-                        positions = await live_broker.get_positions()
-                        if positions:
-                            for pos in positions:
-                                pos_sym = (pos.get('symbol') or '').upper()
-                                if pos_sym == symbol.upper():
-                                    actual_qty = int(float(pos.get('quantity', 0)))
-                                    if actual_qty > 0 and quantity > actual_qty:
-                                        print(f"[API] ⚠️ Capping close qty from {quantity} to actual position {actual_qty} for {symbol}")
-                                        quantity = actual_qty
-                                    break
-                    except Exception as pex:
-                        print(f"[API] Warning: Could not verify position qty: {pex}")
+                    import time as _time
+                    t0 = _time.monotonic()
 
-                    cancelled = 0
-                    try:
-                        await live_broker._cancel_conflicting_sell_orders(symbol, 'EQUITY')
-                        cancelled += 1
-                    except Exception as ce:
-                        print(f"[API] Warning: Could not cancel pending orders for {symbol}: {ce}")
+                    async def _cap_qty():
+                        nonlocal quantity
+                        try:
+                            positions = await live_broker.get_positions()
+                            if positions:
+                                for pos in positions:
+                                    if (pos.get('symbol') or '').upper() == symbol.upper():
+                                        actual_qty = int(float(pos.get('quantity', 0)))
+                                        if actual_qty > 0 and quantity > actual_qty:
+                                            print(f"[API] ⚠️ Capping close qty {quantity} → {actual_qty} for {symbol}")
+                                            quantity = actual_qty
+                                        break
+                        except Exception:
+                            pass
 
-                    try:
-                        from src.risk.position_monitor import risk_manager_instance
-                        rm = risk_manager_instance
-                        if rm and hasattr(rm, 'cache') and hasattr(rm.cache, '_positions'):
-                            for key, cache in list(rm.cache._positions.items()):
-                                if symbol.upper() in key.upper() and 'SCHWAB' in key.upper():
-                                    if hasattr(cache, 'broker_stop_order_id') and cache.broker_stop_order_id:
-                                        try:
-                                            await live_broker.cancel_order(cache.broker_stop_order_id)
-                                            print(f"[API] ✓ Cancelled Schwab SL order {cache.broker_stop_order_id} for {symbol}")
-                                        except Exception:
-                                            pass
-                                        cache.broker_stop_order_id = None
-                                    if hasattr(cache, 'broker_pt_order_id') and cache.broker_pt_order_id:
-                                        try:
-                                            await live_broker.cancel_order(cache.broker_pt_order_id)
-                                            print(f"[API] ✓ Cancelled Schwab PT order {cache.broker_pt_order_id} for {symbol}")
-                                        except Exception:
-                                            pass
-                                        cache.broker_pt_order_id = None
-                                    if hasattr(rm, '_exit_executed_keys') and hasattr(rm, '_exit_executed_lock'):
-                                        with rm._exit_executed_lock:
-                                            rm._exit_executed_keys.discard(key)
-                                    print(f"[API] ✓ Cleared risk engine state for {key}")
-                    except Exception as re:
-                        print(f"[API] Warning: Risk engine cleanup: {re}")
+                    async def _cancel_pending():
+                        try:
+                            await live_broker._cancel_conflicting_sell_orders(symbol, 'EQUITY')
+                        except Exception:
+                            pass
 
-                    await asyncio.sleep(0.5)
+                    async def _clear_risk():
+                        try:
+                            from src.risk.position_monitor import risk_manager_instance
+                            rm = risk_manager_instance
+                            if rm and hasattr(rm, 'cache') and hasattr(rm.cache, '_positions'):
+                                cancel_tasks = []
+                                for key, cache in list(rm.cache._positions.items()):
+                                    if symbol.upper() in key.upper() and 'SCHWAB' in key.upper():
+                                        if hasattr(cache, 'broker_stop_order_id') and cache.broker_stop_order_id:
+                                            cancel_tasks.append(live_broker.cancel_order(cache.broker_stop_order_id))
+                                            cache.broker_stop_order_id = None
+                                        if hasattr(cache, 'broker_pt_order_id') and cache.broker_pt_order_id:
+                                            cancel_tasks.append(live_broker.cancel_order(cache.broker_pt_order_id))
+                                            cache.broker_pt_order_id = None
+                                        if hasattr(rm, '_exit_executed_keys') and hasattr(rm, '_exit_executed_lock'):
+                                            with rm._exit_executed_lock:
+                                                rm._exit_executed_keys.discard(key)
+                                if cancel_tasks:
+                                    await asyncio.gather(*cancel_tasks, return_exceptions=True)
+                        except Exception:
+                            pass
+
+                    await asyncio.gather(_cap_qty(), _cancel_pending(), _clear_risk())
+                    t1 = _time.monotonic()
+                    print(f"[API] ⚡ Pre-close cleanup took {(t1-t0)*1000:.0f}ms for {symbol}")
+
                     order_result = await live_broker.place_stock_order(symbol, 'STC', quantity, limit_price, _skip_cancel_check=True)
+                    t2 = _time.monotonic()
+                    print(f"[API] ⚡ Order submission took {(t2-t1)*1000:.0f}ms, total close {(t2-t0)*1000:.0f}ms for {symbol}")
                     return order_result
 
                 order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
@@ -4128,7 +4131,7 @@ def register_routes(app):
 
                 future = asyncio.run_coroutine_threadsafe(_close_via_live(), bot_loop)
                 try:
-                    order_result = future.result(timeout=30)
+                    order_result = future.result(timeout=15)
                 except Exception as fut_err:
                     return jsonify({'success': False, 'error': f'Close timed out: {fut_err}'}), 500
             else:

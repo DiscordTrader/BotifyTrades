@@ -2419,7 +2419,7 @@
   },
   "Webull_RMSG_stock": {
     "entry_price": 0.64,
-    "highest_price": 0.63,
+    "highest_price": 0.6121,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2433,7 +2433,7 @@
     "tier4_hit": false,
     "original_qty": 42,
     "pending_orders": {},
-    "created_at": "2026-04-13T03:16:06.349214",
+    "created_at": "2026-04-13T03:21:49.091895",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
