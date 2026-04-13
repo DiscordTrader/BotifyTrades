@@ -577,7 +577,7 @@ input:checked + .slider:before {
     
     <!-- License Status -->
     <div class="settings-card" id="license-card">
-        <h3>🔐 License Status</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🔐 License Status</h3><button type="button" onclick="showAdminHelp('license')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Your BotifyTrades license information</p>
         <div id="license-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -600,7 +600,7 @@ input:checked + .slider:before {
     
     <!-- Discord Configuration with Connect -->
     <div class="settings-card">
-        <h3>🔑 Discord</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🔑 Discord</h3><button type="button" onclick="showAdminHelp('discord-creds')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Connect your Discord account to monitor trading signals</p>
         <div id="discord-connection-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -620,7 +620,7 @@ input:checked + .slider:before {
 
     <!-- Alpaca Paper Trading with Connect -->
     <div class="settings-card">
-        <h3>💹 Alpaca Paper Trading</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>💹 Alpaca Paper Trading</h3><button type="button" onclick="showAdminHelp('alpaca-paper')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Commission-free paper trading for testing strategies</p>
         <div id="alpaca-paper-connection-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -644,7 +644,7 @@ input:checked + .slider:before {
 
     <!-- Alpaca Live Trading with Connect -->
     <div class="settings-card">
-        <h3>📈 Alpaca Live Trading</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>📈 Alpaca Live Trading</h3><button type="button" onclick="showAdminHelp('alpaca-live')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Real money trading with Alpaca (use with caution)</p>
         <div id="alpaca-live-connection-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -668,7 +668,7 @@ input:checked + .slider:before {
     
     <!-- Tastytrade Paper Trading with Connect -->
     <div class="settings-card">
-        <h3>🍒 Tastytrade Paper Trading</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🍒 Tastytrade Paper Trading</h3><button type="button" onclick="showAdminHelp('tastytrade-paper')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Options-focused trading platform sandbox for testing</p>
         <div id="tastytrade-paper-connection-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -717,7 +717,7 @@ input:checked + .slider:before {
     
     <!-- Tastytrade Live Trading with Connect -->
     <div class="settings-card">
-        <h3>🍒 Tastytrade Live Trading</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🍒 Tastytrade Live Trading</h3><button type="button" onclick="showAdminHelp('tastytrade-live')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Real money trading with Tastytrade (use with caution)</p>
         <div id="tastytrade-live-connection-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -766,7 +766,7 @@ input:checked + .slider:before {
     
     <!-- Robinhood LIVE Trading (NO PAPER MODE) -->
     <div class="settings-card" style="background: linear-gradient(135deg, #1a2f1a 0%, #0d1f0d 100%); border-color: rgba(0, 200, 83, 0.4);">
-        <h3 style="color: #00c853;">🪶 Robinhood (LIVE Only)</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #00c853;">🪶 Robinhood (LIVE Only)</h3><button type="button" onclick="showAdminHelp('robinhood')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Connect your Robinhood account for stock and options trading</p>
         
         <div style="background: rgba(255, 82, 82, 0.15); border: 2px solid rgba(255, 82, 82, 0.5); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
@@ -827,7 +827,7 @@ input:checked + .slider:before {
     
     <!-- Trading 212 -->
     <div class="settings-card" style="background: linear-gradient(135deg, #0a1a3d 0%, #0d2654 100%); border-color: rgba(0, 163, 255, 0.4);">
-        <h3 style="color: #00A3FF;">📊 Trading 212</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #00A3FF;">📊 Trading 212</h3><button type="button" onclick="showAdminHelp('trading212')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">UK/EU stock trading via Trading 212 API (stocks only, no options)</p>
         
         <div id="trading212-connection-status" class="connection-status disconnected">
@@ -862,7 +862,7 @@ input:checked + .slider:before {
     
     <!-- Charles Schwab OAuth Integration -->
     <div class="settings-card" style="background: linear-gradient(135deg, #0a1628 0%, #1a2d47 100%); border-color: rgba(0, 123, 255, 0.4);">
-        <h3 style="color: #0078d7;">🏦 Charles Schwab</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #0078d7;">🏦 Charles Schwab</h3><button type="button" onclick="showAdminHelp('schwab')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Connect your Schwab account via OAuth for stock and options trading</p>
         
         <div style="background: rgba(0, 123, 255, 0.1); border: 1px solid rgba(0, 123, 255, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
@@ -929,7 +929,7 @@ input:checked + .slider:before {
     
     <!-- Clear Stale Trades - Data Management -->
     <div class="settings-card" style="background: linear-gradient(135deg, #2a1f0d 0%, #3d2a0f 100%); border-color: rgba(255, 170, 0, 0.3);">
-        <h3 style="color: #ffaa00;">🧹 Clear Stale Trades</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #ffaa00;">🧹 Clear Stale Trades</h3><button type="button" onclick="showAdminHelp('clear-stale')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Use this when you switch broker API keys. Clears old open/pending trades from the database that belong to a previous account.</p>
         <div id="stale-trades-info" style="margin-bottom: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px;">
             <div id="stale-counts-container" style="display: flex; gap: 24px; flex-wrap: wrap;">
@@ -943,7 +943,7 @@ input:checked + .slider:before {
     
     <!-- Webull Broker with Connect -->
     <div class="settings-card">
-        <h3>💼 Webull Broker</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>💼 Webull Broker</h3><button type="button" onclick="showAdminHelp('webull')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Connect Webull for options and stock trading</p>
         <div id="webull-connection-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -1053,7 +1053,7 @@ input:checked + .slider:before {
     
     <!-- Interactive Brokers with Connect -->
     <div class="settings-card">
-        <h3>🏦 Interactive Brokers</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🏦 Interactive Brokers</h3><button type="button" onclick="showAdminHelp('ibkr')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Connect to TWS/Gateway for institutional trading</p>
         <div id="ibkr-connection-status" class="connection-status disconnected">
             <span class="status-dot"></span>
@@ -1100,7 +1100,7 @@ input:checked + .slider:before {
 
     <!-- Discord Notifications -->
     <div class="settings-card">
-        <h3>📢 Trade Notifications</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>📢 Trade Notifications</h3><button type="button" onclick="showAdminHelp('trade-notifications-webhook')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Post trade signals to Discord webhook</p>
         <div class="form-group">
             <label class="toggle-label">
@@ -1131,7 +1131,7 @@ input:checked + .slider:before {
 
     <!-- API Keys -->
     <div class="settings-card">
-        <h3>🤖 AI & Market Data APIs</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🤖 AI & Market Data APIs</h3><button type="button" onclick="showAdminHelp('ai-apis')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">External API credentials for analysis & data</p>
         
         <!-- AI Provider Selection -->
@@ -1168,7 +1168,7 @@ input:checked + .slider:before {
 
     <!-- Price Slippage Protection -->
     <div class="settings-card">
-        <h3>🛡️ Slippage Protection</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🛡️ Slippage Protection</h3><button type="button" onclick="showAdminHelp('slippage')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Protect against bad fills with price limits</p>
         <div class="form-group">
             <label class="toggle-label">
@@ -1196,7 +1196,7 @@ input:checked + .slider:before {
 
     <!-- Risk Management -->
     <div class="settings-card">
-        <h3>📊 Risk Management</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>📊 Risk Management</h3><button type="button" onclick="showAdminHelp('risk-mgmt')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Position monitoring & automated exits</p>
         <div class="form-group">
             <label class="toggle-label">
@@ -1243,7 +1243,7 @@ input:checked + .slider:before {
 
     <!-- AI Analysis Settings -->
     <div class="settings-card">
-        <h3>🧠 AI Analysis</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🧠 AI Analysis</h3><button type="button" onclick="showAdminHelp('ai-analysis')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Post-trade analysis & market sentiment</p>
         <div class="form-group">
             <label class="toggle-label">
@@ -1281,7 +1281,7 @@ input:checked + .slider:before {
 
     <!-- Trading Settings -->
     <div class="settings-card">
-        <h3>💰 Trading Limits</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>💰 Trading Limits</h3><button type="button" onclick="showAdminHelp('trading-limits')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Position sizing and trading constraints</p>
         <div class="form-group">
             <label class="toggle-label">
@@ -1328,7 +1328,7 @@ input:checked + .slider:before {
 
     <!-- Advanced Settings -->
     <div class="settings-card">
-        <h3>🔧 Advanced Settings</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🔧 Advanced Settings</h3><button type="button" onclick="showAdminHelp('advanced')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Debugging and diagnostic options</p>
         <div class="form-group">
             <label class="toggle-label">
@@ -1348,10 +1348,11 @@ input:checked + .slider:before {
 
     <!-- Discord Bot Settings (Collapsible) -->
     <div class="settings-card">
-        <h3 class="collapsible-header" onclick="toggleSection('discord-settings-content')">
+        <div style="display:flex;align-items:center;gap:8px;">
+        <h3 class="collapsible-header" onclick="toggleSection('discord-settings-content')" style="flex:1;">
             ⚙️ Discord Bot Settings
             <span class="collapse-icon" id="discord-settings-icon">▼</span>
-        </h3>
+        </h3><button type="button" onclick="event.stopPropagation();showAdminHelp('discord-bot')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;flex-shrink:0;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Signal patterns, message filtering, and bot behavior</p>
         <div id="discord-settings-content" class="collapsible-content" style="display: none;">
             <div class="form-group">
@@ -1409,7 +1410,7 @@ input:checked + .slider:before {
 
     <!-- Trade Notification Settings -->
     <div class="settings-card">
-        <h3>📢 Trade Notifications</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>📢 Trade Notifications</h3><button type="button" onclick="showAdminHelp('trade-notifications-channel')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Configure where trade execution notifications are posted</p>
         <div class="form-group">
             <div class="toggle-row">
@@ -1435,7 +1436,7 @@ input:checked + .slider:before {
 
     <!-- Background Services Settings -->
     <div class="settings-card">
-        <h3>⚙️ Background Services</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>⚙️ Background Services</h3><button type="button" onclick="showAdminHelp('background-services')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Control background services that poll broker APIs. Disable to reduce API usage and prevent rate limiting.</p>
         <div class="form-group">
             <div class="toggle-row">
@@ -1478,7 +1479,7 @@ input:checked + .slider:before {
 
     <!-- Trade Monitor Settings -->
     <div class="settings-card">
-        <h3>📡 Trade Monitor (Broker Sync)</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>📡 Trade Monitor (Broker Sync)</h3><button type="button" onclick="showAdminHelp('trade-monitor')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Automatically detect trades from your broker (Webull mobile, desktop) and post them as BTO/STC signals to Discord</p>
         <div class="form-group">
             <div class="toggle-row">
@@ -1557,7 +1558,7 @@ input:checked + .slider:before {
 
     <!-- Conditional Orders Settings -->
     <div class="settings-card">
-        <h3>⏳ Conditional Orders</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>⏳ Conditional Orders</h3><button type="button" onclick="showAdminHelp('conditional-orders')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Monitor price conditions and execute orders when triggered. Supports signals like "AAPL over 150 SL 5% PT 160"</p>
         <div class="form-group">
             <div class="toggle-row">
@@ -1620,7 +1621,7 @@ input:checked + .slider:before {
 
     <!-- Global Risk Management (OMS/RMS) — Separate Card -->
     <div class="settings-card">
-        <h3>🛡️ Global Risk Management</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>🛡️ Global Risk Management</h3><button type="button" onclick="showAdminHelp('global-risk')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Control how exits are managed, set position limits, and configure safety guardrails. Per-channel settings can override these defaults.</p>
 
         <div style="display: grid; grid-template-columns: 1fr; gap: 0;">
@@ -1709,7 +1710,7 @@ input:checked + .slider:before {
 
     <!-- Daily P&L Limits (Per-Broker) — Separate Card -->
     <div class="settings-card">
-        <h3>📊 Daily P&L Limits</h3>
+        <div style="display:flex;align-items:center;gap:8px;"><h3>📊 Daily P&L Limits</h3><button type="button" onclick="showAdminHelp('daily-pnl')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Automatically pause new entries (BTO) when a broker's daily P&L exceeds these limits. STC exits always pass. Enforced per-broker using start-of-day equity snapshots.</p>
 
         <div class="form-group">
@@ -4757,5 +4758,334 @@ async function closeBrokerNotification(btn, notifId) {
 
 fetchBrokerNotifications();
 setInterval(fetchBrokerNotifications, 15000);
+
+const ADMIN_HELP_CONTENT = {
+    'license': {
+        title: '🔐 License Status',
+        sections: [
+            { heading: 'What This Is', body: 'Displays your active BotifyTrades license key, type (Standard, Pro, etc.), expiration date, and days remaining. The bot validates your license on startup and periodically during runtime.' },
+            { heading: 'How It Works', body: 'On page load, the GUI fetches <code>/api/license/status</code> which reads your stored license key and checks it against the licensing server. A green status dot means your license is valid and active. Red means expired or invalid.' },
+            { heading: 'What Happens When It Expires', body: 'When your license expires, the bot will stop processing new trade signals. Existing open positions are <strong>not</strong> affected — they remain open until you manually close them or re-activate your license.' }
+        ]
+    },
+    'discord-creds': {
+        title: '🔑 Discord Connection',
+        sections: [
+            { heading: 'What This Is', body: 'Your Discord <strong>user token</strong> (not a bot token) that allows BotifyTrades to monitor channels for trading signals in real-time using your Discord account.' },
+            { heading: 'How To Get Your Token', body: 'Open Discord in a browser → Press F12 → Go to the Network tab → Click any request → Look in the Headers for <code>authorization</code>. Copy that value. This is your user token. <strong>Never share it with anyone.</strong>' },
+            { heading: 'Connect vs Save', body: '<strong>Save</strong> stores your token to the database. <strong>Connect</strong> saves and immediately starts the Discord listener. The status dot turns green when the bot is actively connected and receiving messages.' },
+            { heading: 'Important', body: 'This uses a self-bot approach (your personal account), not an official Discord bot. Discord does not officially support this — use at your own risk. The bot only <em>reads</em> messages from configured channels; it does not send messages on your behalf unless Trade Notifications are enabled.' }
+        ]
+    },
+    'alpaca-paper': {
+        title: '💹 Alpaca Paper Trading',
+        sections: [
+            { heading: 'What This Is', body: 'Connects to Alpaca\'s <strong>paper trading</strong> environment for risk-free strategy testing. Trades execute against simulated money — no real funds are used.' },
+            { heading: 'Credentials', body: 'Get your API Key and Secret Key from <a href="https://app.alpaca.markets/paper/dashboard/overview" target="_blank" style="color:#818CF8;">Alpaca Paper Dashboard</a>. These are different from your live keys — make sure you\'re on the <strong>Paper</strong> dashboard.' },
+            { heading: 'How It Works', body: 'When a BTO/STC signal is detected in a monitored Discord channel, the bot places the corresponding order through Alpaca\'s paper API. Supports both stock and options orders. The connection status shows green when the API keys are valid and the account is accessible.' },
+            { heading: 'Supports', body: 'Stocks (market, limit orders) and options (market, limit orders). Commission-free. Paper account resets are available through Alpaca\'s dashboard.' }
+        ]
+    },
+    'alpaca-live': {
+        title: '📈 Alpaca Live Trading',
+        sections: [
+            { heading: 'What This Is', body: 'Connects to Alpaca\'s <strong>live trading</strong> environment. All orders placed here use <strong>real money</strong> from your funded Alpaca account.' },
+            { heading: 'Credentials', body: 'Get your Live API Key and Secret Key from <a href="https://app.alpaca.markets/dashboard/overview" target="_blank" style="color:#818CF8;">Alpaca Live Dashboard</a>. These are separate from paper trading keys.' },
+            { heading: 'How It Works', body: 'Identical to paper trading in functionality — same order types, same signal processing — but all trades execute with real money. The bot uses Alpaca\'s live endpoint (<code>api.alpaca.markets</code>) instead of the paper endpoint.' },
+            { heading: '⚠️ Caution', body: 'Double-check your position sizing and risk management settings before enabling live trading. Use paper trading first to validate your signal channels and settings.' }
+        ]
+    },
+    'tastytrade-paper': {
+        title: '🍒 Tastytrade Paper Trading',
+        sections: [
+            { heading: 'What This Is', body: 'Connects to Tastytrade\'s sandbox (paper) environment for testing options and stock strategies without risking real money.' },
+            { heading: 'Authentication', body: 'Tastytrade uses <strong>OAuth2</strong> authentication (recommended). You need a <strong>Client Secret</strong> and <strong>Refresh Token</strong> from <a href="https://my.tastytrade.com" target="_blank" style="color:#818CF8;">my.tastytrade.com</a> → OAuth Applications. Legacy username/password login is deprecated as of Dec 2025.' },
+            { heading: 'Account Selection', body: 'If you have multiple Tastytrade accounts (Cash, Margin, IRA), the account selector appears after connecting. Choose "Auto" to use the first account, or pick a specific one.' },
+            { heading: 'How It Works', body: 'The bot sends orders to Tastytrade\'s sandbox API. Supports both equity and options orders. Options-focused platform with strong support for multi-leg strategies.' }
+        ]
+    },
+    'tastytrade-live': {
+        title: '🍒 Tastytrade Live Trading',
+        sections: [
+            { heading: 'What This Is', body: 'Connects to Tastytrade\'s <strong>live</strong> environment. All orders use <strong>real money</strong> from your funded Tastytrade account.' },
+            { heading: 'Authentication', body: 'Same OAuth2 flow as paper — Client Secret + Refresh Token from <a href="https://my.tastytrade.com" target="_blank" style="color:#818CF8;">my.tastytrade.com</a>. Make sure you create credentials for the <strong>production</strong> environment, not sandbox.' },
+            { heading: 'Account Selection', body: 'Select which account to trade with if you have multiple (Cash, Margin, IRA). The bot only trades on the selected account.' },
+            { heading: '⚠️ Caution', body: 'Test thoroughly with paper trading before enabling live. Tastytrade supports complex options strategies — ensure your channel signals match what you intend to execute.' }
+        ]
+    },
+    'robinhood': {
+        title: '🪶 Robinhood (LIVE Only)',
+        sections: [
+            { heading: 'What This Is', body: 'Connects your Robinhood account for automated stock and options trading. <strong>Robinhood has NO paper trading mode</strong> — all trades are executed with real money.' },
+            { heading: 'Authentication', body: 'Requires your Robinhood email and password. Optionally provide your <strong>2FA TOTP Secret</strong> (the 16-character code from Settings → Security → Authenticator app → "Can\'t scan?") to skip manual SMS verification on each login.' },
+            { heading: 'How It Works', body: 'Uses the unofficial <code>robin-stocks</code> library to interact with Robinhood. Options are always executed as <strong>LIMIT orders</strong> (Robinhood does not support market orders for options). The bot auto-calculates limit prices from current bid/ask.' },
+            { heading: '⚠️ Important Warnings', body: 'This uses an <strong>unofficial API</strong> that Robinhood can break at any time without notice. There is no paper trading mode — every trade is real. Check <a href="https://github.com/jmfernandes/robin_stocks/issues" target="_blank" style="color:#818CF8;">robin_stocks GitHub issues</a> if authentication fails.' }
+        ]
+    },
+    'trading212': {
+        title: '📊 Trading 212',
+        sections: [
+            { heading: 'What This Is', body: 'Connects to Trading 212 for UK/EU stock trading. <strong>Stocks only — no options support.</strong> Supports both Demo (paper) and Live environments.' },
+            { heading: 'Credentials', body: 'Get your API Key and API Secret from the Trading 212 app → Settings → API. Both are required (the API uses Basic Auth with key + secret).' },
+            { heading: 'Environment', body: 'Choose <strong>Demo</strong> for paper trading or <strong>Live</strong> for real money. The environment setting determines which Trading 212 API endpoint the bot connects to.' },
+            { heading: 'How It Works', body: 'When a stock signal is detected, the bot converts ticker symbols using a built-in symbol conversion map (e.g., US tickers to Trading 212 instrument codes). Options signals are automatically skipped for T212 channels. Per-channel symbol conversion rules can be configured in the Channels page.' }
+        ]
+    },
+    'schwab': {
+        title: '🏦 Charles Schwab',
+        sections: [
+            { heading: 'What This Is', body: 'Connects your Schwab account via <strong>OAuth2</strong> for stock and options trading. Requires a developer app registration at <a href="https://developer.schwab.com" target="_blank" style="color:#818CF8;">developer.schwab.com</a>.' },
+            { heading: 'Setup Steps', body: '1. Register an app at Schwab Developer Portal<br>2. Copy your <strong>Client ID</strong> (App Key) and <strong>Client Secret</strong><br>3. Set the <strong>Redirect URI</strong> to match exactly what you registered (e.g., <code>https://127.0.0.1</code>)<br>4. Click "Connect with Schwab" to start the OAuth flow' },
+            { heading: 'Dry Run Mode', body: 'When enabled, orders are <strong>logged but not executed</strong>. Use this to verify signal parsing and order construction before going live. Disable for real trading.' },
+            { heading: 'Manual Code Entry', body: 'If the OAuth callback fails (common with 127.0.0.1 redirects), paste the <strong>full URL</strong> from your browser\'s address bar after Schwab redirects you. The bot extracts the authorization code from the URL.' }
+        ]
+    },
+    'clear-stale': {
+        title: '🧹 Clear Stale Trades',
+        sections: [
+            { heading: 'What This Is', body: 'A cleanup tool for when you switch broker API keys or accounts. Clears old open/pending trades from the database that belong to a previous account.' },
+            { heading: 'When To Use', body: 'Use this when you:<br>• Switch to a different broker account (new API keys)<br>• Reset your paper trading account<br>• See phantom "open" positions from an old account<br>• Want a clean slate for a specific broker' },
+            { heading: 'How It Works', body: 'Trades are <strong>not deleted</strong> — they are marked as CLOSED with reason <code>ACCOUNT_RESET</code>. This preserves your trade history while removing them from the active positions view. Each broker shows its count of open/pending trades, and you can clear them per-broker.' },
+            { heading: 'Safety', body: 'This only affects the bot\'s internal database — it does <strong>not</strong> close any real positions at your broker. Your actual broker positions remain untouched.' }
+        ]
+    },
+    'webull': {
+        title: '💼 Webull Broker',
+        sections: [
+            { heading: 'What This Is', body: 'Connects your Webull account for stock and options trading. Supports Margin, Cash, and IRA account types. <strong>Live trading only — paper trading has been disabled.</strong>' },
+            { heading: 'Authentication Modes', body: '<strong>Email/Password:</strong> Standard login with captcha handling. May require manual captcha solving.<br><br><strong>Token-Only Mode:</strong> Bypass captcha by extracting your <code>access_token</code> and <code>DID</code> from the Webull browser app (F12 → Network tab). Tokens are valid for ~24 hours.' },
+            { heading: 'Trade PIN', body: 'Your 6-digit Webull trade PIN is <strong>required</strong> for all order submissions. This is the PIN you set in the Webull app for trading authorization.' },
+            { heading: 'Account Type', body: 'Select Margin, Cash, or IRA. The bot trades only on the selected account type. Changing this requires a bot restart to take effect.' },
+            { heading: '⚠️ Important', body: 'This uses an <strong>unofficial API</strong>. Webull can break compatibility at any time. All trades are real (no paper mode). Token-only mode tokens expire after ~24 hours and need to be refreshed.' }
+        ]
+    },
+    'ibkr': {
+        title: '🏦 Interactive Brokers (IBKR)',
+        sections: [
+            { heading: 'What This Is', body: 'Connects to Interactive Brokers via TWS (Trader Workstation) or IB Gateway for institutional-grade stock and options trading.' },
+            { heading: 'Requirements', body: 'TWS or IB Gateway must be <strong>running locally</strong> with API connections enabled:<br>• TWS: Edit → Global Configuration → API → Settings → Enable ActiveX and Socket Clients<br>• Default ports: <strong>7497</strong> (paper), <strong>7496</strong> (live)<br>• Market data subscriptions in TWS are needed for live quotes and option chains' },
+            { heading: 'Configuration', body: '<strong>Host:</strong> Usually <code>127.0.0.1</code> (local machine)<br><strong>Paper Port:</strong> 7497 (TWS paper), 4002 (Gateway paper)<br><strong>Live Port:</strong> 7496 (TWS live), 4001 (Gateway live)<br><strong>Client ID:</strong> Unique identifier (use different IDs if running multiple connections)' },
+            { heading: 'Paper Trading', body: 'Toggle paper trading mode on/off. When enabled, the bot connects to the paper port. When disabled, it connects to the live port for real money trading.' }
+        ]
+    },
+    'trade-notifications-webhook': {
+        title: '📢 Trade Notifications (Webhook)',
+        sections: [
+            { heading: 'What This Is', body: 'Sends trade execution confirmations to a Discord channel via webhook. When the bot executes a BTO or STC order, a formatted embed message is posted with trade details (ticker, price, quantity, broker, P&L for exits).' },
+            { heading: 'Setup', body: 'Create a webhook in your Discord server: Server Settings → Integrations → Webhooks → New Webhook. Copy the webhook URL and paste it here.' },
+            { heading: 'Channel ID', body: 'Optional. If provided, the bot verifies the webhook belongs to this channel. Leave empty if you just want to use the webhook URL directly.' },
+            { heading: 'Test Webhook', body: 'Click "Test Webhook" to send a sample notification message. This verifies your webhook URL is valid and the bot can post to it.' }
+        ]
+    },
+    'ai-apis': {
+        title: '🤖 AI & Market Data APIs',
+        sections: [
+            { heading: 'What This Is', body: 'API credentials for AI-powered features (chatbot, signal format learning) and market data services (option flow scanning, market news).' },
+            { heading: 'AI Provider', body: '<strong>Replit AI:</strong> Uses Replit Credits — no external API key needed (recommended).<br><strong>OpenAI:</strong> Uses your own OpenAI API key (sk-...) for GPT models.<br><strong>Disabled:</strong> Turns off all AI features.' },
+            { heading: 'Alpha Vantage', body: 'Provides option flow data and fundamental analysis. Free tier available with limited calls. Used for the option flow scanner feature.' },
+            { heading: 'Finnhub', body: 'Provides market news, real-time quotes, and company data. Used as a price data source for conditional orders and market sentiment features. Free tier available.' }
+        ]
+    },
+    'slippage': {
+        title: '🛡️ Slippage Protection',
+        sections: [
+            { heading: 'What This Is', body: 'Protects against bad fills by comparing the <strong>current market price</strong> to the <strong>signal price</strong> before placing an order. If the price has moved too far from the signal, the trade is rejected.' },
+            { heading: 'How It Works', body: 'When a signal arrives (e.g., "BTO AAPL @ 150"), the bot checks the current market price. If the current price is more than the threshold % away from $150, the order is <strong>skipped</strong> and logged as a slippage rejection. This prevents buying at inflated prices when signals are delayed.' },
+            { heading: 'Threshold Setting', body: 'The slider sets the maximum allowed price deviation as a percentage. Example: 10% threshold means if signal says $150 but market is at $166+ (>10% above), the trade is rejected. Higher thresholds are more permissive; lower thresholds are stricter.' },
+            { heading: 'When To Adjust', body: 'Lower values (1-5%) for liquid stocks with tight spreads. Higher values (10-30%) for options or volatile tickers where prices move fast. Set to 50% to effectively disable (allow almost any price).' }
+        ]
+    },
+    'risk-mgmt': {
+        title: '📊 Risk Management',
+        sections: [
+            { heading: 'What This Is', body: 'Global position monitoring with automated exits based on profit targets, stop losses, and trailing stops. The risk engine runs as a background service checking positions periodically.' },
+            { heading: 'Enable Monitoring', body: 'When enabled, the bot\'s position monitor continuously checks each open position\'s P&L against your configured thresholds. When a threshold is hit, it automatically places a sell (STC) order.' },
+            { heading: 'Profit Target', body: 'Auto-sell when position gains reach this percentage. Example: 20% means the bot sells when a position is up 20% from entry price. Set to 0% to disable profit-taking.' },
+            { heading: 'Stop Loss', body: 'Auto-sell when position losses reach this percentage. Example: 10% means the bot sells when a position is down 10% from entry. Set to 0% to disable stop loss (not recommended).' },
+            { heading: 'Trailing Stop', body: 'A dynamic stop that follows the price upward. Example: 5% trailing stop means the stop price is always 5% below the highest price reached. As the position gains, the stop ratchets up — it never moves down. This locks in profits while allowing upside.' }
+        ]
+    },
+    'ai-analysis': {
+        title: '🧠 AI Analysis',
+        sections: [
+            { heading: 'What This Is', body: 'Uses AI (GPT) to analyze trades after execution and optionally assess market sentiment from channel messages. Provides insights on trade quality, market conditions, and potential risks.' },
+            { heading: 'AI Model Selection', body: '<strong>GPT-4o Mini:</strong> Faster and cheaper — good for most analysis needs.<br><strong>GPT-4o:</strong> Slower but more detailed analysis — useful for complex options strategies.' },
+            { heading: 'Sentiment Analysis', body: 'When enabled, the bot reads recent channel messages and uses AI to gauge market sentiment (bullish, bearish, neutral). <strong>Warning:</strong> This feature is expensive as it processes many messages through the AI API.' },
+            { heading: 'How It Works', body: 'After a trade is executed, the bot sends trade details to the AI model for analysis. The response includes risk assessment, market context, and trade quality scoring. Results are shown in the trade details and can be included in notification embeds.' }
+        ]
+    },
+    'trading-limits': {
+        title: '💰 Trading Limits',
+        sections: [
+            { heading: 'What This Is', body: 'Controls position sizing and trading constraints globally. These settings determine how many contracts/shares the bot orders and enforce capital limits per trade.' },
+            { heading: 'Max Position Size', body: 'When enabled, the bot <strong>auto-calculates quantity</strong> based on the max capital setting. Example: If max is $600 and an option is $2.00 ($200 per contract), the bot buys 3 contracts ($600 / $200 = 3). When disabled, the bot uses the Global Default Quantity instead.' },
+            { heading: 'Global Default Quantity', body: 'Fallback quantity when signals don\'t specify a quantity and max position size is disabled. Example: If set to 1, the bot buys 1 contract/share when no qty is in the signal.' },
+            { heading: 'EMA Risk Global', body: 'Master kill switch for EMA-based (Exponential Moving Average) risk exits across all channels. When OFF, no EMA risk evaluations run anywhere — even if enabled per-channel. The EMA risk system uses technical indicators to dynamically adjust stop-loss levels based on price momentum and moving average crossovers.' }
+        ]
+    },
+    'advanced': {
+        title: '🔧 Advanced Settings',
+        sections: [
+            { heading: 'What This Is', body: 'Debugging and diagnostic options for troubleshooting. These settings affect logging verbosity and diagnostic output.' },
+            { heading: 'Debug Mode', body: 'When enabled, the bot outputs detailed CONFIG and LICENSE information to the console log. This includes all loaded settings, connected brokers, channel configurations, and internal state. <strong>Requires a bot restart</strong> after toggling.' },
+            { heading: 'Log Files', body: '<code>logs/bot.log</code> — All log output (info, warnings, errors)<br><code>logs/errors.log</code> — Errors only (filtered view for quick diagnosis)<br>Logs rotate automatically. Check these files when troubleshooting signal parsing, order placement, or connection issues.' }
+        ]
+    },
+    'discord-bot': {
+        title: '⚙️ Discord Bot Settings',
+        sections: [
+            { heading: 'What This Is', body: 'Advanced configuration for how the Discord listener parses messages and filters signals. Controls regex patterns, author filtering, and diagnostic modes.' },
+            { heading: 'Allow Self Messages', body: 'When enabled, the bot processes trade signals sent from <strong>your own</strong> Discord account. Useful for testing — send a signal yourself and watch it execute. Disabled by default to avoid accidental self-triggering.' },
+            { heading: 'Discovery Mode', body: 'Logs <strong>all</strong> incoming messages from all channels to the console. Use this to find channel IDs and see what messages are being received. Turn off after setup — it generates a lot of log output.' },
+            { heading: 'Signal Patterns', body: 'Custom regex patterns that define what constitutes a valid trading signal:<br>• <strong>Option Pattern:</strong> Matches signals like "BTO 3 CLSK 14p 12/5 @ 0.50"<br>• <strong>Stock Pattern:</strong> Matches signals like "BTO 100 AAPL @ 150.25"<br>Reset to defaults if your patterns stop matching signals.' },
+            { heading: 'Author & Guild Filters', body: '<strong>Allowed Author IDs:</strong> Only process signals from these Discord users. Empty = allow all.<br><strong>Allowed Guild IDs:</strong> Only process signals from these Discord servers. Empty = allow all.' }
+        ]
+    },
+    'trade-notifications-channel': {
+        title: '📢 Trade Notifications (Channel)',
+        sections: [
+            { heading: 'What This Is', body: 'Controls where trade execution confirmations are posted within Discord. This uses the bot\'s Discord connection (not a webhook) to post messages directly to a channel.' },
+            { heading: 'Enable Discord Notifications', body: 'When enabled, after every BTO or STC execution, the bot posts a confirmation message with trade details (ticker, qty, price, broker, P&L for exits).' },
+            { heading: 'Notification Channel ID', body: 'Specify a Discord channel where all notifications go. To get a channel ID: enable Developer Mode in Discord settings, then right-click the channel → Copy ID. <strong>Leave empty</strong> to post notifications back to the originating signal channel (requires the bot to have post permissions in that channel).' }
+        ]
+    },
+    'background-services': {
+        title: '⚙️ Background Services',
+        sections: [
+            { heading: 'What This Is', body: 'Controls background polling services that keep your broker data synchronized. These services make periodic API calls to your connected brokers.' },
+            { heading: 'Broker Sync Service', body: 'Syncs positions, orders, and account data from all connected brokers every 30 seconds. Makes approximately 2 API calls per 30 seconds per connected broker. Disable if you\'re hitting API rate limits.' },
+            { heading: 'Risk Monitor Service', body: 'Checks open positions against stop-loss and take-profit thresholds every 30 seconds (configurable in Global Risk Management). Makes approximately 1 API call per 30 seconds. Required for automated exits to work.' },
+            { heading: 'Auto-Import External Positions', body: 'When enabled, positions opened <strong>manually</strong> (directly through your broker\'s app/website, outside the bot) are automatically imported into the bot\'s tracking system for risk monitoring. When disabled, only trades placed by the bot are tracked.' }
+        ]
+    },
+    'trade-monitor': {
+        title: '📡 Trade Monitor (Broker Sync)',
+        sections: [
+            { heading: 'What This Is', body: 'Watches your broker for trades made <strong>outside</strong> the bot (e.g., from Webull mobile app or desktop) and automatically posts them as BTO/STC signals to a Discord webhook channel. Essentially turns your manual broker activity into signals.' },
+            { heading: 'How It Works', body: 'The bot polls your connected broker (e.g., Webull) at the configured interval, checking for new filled orders. When a new fill is detected that wasn\'t placed by the bot, it formats it as a trading signal and posts it to the selected webhook channel.' },
+            { heading: 'Configuration', body: '<strong>Target Webhook Channel:</strong> Which Discord webhook receives the auto-generated signals<br><strong>Poll Interval:</strong> How often to check for new trades (5-300 seconds)<br><strong>Include Stock/Option Trades:</strong> Filter which asset types are monitored<br><strong>Post BTO/STC:</strong> Choose whether buy signals, sell signals, or both are posted' },
+            { heading: 'Test Mode', body: 'When enabled, <strong>pending/working orders</strong> (not yet filled) are also posted with a [TEST] prefix. Useful for verifying the monitor works without waiting for orders to actually fill.' }
+        ]
+    },
+    'conditional-orders': {
+        title: '⏳ Conditional Orders',
+        sections: [
+            { heading: 'What This Is', body: 'Monitors price conditions and executes orders when a target price is reached. Supports signals like <code>AAPL over 150 SL 5% PT 160</code> — the bot waits until AAPL crosses $150, then places a buy order with the specified stop loss and profit target.' },
+            { heading: 'How It Works', body: 'When a conditional signal is detected, the bot creates a pending order and continuously monitors the price. Price data comes from connected broker APIs first, then falls back to Finnhub or yfinance. When the condition is met (e.g., price goes over/under target), the order is placed.' },
+            { heading: 'Default Expiry', body: 'How long to monitor before giving up. Options:<br>• <strong>End of Day:</strong> Cancel at 4 PM ET if not triggered<br>• <strong>1/4 Hours, 1 Day:</strong> Time-based expiration from when the signal was received' },
+            { heading: 'Trigger Offset', body: 'Adjust the trigger price by a fixed amount or percentage. Positive offset = trigger earlier (above signal price for "over", below for "under"). Negative offset = trigger later. Use dollar mode for high-priced tickers like SPY/QQQ where small percentages equal large dollar moves.' },
+            { heading: 'Entry Price Offset', body: 'Adjusts the <strong>limit order price</strong> after triggering. +X% = more aggressive fill (pay more but fill faster). -X% = more patient fill (pay less but may not fill).' },
+            { heading: 'Auto-Execute', body: 'When enabled, orders are placed automatically when the price condition is met. When disabled, the bot only alerts but doesn\'t place the order.' }
+        ]
+    },
+    'global-risk': {
+        title: '🛡️ Global Risk Management',
+        sections: [
+            { heading: 'What This Is', body: 'The main risk management control panel. Sets global defaults for exit strategy, position limits, loss guards, and circuit breakers. Per-channel settings can override these defaults.' },
+            { heading: 'Exit Strategy Mode', body: '<strong>Signal:</strong> Follow the trader\'s exit signals exactly — sell when they say sell.<br><strong>Risk:</strong> Ignore trader exits; use only automated SL/PT from risk management.<br><strong>Hybrid:</strong> Use whichever protection is tighter — SL can only move UP (more protective), never down.' },
+            { heading: 'Auto SL/PT Updates', body: 'When enabled, if a trader edits their signal (supported for C1apped/WaxUI format channels), the bot automatically updates the broker\'s stop loss and profit target orders to match the new values.' },
+            { heading: 'Risk Check Interval', body: 'How often the risk engine checks positions against SL/PT thresholds. Default: 1 second. Uses a streaming price cache — sub-second intervals won\'t increase API calls. Min: 0.2s, Max: 60s.' },
+            { heading: 'Position & Loss Guards', body: 'Always-enforced limits (no toggle needed):<br>• <strong>Max Open Positions:</strong> Block new BTO when this many positions are open (0 = unlimited)<br>• <strong>Daily Loss Limit:</strong> Block all new entries when realized daily losses hit this dollar amount (0 = no limit)<br>STC exits always pass through — these guards never prevent you from closing positions.' },
+            { heading: 'Circuit Breaker', body: 'Emergency kill-switch. When enabled, the bot logs halt events and can be used with external monitoring to freeze all trading activity. Acts as a last-resort safety mechanism.' }
+        ]
+    },
+    'daily-pnl': {
+        title: '📊 Daily P&L Limits',
+        sections: [
+            { heading: 'What This Is', body: 'Automatically pauses new entries (BTO) when a broker\'s daily profit or loss exceeds configured limits. Enforced <strong>per-broker</strong> using start-of-day equity snapshots. STC exits are never blocked.' },
+            { heading: 'Loss & Profit Limits', body: '<strong>Max Daily Loss ($/%)</strong>: Block new BTO orders when realized daily losses reach this threshold.<br><strong>Max Daily Profit ($/%)</strong>: Lock in gains by stopping new entries after this daily profit level.<br>Dollar and percentage limits work together — whichever triggers first activates the lock. Set any to 0 to disable that specific limit.' },
+            { heading: 'Max Daily Trades', body: 'Block new BTO entries after this many trades per broker per day. Set to 0 for unlimited. This counts all executed BTO trades for the current day.' },
+            { heading: 'Warning Threshold', body: 'Shows a warning banner in the GUI when you reach this percentage of your configured limit. Default: 80%. Example: If your loss limit is $500 and warning is 80%, you see a warning at $400 in losses.' },
+            { heading: 'Daily Reset Time', body: 'When the daily tracking counters reset:<br>• <strong>Market Open (9:30 AM ET):</strong> Aligns with regular trading hours<br>• <strong>Midnight (12:00 AM ET):</strong> Calendar day reset<br>• <strong>Pre-Market (4:00 AM ET):</strong> Aligns with pre-market session start' }
+        ]
+    }
+};
+
+function showAdminHelp(topic) {
+    const content = ADMIN_HELP_CONTENT[topic];
+    if (!content) return;
+
+    let styleEl = document.getElementById('admin-help-modal-styles');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'admin-help-modal-styles';
+        styleEl.textContent = `
+            .admin-help-overlay {
+                position: fixed; inset: 0; z-index: 100000;
+                background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
+                display: flex; align-items: center; justify-content: center;
+                animation: adminHelpFadeIn 0.18s ease-out;
+            }
+            @keyframes adminHelpFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes adminHelpSlideIn { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+            .admin-help-panel {
+                background: #18181B; border: 1px solid #3F3F46; border-radius: 14px;
+                width: 540px; max-width: 92vw; max-height: 82vh; display: flex; flex-direction: column;
+                box-shadow: 0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+                animation: adminHelpSlideIn 0.22s ease-out;
+            }
+            .admin-help-header {
+                display: flex; align-items: center; justify-content: space-between;
+                padding: 18px 22px 14px; border-bottom: 1px solid #27272A;
+            }
+            .admin-help-header h3 { margin: 0; font-size: 16px; font-weight: 700; color: #F4F4F5; }
+            .admin-help-close {
+                width: 28px; height: 28px; border-radius: 8px; border: 1px solid #3F3F46;
+                background: #27272A; color: #A1A1AA; font-size: 16px; cursor: pointer;
+                display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+            }
+            .admin-help-close:hover { background: #3F3F46; color: #F4F4F5; }
+            .admin-help-body {
+                padding: 18px 22px 20px; overflow-y: auto; flex: 1;
+                scrollbar-width: thin; scrollbar-color: #3F3F46 transparent;
+            }
+            .admin-help-body::-webkit-scrollbar { width: 5px; }
+            .admin-help-body::-webkit-scrollbar-track { background: transparent; }
+            .admin-help-body::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 4px; }
+            .admin-help-section { margin-bottom: 16px; }
+            .admin-help-section:last-child { margin-bottom: 0; }
+            .admin-help-section-heading {
+                font-size: 13px; font-weight: 700; color: #22D3EE; margin-bottom: 6px;
+                text-transform: uppercase; letter-spacing: 0.4px;
+            }
+            .admin-help-section-body { font-size: 14px; line-height: 1.55; color: #D4D4D8; }
+            .admin-help-footer {
+                padding: 12px 22px; border-top: 1px solid #27272A; text-align: right;
+            }
+            .admin-help-footer button {
+                padding: 7px 18px; border-radius: 7px; border: 1px solid #3F3F46;
+                background: #27272A; color: #D4D4D8; font-size: 12px; font-weight: 600;
+                cursor: pointer; transition: all 0.15s;
+            }
+            .admin-help-footer button:hover { background: #3F3F46; color: #F4F4F5; }
+        `;
+        document.head.appendChild(styleEl);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'admin-help-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+    let sectionsHtml = content.sections.map(s => `
+        <div class="admin-help-section">
+            <div class="admin-help-section-heading">${s.heading}</div>
+            <div class="admin-help-section-body">${s.body}</div>
+        </div>
+    `).join('');
+
+    overlay.innerHTML = `
+        <div class="admin-help-panel">
+            <div class="admin-help-header">
+                <h3>${content.title}</h3>
+                <button class="admin-help-close" onclick="this.closest('.admin-help-overlay').remove()">&times;</button>
+            </div>
+            <div class="admin-help-body">${sectionsHtml}</div>
+            <div class="admin-help-footer">
+                <button onclick="this.closest('.admin-help-overlay').remove()">Got it</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+}
 </script>
 {% endblock %}
