@@ -4038,14 +4038,10 @@ def register_routes(app):
     
     @app.route('/api/schwab/positions/<symbol>/close', methods=['POST'])
     def api_schwab_close_position(symbol: str) -> Any:
-        """Close a Schwab position by symbol"""
+        """Close a Schwab position by symbol — uses live broker, cancels pending orders first"""
         import asyncio
         
         try:
-            from src.brokers.schwab_broker import SchwabBroker
-            # Use the correct credentials source (same as schwab_auth.py)
-            from .schwab_auth import get_schwab_credentials
-            
             data = request.get_json(silent=True) or {}
             quantity = data.get('quantity')
             limit_price = data.get('limit_price')
@@ -4066,35 +4062,89 @@ def register_routes(app):
                 except (ValueError, TypeError):
                     return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
             
-            creds = get_schwab_credentials()
+            live_broker = None
+            bot_loop = None
+            if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                live_broker = _bot_instance.schwab_broker
+                bot_loop = getattr(_bot_instance, 'loop', None)
             
-            if not creds or not creds.get('client_id') or not creds.get('client_secret'):
-                return jsonify({'success': False, 'error': 'Schwab not configured'}), 400
-            
-            config = {
-                'client_id': creds.get('client_id'),
-                'client_secret': creds.get('client_secret'),
-                'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
-                'dry_run': creds.get('dry_run', False)
-            }
-            
-            broker = SchwabBroker(config)
-            
-            async def _close_schwab_position():
-                """Execute close order in one async context"""
-                connected = await broker.connect()
-                if not connected:
-                    return None, False
-                order_result = await broker.place_stock_order(symbol, 'STC', quantity, limit_price)
-                return order_result, True
-            
-            order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
-            print(f"[API] Closing Schwab position: {symbol}, qty={quantity}, {order_type_str}")
-            
-            order_result, connected = asyncio.run(_close_schwab_position())
-            
-            if not connected:
-                return jsonify({'success': False, 'error': 'Not authenticated with Schwab'}), 401
+            if live_broker and bot_loop and not bot_loop.is_closed():
+                async def _close_via_live():
+                    cancelled = 0
+                    try:
+                        await live_broker._cancel_conflicting_sell_orders(symbol, 'EQUITY')
+                        cancelled += 1
+                    except Exception as ce:
+                        print(f"[API] Warning: Could not cancel pending orders for {symbol}: {ce}")
+
+                    try:
+                        from src.risk.position_monitor import risk_manager_instance
+                        rm = risk_manager_instance
+                        if rm and hasattr(rm, 'cache') and hasattr(rm.cache, '_positions'):
+                            for key, cache in list(rm.cache._positions.items()):
+                                if symbol.upper() in key.upper() and 'SCHWAB' in key.upper():
+                                    if hasattr(cache, 'broker_stop_order_id') and cache.broker_stop_order_id:
+                                        try:
+                                            await live_broker.cancel_order(cache.broker_stop_order_id)
+                                            print(f"[API] ✓ Cancelled Schwab SL order {cache.broker_stop_order_id} for {symbol}")
+                                        except Exception:
+                                            pass
+                                        cache.broker_stop_order_id = None
+                                    if hasattr(cache, 'broker_pt_order_id') and cache.broker_pt_order_id:
+                                        try:
+                                            await live_broker.cancel_order(cache.broker_pt_order_id)
+                                            print(f"[API] ✓ Cancelled Schwab PT order {cache.broker_pt_order_id} for {symbol}")
+                                        except Exception:
+                                            pass
+                                        cache.broker_pt_order_id = None
+                                    if hasattr(rm, '_exit_executed_keys') and hasattr(rm, '_exit_executed_lock'):
+                                        with rm._exit_executed_lock:
+                                            rm._exit_executed_keys.discard(key)
+                                    print(f"[API] ✓ Cleared risk engine state for {key}")
+                    except Exception as re:
+                        print(f"[API] Warning: Risk engine cleanup: {re}")
+
+                    await asyncio.sleep(0.5)
+                    order_result = await live_broker.place_stock_order(symbol, 'STC', quantity, limit_price, _skip_cancel_check=True)
+                    return order_result
+
+                order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+                print(f"[API] Closing Schwab position (live broker): {symbol}, qty={quantity}, {order_type_str}")
+
+                future = asyncio.run_coroutine_threadsafe(_close_via_live(), bot_loop)
+                try:
+                    order_result = future.result(timeout=30)
+                except Exception as fut_err:
+                    return jsonify({'success': False, 'error': f'Close timed out: {fut_err}'}), 500
+            else:
+                from src.brokers.schwab_broker import SchwabBroker
+                from .schwab_auth import get_schwab_credentials
+                
+                creds = get_schwab_credentials()
+                if not creds or not creds.get('client_id') or not creds.get('client_secret'):
+                    return jsonify({'success': False, 'error': 'Schwab not configured'}), 400
+                
+                config = {
+                    'client_id': creds.get('client_id'),
+                    'client_secret': creds.get('client_secret'),
+                    'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
+                    'dry_run': creds.get('dry_run', False)
+                }
+                broker = SchwabBroker(config)
+                
+                async def _close_schwab_fallback():
+                    connected = await broker.connect()
+                    if not connected:
+                        return None
+                    await broker._cancel_conflicting_sell_orders(symbol, 'EQUITY')
+                    await asyncio.sleep(0.5)
+                    return await broker.place_stock_order(symbol, 'STC', quantity, limit_price, _skip_cancel_check=True)
+                
+                order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+                print(f"[API] Closing Schwab position (fallback broker): {symbol}, qty={quantity}, {order_type_str}")
+                order_result = asyncio.run(_close_schwab_fallback())
+                if order_result is None:
+                    return jsonify({'success': False, 'error': 'Not authenticated with Schwab'}), 401
             
             if order_result and order_result.success:
                 _api_cache.pop('schwab_balance', None)
