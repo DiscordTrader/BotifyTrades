@@ -20332,6 +20332,15 @@ def run_discord_bot_thread():
                         _original_print("[ASYNC] ✓ Queue, events, and locks created (fallback)")
                     await client._init_brokers_background()
                     _original_print("[Discord Thread] ✓ Brokers initialized without Discord — keeping loop alive")
+
+                    client.loop = asyncio.get_event_loop()
+                    try:
+                        from gui_app import routes
+                        routes.set_bot_instance(client)
+                        _original_print("[Discord Thread] ✓ Bot instance registered with web GUI (fallback)")
+                    except Exception as gui_err:
+                        _original_print(f"[Discord Thread] Warning: Could not register bot with GUI: {gui_err}")
+
                     _discord_ready_event.set()
                     while not _discord_shutdown_event.is_set():
                         await asyncio.sleep(1)
