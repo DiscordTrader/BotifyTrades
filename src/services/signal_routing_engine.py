@@ -94,6 +94,10 @@ class RoutingMappingConfig:
     pt2_qty: Optional[int] = None
     pt3_qty: Optional[int] = None
     pt4_qty: Optional[int] = None
+    pt1_trim_pct: Optional[float] = None
+    pt2_trim_pct: Optional[float] = None
+    pt3_trim_pct: Optional[float] = None
+    pt4_trim_pct: Optional[float] = None
     
     trailing_stop_pct: float = 0.0
     trailing_activation_pct: float = 15.0
@@ -269,6 +273,10 @@ class SignalRoutingEngine:
             pt2_qty=mapping.get('pt2_qty'),
             pt3_qty=mapping.get('pt3_qty'),
             pt4_qty=mapping.get('pt4_qty'),
+            pt1_trim_pct=mapping.get('pt1_trim_pct'),
+            pt2_trim_pct=mapping.get('pt2_trim_pct'),
+            pt3_trim_pct=mapping.get('pt3_trim_pct'),
+            pt4_trim_pct=mapping.get('pt4_trim_pct'),
             trailing_stop_pct=mapping.get('trailing_stop_pct', 0.0) or 0.0,
             trailing_activation_pct=mapping.get('trailing_activation_pct', 15.0) or 15.0,
             leave_runner_enabled=bool(mapping.get('leave_runner_enabled', 0)),
@@ -467,11 +475,22 @@ class SignalRoutingEngine:
             ExitReason.PT3: config.pt3_qty,
             ExitReason.PT4: config.pt4_qty,
         }
+        pt_trim_pcts = {
+            ExitReason.PT1: config.pt1_trim_pct,
+            ExitReason.PT2: config.pt2_trim_pct,
+            ExitReason.PT3: config.pt3_trim_pct,
+            ExitReason.PT4: config.pt4_trim_pct,
+        }
         
         if exit_reason in pt_quantities:
             fixed_qty = pt_quantities.get(exit_reason)
-            if fixed_qty and fixed_qty > 0:
+            if fixed_qty is not None and fixed_qty > 0:
                 return min(fixed_qty, max_exit_qty)
+            
+            trim_pct_val = pt_trim_pcts.get(exit_reason)
+            if trim_pct_val is not None and trim_pct_val > 0:
+                calculated = int(math.floor(max_exit_qty * (trim_pct_val / 100.0)))
+                return min(max(0, calculated), max_exit_qty)
             
             default_pct = 25.0
             calculated = int(math.floor(position.entry_qty * (default_pct / 100.0)))

@@ -69,8 +69,9 @@ def calculate_tier_exit_qty(
         is_partial = exit_qty < current_qty
         return exit_qty, is_partial
     
-    # Auto-calculate: Use equal splits based on active tiers
-    # Count how many tiers are configured
+    if max_sellable <= 0:
+        return 0, False
+
     active_tiers = []
     if channel_settings.profit_target_1_pct > 0:
         active_tiers.append(1)

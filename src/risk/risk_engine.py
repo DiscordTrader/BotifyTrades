@@ -306,8 +306,10 @@ def calculate_tier_quantities(
         for i, tier in enumerate(auto_tiers):
             tier_qtys[tier] = base + (1 if i < rem else 0)
     elif not auto_tiers and remaining > 0:
-        first_tier = sorted(enabled_tiers)[0]
-        tier_qtys[first_tier] = tier_qtys.get(first_tier, 0) + remaining
+        has_nonzero = any(tier_qtys.get(t, 0) > 0 for t in enabled_tiers)
+        if has_nonzero:
+            first_nonzero = next(t for t in sorted(enabled_tiers) if tier_qtys.get(t, 0) > 0)
+            tier_qtys[first_nonzero] = tier_qtys[first_nonzero] + remaining
 
     return tier_qtys
 
