@@ -126,7 +126,10 @@ async function loadChannels() {
                         </tr>
                         <tr id="broker-selection-row-${channel.id}" style="display: none; background: rgba(0, 212, 255, 0.03);">
                             <td colspan="8" style="padding: 20px;">
-                                <h4 style="margin: 0 0 16px 0; font-size: 14px; color: var(--primary-blue); display: flex; align-items: center; gap: 8px;">🔌 Multi-Broker ${channelCategory === 'EXECUTE' ? 'Execution' : 'Tracking'}</h4>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                                <h4 style="margin: 0; font-size: 14px; color: var(--primary-blue); display: flex; align-items: center; gap: 8px;">🔌 Multi-Broker ${channelCategory === 'EXECUTE' ? 'Execution' : 'Tracking'}</h4>
+                                <button type="button" onclick="showRiskHelp('multi-broker')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                                </div>
                                 <p style="margin: 0 0 16px 0; font-size: 12px; color: #8E8E93;">Select which brokerage accounts should ${channelCategory === 'EXECUTE' ? 'execute trades' : 'track signals'} from this channel. When enabled, signals will ${channelCategory === 'EXECUTE' ? 'execute on ALL selected accounts simultaneously' : 'be tracked across selected accounts'}.</p>
                                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
                                     <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid #3A3A3C; border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00d4ff'" onmouseout="this.style.borderColor='#3A3A3C'">
@@ -269,7 +272,7 @@ async function loadChannels() {
                                 <div id="risk-tab-targets-${channel.id}" style="display: block;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;">
                                     <h5 style="margin:0;color:#00d4ff;font-size:12px;">📊 Profit Targets</h5>
-                                    <button type="button" onclick="showRiskHelp('profit-targets')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                    <button type="button" onclick="showRiskHelp('profit-targets')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                 </div>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P1 Target %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="e.g. 10" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -299,7 +302,7 @@ async function loadChannels() {
                                 </div>
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 10px;">
                                     <h5 style="margin:0;color:#EF4444;font-size:12px;">🛑 Stop Loss & Trailing</h5>
-                                    <button type="button" onclick="showRiskHelp('stop-loss-trailing')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                    <button type="button" onclick="showRiskHelp('stop-loss-trailing')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                 </div>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -313,7 +316,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('early-trailing')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('early-trailing')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                             <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
                                                 <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion('${channel.id}', this.checked)">
                                                 <span class="toggle-slider"></span>
@@ -336,7 +339,7 @@ async function loadChannels() {
                                 </div>
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 10px;">
                                     <h5 style="margin:0;color:#10B981;font-size:12px;">🎯 Exit Strategy Mode</h5>
-                                    <button type="button" onclick="showRiskHelp('exit-strategy')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                    <button type="button" onclick="showRiskHelp('exit-strategy')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                 </div>
                                 <div style="padding: 12px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;">
                                     <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">Choose how positions are exited when both trader signals and risk management are active.</p>
@@ -360,7 +363,7 @@ async function loadChannels() {
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
                                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                                         <label style="font-size:12px;font-weight:600;color:#ffb700;">Trim Order Type</label>
-                                        <button type="button" onclick="showRiskHelp('trim-order-type')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                        <button type="button" onclick="showRiskHelp('trim-order-type')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                     </div>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
@@ -388,7 +391,7 @@ async function loadChannels() {
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
                                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                                         <label style="font-size:12px;font-weight:600;color:#ff5252;">Stop Loss Order Type</label>
-                                        <button type="button" onclick="showRiskHelp('sl-order-type')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                        <button type="button" onclick="showRiskHelp('sl-order-type')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                     </div>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
@@ -413,7 +416,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #a78bfa;">Order Chase</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('order-chase')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('order-chase')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                             <select id="risk-chase-mode-${channel.id}" style="width: 130px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
                                                 <option value="off" ${!channel.entry_chase_enabled && !channel.order_chase_enabled ? 'selected' : ''}>Off</option>
                                                 <option value="entry" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled !== 1 ? 'selected' : ''}>Entry Only</option>
@@ -432,7 +435,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #00ff88;">Leave Runner</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('leave-runner')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('leave-runner')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                             <label class="toggle-switch" title="Keep a portion of your position to ride further gains">
                                                 <input type="checkbox" id="risk-leave-runner-enabled-${channel.id}" ${channel.leave_runner_enabled ? 'checked' : ''}>
                                                 <span class="toggle-slider"></span>
@@ -458,7 +461,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #ff6b6b;">Dynamic Stop Loss Escalation</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('dynamic-sl')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('dynamic-sl')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                             <label class="toggle-switch" title="Automatically move stop loss after hitting profit targets">
                                                 <input type="checkbox" id="risk-dynamic-sl-${channel.id}" ${channel.enable_dynamic_sl ? 'checked' : ''}>
                                                 <span class="toggle-slider"></span>
@@ -495,7 +498,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #ffc800;">Max Profit Giveback Guard</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('giveback-guard')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('giveback-guard')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                             <label class="toggle-switch" title="Exit if profit drops too much from peak">
                                                 <input type="checkbox" id="risk-giveback-guard-${channel.id}" ${channel.enable_giveback_guard ? 'checked' : ''}>
                                                 <span class="toggle-slider"></span>
@@ -516,7 +519,7 @@ async function loadChannels() {
                                             <label style="font-size: 13px; font-weight: 600; color: #00bcd4;">EMA Risk Management</label>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('ema-risk')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#818CF8;font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;transition:all 0.15s;font-weight:500;" onmouseover="this.style.background='rgba(99,102,241,0.15)';this.style.borderColor='rgba(99,102,241,0.5)'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='rgba(99,102,241,0.3)'">Need help?</button>
+                                            <button type="button" onclick="showRiskHelp('ema-risk')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                             <label class="toggle-switch" title="Monitor EMA crossovers for exit/escalation signals">
                                                 <input type="checkbox" id="risk-ema-enabled-${channel.id}" ${channel.ema_risk_enabled ? 'checked' : ''} onchange="document.getElementById('ema-settings-grid-${channel.id}').style.display = this.checked ? 'block' : 'none';">
                                                 <span class="toggle-slider"></span>
@@ -603,6 +606,7 @@ async function loadChannels() {
                                         🎯 Ticker Filter
                                         <span id="ticker-filter-badge-${channel.id}" style="font-size: 11px; padding: 2px 8px; background: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; border-radius: 4px; color: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? '#ffb300' : '#8E8E93'}; font-weight: 600;">${channel.ticker_filter_mode === 'allow' ? '✓ ALLOW LIST' : channel.ticker_filter_mode === 'block' ? '✗ BLOCK LIST' : 'OFF'}</span>
                                     </h4>
+                                    <button type="button" onclick="showRiskHelp('ticker-filter')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                 </div>
                                 <p style="font-size: 12px; color: #8E8E93; margin: 0 0 16px 0;">Filter which tickers this channel can trade. Useful when a trader excels at specific symbols but underperforms on others.</p>
                                 <div style="display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start;">
@@ -638,10 +642,13 @@ async function loadChannels() {
                                         📄 Paper Trading & Account Info
                                         <span style="font-size: 11px; padding: 2px 8px; background: ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; border-radius: 4px; color: ${channel.paper_trade_enabled ? '#00ff88' : '#8E8E93'}; font-weight: 600;">Execution: ${channel.paper_trade_enabled ? '✓ ENABLED' : '✗ DISABLED'}</span>
                                     </h4>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                    <button type="button" onclick="showRiskHelp('paper-trading')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
                                     <label class="toggle-switch">
                                         <input type="checkbox" id="paper-trade-${channel.id}" ${channel.paper_trade_enabled ? 'checked' : ''} onchange="togglePaperTrade('${channel.id}')">
                                         <span class="toggle-slider"></span>
                                     </label>
+                                    </div>
                                 </div>
                                 
                                 <div id="paper-account-dashboard-${channel.id}" style="margin-bottom: 16px; padding: 16px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(0, 212, 255, 0.2); border-radius: 8px;">
@@ -704,7 +711,10 @@ async function loadChannels() {
                 </div>
                 <div id="allowed-users-${channel.id}" class="allowed-users-section" style="display: none;">
                     <div style="border-top: 1px solid #2C2C2E; padding: 15px 0 0 0; margin-top: 15px;">
-                        <h4 style="margin: 0 0 10px 0; font-size: 14px; color: var(--primary-blue);">👥 Allowed Users (Signal Filtering)</h4>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                        <h4 style="margin: 0; font-size: 14px; color: var(--primary-blue);">👥 Allowed Users (Signal Filtering)</h4>
+                        <button type="button" onclick="showRiskHelp('allowed-users')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                        </div>
                         <div id="allowed-users-list-${channel.id}" style="margin-bottom: 10px;">
                             <div class="loading" style="font-size: 12px;">Loading users...</div>
                         </div>
@@ -2316,6 +2326,186 @@ const RISK_HELP_CONTENT = {
                 </div>
                 <div style="margin-top:10px;padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
                     <strong style="color:#22D3EE;">Tip for Options:</strong> Enable \u201cUse Underlying\u201d to compute EMA on the stock price (e.g., SPY) rather than the option price, which tends to be more reliable. EMA on option prices can be noisy due to bid-ask spreads.
+                </div>`
+            }
+        ]
+    },
+    'multi-broker': {
+        title: 'Multi-Broker Execution',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Controls which brokerage accounts receive trades from this channel. When multiple brokers are enabled, signals are executed simultaneously across ALL selected accounts.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;">
+                    <strong style="color:#22D3EE;">Select Brokers</strong> <span style="color:#A1A1AA;">\u2192</span> Check the boxes next to each broker you want active for this channel
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;">
+                    <strong style="color:#22D3EE;">Simultaneous Execution</strong> <span style="color:#A1A1AA;">\u2192</span> A single signal triggers orders on every enabled broker at the same time
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;">
+                    <strong style="color:#22D3EE;">Independent Sizing</strong> <span style="color:#A1A1AA;">\u2192</span> Each broker uses its own position-sizing and account settings
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Supported Brokers',
+                body: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div style="padding:6px 10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.12);border-radius:5px;font-size:13px;color:#D4D4D8;"><strong style="color:#4ADE80;">Webull</strong> \u2014 Options & Stocks</div>
+                <div style="padding:6px 10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.12);border-radius:5px;font-size:13px;color:#D4D4D8;"><strong style="color:#4ADE80;">Schwab</strong> \u2014 Options & Stocks</div>
+                <div style="padding:6px 10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.12);border-radius:5px;font-size:13px;color:#D4D4D8;"><strong style="color:#4ADE80;">Alpaca</strong> \u2014 Options & Stocks</div>
+                <div style="padding:6px 10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.12);border-radius:5px;font-size:13px;color:#D4D4D8;"><strong style="color:#4ADE80;">IBKR</strong> \u2014 Options & Stocks</div>
+                <div style="padding:6px 10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.12);border-radius:5px;font-size:13px;color:#D4D4D8;"><strong style="color:#4ADE80;">TastyTrade</strong> \u2014 Options & Stocks</div>
+                <div style="padding:6px 10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.12);border-radius:5px;font-size:13px;color:#D4D4D8;"><strong style="color:#4ADE80;">Trading212</strong> \u2014 Stocks Only</div>
+                <div style="padding:6px 10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.12);border-radius:5px;font-size:13px;color:#D4D4D8;"><strong style="color:#4ADE80;">Robinhood</strong> \u2014 Options & Stocks</div>
+                </div>`
+            },
+            {
+                heading: 'Tips',
+                body: `<div style="margin-top:4px;padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                \u2022 You must configure broker credentials on the <strong style="color:#22D3EE;">Broker Settings</strong> page before enabling a broker here.<br>
+                \u2022 Each broker maintains its own positions independently \u2014 closing on one does not affect the others.<br>
+                \u2022 Risk management settings apply to each broker\u2019s positions individually.
+                </div>`
+            }
+        ]
+    },
+    'ticker-filter': {
+        title: 'Ticker Filter',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Filters which tickers (symbols) are allowed or blocked for this channel. Useful when a signal provider is strong on certain tickers but weak on others.'
+            },
+            {
+                heading: 'Filter Modes',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:6px;font-size:13px;">
+                    <strong style="color:#4ADE80;">Allow List</strong> <span style="color:#A1A1AA;">\u2014</span> <span style="color:#D4D4D8;">Only trade signals matching these tickers. Everything else is ignored.</span>
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,107,107,0.06);border:1px solid rgba(255,107,107,0.15);border-radius:6px;font-size:13px;">
+                    <strong style="color:#F87171;">Block List</strong> <span style="color:#A1A1AA;">\u2014</span> <span style="color:#D4D4D8;">Trade everything EXCEPT these tickers. Listed symbols are skipped.</span>
+                </div>
+                <div style="padding:8px 12px;background:rgba(142,142,147,0.06);border:1px solid rgba(142,142,147,0.15);border-radius:6px;font-size:13px;">
+                    <strong style="color:#A1A1AA;">Off</strong> <span style="color:#A1A1AA;">\u2014</span> <span style="color:#D4D4D8;">No filtering. All tickers from this channel are traded.</span>
+                </div>
+                </div>`
+            },
+            {
+                heading: 'How Matching Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Options:</strong> The underlying symbol is matched. A signal for <code style="background:#2A2A30;padding:1px 5px;border-radius:3px;color:#F4F4F5;">SPY 450C 12/15</code> matches the ticker <code style="background:#2A2A30;padding:1px 5px;border-radius:3px;color:#F4F4F5;">SPY</code>.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Case-Insensitive:</strong> <code style="background:#2A2A30;padding:1px 5px;border-radius:3px;color:#F4F4F5;">spy</code>, <code style="background:#2A2A30;padding:1px 5px;border-radius:3px;color:#F4F4F5;">SPY</code>, and <code style="background:#2A2A30;padding:1px 5px;border-radius:3px;color:#F4F4F5;">Spy</code> all match the same ticker.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Format:</strong> Enter tickers comma-separated: <code style="background:#2A2A30;padding:1px 5px;border-radius:3px;color:#F4F4F5;">SPY, QQQ, AAPL, TSLA</code>
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Examples',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                \u2022 <strong style="color:#4ADE80;">Allow List "SPY, QQQ"</strong> \u2192 Only trades SPY and QQQ signals, ignores AAPL, TSLA, etc.<br>
+                \u2022 <strong style="color:#F87171;">Block List "COIN, GME, AMC"</strong> \u2192 Trades everything except meme stocks<br>
+                \u2022 <strong style="color:#A1A1AA;">Off</strong> \u2192 Every signal from this channel is traded regardless of ticker
+                </div>`
+            }
+        ]
+    },
+    'paper-trading': {
+        title: 'Paper Trading',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Paper trading simulates trade execution without risking real money. When enabled, the system tracks entries, exits, profit targets, and stop losses exactly as it would with a live broker, but uses a virtual account balance instead.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Virtual Account</strong> \u2014 Starts with a simulated balance. Trades deduct and add to this balance just like a real account.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Full Risk Engine</strong> \u2014 All risk management rules (profit targets, stop losses, trailing stops) apply exactly the same as live trading.
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Performance Tracking</strong> \u2014 Track win rate, P&L, and trade history to evaluate a signal provider before going live.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Configuration',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Profit Target %</strong> \u2014 Override the global profit target for this channel\u2019s paper trades
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Stop Loss %</strong> \u2014 Override the global stop loss for this channel\u2019s paper trades
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Trailing Stop %</strong> \u2014 Set a trailing stop that follows price upward
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Trailing Activation %</strong> \u2014 Profit level at which the trailing stop begins tracking
+                </div>
+                </div>`
+            },
+            {
+                heading: 'When to Use',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                \u2022 <strong style="color:#4ADE80;">Testing a new channel</strong> \u2014 Evaluate signal quality before risking real capital<br>
+                \u2022 <strong style="color:#4ADE80;">Tuning risk settings</strong> \u2014 Experiment with different profit targets and stop losses<br>
+                \u2022 <strong style="color:#4ADE80;">Comparing providers</strong> \u2014 Run multiple channels on paper to find the best performers<br>
+                \u2022 Leave fields empty to use the global default settings
+                </div>`
+            }
+        ]
+    },
+    'allowed-users': {
+        title: 'Allowed Users (Signal Filtering)',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Controls which Discord users\u2019 messages are treated as trading signals in this channel. By default, ALL messages in the channel are parsed for signals. Adding specific users restricts signal processing to only those users.'
+            },
+            {
+                heading: 'How It Works',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">No Users Added</strong> \u2014 Every message in the channel is parsed for trade signals (default behavior)
+                </div>
+                <div style="padding:8px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#22D3EE;">Users Added</strong> \u2014 Only messages from the listed Discord User IDs are treated as signals. All other messages are ignored.
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Finding a Discord User ID',
+                body: `<div style="display:grid;gap:6px;">
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Step 1:</strong> Enable Developer Mode in Discord (Settings \u2192 Advanced \u2192 Developer Mode)
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Step 2:</strong> Right-click the user\u2019s name in Discord
+                </div>
+                <div style="padding:8px 12px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);border-radius:6px;font-size:13px;color:#D4D4D8;">
+                    <strong style="color:#FBBF24;">Step 3:</strong> Click \u201cCopy User ID\u201d \u2014 paste it into the Discord User ID field
+                </div>
+                </div>`
+            },
+            {
+                heading: 'Tips',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                \u2022 <strong style="color:#4ADE80;">Best Practice:</strong> Always add the signal provider\u2019s User ID to avoid executing trades from random chat messages<br>
+                \u2022 The Username field is optional \u2014 it\u2019s just a label to help you identify who each ID belongs to<br>
+                \u2022 You can add multiple users if a channel has more than one signal provider<br>
+                \u2022 Bot accounts (webhooks) have their own User IDs and can be added here too
                 </div>`
             }
         ]
