@@ -10003,17 +10003,17 @@ def register_routes(app):
                     return jsonify({'success': False, 'error': 'Discord notifications are disabled. Enable them in Settings → Notifications.'}), 400
             
             skip_tag = data.get('no_qt_tag', False)
-            tagged_signal = signal if skip_tag else f"[QT] {signal}"
+            qt_username = bot_name if skip_tag else f"{bot_name} [QT]"
 
             payload = {
-                "content": tagged_signal,
-                "username": bot_name
+                "content": signal,
+                "username": qt_username
             }
             
             response = http_requests.post(webhook_url, json=payload, timeout=5)
             
             if response.status_code in [200, 204]:
-                print(f"[DISCORD] Signal sent: {tagged_signal}")
+                print(f"[DISCORD] Signal sent: {signal}")
                 return jsonify({'success': True, 'message': 'Signal sent to Discord'})
             else:
                 print(f"[DISCORD] Webhook failed: {response.status_code} - {response.text}")
@@ -10089,7 +10089,6 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'No channels selected'}), 400
 
             skip_tag = data.get('no_qt_tag', False)
-            tagged_signal = signal if skip_tag else f"[QT] {signal}"
 
             results = []
             for tid in target_ids:
@@ -10106,11 +10105,12 @@ def register_routes(app):
                             results.append({'id': tid, 'ok': False, 'error': 'Channel disabled'})
                             continue
                         bot_name = channel.get('bot_name', 'BotifyTrades')
-                        payload = {"content": tagged_signal, "username": bot_name}
+                        qt_username = bot_name if skip_tag else f"{bot_name} [QT]"
+                        payload = {"content": signal, "username": qt_username}
                         resp = http_requests.post(channel['webhook_url'], json=payload, timeout=5)
                         if resp.status_code in [200, 204]:
                             results.append({'id': tid, 'ok': True, 'name': channel.get('name')})
-                            print(f"[DISCORD] Signal sent to webhook '{channel.get('name')}': {tagged_signal}")
+                            print(f"[DISCORD] Signal sent to webhook '{channel.get('name')}': {signal}")
                         else:
                             results.append({'id': tid, 'ok': False, 'error': f'HTTP {resp.status_code}'})
 
@@ -11866,8 +11866,9 @@ def register_routes(app):
                                         parts = expiry.split('-')
                                         if len(parts) == 3:
                                             expiry_fmt = f"{parts[1]}/{parts[2]}"
-                                    signal_msg = f"[QT] {action} {quantity} {symbol} {strike_d}{option_type[0].lower()} {expiry_fmt} @ {price:.2f}"
-                                    wh_payload = {"content": signal_msg, "username": wh_channel.get('bot_name', 'BotifyTrades')}
+                                    signal_msg = f"{action} {quantity} {symbol} {strike_d}{option_type[0].lower()} {expiry_fmt} @ {price:.2f}"
+                                    _qt_bot_name = wh_channel.get('bot_name', 'BotifyTrades')
+                                    wh_payload = {"content": signal_msg, "username": f"{_qt_bot_name} [QT]"}
                                     wh_resp = http_requests.post(wh_channel['webhook_url'], json=wh_payload, timeout=5)
                                     if wh_resp.status_code in [200, 204]:
                                         webhook_sent = True
