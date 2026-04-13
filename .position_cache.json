@@ -2419,7 +2419,7 @@
   },
   "Webull_RMSG_stock": {
     "entry_price": 0.64,
-    "highest_price": 0.6121,
+    "highest_price": 0.63,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
