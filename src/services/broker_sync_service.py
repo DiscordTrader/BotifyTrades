@@ -1504,6 +1504,10 @@ class BrokerSyncService:
                         
                         # Sync quantity from broker — but never overwrite original_quantity
                         if broker_quantity > 0 and abs(broker_quantity - db_quantity) > 0.001:
+                            if broker_quantity > db_quantity and trade.get('channel_id'):
+                                print(f"[SYNC] ⚠️ Trade #{trade_id} ({symbol}) qty INCREASED: DB={db_quantity} → Broker={broker_quantity} "
+                                      f"— possible manual add-on to signal trade (channel={trade.get('channel_id')}). "
+                                      f"Risk settings from channel will apply to combined position.")
                             update_fields['quantity'] = broker_quantity
                             original_qty = trade.get('original_quantity')
                             if not original_qty and broker_quantity < db_quantity:
@@ -2341,10 +2345,14 @@ class BrokerSyncService:
             if matching_trades:
                 for t in matching_trades:
                     trade_qty = float(t.get('quantity', 0))
+                    ch_id = t.get('channel_id')
                     if trade_qty > 0 and abs(trade_qty - pos_qty) / trade_qty <= 0.2:
-                        return t.get('channel_id')
+                        if ch_id and _channel_has_broker_enabled(ch_id, broker_name):
+                            return ch_id
                 
-                return matching_trades[0].get('channel_id')
+                first_ch = matching_trades[0].get('channel_id')
+                if first_ch and _channel_has_broker_enabled(first_ch, broker_name):
+                    return first_ch
             
             return None
         

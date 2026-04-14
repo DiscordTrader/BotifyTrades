@@ -1096,7 +1096,7 @@ class RiskDBAdapter:
                                 SELECT id FROM trades
                                 WHERE symbol = ? AND asset_type = 'option'
                                 AND strike = ? AND expiry = ? AND call_put = ?
-                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
                                 AND LOWER(broker) = LOWER(?)
                                 ORDER BY id DESC LIMIT 1
                             ''', (sym_try, strike, exp_try, cp_normalized, broker))
@@ -1105,7 +1105,7 @@ class RiskDBAdapter:
                                 SELECT id FROM trades
                                 WHERE symbol = ? AND asset_type = 'option'
                                 AND strike = ? AND expiry = ?
-                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
                                 AND LOWER(broker) = LOWER(?)
                                 ORDER BY id DESC LIMIT 1
                             ''', (sym_try, strike, exp_try, broker))
@@ -1118,7 +1118,7 @@ class RiskDBAdapter:
                     cursor.execute('''
                         SELECT id FROM trades
                         WHERE symbol = ? AND asset_type = 'option'
-                        AND strike = ? AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                        AND strike = ? AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
                         AND LOWER(broker) = LOWER(?)
                         ORDER BY id DESC LIMIT 1
                     ''', (sym_try, strike, broker))
@@ -1163,7 +1163,7 @@ class RiskDBAdapter:
                             cursor.execute('''
                                 SELECT id FROM trades
                                 WHERE symbol = ? AND asset_type = 'option'
-                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
                                 AND LOWER(broker) = LOWER(?) AND expiry = ? AND call_put = ?
                                 ORDER BY id DESC
                             ''', (sym_try, broker, exp_try, cp_normalized))
@@ -1171,7 +1171,7 @@ class RiskDBAdapter:
                             cursor.execute('''
                                 SELECT id FROM trades
                                 WHERE symbol = ? AND asset_type = 'option'
-                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
                                 AND LOWER(broker) = LOWER(?) AND expiry = ?
                                 ORDER BY id DESC
                             ''', (sym_try, broker, exp_try))
@@ -1179,7 +1179,7 @@ class RiskDBAdapter:
                             cursor.execute('''
                                 SELECT id FROM trades
                                 WHERE symbol = ? AND asset_type = 'option'
-                                AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
                                 AND LOWER(broker) = LOWER(?)
                                 ORDER BY id DESC
                             ''', (sym_try, broker))
@@ -1204,7 +1204,7 @@ class RiskDBAdapter:
                     cursor.execute('''
                         SELECT id FROM trades
                         WHERE symbol = ? AND asset_type = 'stock'
-                        AND status IN ('OPEN', 'PENDING') AND direction = 'BTO'
+                        AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
                         AND LOWER(broker) = LOWER(?)
                         ORDER BY id DESC LIMIT 1
                     ''', (sym_try, broker))
@@ -3788,9 +3788,9 @@ class RiskManager:
                         _cur.execute('SELECT source FROM trades WHERE id = ?', (trade_id,))
                         _src_row = _cur.fetchone()
                         _trade_source = (_src_row[0] or '').strip().lower() if _src_row else ''
-                        if _trade_source == 'sync':
+                        if _trade_source in ('sync', 'risk_auto_import'):
                             print(f"[RISK] 🛡️ BLOCKED channel settings for {position.symbol}: trade #{trade_id} was auto-imported "
-                                  f"(source='sync'), NOT a real signal from '{channel_settings.channel_name}' — treating as manual trade")
+                                  f"(source='{_trade_source}'), NOT a real signal from '{channel_settings.channel_name}' — treating as manual trade")
                             channel_settings = None
                 except Exception as _src_err:
                     print(f"[RISK] ⚠️ Could not verify trade source for #{trade_id}: {_src_err}")
