@@ -1483,6 +1483,15 @@ STACK_0DTE_PATTERN = r'(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)
 # Groups: (action, qty, strike, opt_type, price)
 STACK_TICKERLESS_PATTERN = r'(BTO|STC)\s+(\d+)\s+(\d{4,5})([CPcp])\s*@\s*(\d+\.?\d*)'
 
+# Trade Echo / CBlast format (embed-based, Opened/Closed instead of BTO/STC)
+# Entry: Opened 1 SPXW 6835C 04/13 @ $5.20
+# Entry: Opened 10 BABA 130C 04/10 @ $0.30 (Actual Cost: $0.30)
+# Exit:  Closed 1 SPXW 6835C 04/13 @ $7.00
+# Exit:  Closed 10 BABA 130C 04/10 @ $0.45 (Entry: $0.30) | Gain: +50.0%
+# Groups: (action_word, qty, symbol, strike, opt_type, month, day, price)
+# Note: SPXW→SPX, NDXP→NDX normalization handled in parser
+TRADE_ECHO_PATTERN = r'(Opened|Closed)\s+(\d+)\s+\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
+
 # STACK$ strangle pattern: BTO SPX STRANGLE: followed by legs
 # Groups: (symbol)
 STACK_STRANGLE_PATTERN = r'BTO\s+([A-Za-z]+)\s+STRANGLE'
@@ -5897,6 +5906,7 @@ STACK_OPT_REGEX = re.compile(STACK_OPT_PATTERN, re.IGNORECASE)
 STACK_0DTE_REGEX = re.compile(STACK_0DTE_PATTERN, re.IGNORECASE)
 STACK_TICKERLESS_REGEX = re.compile(STACK_TICKERLESS_PATTERN, re.IGNORECASE)
 STACK_STRANGLE_REGEX = re.compile(STACK_STRANGLE_PATTERN, re.IGNORECASE)
+TRADE_ECHO_REGEX = re.compile(TRADE_ECHO_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     learned_result = try_parse_with_learned_formats(text)
@@ -5949,6 +5959,32 @@ def parse_option_signal(text: str) -> Optional[dict]:
                 "is_market_order": False,
                 "_dte_format": True,
                 "_dte_days": int(dte_days)
+            }
+        
+        # Try Trade Echo / CBlast format: Opened 1 SPXW 6835C 04/13 @ $5.20
+        trade_echo_match = TRADE_ECHO_REGEX.search(text.strip())
+        if trade_echo_match:
+            action_word, qty_str, symbol, strike, opt_type, month, day, price_str = trade_echo_match.groups()
+            action = 'BTO' if action_word.lower() == 'opened' else 'STC'
+            price = float(price_str)
+            expiry = f"{month}/{day}"
+            qty = int(qty_str) if qty_str else 1
+            sym = symbol.upper()
+            _te_sym_map = {'SPXW': 'SPX', 'NDXP': 'NDX', 'RUTW': 'RUT'}
+            sym = _te_sym_map.get(sym, sym)
+            print(f"[Discord] ✓ Matched Trade Echo format: {action} {qty} {sym} {strike}{opt_type} {expiry} @ ${price}")
+            return {
+                "asset": "option",
+                "action": action,
+                "qty": qty,
+                "qty_specified": True,
+                "symbol": sym,
+                "strike": float(strike),
+                "opt_type": opt_type.upper(),
+                "expiry": expiry,
+                "price": price,
+                "is_market_order": False,
+                "_trade_echo_format": True
             }
         
         # Try STACK$ format with expiry: BTO 1 NVDA 185p 01/16 @ 4.50
