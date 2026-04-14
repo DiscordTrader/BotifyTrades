@@ -10856,6 +10856,11 @@ def register_routes(app):
             calls = chain.get('calls', [])
             puts = chain.get('puts', [])
             
+            for o in calls:
+                o['strike'] = round(float(o['strike']), 2)
+            for o in puts:
+                o['strike'] = round(float(o['strike']), 2)
+            
             all_strikes = sorted(set([o['strike'] for o in calls] + [o['strike'] for o in puts]))
             
             if not all_strikes:
@@ -10871,8 +10876,25 @@ def register_routes(app):
             end = min(len(all_strikes), atm_idx + count + 1)
             selected_strikes = all_strikes[start:end]
             
-            calls_map = {o['strike']: o for o in calls}
-            puts_map = {o['strike']: o for o in puts}
+            calls_map = {}
+            for o in calls:
+                k = round(o['strike'], 2)
+                if k not in calls_map or (o.get('bid', 0) or 0) > (calls_map[k].get('bid', 0) or 0):
+                    calls_map[k] = o
+            puts_map = {}
+            for o in puts:
+                k = round(o['strike'], 2)
+                if k not in puts_map or (o.get('bid', 0) or 0) > (puts_map[k].get('bid', 0) or 0):
+                    puts_map[k] = o
+            
+            call_strikes_set = set(calls_map.keys())
+            put_strikes_set = set(puts_map.keys())
+            missing_puts = set(selected_strikes) - put_strikes_set
+            missing_calls = set(selected_strikes) - call_strikes_set
+            if missing_puts:
+                print(f"[CHAIN] ⚠️ Puts missing for strikes: {sorted(missing_puts)} (total puts={len(puts)}, total calls={len(calls)})", flush=True)
+            if missing_calls:
+                print(f"[CHAIN] ⚠️ Calls missing for strikes: {sorted(missing_calls)}", flush=True)
             
             strikes_data = []
             for s in selected_strikes:
