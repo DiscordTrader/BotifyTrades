@@ -10544,10 +10544,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         total_cost = cost_per_unit * calc_qty
                                         if total_cost > _cond_max_pos:
                                             max_affordable = int(_cond_max_pos / cost_per_unit)
-                                            if max_affordable > 0:
-                                                sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ MAX POSITION$ cap: {calc_qty} → {max_affordable} (cap ${_cond_max_pos:.0f})\n")
+                                            if max_affordable <= 0:
+                                                sys.stderr.write(f"[CONDITIONAL EXEC] ❌ BLOCKING: 1 unit costs ${cost_per_unit:.0f} but MAX POSITION$ is ${_cond_max_pos:.0f}\n")
                                                 sys.stderr.flush()
-                                                calc_qty = max_affordable
+                                                return False
+                                            sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ MAX POSITION$ cap: {calc_qty} → {max_affordable} (cap ${_cond_max_pos:.0f})\n")
+                                            sys.stderr.flush()
+                                            calc_qty = max_affordable
                                 signal['qty'] = calc_qty
                             elif market == 'INDIA' and order.get('lots'):
                                 signal['qty'] = int(order['lots'])
@@ -10555,13 +10558,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 conditional_qty = 1
                                 try:
                                     cond_ch = _cond_channel_info
-                                    if not cond_ch and channel_id:
-                                        try:
-                                            cond_ch = get_channel_by_discord_id(str(channel_id))
-                                            if not cond_ch:
-                                                cond_ch = get_channel_by_telegram_id(str(channel_id))
-                                        except Exception:
-                                            pass
                                     if cond_ch:
                                         ch_position_size_pct = cond_ch.get('position_size_pct')
                                         ch_default_qty = cond_ch.get('default_quantity')
@@ -10584,10 +10580,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     total_cost = cost_per_unit * conditional_qty
                                                     if total_cost > _cond_max_pos:
                                                         max_affordable = int(_cond_max_pos / cost_per_unit)
-                                                        if max_affordable > 0:
-                                                            sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ MAX POSITION$ cap on default qty: {conditional_qty} → {max_affordable} (cap ${_cond_max_pos:.0f})\n")
+                                                        if max_affordable <= 0:
+                                                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ BLOCKING: 1 unit costs ${cost_per_unit:.0f} but MAX POSITION$ is ${_cond_max_pos:.0f}\n")
                                                             sys.stderr.flush()
-                                                            conditional_qty = max_affordable
+                                                            return False
+                                                        sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ MAX POSITION$ cap on default qty: {conditional_qty} → {max_affordable} (cap ${_cond_max_pos:.0f})\n")
+                                                        sys.stderr.flush()
+                                                        conditional_qty = max_affordable
                                             sys.stderr.write(f"[CONDITIONAL EXEC] Using channel default qty: {conditional_qty}\n")
                                             sys.stderr.flush()
                                         else:
