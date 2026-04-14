@@ -357,25 +357,6 @@ def evaluate_channel_stop_loss(
         return ExitDecision.no_exit()
     
     if pct_change <= -stop_loss_pct:
-        if not cache.startup_grace_active and cache.startup_baseline_price is None:
-            cache.startup_grace_active = True
-            cache.startup_baseline_price = current_price
-            print(f"[RISK] 🛡️ STARTUP GRACE: {position.symbol} already past SL on first eval "
-                  f"({pct_change:.2f}% vs -{stop_loss_pct:.1f}%) — using startup price "
-                  f"${current_price:.4f} as baseline instead of entry ${entry_price:.4f}")
-            return ExitDecision.no_exit()
-        
-        if cache.startup_grace_active and cache.startup_baseline_price is not None:
-            baseline_change = ((current_price - cache.startup_baseline_price) / cache.startup_baseline_price) * 100 if cache.startup_baseline_price > 0 else 0
-            if baseline_change <= -stop_loss_pct:
-                _saved_baseline = cache.startup_baseline_price
-                cache.startup_grace_active = False
-                cache.startup_baseline_price = None
-                print(f"[RISK] ⚠️ STARTUP GRACE EXPIRED: {position.symbol} dropped {baseline_change:.2f}% from startup price "
-                      f"${_saved_baseline:.4f} — SL now active")
-            else:
-                return ExitDecision.no_exit()
-        
         sl_label = f"STOP LOSS [{channel_name}]" if sl_source == "CHANNEL" else f"STOP LOSS [{sl_source}]"
         return ExitDecision(
             should_exit=True,
@@ -384,10 +365,5 @@ def evaluate_channel_stop_loss(
             is_partial=False,
             risk_trigger='stop_loss'
         )
-    
-    if cache.startup_grace_active:
-        cache.startup_grace_active = False
-        cache.startup_baseline_price = None
-        print(f"[RISK] ✅ STARTUP GRACE CLEARED: {position.symbol} recovered above SL threshold — normal SL monitoring resumed")
     
     return ExitDecision.no_exit()

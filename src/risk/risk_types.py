@@ -293,9 +293,6 @@ class PositionCacheEntry:
     trailing_stop_price: Optional[float] = None  # Current trailing stop price
     risk_settings_hash: Optional[str] = None  # Hash of settings when position opened
     
-    startup_baseline_price: Optional[float] = None
-    startup_grace_active: bool = False
-    
     # Early Trailing Stop state
     early_trailing_active: bool = False  # True once breakeven locked
     early_stop_price: Optional[float] = None  # Current early trailing stop price
