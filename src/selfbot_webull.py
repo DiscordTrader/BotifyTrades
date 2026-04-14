@@ -1471,12 +1471,12 @@ BISHOP_STOPPED_PATTERN = r'[Ss]topped\s+out\s+(?:at\s+)?\$?(\d+\.?\d*)'
 # Exit format: @everyone STC 1 6935c @ 1.50 (no ticker = use current position)
 # Groups: (action, qty, symbol, strike, opt_type, month, day, price)
 # Note: Symbol is optional for STC (closing based on strike)
-STACK_OPT_PATTERN = r'(BTO|STC)\s+(\d+)\s+\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*(\d+\.?\d*)'
+STACK_OPT_PATTERN = r'(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*(\d+\.?\d*)'
 
 # STACK$ 0DTE pattern - no expiry date, assumes today for index options
 # Entry: BTO 1 SPX 6925c @ 1.90
 # Groups: (action, qty, symbol, strike, opt_type, price)
-STACK_0DTE_PATTERN = r'(BTO|STC)\s+(\d+)\s+\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s*@\s*(\d+\.?\d*)'
+STACK_0DTE_PATTERN = r'(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s*@\s*(\d+\.?\d*)'
 
 # STACK$ ticker-less exit pattern - just strike+type for closing index positions
 # Exit: STC 1 6935c @ 1.50 (no ticker, infers SPX/NDX from strike)
