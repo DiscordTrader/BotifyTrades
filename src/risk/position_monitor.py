@@ -3779,6 +3779,22 @@ class RiskManager:
                 position.broker,
                 trade_id=trade_id
             )
+            
+            if channel_settings and trade_id:
+                try:
+                    _conn = self.db_adapter._db.get_connection() if self.db_adapter._db else None
+                    if _conn:
+                        _cur = _conn.cursor()
+                        _cur.execute('SELECT source FROM trades WHERE id = ?', (trade_id,))
+                        _src_row = _cur.fetchone()
+                        _trade_source = (_src_row[0] or '').strip().lower() if _src_row else ''
+                        if _trade_source == 'sync':
+                            print(f"[RISK] 🛡️ BLOCKED channel settings for {position.symbol}: trade #{trade_id} was auto-imported "
+                                  f"(source='sync'), NOT a real signal from '{channel_settings.channel_name}' — treating as manual trade")
+                            channel_settings = None
+                except Exception as _src_err:
+                    print(f"[RISK] ⚠️ Could not verify trade source for #{trade_id}: {_src_err}")
+            
             self.cache.apply_settings_with_versioning(pos_key, channel_settings)
             
             if channel_settings:

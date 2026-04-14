@@ -2222,12 +2222,18 @@ class BrokerSyncService:
             return False
 
         # RECOVERY: Try to repair orphaned trades by linking them to matching Discord signals or routing ledger
+        # SAFETY: Only match against OPEN/PENDING trades — closed/historical trades should NOT
+        # cause orphaned manual positions to inherit channel risk settings
         if orphaned_trades_by_key:
             print(f"[SYNC] 🔧 Found {len(orphaned_trades_by_key)} orphaned {broker_name} trades - attempting recovery...")
             for orphan_key, orphan_trade in orphaned_trades_by_key.items():
                 recovered = False
-                # Pass 1: Try to find a matching Discord trade with channel_id
+                # Pass 1: Try to find a matching OPEN Discord trade with channel_id
                 for discord_trade in discord_trades_with_channel:
+                    if discord_trade.get('status', '').upper() not in ('OPEN', 'PENDING'):
+                        continue
+                    if discord_trade.get('id') == orphan_trade.get('id'):
+                        continue
                     discord_key = self._build_position_key(
                         discord_trade['symbol'],
                         discord_trade.get('asset_type', 'stock'),
@@ -2287,6 +2293,10 @@ class BrokerSyncService:
             IMPORTANT: Only inherits channel_id if that channel actually has this broker
             in its enabled_brokers list. Prevents cross-broker channel attribution
             (e.g. WEBULL_PAPER positions inheriting phoenix channel which only uses WEBULL/SCHWAB).
+            
+            SAFETY: Only matches against OPEN trades from the same broker.
+            Closed/historical trades are excluded to prevent manual positions from
+            inheriting channel risk settings from unrelated past trades of the same symbol.
             """
             pos_key = self._build_position_key(
                 position['symbol'],
@@ -2296,19 +2306,28 @@ class BrokerSyncService:
                 position.get('call_put')
             )
             
-            # Pass 1: Match by order_id (most reliable)
+            # Pass 1: Match by order_id (most reliable) — ONLY OPEN/PENDING trades on same broker
             pos_order_id = position.get('position_id') or position.get('order_id')
             if pos_order_id:
                 for t in discord_trades_with_channel:
                     if t.get('order_id') == pos_order_id:
+                        if t.get('status', '').upper() not in ('OPEN', 'PENDING', 'PARTIAL'):
+                            continue
+                        if not self._is_broker_match(broker_name, t.get('broker', '')):
+                            continue
                         ch_id = t.get('channel_id')
                         if ch_id and _channel_has_broker_enabled(ch_id, broker_name):
                             return ch_id
             
-            # Pass 2: Match by position key (symbol + option details) with quantity consideration
+            # Pass 2: Match by position key — ONLY against OPEN trades on the same broker
+            # This prevents manual positions from inheriting channel_id from closed/historical
+            # trades that happened to have the same symbol (e.g. phoenix traded AHMA months ago,
+            # user manually buys AHMA now — should NOT inherit phoenix risk settings)
             pos_qty = float(position.get('quantity', 0))
             matching_trades = []
             for t in discord_trades_with_channel:
+                if t.get('status', '').upper() not in ('OPEN', 'PENDING'):
+                    continue
                 trade_key = self._build_position_key(
                     t['symbol'],
                     t.get('asset_type', 'stock'),
