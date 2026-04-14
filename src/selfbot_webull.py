@@ -10486,39 +10486,76 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Add position sizing
                         cond_sizing_mode = None
+                        _cond_channel_info = None
                         try:
                             if channel_id:
-                                _ch_for_sizing = get_channel_by_discord_id(str(channel_id))
-                                if not _ch_for_sizing:
-                                    _ch_for_sizing = get_channel_by_telegram_id(str(channel_id))
-                                if _ch_for_sizing:
-                                    cond_sizing_mode = _ch_for_sizing.get('sizing_mode', 'live') or 'live'
+                                _cond_channel_info = get_channel_by_discord_id(str(channel_id))
+                                if not _cond_channel_info:
+                                    _cond_channel_info = get_channel_by_telegram_id(str(channel_id))
+                                if _cond_channel_info:
+                                    cond_sizing_mode = _cond_channel_info.get('sizing_mode', 'live') or 'live'
                                     if cond_sizing_mode in ('start_of_day', 'pre_market'):
                                         signal['_sizing_mode'] = cond_sizing_mode
                         except Exception:
                             pass
                         
+                        _cond_max_pos = None
+                        if _cond_channel_info:
+                            _cond_max_pos_raw = _cond_channel_info.get('channel_max_position_size')
+                            if _cond_max_pos_raw and float(_cond_max_pos_raw) > 0:
+                                _cond_max_pos = float(_cond_max_pos_raw)
+                                signal['_channel_max_position_size'] = _cond_max_pos
+                                sys.stderr.write(f"[CONDITIONAL EXEC] Channel max position size: ${_cond_max_pos:.0f}\n")
+                                sys.stderr.flush()
+
                         size_mode = order.get('size_mode')
                         if size_mode == 'percent_account':
                             signal['_position_size_pct'] = order.get('qty_value')
                             signal['_calculate_qty'] = True
-                            signal['qty'] = 1  # Default qty, will be replaced by position sizing calculation
+                            signal['qty'] = 1
                         elif size_mode == 'fixed_qty':
-                            signal['qty'] = int(order.get('qty_value', 1))
+                            fixed_qty = int(order.get('qty_value', 1))
+                            if _cond_max_pos and fixed_qty > 0:
+                                sig_price = signal.get('price', 0) or 0
+                                if sig_price > 0:
+                                    asset_type = signal.get('asset', 'stock')
+                                    cost_per_unit = (sig_price * 100) if asset_type == 'option' else sig_price
+                                    total_cost = cost_per_unit * fixed_qty
+                                    if total_cost > _cond_max_pos:
+                                        max_affordable = int(_cond_max_pos / cost_per_unit)
+                                        if max_affordable <= 0:
+                                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ BLOCKING: 1 unit costs ${cost_per_unit:.0f} but MAX POSITION$ is ${_cond_max_pos:.0f}\n")
+                                            sys.stderr.flush()
+                                            return False
+                                        old_qty = fixed_qty
+                                        fixed_qty = max_affordable
+                                        sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ MAX POSITION$ cap: {old_qty} → {fixed_qty} (${total_cost:.0f} → ${cost_per_unit * fixed_qty:.0f}, cap ${_cond_max_pos:.0f})\n")
+                                        sys.stderr.flush()
+                            signal['qty'] = fixed_qty
                         else:
-                            # Use calculated_qty from order if available
                             calculated = order.get('calculated_qty')
                             if calculated:
-                                signal['qty'] = int(calculated)
+                                calc_qty = int(calculated)
+                                if _cond_max_pos and calc_qty > 0:
+                                    sig_price = signal.get('price', 0) or 0
+                                    if sig_price > 0:
+                                        asset_type = signal.get('asset', 'stock')
+                                        cost_per_unit = (sig_price * 100) if asset_type == 'option' else sig_price
+                                        total_cost = cost_per_unit * calc_qty
+                                        if total_cost > _cond_max_pos:
+                                            max_affordable = int(_cond_max_pos / cost_per_unit)
+                                            if max_affordable > 0:
+                                                sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ MAX POSITION$ cap: {calc_qty} → {max_affordable} (cap ${_cond_max_pos:.0f})\n")
+                                                sys.stderr.flush()
+                                                calc_qty = max_affordable
+                                signal['qty'] = calc_qty
                             elif market == 'INDIA' and order.get('lots'):
                                 signal['qty'] = int(order['lots'])
                             else:
-                                # No explicit sizing - apply tiered default for conditional orders
-                                # (channel position_size_pct → channel default_qty → global default → max_position_size → 1)
                                 conditional_qty = 1
                                 try:
-                                    cond_ch = None
-                                    if channel_id:
+                                    cond_ch = _cond_channel_info
+                                    if not cond_ch and channel_id:
                                         try:
                                             cond_ch = get_channel_by_discord_id(str(channel_id))
                                             if not cond_ch:
@@ -10528,14 +10565,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     if cond_ch:
                                         ch_position_size_pct = cond_ch.get('position_size_pct')
                                         ch_default_qty = cond_ch.get('default_quantity')
+                                        ch_ignore_signal_pct = cond_ch.get('ignore_signal_position_size', 0)
                                         if ch_position_size_pct:
                                             signal['_position_size_pct'] = float(ch_position_size_pct)
                                             signal['_pct_from_channel'] = True
                                             signal['_calculate_qty'] = True
+                                            if ch_ignore_signal_pct:
+                                                signal['_ignore_signal_position_size'] = True
                                             sys.stderr.write(f"[CONDITIONAL EXEC] Position sizing: channel {ch_position_size_pct}% (will calculate from buying power)\n")
                                             sys.stderr.flush()
                                         elif ch_default_qty:
                                             conditional_qty = int(ch_default_qty)
+                                            if _cond_max_pos and conditional_qty > 0:
+                                                sig_price = signal.get('price', 0) or 0
+                                                if sig_price > 0:
+                                                    asset_type = signal.get('asset', 'stock')
+                                                    cost_per_unit = (sig_price * 100) if asset_type == 'option' else sig_price
+                                                    total_cost = cost_per_unit * conditional_qty
+                                                    if total_cost > _cond_max_pos:
+                                                        max_affordable = int(_cond_max_pos / cost_per_unit)
+                                                        if max_affordable > 0:
+                                                            sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ MAX POSITION$ cap on default qty: {conditional_qty} → {max_affordable} (cap ${_cond_max_pos:.0f})\n")
+                                                            sys.stderr.flush()
+                                                            conditional_qty = max_affordable
                                             sys.stderr.write(f"[CONDITIONAL EXEC] Using channel default qty: {conditional_qty}\n")
                                             sys.stderr.flush()
                                         else:
