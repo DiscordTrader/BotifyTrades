@@ -1946,10 +1946,15 @@ class RiskManager:
                 return
 
             for pos in positions:
-                sym = pos.symbol.upper()
-                ext = interval_snapshot.get(sym)
-                if not ext and hasattr(pos, 'raw_symbol') and pos.raw_symbol:
-                    ext = interval_snapshot.get(pos.raw_symbol.upper())
+                ext = None
+                if pos.asset == 'option':
+                    if hasattr(pos, 'raw_symbol') and pos.raw_symbol:
+                        ext = interval_snapshot.get(pos.raw_symbol.upper())
+                else:
+                    sym = pos.symbol.upper()
+                    ext = interval_snapshot.get(sym)
+                    if not ext and hasattr(pos, 'raw_symbol') and pos.raw_symbol:
+                        ext = interval_snapshot.get(pos.raw_symbol.upper())
                 if ext:
                     pos._interval_high = ext['high']
                     pos._interval_low = ext['low']

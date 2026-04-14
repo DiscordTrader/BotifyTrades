@@ -348,6 +348,18 @@ def evaluate_exit_actions(
     
     state.last_evaluated_price = state.current_price
     
+    _sanity_ref = max(state.current_price, state.entry_price, 0.01)
+    if state.interval_high and state.interval_high > 0:
+        if state.interval_high > _sanity_ref * 10:
+            if verbose:
+                print(f"[RISK ENGINE] ⚠️ INTERVAL HIGH REJECTED: ${state.interval_high:.2f} is >10x reference ${_sanity_ref:.2f} (likely stock/option price mix)")
+            state.interval_high = None
+    if state.interval_low and state.interval_low > 0:
+        if state.interval_low > _sanity_ref * 10 or (state.current_price > 0.01 and state.interval_low < state.current_price * 0.01):
+            if verbose:
+                print(f"[RISK ENGINE] ⚠️ INTERVAL LOW REJECTED: ${state.interval_low:.4f} vs reference ${_sanity_ref:.2f} (likely stock/option price mix)")
+            state.interval_low = None
+
     if state.interval_high and state.interval_high > state.highest_price:
         state.highest_price = state.interval_high
     if state.current_price > state.highest_price:
