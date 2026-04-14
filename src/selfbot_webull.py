@@ -10638,6 +10638,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 signal['_channel_name'] = channel_settings.get('name', '')
                                 print(f"[CONDITIONAL] ✓ Linked to channel #{channel_settings['id']} ({signal['_channel_name']}) for trade tracking", flush=True)
                         
+                        _ch_exit_mode = (channel_settings or {}).get('exit_strategy_mode', 'hybrid') or 'hybrid'
+                        signal['_exit_strategy_mode'] = _ch_exit_mode
+                        if _ch_exit_mode == 'risk':
+                            has_signal_sl = False
+                            has_signal_targets = False
+                            print(f"[CONDITIONAL] Exit strategy = RISK → overriding signal PT/SL with channel risk settings", flush=True)
+                        
                         # Stop Loss: Signal value first, then channel settings
                         # Hybrid SL: Both fixed price AND percentage (whichever triggers first)
                         sl_type = order.get('stop_loss_type')

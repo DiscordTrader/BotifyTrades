@@ -701,19 +701,51 @@ class ConditionalOrderService:
                 qty_value = channel_settings.get('default_quantity')
                 print(f"[CONDITIONAL] Using channel default_quantity: {qty_value}")
         
+        _exit_mode = channel_settings.get('exit_strategy_mode', 'hybrid') or 'hybrid'
+        
         profit_targets = parsed_signal.get('profit_targets', [])
-        _pt_from_signal = bool(profit_targets)
+        _pt_from_signal = False
         take_profit_json = None
-        if profit_targets:
-            take_profit_json = json.dumps(profit_targets)
-            print(f"[CONDITIONAL] Signal profit targets (prices): {profit_targets}")
-        else:
-            print(f"[CONDITIONAL] No signal targets - will use channel settings at trigger time")
         
         stop_loss = parsed_signal.get('stop_loss')
         stop_loss_type = parsed_signal.get('stop_loss_type')
         stop_loss_value = parsed_signal.get('stop_loss_value') or stop_loss
-        _sl_from_signal = bool(stop_loss_value)
+        _sl_from_signal = False
+        
+        if _exit_mode == 'risk':
+            print(f"[CONDITIONAL] Exit strategy = RISK → ignoring signal PT/SL, using channel risk settings")
+            _channel_pts = []
+            for i in range(1, 5):
+                pct = channel_settings.get(f'profit_target_{i}_pct')
+                if pct and float(pct) > 0:
+                    _channel_pts.append(float(pct))
+            if _channel_pts:
+                take_profit_json = json.dumps(_channel_pts)
+                print(f"[CONDITIONAL] Channel profit targets: {_channel_pts}%")
+            
+            if channel_settings.get('stop_loss_pct'):
+                stop_loss_type = 'percent'
+                stop_loss_value = channel_settings.get('stop_loss_pct')
+                print(f"[CONDITIONAL] Channel stop loss: {stop_loss_value}%")
+            else:
+                stop_loss_value = None
+                stop_loss_type = None
+        elif _exit_mode == 'signal':
+            if profit_targets:
+                _pt_from_signal = True
+                take_profit_json = json.dumps(profit_targets)
+                print(f"[CONDITIONAL] Exit strategy = SIGNAL → signal profit targets (prices): {profit_targets}")
+            else:
+                print(f"[CONDITIONAL] Exit strategy = SIGNAL → no signal targets provided")
+            _sl_from_signal = bool(stop_loss_value)
+        else:
+            if profit_targets:
+                _pt_from_signal = True
+                take_profit_json = json.dumps(profit_targets)
+                print(f"[CONDITIONAL] Signal profit targets (prices): {profit_targets}")
+            else:
+                print(f"[CONDITIONAL] No signal targets - will use channel settings at trigger time")
+            _sl_from_signal = bool(stop_loss_value)
         
         if not stop_loss_value and channel_settings.get('stop_loss_pct'):
             stop_loss_type = 'percent'

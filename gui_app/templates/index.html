@@ -2731,10 +2731,11 @@ async function loadConditionalOrders() {
             try {
                 const targets = order.take_profit_targets ? JSON.parse(order.take_profit_targets) : [];
                 if (targets.length > 0) {
-                    const isChannelSource = order.params_source === 'channel';
+                    const settingsSource = order.settings_source || '';
+                    const isPtFromSignal = settingsSource.includes('pt:signal');
                     ptDisplay = targets.map(t => {
                         const val = parseFloat(t);
-                        return isChannelSource ? `${val}%` : `$${val.toFixed(2)}`;
+                        return isPtFromSignal ? `$${val.toFixed(2)}` : `${parseFloat(val.toFixed(2))}%`;
                     }).join(', ');
                 }
             } catch(e) {}
