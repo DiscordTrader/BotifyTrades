@@ -6934,11 +6934,13 @@ class RiskManager:
             session = self._get_market_session()
             if session == 'extended':
                 fresh_price = None
+                _is_opt_pos = position.asset == 'option'
+                _fresh_lookup = position.raw_symbol if (_is_opt_pos and hasattr(position, 'raw_symbol') and position.raw_symbol) else position.symbol
                 try:
                     from src.services.webull_data_hub import get_webull_data_hub
                     hub = get_webull_data_hub()
                     if hub:
-                        fresh_price = self._get_fresh_hub_price(hub, position.symbol, max_age=60)
+                        fresh_price = self._get_fresh_hub_price(hub, _fresh_lookup, max_age=60)
                 except Exception:
                     pass
                 if not fresh_price:
@@ -6946,7 +6948,11 @@ class RiskManager:
                         from src.services.schwab_data_hub import get_schwab_data_hub
                         s_hub = get_schwab_data_hub()
                         if s_hub:
-                            fresh_price = self._get_fresh_hub_price(s_hub, position.symbol, max_age=60)
+                            _schwab_lk = _fresh_lookup
+                            if _is_opt_pos:
+                                _s_keys = self._get_option_hub_keys(position, 'Schwab')
+                                _schwab_lk = _s_keys[0] if _s_keys else _fresh_lookup
+                            fresh_price = self._get_fresh_hub_price(s_hub, _schwab_lk, max_age=60)
                     except Exception:
                         pass
                 if not fresh_price:
@@ -6954,9 +6960,15 @@ class RiskManager:
                         from src.services.ibkr_data_hub import get_ibkr_data_hub
                         ib_hub = get_ibkr_data_hub()
                         if ib_hub and ib_hub.is_streaming():
-                            fresh_price = self._get_fresh_hub_price(ib_hub, position.symbol, max_age=60)
+                            _ibkr_lk = _fresh_lookup
+                            if _is_opt_pos:
+                                _i_keys = self._get_option_hub_keys(position, 'IBKR')
+                                _ibkr_lk = _i_keys[0] if _i_keys else _fresh_lookup
+                            fresh_price = self._get_fresh_hub_price(ib_hub, _ibkr_lk, max_age=60)
                     except Exception:
                         pass
+                if fresh_price and _is_opt_pos and entry_price > 0 and (fresh_price / entry_price) > 50:
+                    fresh_price = None
 
                 if fresh_price and fresh_price > 0:
                     fresh_dev = abs(fresh_price - entry_price) / entry_price * 100
@@ -7436,6 +7448,8 @@ class RiskManager:
                 for ok in opt_keys:
                     price = self._get_fresh_hub_price(hub, ok, max_age=2)
                     if price and price > 0:
+                        if pos.avg_cost > 0 and (price / pos.avg_cost) > 50:
+                            continue
                         return price
             else:
                 norm_sym = self._normalize_symbol_for_hub(pos.symbol, hub_name)
@@ -7667,13 +7681,10 @@ class RiskManager:
                         continue
                     if pos.asset == 'option':
                         price = None
-                        for lk in [pos.raw_symbol, pos.symbol]:
-                            if lk:
-                                price = self._get_fresh_hub_price(hub, lk)
-                                if price:
-                                    break
+                        if pos.raw_symbol:
+                            price = self._get_fresh_hub_price(hub, pos.raw_symbol)
                         if not price:
-                            lk_check = pos.raw_symbol or pos.symbol
+                            lk_check = pos.raw_symbol
                             if lk_check and hub.get_quote_price(lk_check):
                                 stale_skipped += 1
                             continue
@@ -7684,6 +7695,19 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
+                        if pos.asset == 'option' and pos.avg_cost > 0:
+                            _hub_ratio = price / pos.avg_cost
+                            if _hub_ratio > 50:
+                                _sym = pos.symbol or pos.raw_symbol or '?'
+                                if not hasattr(self, '_hub_idx_guard_ts'):
+                                    self._hub_idx_guard_ts = {}
+                                import time as _hig
+                                _hig_now = _hig.time()
+                                if _sym not in self._hub_idx_guard_ts or (_hig_now - self._hub_idx_guard_ts.get(_sym, 0)) > 30:
+                                    self._hub_idx_guard_ts[_sym] = _hig_now
+                                    print(f"[RISK] ⚠️ HUB INDEX GUARD: {_sym} hub price ${price:.2f} is {_hub_ratio:.0f}x entry ${pos.avg_cost:.2f} "
+                                          f"— likely underlying index price leaked into option quote. Rejecting hub price.")
+                                continue
                         _hub_ts = self._get_hub_quote_ts(hub, pos.symbol)
                         _rk = self._pos_tracking_key(pos)
                         if self._is_rest_repair_active(pos, hub_quote_ts=_hub_ts):
@@ -7725,6 +7749,16 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
+                        if pos.asset == 'option' and pos.avg_cost > 0 and (price / pos.avg_cost) > 50:
+                            _sym = pos.symbol or pos.raw_symbol or '?'
+                            if not hasattr(self, '_hub_idx_guard_ts'):
+                                self._hub_idx_guard_ts = {}
+                            import time as _hig2
+                            _hig2_now = _hig2.time()
+                            if _sym not in self._hub_idx_guard_ts or (_hig2_now - self._hub_idx_guard_ts.get(_sym, 0)) > 30:
+                                self._hub_idx_guard_ts[_sym] = _hig2_now
+                                print(f"[RISK] ⚠️ HUB INDEX GUARD: Schwab {_sym} hub price ${price:.2f} is {price/pos.avg_cost:.0f}x entry ${pos.avg_cost:.2f} — rejecting")
+                            continue
                         _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
                         _hub_ts = self._get_hub_quote_ts(schwab_hub, _lookup)
                         _rk = self._pos_tracking_key(pos)
@@ -7768,6 +7802,16 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
+                        if pos.asset == 'option' and pos.avg_cost > 0 and (price / pos.avg_cost) > 50:
+                            _sym = pos.symbol or pos.raw_symbol or '?'
+                            if not hasattr(self, '_hub_idx_guard_ts'):
+                                self._hub_idx_guard_ts = {}
+                            import time as _hig3
+                            _hig3_now = _hig3.time()
+                            if _sym not in self._hub_idx_guard_ts or (_hig3_now - self._hub_idx_guard_ts.get(_sym, 0)) > 30:
+                                self._hub_idx_guard_ts[_sym] = _hig3_now
+                                print(f"[RISK] ⚠️ HUB INDEX GUARD: IBKR {_sym} hub price ${price:.2f} is {price/pos.avg_cost:.0f}x entry ${pos.avg_cost:.2f} — rejecting")
+                            continue
                         _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
                         _hub_ts = self._get_hub_quote_ts(ibkr_hub, _lookup)
                         _rk = self._pos_tracking_key(pos)
@@ -7813,6 +7857,15 @@ class RiskManager:
                                 stale_skipped += 1
                             continue
                     if price and price > 0:
+                        if pos.asset == 'option' and pos.avg_cost > 0 and (price / pos.avg_cost) > 50:
+                            _sym = pos.symbol or pos.raw_symbol or '?'
+                            if not hasattr(self, '_hub_idx_guard_ts'):
+                                self._hub_idx_guard_ts = {}
+                            _hig4_now = _tt_time.time()
+                            if _sym not in self._hub_idx_guard_ts or (_hig4_now - self._hub_idx_guard_ts.get(_sym, 0)) > 30:
+                                self._hub_idx_guard_ts[_sym] = _hig4_now
+                                print(f"[RISK] ⚠️ HUB INDEX GUARD: TastyTrade {_sym} hub price ${price:.2f} is {price/pos.avg_cost:.0f}x entry ${pos.avg_cost:.2f} — rejecting")
+                            continue
                         _lookup = pos.raw_symbol if pos.asset == 'option' and pos.raw_symbol else pos.symbol
                         _tt_quote = tt_hub.get_quote(_lookup)
                         _hub_ts = _tt_quote.timestamp if _tt_quote else None
@@ -7957,6 +8010,8 @@ class RiskManager:
             _cross_applied = False
             _repair_key = self._pos_tracking_key(pos)
             for _cp, _ct, _cs in _cross_candidates:
+                if _is_opt and pos.avg_cost > 0 and (_cp / pos.avg_cost) > 50:
+                    continue
                 if self._is_rest_repair_active(pos, hub_quote_ts=_ct):
                     repair = self._rest_repaired_prices.get(_repair_key)
                     if repair and abs(_cp - repair['price']) > max(0.02, repair['price'] * 0.005):
