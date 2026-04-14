@@ -10828,6 +10828,84 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/debug/chain-test', methods=['GET'])
+    def api_debug_chain_test():
+        """Temporary debug endpoint to diagnose put zigzag"""
+        try:
+            symbol = request.args.get('symbol', 'SPY').upper()
+            expiry = request.args.get('expiry', '2026-04-14')
+            broker_name = request.args.get('broker', 'WEBULL').upper()
+            mode = request.args.get('mode', 'parsed')
+            
+            if mode == 'raw':
+                wb_broker = get_webull_broker()
+                if not wb_broker or not hasattr(wb_broker, '_client'):
+                    return jsonify({'error': 'No Webull broker'})
+                wb = wb_broker._client if hasattr(wb_broker, '_client') else None
+                if not wb:
+                    return jsonify({'error': 'No Webull client'})
+                ticker_id = wb_broker._get_ticker_id(symbol)
+                if not ticker_id:
+                    return jsonify({'error': f'No ticker ID for {symbol}'})
+                import requests as req_lib
+                headers = wb.build_req_headers()
+                data = {'count': -1, 'direction': 'all', 'tickerId': ticker_id}
+                res = req_lib.post(wb._urls.options_exp_dat_new(), json=data, headers=headers, timeout=15)
+                api_result = res.json()
+                exp_list = api_result.get('expireDateList', [])
+                chain_data = []
+                for entry in exp_list:
+                    if isinstance(entry, dict):
+                        exp_from = entry.get('from', {})
+                        entry_date = exp_from.get('date', '') if isinstance(exp_from, dict) else str(exp_from)
+                        if str(entry_date) == str(expiry):
+                            chain_data = entry.get('data', [])
+                            break
+                mid = len(chain_data) // 2
+                sample_rows = []
+                for row in chain_data[max(0,mid-5):mid+5]:
+                    sp = row.get('strikePrice', 'N/A')
+                    sample_rows.append({
+                        'strikePrice': sp,
+                        'direction': row.get('direction', 'N/A'),
+                        'tickerId': row.get('tickerId'),
+                        'delta': row.get('delta'),
+                        'symbol': row.get('symbol', ''),
+                        'has_call_key': 'call' in row,
+                        'has_put_key': 'put' in row,
+                    })
+                directions = {}
+                for row in chain_data:
+                    d = row.get('direction', 'N/A')
+                    directions[d] = directions.get(d, 0) + 1
+                return jsonify({'total_rows': len(chain_data), 'directions': directions, 'sample': sample_rows})
+            
+            chain = get_option_chain_for_broker(symbol, expiry, broker_name)
+            if not chain:
+                return jsonify({'error': 'No chain'}), 404
+            calls = chain.get('calls', [])
+            puts = chain.get('puts', [])
+            stock_price = chain.get('stock_price', 0)
+            all_strikes = sorted(set([o['strike'] for o in calls] + [o['strike'] for o in puts]))
+            atm = min(all_strikes, key=lambda x: abs(x - stock_price)) if stock_price and all_strikes else 0
+            atm_idx = all_strikes.index(atm) if atm in all_strikes else 0
+            selected = all_strikes[max(0,atm_idx-4):atm_idx+5]
+            calls_map = {round(o['strike'],2): o for o in calls}
+            puts_map = {round(o['strike'],2): o for o in puts}
+            result = []
+            for s in selected:
+                c = calls_map.get(s, {})
+                p = puts_map.get(s, {})
+                result.append({
+                    'strike': s,
+                    'call_bid': c.get('bid',0), 'call_delta': c.get('delta',0), 'call_oid': c.get('option_id',''),
+                    'put_bid': p.get('bid',0), 'put_delta': p.get('delta',0), 'put_oid': p.get('option_id','')
+                })
+            return jsonify({'stock_price': stock_price, 'atm': atm, 'total_calls': len(calls), 'total_puts': len(puts), 'strikes': result})
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/options/quick-chain', methods=['GET'])
     def api_get_quick_chain():
         """Get ATM-centered option chain (2 ITM + ATM + 2 OTM) for quick trading panel"""
@@ -10895,6 +10973,23 @@ def register_routes(app):
                 print(f"[CHAIN] ⚠️ Puts missing for strikes: {sorted(missing_puts)} (total puts={len(puts)}, total calls={len(calls)})", flush=True)
             if missing_calls:
                 print(f"[CHAIN] ⚠️ Calls missing for strikes: {sorted(missing_calls)}", flush=True)
+            
+            import os
+            _dbg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'chain_debug.log')
+            with open(_dbg_path, 'w') as _dbg:
+                _dbg.write(f"=== CHAIN DEBUG {symbol} {expiry} ===\n")
+                _dbg.write(f"Stock price: {stock_price}, ATM: {atm_strike}, Count: {count}\n")
+                _dbg.write(f"Total calls: {len(calls)}, Total puts: {len(puts)}\n")
+                _dbg.write(f"Selected strikes: {selected_strikes}\n\n")
+                _dbg.write(f"--- RAW PUT DATA (selected range) ---\n")
+                for p in sorted(puts, key=lambda x: x['strike']):
+                    if p['strike'] >= selected_strikes[0] and p['strike'] <= selected_strikes[-1]:
+                        _dbg.write(f"  PUT strike={p['strike']} bid={p.get('bid',0)} ask={p.get('ask',0)} delta={p.get('delta',0)} oid={p.get('option_id','')}\n")
+                _dbg.write(f"\n--- PUTS MAP KEYS ---\n")
+                for k in sorted(puts_map.keys()):
+                    if k >= selected_strikes[0] and k <= selected_strikes[-1]:
+                        pm = puts_map[k]
+                        _dbg.write(f"  MAP strike={k} bid={pm.get('bid',0)} ask={pm.get('ask',0)} delta={pm.get('delta',0)} oid={pm.get('option_id','')}\n")
             
             strikes_data = []
             for s in selected_strikes:
@@ -11008,6 +11103,13 @@ def register_routes(app):
                 import traceback
                 print(f"[CHAIN_OVERLAY] ❌ Error: {overlay_err}", flush=True)
                 traceback.print_exc()
+
+            with open(_dbg_path, 'a') as _dbg:
+                _dbg.write(f"\n--- AFTER OVERLAY (hub_overlay_count={hub_overlay_count}) ---\n")
+                for sd in strikes_data:
+                    p = sd.get('put', {})
+                    c = sd.get('call', {})
+                    _dbg.write(f"  strike={sd['strike']} | CALL bid={c.get('bid',0):.2f} ask={c.get('ask',0):.2f} | PUT bid={p.get('bid',0):.2f} ask={p.get('ask',0):.2f} delta={p.get('delta',0)} oid={p.get('option_id','')}\n")
 
             return jsonify({
                 'success': True,

@@ -5586,20 +5586,18 @@ class WebullBroker:
             
             try:
                 def extract_option(row, direction):
-                    """Extract option data from row - handles nested Webull structure.
-                    Webull returns: [{"strikePrice": "600", "call": {...}, "put": {...}}, ...]
-                    The actual bid/ask/tickerId are nested under 'call' or 'put' key.
+                    """Extract option data from row - handles both Webull formats:
+                    Format A (nested): [{"strikePrice": "600", "call": {...}, "put": {...}}, ...]
+                    Format B (flat):   [{"strikePrice": "600", "direction": "call", "tickerId": ..., ...}, ...]
                     """
                     if not row or not isinstance(row, dict):
                         return None
                     
-                    # Get strike price from the row itself
                     strike_val = row.get('strikePrice') or row.get('strike')
                     if strike_val is None:
                         return None
                     
                     def extract_price_from_list(price_list):
-                        """Extract best price from Webull bid/ask list format"""
                         if not price_list:
                             return 0.0
                         if isinstance(price_list, list) and len(price_list) > 0:
@@ -5610,13 +5608,9 @@ class WebullBroker:
                                 return float(first)
                         return 0.0
                     
-                    # Check for nested data under 'call' or 'put' key
                     nested = row.get(direction)
-                    if isinstance(nested, dict):
-                        # Data is nested under direction key (this is the expected Webull structure)
+                    if isinstance(nested, dict) and nested:
                         oid = nested.get('tickerId') or nested.get('optionId') or nested.get('id')
-                        
-                        # Bid/ask might be in bidList/askList arrays or direct values
                         bid_list = nested.get('bidList')
                         ask_list = nested.get('askList')
                         if bid_list:
@@ -5627,18 +5621,28 @@ class WebullBroker:
                             ask = extract_price_from_list(ask_list)
                         else:
                             ask = nested.get('askPrice') or nested.get('ask') or 0
-                        
                         last = nested.get('close') or nested.get('lastPrice') or nested.get('price') or 0
                         volume = nested.get('volume') or 0
                         oi = nested.get('openInterest') or 0
                         iv = nested.get('impVol') or nested.get('impliedVolatility') or 0
                         delta = nested.get('delta') or 0
                     else:
-                        # Fallback: Data is directly in the row (alternative format)
+                        row_direction = row.get('direction', '')
+                        if row_direction and row_direction.lower() != direction.lower():
+                            return None
+                        
                         oid = row.get('tickerId') or row.get('optionId') or row.get('id')
-                        bid = row.get('bidPrice') or row.get('bid') or 0
-                        ask = row.get('askPrice') or row.get('ask') or 0
-                        last = row.get('lastPrice') or row.get('close') or row.get('price') or 0
+                        bid_list = row.get('bidList')
+                        ask_list = row.get('askList')
+                        if bid_list:
+                            bid = extract_price_from_list(bid_list)
+                        else:
+                            bid = row.get('bidPrice') or row.get('bid') or 0
+                        if ask_list:
+                            ask = extract_price_from_list(ask_list)
+                        else:
+                            ask = row.get('askPrice') or row.get('ask') or 0
+                        last = row.get('close') or row.get('lastPrice') or row.get('price') or 0
                         volume = row.get('volume') or 0
                         oi = row.get('openInterest') or 0
                         iv = row.get('impVol') or row.get('impliedVolatility') or 0
@@ -5743,6 +5747,31 @@ class WebullBroker:
                 calls_with_bids = sum(1 for c in calls if c.get('bid', 0) > 0)
                 puts_with_bids = sum(1 for p in puts if p.get('bid', 0) > 0)
                 print(f"[Webull] Option chain for {symbol} {expiration_date}: {len(calls)} calls, {len(puts)} puts (with bid: {calls_with_bids}C/{puts_with_bids}P, needs_live={needs_live_quotes})")
+                
+                try:
+                    import os as _os
+                    _chain_dbg = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'chain_debug.log')
+                    with open(_chain_dbg, 'w') as _df:
+                        _df.write(f"=== RAW CHAIN FROM WEBULL API: {symbol} {expiration_date} ===\n")
+                        _df.write(f"chain_data rows: {len(chain_data)}\n")
+                        _df.write(f"calls: {len(calls)}, puts: {len(puts)}\n\n")
+                        _df.write("--- RAW API ROWS (first 20 near ATM) ---\n")
+                        mid_idx = len(chain_data) // 2
+                        for i, row in enumerate(chain_data[max(0,mid_idx-10):mid_idx+10]):
+                            real_i = max(0,mid_idx-10) + i
+                            sp = row.get('strikePrice', 'N/A')
+                            call_nested = row.get('call', {}) if isinstance(row.get('call'), dict) else {}
+                            put_nested = row.get('put', {}) if isinstance(row.get('put'), dict) else {}
+                            c_tid = call_nested.get('tickerId', 'N/A')
+                            p_tid = put_nested.get('tickerId', 'N/A')
+                            c_delta = call_nested.get('delta', 'N/A')
+                            p_delta = put_nested.get('delta', 'N/A')
+                            _df.write(f"  row[{real_i}] strike={sp} | call_tid={c_tid} c_delta={c_delta} | put_tid={p_tid} p_delta={p_delta}\n")
+                        _df.write(f"\n--- PARSED PUTS (all {len(puts)}, sorted by strike) ---\n")
+                        for p in sorted(puts, key=lambda x: x['strike']):
+                            _df.write(f"  strike={p['strike']} bid={p.get('bid',0)} delta={p.get('delta',0)} oid={p.get('option_id','')}\n")
+                except Exception as _de:
+                    print(f"[Webull] Chain debug write error: {_de}")
                 
                 if needs_live_quotes and (calls or puts):
                     
