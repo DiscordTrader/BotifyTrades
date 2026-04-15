@@ -1004,29 +1004,32 @@ class BrokerSyncService:
                     raw = await broker_instance.get_account_info()
                     if raw:
                         print(f"[SYNC] {broker_name} account info keys: {list(raw.keys())[:10]}")
-                        # Use the normalized keys returned by get_account_info (snake_case)
                         account_info = {
                             'portfolio_value': raw.get('portfolio_value', 0),
                             'buying_power': raw.get('buying_power', 0),
                             'cash': raw.get('cash', 0),
                             'options_buying_power': raw.get('options_buying_power', 0),
+                            'settled_cash': raw.get('settled_cash', 0),
+                            'unsettled_cash': raw.get('unsettled_cash', 0),
                             'account_type': raw.get('account_type', 'Unknown'),
                             'account_id': raw.get('account_id')
                         }
-                        print(f"[SYNC] Webull account info: buying_power=${account_info.get('buying_power')}, options_bp=${account_info.get('options_buying_power')}, portfolio=${account_info.get('portfolio_value')}")
+                        print(f"[SYNC] Webull account info: buying_power=${account_info.get('buying_power')}, settled=${account_info.get('settled_cash')}, options_bp=${account_info.get('options_buying_power')}, portfolio=${account_info.get('portfolio_value')}")
                     else:
                         print(f"[SYNC] Webull get_account_info returned None/empty")
             
             elif broker_name.startswith('ALPACA'):
-                if hasattr(broker_instance, 'get_account'):
-                    raw = await broker_instance.get_account()
+                if hasattr(broker_instance, 'get_account_info'):
+                    raw = await broker_instance.get_account_info()
                     if raw:
                         account_info = {
-                            'portfolio_value': float(getattr(raw, 'portfolio_value', 0) or 0),
-                            'buying_power': float(getattr(raw, 'buying_power', 0) or 0),
-                            'cash': float(getattr(raw, 'cash', 0) or 0),
-                            'options_buying_power': float(getattr(raw, 'options_buying_power', 0) or getattr(raw, 'buying_power', 0) or 0),
-                            'account_id': getattr(raw, 'account_number', None)
+                            'portfolio_value': float(raw.get('portfolio_value', 0) or 0),
+                            'buying_power': float(raw.get('buying_power', 0) or 0),
+                            'cash': float(raw.get('cash', 0) or 0),
+                            'options_buying_power': float(raw.get('options_buying_power', 0) or raw.get('buying_power', 0) or 0),
+                            'settled_cash': float(raw.get('settled_cash', 0) or 0),
+                            'unsettled_cash': float(raw.get('unsettled_cash', 0) or 0),
+                            'account_id': raw.get('account_id', None)
                         }
             
             elif broker_name == 'SCHWAB':
@@ -1052,9 +1055,11 @@ class BrokerSyncService:
                     raw = await broker_instance.get_account_info()
                     if raw:
                         account_info = {
-                            'portfolio_value': float(raw.get('portfolio_cash', 0) or 0),
+                            'portfolio_value': float(raw.get('portfolio_value', 0) or 0),
                             'buying_power': float(raw.get('buying_power', 0) or 0),
                             'options_buying_power': float(raw.get('options_buying_power', 0) or raw.get('buying_power', 0) or 0),
+                            'settled_cash': float(raw.get('settled_cash', 0) or 0),
+                            'unsettled_cash': float(raw.get('unsettled_cash', 0) or 0),
                             'margin_buying_power': float(raw.get('margin_buying_power', 0) or 0)
                         }
             
@@ -1086,6 +1091,18 @@ class BrokerSyncService:
                                 tt_hub.update_account_info(account_info)
                         except Exception:
                             pass
+            
+            elif broker_name == 'TRADING212':
+                if hasattr(broker_instance, 'get_account_info'):
+                    raw = await broker_instance.get_account_info()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': float(raw.get('portfolio_value', 0) or 0),
+                            'buying_power': float(raw.get('buying_power', 0) or 0),
+                            'cash': float(raw.get('cash', 0) or 0),
+                            'invested': float(raw.get('invested', 0) or 0),
+                            'ppl': float(raw.get('ppl', 0) or 0),
+                        }
             
             elif broker_name == 'ZERODHA':
                 if hasattr(broker_instance, 'margins'):

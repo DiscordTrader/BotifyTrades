@@ -637,7 +637,12 @@ class WebullBroker(BrokerInterface):
             print(f"[{self.name}] Error getting account info: {e}")
             import traceback
             traceback.print_exc()
-            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            if self._data_hub:
+                cached = self._data_hub.get_account_info(max_age_seconds=300)
+                if cached is not None:
+                    print(f"[{self.name}] Returning hub-cached account info after error")
+                    return cached
+            return None
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""

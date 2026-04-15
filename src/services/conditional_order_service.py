@@ -1118,6 +1118,40 @@ class ConditionalOrderService:
         
         if self.execution_callback:
             try:
+                broker_primary = order.get('broker_primary', '')
+                if broker_primary:
+                    try:
+                        from src.services.broker_health_monitor import get_health_monitor
+                        hm = get_health_monitor()
+                        if hm:
+                            qty = int(order.get('quantity', 1) or 1)
+                            if order.get('strike'):
+                                limit_price = order.get('limit_price')
+                                if limit_price and float(limit_price) > 0:
+                                    option_premium = float(limit_price)
+                                else:
+                                    option_premium = triggered_price
+                                required = option_premium * qty * 100
+                            else:
+                                required = triggered_price * qty
+                            is_valid, bp_reason = hm.validate_buying_power(broker_primary, required)
+                            if not is_valid:
+                                sys.stderr.write(f"[CONDITIONAL] ❌ Pre-exec BP check FAILED for #{order_id}: {bp_reason}\n")
+                                sys.stderr.flush()
+                                update_conditional_order_status(
+                                    order_id, 'ERROR',
+                                    event='INSUFFICIENT_FUNDS',
+                                    error_message=f"Buying power check failed at trigger: {bp_reason}"
+                                )
+                                if order_id in self.pending_orders:
+                                    del self.pending_orders[order_id]
+                                return
+                            sys.stderr.write(f"[CONDITIONAL] ✓ Pre-exec BP check passed for #{order_id} (need ${required:.2f})\n")
+                            sys.stderr.flush()
+                    except Exception as bp_err:
+                        sys.stderr.write(f"[CONDITIONAL] ⚠️ BP check error (proceeding): {bp_err}\n")
+                        sys.stderr.flush()
+                
                 update_conditional_order_status(order_id, 'EXECUTING')
                 sys.stderr.write(f"[CONDITIONAL] Calling execution callback for #{order_id}...\n")
                 sys.stderr.flush()

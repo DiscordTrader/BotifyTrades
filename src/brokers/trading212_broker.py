@@ -173,7 +173,9 @@ class Trading212Broker(BrokerInterface):
 
     async def get_account_info(self) -> Dict[str, Any]:
         if not self._client or not self.connected:
-            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            if self._account_cache:
+                return self._account_cache
+            return None
 
         now = time.time()
         if self._account_cache and (now - self._account_cache_ts) < 10:
@@ -206,7 +208,7 @@ class Trading212Broker(BrokerInterface):
         except Exception as e:
             print(f"[T212] Error getting account info: {e}")
 
-        return self._account_cache or {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+        return self._account_cache or None
 
     async def get_positions(self) -> List[Dict[str, Any]]:
         if not self._client or not self.connected:

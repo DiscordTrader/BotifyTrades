@@ -729,7 +729,10 @@ class SchwabBroker(BrokerInterface):
                     return dict(self._last_account_info)
             
             if not await self._ensure_valid_token():
-                return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
+                if hasattr(self, '_last_account_info') and self._last_account_info:
+                    print(f"[{self.name}] Token refresh pending - returning last known good account info")
+                    return dict(self._last_account_info)
+                return None
             
             response = await self._make_request(
                 'GET',
@@ -804,8 +807,11 @@ class SchwabBroker(BrokerInterface):
                     
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
+            if hasattr(self, '_last_account_info') and self._last_account_info:
+                print(f"[{self.name}] Returning last known good account info (BP=${self._last_account_info.get('buying_power', 0):.2f})")
+                return dict(self._last_account_info)
         
-        return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
+        return None
     
     def _register_429(self, retry_after: int = 60):
         """Register a 429 error - sets global backoff for ALL Schwab API calls"""

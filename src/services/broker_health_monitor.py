@@ -282,7 +282,9 @@ class BrokerHealthMonitor:
                 }
             elif not is_connected:
                 if broker_key in self._account_cache:
-                    del self._account_cache[broker_key]
+                    existing = self._account_cache[broker_key]
+                    existing['stale'] = True
+                    existing['disconnected_at'] = time.time()
             
             callback_action = None
             callback_broker = broker_key
@@ -528,14 +530,18 @@ class BrokerHealthMonitor:
         cached_info = self.get_cached_account_info(broker_key)
         
         if not cached_info:
-            # Check if broker is marked as connected - if so, allow trade
-            # This handles the case where conditional orders trigger before first sync completes
-            # The broker itself will validate the order and reject if insufficient funds
             with self._state_lock:
                 broker_state = self._broker_states.get(broker_key, {})
                 is_connected = broker_state.get('is_connected', False)
+                stale_entry = self._account_cache.get(broker_key)
             
-            if is_connected:
+            if stale_entry and stale_entry.get('data'):
+                stale_data = stale_entry['data']
+                stale_bp = stale_data.get('buying_power', 0) or stale_data.get('options_buying_power', 0)
+                age_s = time.time() - stale_entry.get('timestamp', 0)
+                print(f"[HEALTH] ⚠️ Using stale cached data for {broker_name} (age={age_s:.0f}s, BP=${stale_bp:.2f})")
+                cached_info = stale_data
+            elif is_connected:
                 print(f"[HEALTH] ⚠️ No cached data for {broker_name} but broker connected - allowing trade (broker will validate)")
                 return True, ""
             else:

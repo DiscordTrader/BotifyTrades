@@ -242,7 +242,9 @@ class TastytradeBroker(BrokerInterface):
         """Get account information from Tastytrade"""
         try:
             if not self.account or not self.session:
-                return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+                if hasattr(self, '_last_account_info') and self._last_account_info:
+                    return dict(self._last_account_info)
+                return None
             
             balances = await _await_if_needed(
                 await asyncio.to_thread(self.account.get_balances, self.session)
@@ -274,12 +276,16 @@ class TastytradeBroker(BrokerInterface):
                         'is_active': a.account_number == self.account.account_number,
                     })
             
+            self._last_account_info = result
             return result
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
             import traceback
             traceback.print_exc()
-            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            if hasattr(self, '_last_account_info') and self._last_account_info:
+                print(f"[{self.name}] Returning last known good account info after error")
+                return dict(self._last_account_info)
+            return None
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""

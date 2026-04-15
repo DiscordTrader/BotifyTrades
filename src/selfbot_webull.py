@@ -14916,6 +14916,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     open_trades = get_open_trades_by_channel(str(message.channel.id))
                     has_matching_trade = False
+                    pending_trade_to_cancel = None
                     for t in (open_trades or []):
                         t_sym = (t.get('symbol') or '').upper()
                         t_strike = float(t.get('strike') or 0)
@@ -14928,8 +14929,46 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             t_opt == stc_opt and
                             t_status in ('OPEN', 'PENDING') and
                             expiry_ok):
+                            if t_status == 'PENDING':
+                                pending_trade_to_cancel = t
                             has_matching_trade = True
                             break
+                    
+                    if pending_trade_to_cancel:
+                        trade_id = pending_trade_to_cancel.get('id')
+                        broker_order_id = pending_trade_to_cancel.get('order_id') or pending_trade_to_cancel.get('broker_order_id')
+                        broker_name = pending_trade_to_cancel.get('broker', '')
+                        print(f"[STC PRE-CHECK] ⚠️ STC arrived but trade #{trade_id} is PENDING (BTO not filled) — cancelling unfilled BTO", flush=True)
+                        try:
+                            from gui_app.database import update_trade
+                            broker_cancel_ok = True
+                            if broker_order_id and broker_name:
+                                broker_instance = None
+                                for b in (self.brokers if hasattr(self, 'brokers') else []):
+                                    if hasattr(b, 'name') and b.name.upper() == broker_name.upper():
+                                        broker_instance = b
+                                        break
+                                if broker_instance and hasattr(broker_instance, 'cancel_order'):
+                                    try:
+                                        cancel_result = await broker_instance.cancel_order(str(broker_order_id))
+                                        print(f"[STC PRE-CHECK] 🧹 Cancel BTO order {broker_order_id} on {broker_name}: {cancel_result}", flush=True)
+                                        if isinstance(cancel_result, dict) and cancel_result.get('error'):
+                                            err_msg = str(cancel_result.get('error', '')).lower()
+                                            if 'filled' in err_msg or 'executed' in err_msg:
+                                                broker_cancel_ok = False
+                                                print(f"[STC PRE-CHECK] ⚠️ BTO already filled on broker — NOT marking cancelled, will let STC proceed", flush=True)
+                                    except Exception as ce:
+                                        print(f"[STC PRE-CHECK] ⚠️ Broker cancel error: {ce} — marking trade cancelled anyway", flush=True)
+                            if broker_cancel_ok:
+                                update_trade(trade_id, status='CANCELLED', notes=f'BTO cancelled — STC signal arrived before fill')
+                                print(f"[STC PRE-CHECK] ✓ Trade #{trade_id} marked CANCELLED", flush=True)
+                                return
+                            else:
+                                update_trade(trade_id, status='OPEN', notes=f'BTO filled during STC cancel attempt — proceeding with STC')
+                                print(f"[STC PRE-CHECK] ✓ Trade #{trade_id} moved to OPEN — continuing STC execution", flush=True)
+                        except Exception as cancel_err:
+                            print(f"[STC PRE-CHECK] ⚠️ Error cancelling pending BTO: {cancel_err}", flush=True)
+                            return
                     
                     if not has_matching_trade:
                         print(f"[STC PRE-CHECK] ⏭️ No open/pending trade for {stc_symbol} ${stc_strike}{stc_opt} {stc_expiry} — skipping STC", flush=True)

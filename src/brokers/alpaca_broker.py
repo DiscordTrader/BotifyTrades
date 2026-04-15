@@ -181,7 +181,7 @@ class AlpacaBroker(BrokerInterface):
             total_cash = float(account.cash)
             unsettled_cash = max(0, total_cash - cash_withdrawable)
             
-            return {
+            result = {
                 'buying_power': float(account.buying_power),
                 'options_buying_power': float(options_bp),
                 'cash': total_cash,
@@ -192,9 +192,14 @@ class AlpacaBroker(BrokerInterface):
                 'cash_withdrawable': cash_withdrawable,
                 'non_marginable_buying_power': non_marginable_bp
             }
+            self._last_account_info = result
+            return result
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
-            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
+            if hasattr(self, '_last_account_info') and self._last_account_info:
+                print(f"[{self.name}] Returning last known good account info after error")
+                return dict(self._last_account_info)
+            return None
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""

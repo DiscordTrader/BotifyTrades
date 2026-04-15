@@ -144,7 +144,9 @@ class IBKRBroker(BrokerInterface):
         try:
             if not self.ib.isConnected():
                 print(f"[{self.name}] ⚠️ get_account_info called but not connected")
-                return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+                if hasattr(self, '_last_account_info') and self._last_account_info:
+                    return dict(self._last_account_info)
+                return None
 
             result = {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
             need_async_fallback = False
@@ -186,10 +188,14 @@ class IBKRBroker(BrokerInterface):
             if result['options_buying_power'] <= 0:
                 result['options_buying_power'] = result['buying_power']
             
+            self._last_account_info = result
             return result
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
-            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            if hasattr(self, '_last_account_info') and self._last_account_info:
+                print(f"[{self.name}] Returning last known good account info after error")
+                return dict(self._last_account_info)
+            return None
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""

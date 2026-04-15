@@ -169,7 +169,9 @@ class RobinhoodBroker(BrokerInterface):
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information including settled cash for good faith violation prevention"""
         if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
-            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
+            if hasattr(self, '_last_account_info') and self._last_account_info:
+                return dict(self._last_account_info)
+            return None
         
         try:
             def get_profile():
@@ -214,7 +216,7 @@ class RobinhoodBroker(BrokerInterface):
             if portfolio:
                 portfolio_value = float(portfolio.get('equity', 0) or 0)
             
-            return {
+            result = {
                 'buying_power': buying_power,
                 'options_buying_power': buying_power,
                 'cash': cash,
@@ -224,10 +226,15 @@ class RobinhoodBroker(BrokerInterface):
                 'unsettled_cash': unsettled_cash,
                 'cash_available_for_withdrawal': settled_cash
             }
+            self._last_account_info = result
+            return result
             
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
-            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
+            if hasattr(self, '_last_account_info') and self._last_account_info:
+                print(f"[{self.name}] Returning last known good account info after error")
+                return dict(self._last_account_info)
+            return None
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current stock positions"""
