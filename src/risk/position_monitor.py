@@ -4710,6 +4710,20 @@ class RiskManager:
             print(f"[RISK] 📋 PROGRESSIVE BRACKET: {position.symbol} entry=${entry_price:.2f} "
                   f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty}) broker={broker_name} exit_mode={_bracket_exit_mode}")
 
+            if not sl_price and (not pt1_price or pt1_qty <= 0):
+                _reasons = []
+                if not sl_price and _allows_sl:
+                    _reasons.append("no SL level")
+                elif not _allows_sl:
+                    _reasons.append(f"SL excluded by mode '{_bbm}'")
+                if escalation_only:
+                    _reasons.append("escalation-only (no PT trim)")
+                elif not pt1_price:
+                    _reasons.append(f"PT excluded by mode '{_bbm}'")
+                print(f"[RISK] ⏭ No bracket orders to place for {position.symbol}: {', '.join(_reasons)} — risk engine manages exits")
+                cache.broker_orders_placed = True
+                return
+
             if broker_name == 'SCHWAB' and self.schwab_broker:
                 try:
                     if not self.schwab_broker.is_authenticated():
