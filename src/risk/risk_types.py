@@ -112,6 +112,16 @@ class ChannelRiskSettings:
 
     escalation_only_mode: bool = False
     
+    broker_bracket_mode: str = 'both'  # 'both', 'sl_only', 'pt_only', 'none'
+    
+    @property
+    def allows_broker_sl(self) -> bool:
+        return self.broker_bracket_mode in ('both', 'sl_only')
+    
+    @property
+    def allows_broker_pt(self) -> bool:
+        return self.broker_bracket_mode in ('both', 'pt_only')
+    
     # EMA Risk Management Settings (EMA-5 Candlestick Risk Engine)
     ema_risk_enabled: bool = False
     ema_period: int = 5
@@ -163,7 +173,7 @@ class ChannelRiskSettings:
             self.ema_risk_enabled, self.ema_period, self.ema_timeframe_minutes,
             self.ema_buffer_pct, self.ema_exit_enabled, self.ema_escalation_enabled,
             self.ema_no_trend_candles, self.ema_extended_hours,
-            self.escalation_only_mode
+            self.escalation_only_mode, self.broker_bracket_mode
         )
         hash_input = str(key_fields).encode()
         return hashlib.md5(hash_input).hexdigest()[:12]

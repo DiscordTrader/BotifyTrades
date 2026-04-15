@@ -505,6 +505,13 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added entry_order_mode column (limit/market) for per-channel entry order type")
     
+    try:
+        cursor.execute('SELECT broker_bracket_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN broker_bracket_mode TEXT DEFAULT 'both'")
+        conn.commit()
+        print("[DATABASE] ✓ Added broker_bracket_mode column (both/sl_only/pt_only/none) for per-channel broker bracket control")
+    
     # Migrate: Add stop loss limit offset column for setting limit price below SL trigger
     # E.g., if SL triggers at -10% and offset is 3%, the limit sell is at -13%
     try:
@@ -2884,7 +2891,7 @@ def update_channel(channel_id: int, **kwargs):
                    'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled', 'entry_chase_enabled',
-                   'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode']:
+                   'ticker_filter_mode', 'ticker_filter_list', 'sizing_mode', 'broker_bracket_mode']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))

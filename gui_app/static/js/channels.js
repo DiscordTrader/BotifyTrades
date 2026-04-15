@@ -409,6 +409,34 @@ async function loadChannels() {
                                         <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
                                     </div>
                                 </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 188, 212, 0.05); border: 1px solid rgba(0, 188, 212, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">📋</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00BCD4;">Broker Bracket Orders</label>
+                                        </div>
+                                        <button type="button" onclick="showRiskHelp('broker-bracket-mode')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(0,188,212,0.08);color:#00BCD4;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(0,188,212,0.2)';this.style.borderColor='#00BCD4';this.style.color='#4DD0E1'" onmouseout="this.style.background='rgba(0,188,212,0.08)';this.style.borderColor='#52525B';this.style.color='#00BCD4'" title="Click for help">?</button>
+                                    </div>
+                                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="both" ${(channel.broker_bracket_mode || 'both') === 'both' ? 'checked' : ''} style="cursor: pointer;">
+                                            <span style="font-size: 12px; color: white;">Both</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="sl_only" ${channel.broker_bracket_mode === 'sl_only' ? 'checked' : ''} style="cursor: pointer;">
+                                            <span style="font-size: 12px; color: white;">SL Only</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="pt_only" ${channel.broker_bracket_mode === 'pt_only' ? 'checked' : ''} style="cursor: pointer;">
+                                            <span style="font-size: 12px; color: white;">PT Only</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="none" ${channel.broker_bracket_mode === 'none' ? 'checked' : ''} style="cursor: pointer;">
+                                            <span style="font-size: 12px; color: white;">Disabled</span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 6px 0 0 0;">Which bracket orders to place on the broker. Risk engine always monitors regardless.</p>
+                                </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
@@ -1475,6 +1503,7 @@ async function saveRiskManagement(channelId) {
         const trimOffsetPct = document.getElementById(`risk-trim-offset-pct-${channelId}`)?.value;
         const slOrderMode = document.querySelector(`input[name="sl-order-mode-${channelId}"]:checked`)?.value || 'limit';
         const slLimitOffset = document.getElementById(`risk-sl-limit-offset-${channelId}`).value;
+        const brokerBracketMode = document.querySelector(`input[name="broker-bracket-mode-${channelId}"]:checked`)?.value || 'both';
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         const escalationOnlyMode = document.getElementById(`risk-escalation-only-${channelId}`)?.checked ? 1 : 0;
         const exitStrategyMode = document.querySelector(`input[name="exit-strategy-mode-${channelId}"]:checked`)?.value || 'hybrid';
@@ -1556,6 +1585,7 @@ async function saveRiskManagement(channelId) {
                 exit_strategy_mode: exitStrategyMode,
                 order_chase_enabled: orderChaseEnabled,
                 entry_chase_enabled: entryChaseEnabled,
+                broker_bracket_mode: brokerBracketMode,
                 use_global_risk_settings: 0
         };
         const response = await fetch(`/api/channels/${channelId}`, {
@@ -2506,6 +2536,44 @@ const RISK_HELP_CONTENT = {
                 \u2022 The Username field is optional \u2014 it\u2019s just a label to help you identify who each ID belongs to<br>
                 \u2022 You can add multiple users if a channel has more than one signal provider<br>
                 \u2022 Bot accounts (webhooks) have their own User IDs and can be added here too
+                </div>`
+            }
+        ]
+    },
+    'broker-bracket-mode': {
+        title: 'Broker Bracket Orders',
+        sections: [
+            {
+                heading: 'What It Does',
+                body: 'Controls which bracket orders are placed directly on the broker when a position opens. The risk engine always monitors your positions — this setting only controls the <strong>broker-side</strong> stop-loss and profit-target orders.'
+            },
+            {
+                heading: 'Options',
+                body: `<div style="margin:8px 0;">
+                    <div style="margin-bottom:10px;padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
+                        <strong style="color:#22D3EE;">Both (Default)</strong><br>
+                        <span style="color:#A1A1AA;font-size:13px;">Places both a stop-loss and profit-target order on the broker. Best for most setups.</span>
+                    </div>
+                    <div style="margin-bottom:10px;padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
+                        <strong style="color:#F59E0B;">SL Only</strong><br>
+                        <span style="color:#A1A1AA;font-size:13px;">Only places the stop-loss order on the broker. Profit targets are handled by the risk engine. Useful when broker rejects simultaneous SL + PT orders (e.g., Webull options).</span>
+                    </div>
+                    <div style="margin-bottom:10px;padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
+                        <strong style="color:#F59E0B;">PT Only</strong><br>
+                        <span style="color:#A1A1AA;font-size:13px;">Only places the profit-target order. Stop-loss is managed by the risk engine only.</span>
+                    </div>
+                    <div style="padding:10px 14px;background:#1E1E24;border-radius:10px;border:1px solid #3A3A3C;">
+                        <strong style="color:#EF4444;">Disabled</strong><br>
+                        <span style="color:#A1A1AA;font-size:13px;">No bracket orders placed on the broker. The risk engine handles all exits. Use when your broker doesn\u2019t support bracket orders or you prefer software-only risk management.</span>
+                    </div>
+                </div>`
+            },
+            {
+                heading: 'When to Use',
+                body: `<div style="padding:10px 14px;background:#1E1E24;border:1px solid rgba(0,188,212,0.15);border-radius:8px;font-size:13px;color:#D4D4D8;">
+                \u2022 <strong style="color:#4ADE80;">Webull Options:</strong> Set to <strong>SL Only</strong> — Webull rejects simultaneous SL + PT orders on options<br>
+                \u2022 <strong style="color:#4ADE80;">Broker doesn\u2019t support stops:</strong> Set to <strong>PT Only</strong> or <strong>Disabled</strong><br>
+                \u2022 <strong style="color:#4ADE80;">Prefer software exits:</strong> Set to <strong>Disabled</strong> — risk engine still monitors and exits
                 </div>`
             }
         ]

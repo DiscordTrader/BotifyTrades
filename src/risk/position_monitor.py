@@ -498,7 +498,8 @@ class RiskDBAdapter:
                                    c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
                                    c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                    c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
-                                   c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
+                                   c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
+                                   c.broker_bracket_mode
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -524,7 +525,8 @@ class RiskDBAdapter:
                                    c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
                                    c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                    c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
-                                   c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
+                                   c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
+                                   c.broker_bracket_mode
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -554,7 +556,8 @@ class RiskDBAdapter:
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
-                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
+                               c.broker_bracket_mode
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -588,7 +591,8 @@ class RiskDBAdapter:
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
-                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
+                               c.broker_bracket_mode
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -614,7 +618,8 @@ class RiskDBAdapter:
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
-                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
+                               c.broker_bracket_mode
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -641,7 +646,8 @@ class RiskDBAdapter:
                                c.ema_exit_enabled, c.ema_escalation_enabled, c.ema_extended_hours,
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
-                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4
+                               c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
+                               c.broker_bracket_mode
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -693,7 +699,8 @@ class RiskDBAdapter:
                                    ema_exit_enabled, ema_escalation_enabled, ema_extended_hours,
                                    ema_use_underlying, ema_no_trend_candles, escalation_only_mode,
                                    profit_target_trim_pct_1, profit_target_trim_pct_2,
-                                   profit_target_trim_pct_3, profit_target_trim_pct_4
+                                   profit_target_trim_pct_3, profit_target_trim_pct_4,
+                                   broker_bracket_mode
                             FROM channels
                             WHERE discord_channel_id = ? OR CAST(id AS TEXT) = ? OR telegram_chat_id = ?
                             LIMIT 1
@@ -744,12 +751,13 @@ class RiskDBAdapter:
                             if len(row) > 42: row[42] = ch_row[37]  # ema_use_underlying
                             if len(row) > 43: row[43] = ch_row[38]  # ema_no_trend_candles
                             if len(row) > 44: row[44] = ch_row[39]  # escalation_only_mode
-                            while len(row) < 49:
+                            while len(row) < 50:
                                 row.append(None)
                             row[45] = ch_row[40]  # profit_target_trim_pct_1
                             row[46] = ch_row[41]  # profit_target_trim_pct_2
                             row[47] = ch_row[42]  # profit_target_trim_pct_3
                             row[48] = ch_row[43]  # profit_target_trim_pct_4
+                            row[49] = ch_row[44]  # broker_bracket_mode
                             print(f"[RISK] ✓ Channel settings recovered via direct lookup for '{channel_name_from_join}' (LEFT JOIN fallback)")
                     except Exception as e:
                         print(f"[RISK] ⚠️ Direct channel lookup fallback failed: {e}")
@@ -799,6 +807,7 @@ class RiskDBAdapter:
                                 trailing_stop_pct=row[5] or 0,
                                 trailing_activation_pct=row[6] or 15.0,
                                 exit_strategy_mode=channel_exit_mode,
+                                broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'both',
                             )
                     ch_sl = row[4] or 0
                     ch_pt1 = row[1] or 0
@@ -851,6 +860,7 @@ class RiskDBAdapter:
                             ema_use_underlying=bool(row[42]) if len(row) > 42 and row[42] is not None else True,
                             ema_no_trend_candles=row[43] if len(row) > 43 and row[43] is not None else 3,
                             escalation_only_mode=bool(row[44]) if len(row) > 44 and row[44] else False,
+                            broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'both',
                         )
                     return None
                 else:
@@ -989,7 +999,8 @@ class RiskDBAdapter:
                     ema_extended_hours=ema_extended_hours,
                     ema_use_underlying=ema_use_underlying,
                     ema_no_trend_candles=ema_no_trend_candles,
-                    escalation_only_mode=escalation_only_mode
+                    escalation_only_mode=escalation_only_mode,
+                    broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'both',
                 )
             
             return None
@@ -4618,6 +4629,12 @@ class RiskManager:
     async def _place_initial_broker_bracket(self, position, cache, channel_settings):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
 
+        _bbm = getattr(channel_settings, 'broker_bracket_mode', 'both')
+        if _bbm == 'none':
+            print(f"[RISK] ⏭ Broker bracket mode is 'none' — skipping all broker bracket orders for {position.symbol}")
+            cache.broker_orders_placed = True
+            return
+
         entry_price = cache.entry_price
         if entry_price <= 0:
             return
@@ -4646,8 +4663,14 @@ class RiskManager:
             asset_type = getattr(position, 'asset', 'stock')
             is_option = asset_type.lower() in ('option', 'options')
 
-            sl_price = round(entry_price * (1 - sl_pct / 100), 4) if sl_pct > 0 else None
-            pt1_price = round(entry_price * (1 + pt1_pct / 100), 4) if pt1_pct > 0 else None
+            _allows_sl = getattr(channel_settings, 'allows_broker_sl', True)
+            _allows_pt = getattr(channel_settings, 'allows_broker_pt', True)
+            sl_price = round(entry_price * (1 - sl_pct / 100), 4) if sl_pct > 0 and _allows_sl else None
+            pt1_price = round(entry_price * (1 + pt1_pct / 100), 4) if pt1_pct > 0 and _allows_pt else None
+            if not sl_price and not pt1_price:
+                print(f"[RISK] ⏭ Broker bracket mode '{_bbm}' — no orders to place for {position.symbol}")
+                cache.broker_orders_placed = True
+                return
 
             from src.risk.risk_engine import calculate_tier_quantities
             enabled_tiers = []
@@ -5202,6 +5225,10 @@ class RiskManager:
                     lambda _p=position, _c=cache, _sp=_current_sl: self._sync_stop_to_broker(_p, _c, _sp))
 
     async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int, _retry_count: int = 0):
+        if not getattr(channel_settings, 'allows_broker_pt', True):
+            print(f"[RISK] ⏭ Broker bracket mode '{getattr(channel_settings, 'broker_bracket_mode', 'both')}' — skipping PT{completed_tier + 1} broker order for {position.symbol}")
+            return
+
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         broker_instance = self._get_broker_instance_for_bracket(broker_name)
         if not broker_instance:
@@ -5466,7 +5493,7 @@ class RiskManager:
             return result.get('success', False)
         return bool(result)
 
-    async def _cancel_broker_bracket_orders(self, position, cache):
+    async def _cancel_broker_bracket_orders(self, position, cache, cancel_stop=True, cancel_pt=True):
         if not hasattr(self, '_broker_stop_locks'):
             self._broker_stop_locks = {}
         pos_key = getattr(position, 'position_key', '') or f"{position.broker}_{position.symbol}"
@@ -5474,15 +5501,15 @@ class RiskManager:
             import asyncio
             self._broker_stop_locks[pos_key] = asyncio.Lock()
         async with self._broker_stop_locks[pos_key]:
-            await self._cancel_broker_bracket_orders_inner(position, cache)
+            await self._cancel_broker_bracket_orders_inner(position, cache, cancel_stop=cancel_stop, cancel_pt=cancel_pt)
 
-    async def _cancel_broker_bracket_orders_inner(self, position, cache):
+    async def _cancel_broker_bracket_orders_inner(self, position, cache, cancel_stop=True, cancel_pt=True):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
         asset_type = getattr(position, 'asset', 'stock')
         orders_to_cancel = []
-        if cache.broker_stop_order_id:
+        if cancel_stop and cache.broker_stop_order_id:
             orders_to_cancel.append(('SL', cache.broker_stop_order_id))
-        if cache.broker_pt_order_id:
+        if cancel_pt and cache.broker_pt_order_id:
             orders_to_cancel.append((f'PT{cache.broker_pt_tier}', cache.broker_pt_order_id))
 
         if not orders_to_cancel:
@@ -5501,8 +5528,10 @@ class RiskManager:
             except Exception as e:
                 print(f"[RISK] ⚠️ Failed to cancel broker {label} order #{order_id}: {e}")
 
-        cache.broker_stop_order_id = None
-        cache.broker_pt_order_id = None
+        if cancel_stop:
+            cache.broker_stop_order_id = None
+        if cancel_pt:
+            cache.broker_pt_order_id = None
 
     async def _sync_stop_to_broker(self, position, cache, new_stop_price: float):
         if not hasattr(self, '_broker_stop_locks'):
@@ -5521,6 +5550,10 @@ class RiskManager:
     async def _sync_stop_to_broker_inner(self, position, cache, new_stop_price: float):
         if cache.closing:
             print(f"[RISK] ⏭️ Skipping broker stop sync — position is closing")
+            return
+
+        _ch_settings = getattr(cache, 'channel_settings', None)
+        if _ch_settings and not getattr(_ch_settings, 'allows_broker_sl', True):
             return
 
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
@@ -5905,10 +5938,16 @@ class RiskManager:
         pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price and entry_price > 0 else 0.0
         cache: Optional[PositionCacheEntry] = self.cache.get(pos_key) if hasattr(self.cache, 'get') else None
 
-        if not decision.is_partial and cache and cache.broker_orders_placed:
+        if cache and cache.broker_orders_placed:
             if cache.broker_stop_order_id or cache.broker_pt_order_id:
                 try:
-                    await self._cancel_broker_bracket_orders(position, cache)
+                    if decision.is_partial:
+                        if cache.broker_pt_order_id:
+                            await self._cancel_broker_bracket_orders(position, cache, cancel_stop=False, cancel_pt=True)
+                        if cache.broker_stop_order_id:
+                            await self._cancel_broker_bracket_orders(position, cache, cancel_stop=True, cancel_pt=False)
+                    else:
+                        await self._cancel_broker_bracket_orders(position, cache)
                 except Exception as e:
                     print(f"[RISK] ⚠️ Bracket order cleanup failed (non-blocking): {e}")
         
