@@ -172,7 +172,7 @@ class ChannelRiskSettings:
             self.sl_order_mode, self.sl_limit_offset,
             self.ema_risk_enabled, self.ema_period, self.ema_timeframe_minutes,
             self.ema_buffer_pct, self.ema_exit_enabled, self.ema_escalation_enabled,
-            self.ema_no_trend_candles, self.ema_extended_hours,
+            self.ema_no_trend_candles, self.ema_extended_hours, self.ema_use_underlying,
             self.escalation_only_mode, self.broker_bracket_mode
         )
         hash_input = str(key_fields).encode()

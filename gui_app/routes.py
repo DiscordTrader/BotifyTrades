@@ -2085,6 +2085,7 @@ def register_routes(app):
             'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
             'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct',
             'profit_target_2_pct', 'profit_target_3_pct', 'profit_target_4_pct',
+            'broker_bracket_mode',
         )
         if any(data.get(f) is not None for f in channel_specific_risk_fields):
             data.setdefault('use_global_risk_settings', 0)
@@ -2145,7 +2146,8 @@ def register_routes(app):
                        'ema_exit_enabled', 'ema_escalation_enabled', 'ema_extended_hours', 'ema_use_underlying', 'ema_no_trend_candles',
                        'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
                        'trim_order_mode', 'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct',
-                       'order_chase_enabled', 'entry_chase_enabled', 'use_global_risk_settings'}
+                       'order_chase_enabled', 'entry_chase_enabled', 'use_global_risk_settings',
+                       'broker_bracket_mode'}
         cache_warning = None
         if any(field in data for field in risk_fields):
             try:

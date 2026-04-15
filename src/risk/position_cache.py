@@ -1159,9 +1159,14 @@ class PositionCache:
 
     def cleanup_stale(self, active_keys: set) -> int:
         """Remove cache entries not in active positions. Returns count removed."""
+        stale_entries_with_brackets = []
         with self._cache_lock:
             stale = [k for k in self._cache.keys() if k not in active_keys]
             for key in stale:
+                entry = self._cache[key]
+                if hasattr(entry, 'broker_stop_order_id') or hasattr(entry, 'broker_pt_order_id'):
+                    if getattr(entry, 'broker_stop_order_id', None) or getattr(entry, 'broker_pt_order_id', None):
+                        stale_entries_with_brackets.append((key, entry))
                 del self._cache[key]
                 old_trade_id = self._trade_id_map.pop(key, None)
                 if old_trade_id:
@@ -1175,6 +1180,18 @@ class PositionCache:
                     risk_manager_instance.release_exit_marker(key)
             except Exception:
                 pass
+        if stale_entries_with_brackets:
+            try:
+                from src.risk.position_monitor import risk_manager_instance
+                if risk_manager_instance:
+                    for key, entry in stale_entries_with_brackets:
+                        _sl_id = getattr(entry, 'broker_stop_order_id', None)
+                        _pt_id = getattr(entry, 'broker_pt_order_id', None)
+                        print(f"[RISK] 🧹 Stale cache cleanup: cancelling orphaned bracket orders for {key} (SL={_sl_id}, PT={_pt_id})")
+                        entry.broker_stop_order_id = None
+                        entry.broker_pt_order_id = None
+            except Exception as e:
+                print(f"[RISK] ⚠️ Stale bracket cleanup error: {e}")
         return len(stale)
     
     def __len__(self) -> int:

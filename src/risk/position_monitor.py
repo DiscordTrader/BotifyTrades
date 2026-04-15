@@ -359,6 +359,21 @@ class RiskDBAdapter:
             if not has_any_risk_config:
                 return None
             
+            _source_bracket_mode = 'both'
+            _source_ch_id = str(row[2]) if row[2] else None
+            if _source_ch_id:
+                try:
+                    cursor.execute('''
+                        SELECT broker_bracket_mode FROM channels
+                        WHERE discord_channel_id = ? OR CAST(id AS TEXT) = ? OR telegram_chat_id = ?
+                        LIMIT 1
+                    ''', (_source_ch_id, _source_ch_id, _source_ch_id))
+                    _bbm_row = cursor.fetchone()
+                    if _bbm_row and _bbm_row[0]:
+                        _source_bracket_mode = _bbm_row[0]
+                except Exception:
+                    pass
+            
             return ChannelRiskSettings(
                 channel_id=str(row[2]),
                 channel_name=row[1] or 'Signal Routing',
@@ -403,6 +418,7 @@ class RiskDBAdapter:
                 ema_extended_hours=ema_extended_hours,
                 ema_use_underlying=ema_use_underlying,
                 ema_no_trend_candles=ema_no_trend_candles,
+                broker_bracket_mode=_source_bracket_mode,
             )
         except Exception as e:
             print(f"[RISK] Warning: Could not fetch signal routing risk settings: {e}")
