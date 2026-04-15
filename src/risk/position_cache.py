@@ -1184,10 +1184,23 @@ class PositionCache:
             try:
                 from src.risk.position_monitor import risk_manager_instance
                 if risk_manager_instance:
+                    import asyncio
                     for key, entry in stale_entries_with_brackets:
                         _sl_id = getattr(entry, 'broker_stop_order_id', None)
                         _pt_id = getattr(entry, 'broker_pt_order_id', None)
                         print(f"[RISK] 🧹 Stale cache cleanup: cancelling orphaned bracket orders for {key} (SL={_sl_id}, PT={_pt_id})")
+                        try:
+                            parts = key.split('_', 1)
+                            broker_name = parts[0].upper() if parts else ''
+                            broker_inst = risk_manager_instance._get_broker_instance_for_bracket(broker_name)
+                            asset_type = getattr(entry, 'asset_type', 'stock')
+                            if broker_inst:
+                                if _sl_id:
+                                    asyncio.ensure_future(risk_manager_instance._cancel_single_order(broker_name, _sl_id, broker_inst, asset_type=asset_type))
+                                if _pt_id:
+                                    asyncio.ensure_future(risk_manager_instance._cancel_single_order(broker_name, _pt_id, broker_inst, asset_type=asset_type))
+                        except Exception as ce:
+                            print(f"[RISK] ⚠️ Could not schedule orphaned bracket cancel for {key}: {ce}")
                         entry.broker_stop_order_id = None
                         entry.broker_pt_order_id = None
             except Exception as e:
