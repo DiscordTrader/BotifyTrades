@@ -2378,7 +2378,7 @@ function qtRenderChain(data) {
     html += '</tbody></table></div>';
 
     html += '<div class="qt-bottom-bar">';
-    html += '<span class="qt-label" style="color:#A78BFA;">Webhook Signal:</span>';
+    html += '<span class="qt-label" style="color:#A78BFA;">Signal Post:</span>';
     html += '<select class="qt-select" id="qt-signal-strike" style="min-width:100px; font-size:11px;">';
     strikes.forEach((s, idx) => {
         const d = s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2);
@@ -3001,6 +3001,36 @@ async function qtStreamingStockPoll() {
 
 let qtAllSendChannels = [];
 
+function qtBuildChannelRow(ch) {
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex; align-items:center; padding:5px 12px; cursor:pointer; gap:8px; font-size:11px; color:#E6EDF3;';
+    label.onmouseover = function() { this.style.background = '#21262D'; };
+    label.onmouseout = function() { this.style.background = 'transparent'; };
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'qt-ch-cb';
+    cb.value = ch.id;
+    cb.style.cssText = 'accent-color:#238636; cursor:pointer;';
+    cb.onchange = qtUpdateChannelLabel;
+    label.appendChild(cb);
+    const nameSpan = document.createElement('span');
+    nameSpan.style.cssText = 'flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+    nameSpan.textContent = ch.name;
+    label.appendChild(nameSpan);
+    if (ch.type === 'webhook') {
+        const badge = document.createElement('span');
+        badge.style.cssText = 'font-size:9px; padding:1px 5px; border-radius:3px; background:#1f3a1f; color:#3fb950;';
+        badge.textContent = 'WH';
+        label.appendChild(badge);
+    } else if (ch.monitored) {
+        const badge = document.createElement('span');
+        badge.style.cssText = 'font-size:9px; padding:1px 5px; border-radius:3px; background:#1a2744; color:#58a6ff;';
+        badge.textContent = 'MON';
+        label.appendChild(badge);
+    }
+    return label;
+}
+
 async function qtLoadSendChannels() {
     const listEl = document.getElementById('qt-channel-list');
     if (!listEl) return;
@@ -3014,35 +3044,27 @@ async function qtLoadSendChannels() {
         }
         qtAllSendChannels = data.channels;
         listEl.innerHTML = '';
-        let lastType = '';
-        data.channels.forEach(ch => {
-            if (ch.type !== lastType) {
-                const headerDiv = document.createElement('div');
-                headerDiv.style.cssText = 'padding:4px 12px; font-size:10px; color:#8B949E; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; background:#161B22; border-top:1px solid #21262D;';
-                headerDiv.textContent = (ch.type === 'webhook' ? '\uD83D\uDD17 Webhook Channels' : '\uD83D\uDCAC Discord Channels');
-                listEl.appendChild(headerDiv);
-                lastType = ch.type;
-            }
-            const label = document.createElement('label');
-            label.style.cssText = 'display:flex; align-items:center; padding:5px 12px; cursor:pointer; gap:8px; font-size:11px; color:#E6EDF3;';
-            label.onmouseover = function() { this.style.background = '#21262D'; };
-            label.onmouseout = function() { this.style.background = 'transparent'; };
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.className = 'qt-ch-cb';
-            cb.value = ch.id;
-            cb.style.cssText = 'accent-color:#238636; cursor:pointer;';
-            cb.onchange = qtUpdateChannelLabel;
-            label.appendChild(cb);
-            const nameSpan = document.createElement('span');
-            nameSpan.style.cssText = 'flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-            nameSpan.textContent = ch.name + (ch.server ? ' ' + ch.server : '');
-            label.appendChild(nameSpan);
-            const badge = document.createElement('span');
-            badge.style.cssText = 'font-size:9px; padding:1px 5px; border-radius:3px; background:' + (ch.type === 'webhook' ? '#1f3a1f' : '#1a2744') + '; color:' + (ch.type === 'webhook' ? '#3fb950' : '#58a6ff') + ';';
-            badge.textContent = ch.type === 'webhook' ? 'WH' : 'DC';
-            label.appendChild(badge);
-            listEl.appendChild(label);
+        const webhooks = data.channels.filter(c => c.type === 'webhook');
+        const discords = data.channels.filter(c => c.type === 'discord');
+        const servers = {};
+        discords.forEach(ch => {
+            const srv = ch.server || 'Unknown Server';
+            if (!servers[srv]) servers[srv] = [];
+            servers[srv].push(ch);
+        });
+        if (webhooks.length > 0) {
+            const whHeader = document.createElement('div');
+            whHeader.style.cssText = 'padding:4px 12px; font-size:10px; color:#8B949E; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; background:#161B22; border-top:1px solid #21262D;';
+            whHeader.textContent = '\uD83D\uDD17 Webhook Channels';
+            listEl.appendChild(whHeader);
+            webhooks.forEach(ch => listEl.appendChild(qtBuildChannelRow(ch)));
+        }
+        Object.keys(servers).sort().forEach(srv => {
+            const srvHeader = document.createElement('div');
+            srvHeader.style.cssText = 'padding:4px 12px; font-size:10px; color:#8B949E; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; background:#161B22; border-top:1px solid #21262D;';
+            srvHeader.textContent = '\uD83D\uDCAC ' + srv;
+            listEl.appendChild(srvHeader);
+            servers[srv].forEach(ch => listEl.appendChild(qtBuildChannelRow(ch)));
         });
     } catch (e) {
         console.log('[QT] Send channels load error:', e.message);

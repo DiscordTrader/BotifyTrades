@@ -10048,24 +10048,32 @@ def register_routes(app):
                 try:
                     from .database import get_channels as db_get_channels
                     db_channels = db_get_channels()
-                    monitored_ids = set()
+                    monitored_map = {}
                     for dbc in db_channels:
                         dc_id = dbc.get('discord_channel_id')
                         if dc_id:
-                            monitored_ids.add(str(dc_id))
+                            monitored_map[str(dc_id)] = dbc
 
                     for guild in _bot_instance.guilds:
+                        me = guild.me
                         for ch in guild.text_channels:
-                            if str(ch.id) not in monitored_ids:
+                            try:
+                                perms = ch.permissions_for(me) if me else None
+                                can_send = getattr(perms, 'send_messages', False) if perms else False
+                            except Exception:
+                                can_send = False
+                            if not can_send:
                                 continue
-                            db_ch = next((dbc for dbc in db_channels if str(dbc.get('discord_channel_id')) == str(ch.id)), None)
+                            db_ch = monitored_map.get(str(ch.id))
+                            is_monitored = db_ch is not None
                             ch_name = db_ch.get('name', f"#{ch.name}") if db_ch else f"#{ch.name}"
                             channels.append({
                                 'id': f"dc_{ch.id}",
                                 'name': ch_name,
                                 'server': guild.name,
                                 'type': 'discord',
-                                'writable': True
+                                'writable': True,
+                                'monitored': is_monitored
                             })
                 except Exception as e:
                     print(f"[SEND_CHANNELS] Discord channels error: {e}")
@@ -10138,10 +10146,11 @@ def register_routes(app):
                             results.append({'id': tid, 'ok': False, 'error': 'Event loop unavailable'})
                             continue
                         import asyncio
-                        future = asyncio.run_coroutine_threadsafe(dc_channel.send(tagged_signal), loop)
+                        send_msg = f"[QT] {signal}" if not skip_tag else signal
+                        future = asyncio.run_coroutine_threadsafe(dc_channel.send(send_msg), loop)
                         future.result(timeout=5)
                         results.append({'id': tid, 'ok': True, 'name': f"#{dc_channel.name}"})
-                        print(f"[DISCORD] Signal sent to #{dc_channel.name}: {tagged_signal}")
+                        print(f"[DISCORD] Signal sent to #{dc_channel.name}: {send_msg}")
                     else:
                         results.append({'id': tid, 'ok': False, 'error': 'Unknown channel type'})
                 except Exception as e:
