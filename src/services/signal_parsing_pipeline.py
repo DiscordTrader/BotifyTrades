@@ -25,6 +25,7 @@ class SignalSource(Enum):
     EMBED_SPY_SNIPER = "spy_sniper"
     EMBED_SIR_GOLDMAN = "sir_goldman"
     EMBED_HENGY = "hengy_alerts"
+    EMBED_KC_TRADES = "kc_trades"
     REGISTRY_JAKE = "jake"
     REGISTRY_SLEM = "slem"
     REGISTRY_STACK = "stack"

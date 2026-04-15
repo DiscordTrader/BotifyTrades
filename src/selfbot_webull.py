@@ -11638,6 +11638,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as hengy_err:
                 print(f"[HENGY] ⚠️ Parse error: {hengy_err}")
         
+        kc_trades_signals = []
+        is_kc_trades = False
+        if hasattr(message, 'embeds') and message.embeds:
+            try:
+                from src.signals.kc_trades_parser import is_kc_trades_embed, parse_kc_trades_embed, KC_TRADES_AUTHOR_ID
+                embeds_as_dicts = [{'title': e.title, 'description': e.description} for e in message.embeds if e.title or e.description]
+                if is_kc_trades_embed(message.author.id, embeds_as_dicts):
+                    kc_parsed = parse_kc_trades_embed(embeds_as_dicts)
+                    if kc_parsed:
+                        kc_trades_signals = kc_parsed
+                        is_kc_trades = True
+                        print(f"[KC-TRADES] ✓ Detected {len(kc_parsed)} signal(s) from embed (author={message.author.id})")
+            except Exception as kc_err:
+                print(f"[KC-TRADES] ⚠️ Parse error: {kc_err}")
+
         equity_genie_entries = []
         equity_genie_exits = []
         if hasattr(message, 'embeds') and message.embeds:
@@ -11858,7 +11873,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception:
                     pass
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman or is_phoenix_registry or is_protrader_conditional:
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman or is_kc_trades or is_phoenix_registry or is_protrader_conditional:
                     print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman}, phoenix_registry={is_phoenix_registry}, protrader_cond={is_protrader_conditional})")
                     
                     # === SIGNAL ROUTING ENGINE: Forward BTO via routing engine (creates position for risk monitoring) ===
@@ -11918,6 +11933,59 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'is_market_exit': sir_goldman_parsed.is_market_exit
                             }
                             print(f"[SIR-GOLDMAN] ✓ Converted to routing format: {routing_parsed}")
+                        elif is_kc_trades and kc_trades_signals:
+                            for kc_idx, kc_sig in enumerate(kc_trades_signals):
+                                kc_routing = {
+                                    'action': kc_sig.get('action', 'BTO'),
+                                    'symbol': kc_sig.get('symbol', ''),
+                                    'strike': kc_sig.get('strike', 0),
+                                    'opt_type': kc_sig.get('opt_type', 'C'),
+                                    'expiry': kc_sig.get('expiry', ''),
+                                    'price': kc_sig.get('price', 0),
+                                    'qty': 1,
+                                    'is_trim': kc_sig.get('is_trim', False),
+                                    'is_full_exit': kc_sig.get('is_full_exit', False),
+                                }
+                                if kc_routing.get('action') == 'STC' and not kc_routing.get('strike'):
+                                    try:
+                                        from gui_app.database import get_connection
+                                        conn = get_connection()
+                                        cursor = conn.cursor()
+                                        cursor.execute('''
+                                            SELECT symbol, strike, call_put, expiry 
+                                            FROM trades 
+                                            WHERE channel_id = ? AND symbol = ?
+                                            AND direction = 'BTO' 
+                                            AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                            ORDER BY created_at DESC LIMIT 1
+                                        ''', (str(message.channel.id), kc_routing['symbol']))
+                                        open_pos = cursor.fetchone()
+                                        if open_pos:
+                                            kc_routing['strike'] = open_pos['strike'] or 0
+                                            kc_routing['opt_type'] = open_pos['call_put'] or kc_routing['opt_type']
+                                            kc_routing['expiry'] = open_pos['expiry'] or kc_routing['expiry']
+                                    except Exception:
+                                        pass
+                                if kc_idx == 0:
+                                    routing_parsed = kc_routing
+                                else:
+                                    try:
+                                        routing_engine = get_signal_routing_engine()
+                                        r_sym = kc_routing.get('symbol', '')
+                                        r_strike = float(kc_routing.get('strike', 0) or 0)
+                                        r_opt = kc_routing.get('opt_type', 'C')
+                                        r_exp = kc_routing.get('expiry', '')
+                                        r_price = float(kc_routing.get('price', 0) or 0)
+                                        if r_sym and kc_routing.get('action') == 'BTO':
+                                            await routing_engine.post_bto_signal(
+                                                config=signal_routing_config,
+                                                symbol=r_sym, strike=r_strike, option_type=r_opt,
+                                                expiry=r_exp, entry_price=r_price, quantity=1,
+                                                message_id=str(message.id)
+                                            )
+                                    except Exception as e:
+                                        print(f"[KC-TRADES] ⚠️ Multi-signal routing error (idx={kc_idx}): {e}")
+                            print(f"[KC-TRADES] ✓ Converted {len(kc_trades_signals)} signal(s) to routing format")
                         elif is_bishop:
                             routing_parsed = parse_bishop_signal(combined_content)
                         elif is_evapanda:
@@ -12211,6 +12279,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 forward_msg = combined_content.strip()
                                 print(f"[CHANNEL MAP] ⚠️ Toon parse failed, forwarding raw")
+                        elif is_kc_trades and kc_trades_signals:
+                            print(f"[DEBUG] Taking KC_TRADES path", flush=True)
+                            fwd_parts = []
+                            for kc_fwd in kc_trades_signals:
+                                kc_action = kc_fwd.get('action', 'BTO')
+                                kc_sym = kc_fwd.get('symbol', '')
+                                kc_str = kc_fwd.get('strike', '')
+                                kc_ot = kc_fwd.get('opt_type', 'C')
+                                kc_exp = kc_fwd.get('expiry', '')
+                                kc_pr = kc_fwd.get('price')
+                                price_part = f"@ {kc_pr}" if kc_pr else "@ m"
+                                if kc_str:
+                                    fwd_parts.append(f"{kc_action} {kc_sym} {kc_str}{kc_ot} {kc_exp} {price_part}")
+                                else:
+                                    fwd_parts.append(f"{kc_action} {kc_sym} {price_part}")
+                            forward_msg = "\n".join(fwd_parts)
+                            print(f"[CHANNEL MAP] ✓ Formatted KC Trades ({len(fwd_parts)} signals): {forward_msg}")
                         elif is_sir_goldman and sir_goldman_parsed:
                             print(f"[DEBUG] Taking SIR_GOLDMAN path", flush=True)
                             from src.signals.sir_goldman_parser import format_forwarding_message
@@ -12437,6 +12522,55 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'asset_type': 'option'
                                 }
                                 print(f"[PNL TRACK] Toon parsed: {parsed_signal} (partial={is_partial})")
+                        elif is_kc_trades and kc_trades_signals:
+                            first_kc = kc_trades_signals[0]
+                            is_exit = first_kc.get('is_exit', False)
+                            is_partial = first_kc.get('is_trim', False)
+
+                            kc_symbol = first_kc.get('symbol', '')
+                            kc_strike = first_kc.get('strike')
+                            kc_opt_type = first_kc.get('opt_type', 'C')
+                            kc_expiry = first_kc.get('expiry', '')
+
+                            if is_exit and (not kc_strike):
+                                try:
+                                    from gui_app.database import get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        SELECT symbol, strike, call_put, expiry 
+                                        FROM trades 
+                                        WHERE channel_id = ? 
+                                        AND symbol = ?
+                                        AND direction = 'BTO' 
+                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                        ORDER BY created_at DESC 
+                                        LIMIT 1
+                                    ''', (str(channel_id), kc_symbol))
+                                    open_pos = cursor.fetchone()
+                                    if open_pos:
+                                        kc_strike = kc_strike or open_pos['strike']
+                                        kc_opt_type = open_pos['call_put'] or kc_opt_type
+                                        kc_expiry = open_pos['expiry'] or kc_expiry
+                                        print(f"[KC-TRADES] ✓ Resolved EXIT to open position: {kc_symbol} ${kc_strike}{kc_opt_type} {kc_expiry}")
+                                    else:
+                                        print(f"[KC-TRADES] ⚠️ No open position found for EXIT signal: {kc_symbol}")
+                                except Exception as e:
+                                    print(f"[KC-TRADES] ⚠️ Error looking up open position: {e}")
+
+                            parsed_signal = {
+                                'symbol': kc_symbol,
+                                'strike': kc_strike,
+                                'opt_type': kc_opt_type,
+                                'expiry': kc_expiry,
+                                'price': first_kc.get('price'),
+                                'qty': 1,
+                                'is_exit': is_exit,
+                                'is_partial': is_partial,
+                                'is_market_order': False,
+                                'asset_type': 'option'
+                            }
+                            print(f"[PNL TRACK] KC Trades parsed: {parsed_signal} (partial={is_partial})")
                         elif is_sir_goldman and sir_goldman_parsed:
                             is_exit = sir_goldman_parsed.action == 'STC'
                             is_partial = sir_goldman_parsed.signal_type.value == 'TRIM'
