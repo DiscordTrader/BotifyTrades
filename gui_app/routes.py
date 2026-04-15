@@ -10002,8 +10002,7 @@ def register_routes(app):
                 if not settings.get('enabled', True):
                     return jsonify({'success': False, 'error': 'Discord notifications are disabled. Enable them in Settings → Notifications.'}), 400
             
-            skip_tag = data.get('no_qt_tag', False)
-            qt_username = bot_name if skip_tag else f"{bot_name} [QT]"
+            qt_username = bot_name
 
             payload = {
                 "content": signal,
@@ -12001,7 +12000,7 @@ def register_routes(app):
                                             expiry_fmt = f"{parts[1]}/{parts[2]}"
                                     signal_msg = f"{action} {quantity} {symbol} {strike_d}{option_type[0].lower()} {expiry_fmt} @ {price:.2f}"
                                     _qt_bot_name = wh_channel.get('bot_name', 'BotifyTrades')
-                                    wh_payload = {"content": signal_msg, "username": f"{_qt_bot_name} [QT]"}
+                                    wh_payload = {"content": signal_msg, "username": _qt_bot_name}
                                     wh_resp = http_requests.post(wh_channel['webhook_url'], json=wh_payload, timeout=5)
                                     if wh_resp.status_code in [200, 204]:
                                         webhook_sent = True
