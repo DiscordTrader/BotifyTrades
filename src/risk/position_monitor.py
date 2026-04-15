@@ -3017,12 +3017,14 @@ class RiskManager:
                 if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
                     return list(self._last_schwab_positions)
                 _schwab_streaming = False
+                _hub_succeeded = False
                 try:
                     from src.services.schwab_data_hub import get_schwab_data_hub
                     schwab_hub = get_schwab_data_hub()
                     _schwab_streaming = schwab_hub.is_streaming() or getattr(schwab_hub, '_streaming_active', False)
                     hub_pos = schwab_hub.get_positions(detailed=True)
                     if hub_pos is not None:
+                        _hub_succeeded = True
                         schwab_positions = []
                         for pos in hub_pos:
                             _schwab_asset = pos.get('asset', 'stock')
@@ -3042,15 +3044,34 @@ class RiskManager:
                                 direction=pos.get('direction'),
                                 raw_symbol=pos.get('raw_symbol')
                             ))
-                        self._last_schwab_positions = schwab_positions
-                        self._schwab_cache_ts = _time.time()
-                        return schwab_positions
+                        if schwab_positions or not (hasattr(self, '_last_schwab_positions') and self._last_schwab_positions):
+                            self._last_schwab_positions = schwab_positions
+                            self._schwab_cache_ts = _time.time()
+                        elif not schwab_positions and hasattr(self, '_last_schwab_positions') and self._last_schwab_positions:
+                            _open_schwab_trades = 0
+                            try:
+                                from gui_app.database import get_connection as _gc_schwab
+                                _sc = _gc_schwab()
+                                _sc_cur = _sc.cursor()
+                                _sc_cur.execute("SELECT COUNT(*) FROM trades WHERE UPPER(broker) = 'SCHWAB' AND status IN ('OPEN','PENDING','PARTIAL') AND direction = 'BTO'")
+                                _open_schwab_trades = _sc_cur.fetchone()[0]
+                            except Exception:
+                                pass
+                            if _open_schwab_trades > 0:
+                                _stale_age = schwab_cache_age
+                                if _stale_age < 120:
+                                    return list(self._last_schwab_positions)
+                            self._last_schwab_positions = []
+                            self._schwab_cache_ts = _time.time()
+                        return list(self._last_schwab_positions) if self._last_schwab_positions else schwab_positions
                     elif _schwab_streaming and hub_pos is not None:
                         self._last_schwab_positions = []
                         self._schwab_cache_ts = _time.time()
                         return []
-                except (ImportError, Exception):
+                except ImportError:
                     pass
+                except Exception as _hub_err:
+                    print(f"[RISK] ⚠️ Schwab hub fetch error: {_hub_err}")
                 if _schwab_streaming:
                     if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and schwab_cache_age < _REST_CACHE_TTL:
                         return list(self._last_schwab_positions)
@@ -3062,8 +3083,45 @@ class RiskManager:
                 if rate_manager:
                     can_proceed, wait_time = rate_manager.can_make_request('schwab')
                     if not can_proceed:
-                        if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions and schwab_cache_age < 120:
+                        if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and len(self._last_schwab_positions) > 0 and schwab_cache_age < 120:
                             return list(self._last_schwab_positions)
+                        _open_schwab_trades = 0
+                        try:
+                            from gui_app.database import get_connection as _gc_schwab2
+                            _sc2 = _gc_schwab2()
+                            _sc2_cur = _sc2.cursor()
+                            _sc2_cur.execute("SELECT COUNT(*) FROM trades WHERE UPPER(broker) = 'SCHWAB' AND status IN ('OPEN','PENDING','PARTIAL') AND direction = 'BTO'")
+                            _open_schwab_trades = _sc2_cur.fetchone()[0]
+                        except Exception:
+                            pass
+                        if _open_schwab_trades > 0 and not _hub_succeeded:
+                            try:
+                                _broker_cached = getattr(self.schwab_broker, '_last_valid_positions', None)
+                                if _broker_cached and len(_broker_cached) > 0:
+                                    schwab_positions = []
+                                    for pos in _broker_cached:
+                                        _schwab_asset = pos.get('asset', 'stock')
+                                        _schwab_sym = pos.get('symbol', '')
+                                        if _schwab_asset == 'stock' and (_schwab_sym or '').upper() in self._INDEX_TO_CANONICAL:
+                                            _schwab_asset = 'option'
+                                        schwab_positions.append(PositionSnapshot(
+                                            symbol=_schwab_sym,
+                                            quantity=abs(float(pos.get('quantity', 0))),
+                                            avg_cost=float(pos.get('avg_cost', 0)),
+                                            current_price=float(pos.get('current_price', 0)),
+                                            asset=_schwab_asset,
+                                            broker='SCHWAB',
+                                            strike=pos.get('strike'),
+                                            expiry=pos.get('expiry'),
+                                            direction=pos.get('direction'),
+                                            raw_symbol=pos.get('raw_symbol')
+                                        ))
+                                    if schwab_positions:
+                                        self._last_schwab_positions = schwab_positions
+                                        self._schwab_cache_ts = _time.time()
+                                        return schwab_positions
+                            except Exception:
+                                pass
                         return []
                     is_auth = self.schwab_broker.is_authenticated()
                     if not is_auth:
@@ -3079,7 +3137,7 @@ class RiskManager:
                 return schwab_positions
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Schwab positions: {e}")
-                if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions:
+                if hasattr(self, '_last_schwab_positions') and self._last_schwab_positions is not None and len(self._last_schwab_positions) > 0:
                     if (_time.time() - getattr(self, '_schwab_cache_ts', 0)) < 30:
                         return list(self._last_schwab_positions)
                 return []
