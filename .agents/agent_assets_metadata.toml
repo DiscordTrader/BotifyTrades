@@ -126,3 +126,9 @@ id = "SUr9MYzLRyDaTPHDtdT-K"
 uri = "file://docs/bracket_order_deep_analysis.md"
 type = "text"
 title = "Bracket Order Deep Analysis — All 7 Brokers"
+
+[[outputs]]
+id = "fTSvAUaeOUl6Ipz0S_Fwl"
+uri = "file://docs/balance_pipeline_gap_analysis.md"
+type = "text"
+title = "Balance Pipeline & Risk Engine Gap Analysis"
