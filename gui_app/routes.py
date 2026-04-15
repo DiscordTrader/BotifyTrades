@@ -10113,7 +10113,7 @@ def register_routes(app):
                             results.append({'id': tid, 'ok': False, 'error': 'Channel disabled'})
                             continue
                         bot_name = channel.get('bot_name', 'BotifyTrades')
-                        qt_username = bot_name if skip_tag else f"{bot_name} [QT]"
+                        qt_username = bot_name
                         payload = {"content": signal, "username": qt_username}
                         resp = http_requests.post(channel['webhook_url'], json=payload, timeout=5)
                         if resp.status_code in [200, 204]:
@@ -10146,7 +10146,7 @@ def register_routes(app):
                             results.append({'id': tid, 'ok': False, 'error': 'Event loop unavailable'})
                             continue
                         import asyncio
-                        send_msg = f"[QT] {signal}" if not skip_tag else signal
+                        send_msg = signal
                         future = asyncio.run_coroutine_threadsafe(dc_channel.send(send_msg), loop)
                         future.result(timeout=5)
                         results.append({'id': tid, 'ok': True, 'name': f"#{dc_channel.name}"})
