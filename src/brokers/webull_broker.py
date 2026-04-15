@@ -499,6 +499,10 @@ class WebullBroker(BrokerInterface):
             if self._data_hub:
                 cached = self._data_hub.get_account_info(max_age_seconds=90)
                 if cached is not None:
+                    _bp = cached.get('buying_power', 0) or 0
+                    _sc = cached.get('settled_cash', 0) or 0
+                    if _sc == 0 and _bp > 0:
+                        cached['settled_cash'] = _bp
                     return cached
 
             account_response = await self._retry_on_busy(self.wb.get_account, 'get_account')
@@ -567,14 +571,14 @@ class WebullBroker(BrokerInterface):
                     except (ValueError, TypeError):
                         pass
             
-            # CRITICAL: Extract settled cash separately (can be negative!)
-            # Negative settled cash = good faith violation risk
             settled_cash = 0.0
             unsettled_cash = 0.0
+            _settled_found = False
             for field in ['settledCash', 'settledFunds']:
                 if field in account_data:
                     try:
                         settled_cash = float(account_data[field])
+                        _settled_found = True
                         print(f"[{self.name}] [DEBUG] Settled cash from '{field}': ${settled_cash:.2f}")
                         break
                     except (ValueError, TypeError):
@@ -588,6 +592,10 @@ class WebullBroker(BrokerInterface):
                         break
                     except (ValueError, TypeError):
                         pass
+
+            if not _settled_found and buying_power > 0:
+                settled_cash = buying_power
+                print(f"[{self.name}] [DEBUG] Webull API did not return settledCash/settledFunds — using buying_power ${buying_power:.2f} as settled cash")
             
             # Try multiple field name variations for portfolio value (market value)
             portfolio_value = 0.0

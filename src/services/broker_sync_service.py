@@ -1004,12 +1004,16 @@ class BrokerSyncService:
                     raw = await broker_instance.get_account_info()
                     if raw:
                         print(f"[SYNC] {broker_name} account info keys: {list(raw.keys())[:10]}")
+                        _raw_bp = float(raw.get('buying_power', 0) or 0)
+                        _raw_sc = float(raw.get('settled_cash', 0) or 0)
+                        if _raw_sc == 0 and _raw_bp > 0:
+                            _raw_sc = _raw_bp
                         account_info = {
                             'portfolio_value': raw.get('portfolio_value', 0),
-                            'buying_power': raw.get('buying_power', 0),
+                            'buying_power': _raw_bp,
                             'cash': raw.get('cash', 0),
                             'options_buying_power': raw.get('options_buying_power', 0),
-                            'settled_cash': raw.get('settled_cash', 0),
+                            'settled_cash': _raw_sc,
                             'unsettled_cash': raw.get('unsettled_cash', 0),
                             'account_type': raw.get('account_type', 'Unknown'),
                             'account_id': raw.get('account_id')
