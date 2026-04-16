@@ -2383,9 +2383,12 @@ class BrokerSyncService:
                         if ch_id and _channel_has_broker_enabled(ch_id, broker_name):
                             return ch_id
                 
-                first_ch = matching_trades[0].get('channel_id')
-                if first_ch and _channel_has_broker_enabled(first_ch, broker_name):
-                    return first_ch
+                for mt in matching_trades:
+                    _mt_src = (mt.get('source') or '').strip().lower()
+                    if _mt_src in ('discord', 'signal', 'sync_routing'):
+                        mt_ch = mt.get('channel_id')
+                        if mt_ch and _channel_has_broker_enabled(mt_ch, broker_name):
+                            return mt_ch
             
             return None
         
