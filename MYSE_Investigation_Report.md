@@ -130,4 +130,73 @@ With the real entry $3.77 and channel 'test' settings (1% SL, 1% TP):
 
 ---
 
-*No code changes were made during this investigation. This document only explains what the logs show.*
+## Remediation Status
+
+### ✅ Phase 1 — SHIPPED (16 April 2026)
+Targets root causes #2, #3, and #5 above. All three fixes are in production and the bot has been restarted clean (76 risk cycles, 0 tracebacks, 61 risk states cached). Architect-reviewed and approved as safe.
+
+| # | File | Change |
+|---|---|---|
+| 1 | `src/selfbot_webull.py:2029` | Webull `cancel_order()` failure branch now correctly returns `{'success': False, 'error': ...}`. Previously returned `success: True` even when Webull rejected the cancel — masking failures and causing the misleading "✅ Cancelled" log on MYSE. |
+| 2 | `src/risk/position_cache.py:47-67` | New `_entry_change_is_material()` classmethod. Tolerance is now **`max(5% relative, $0.05 absolute on sub-$10 stocks)`**. The MYSE $3.87 → $3.77 correction (2.6%, $0.10 absolute) would now be accepted instead of silently dropped. Replaces both old gates at lines 456 and 517. |
+| 3 | `src/risk/position_cache.py:539-583` | New `_guard_against_corrupt_risk_levels()`. Whenever entry-price is corrected, automatically clears any cached SL ≥ entry or PT ≤ entry (mathematically impossible for a long position). **Skipped** if `trailing_activated`, `max_pnl_seen ≥ 0.5%`, or `manual_sl_price` is set — manual overrides and locked-in profit stops are protected. Wrapped in try/except. Called from both the rollover/reset branch (line 509) and the quiet-update branch (line 535). |
+
+**Expected log signature when the fix engages on the next similar incident:**
+```
+[RISK] ✓ Updated Webull_MYSE_stock entry price: $3.87 → $3.77 (broker sync)
+[RISK] ⚠️ CORRUPT SL DETECTED for Webull_MYSE_stock: stored SL=$3.8000 >= corrected entry=$3.7700
+        (was based on stale entry $3.8700). Clearing — will re-derive next cycle.
+```
+The next risk-evaluation cycle re-derives SL from channel settings → no premature exit.
+
+**Verification performed:**
+- 8-case unit-test matrix on tolerance boundaries ($9.99/$10.00, $0.049/$0.05, mid-cap, small-cap) — all pass.
+- Bot restart healthy: all 4 brokers connected, conditional router up, Webull MQTT stream live.
+- Architect code review: confirmed all `cached_entry` attributes exist in `risk_types.py:282-323`; `getattr` defaults make legacy entries non-fatal; long-only assumption valid for BTO-centric bot; manual overrides untouched; no concurrency regression.
+
+---
+
+### ⏳ Phase 2 — PENDING (needs paper-trading validation before shipping)
+Targets root causes #1 and #4 above. Cannot be safely unit-tested — requires real broker latency to tune.
+
+#### Issue 2A: Cancel→reconcile→sell race window
+**Where:** `src/risk/position_monitor.py:5688-5716` and `6123-6132`
+**Problem:** When SL fires while a PT bracket exists at the broker, the flow is:
+1. Risk engine decides "exit"
+2. Calls `cancel_order(PT_id)` to free the shares
+3. Waits for broker confirmation
+4. Places sell-to-close
+
+Between steps 2 and 3, the position-reconciler can run on a separate task, see "PT order disappeared," and either re-trigger another exit attempt or place a duplicate STC. If the cancel silently fails (now detectable thanks to Phase 1 fix #1), step 4 fails because shares are still locked in the bracket.
+
+**Planned fix:**
+- Wrap cancel→sell as an atomic operation under a per-position lock
+- Verify cancel `success=True` before submitting STC (now possible)
+- Retry-with-backoff or escalate to "force market close" if cancel keeps failing
+- Suppress reconciler exit logic for the position while this lock is held
+
+#### Issue 2B: Bracket-placement grace window
+**Where:** `src/risk/position_monitor.py:6123-6132`, `src/risk/risk_types.py` (PositionCacheEntry)
+**Problem:** New BTO fills → risk engine immediately tries to place SL+PT bracket. If a stream tick or reconciler runs in those first ~500ms before bracket order IDs are stored, it sees "position with no SL on file" → can trigger emergency-close logic or place a duplicate bracket.
+
+**Planned fix:**
+- Add `bracket_placed_at: Optional[datetime]` field to `PositionCacheEntry` in `risk_types.py`
+- Set timestamp at the moment bracket placement is initiated
+- Risk evaluator skips "missing SL → exit" path for the first **3-5 seconds** (TBD per broker) after `bracket_placed_at`
+- Tunable per-broker: Webull MQTT is fast, Schwab REST is slow
+
+#### Why paper-trading validation is required
+- Race conditions only reproduce under real broker latency
+- Wrong grace window value = either still-racy (too short) or genuinely missed exits during the window (too long)
+- Need to capture broker-specific fill→ack latency distributions before picking the threshold
+
+#### To resume Phase 2 work
+1. Open paper accounts on Webull + Schwab + Tastytrade
+2. Capture 20-50 fills with timing of `fill event → bracket-order-ID-stored`
+3. Implement bracket grace window with empirically-derived threshold per broker
+4. Implement cancel-sell atomic lock with cancel-failure escalation
+5. Re-test under paper for 1 week before promoting to live
+
+---
+
+*Phase 1 was implemented and deployed on 16 April 2026. Phase 2 is documented and ready to resume when paper-trading time is available.*
