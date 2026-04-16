@@ -44,6 +44,13 @@ python3 -m PyInstaller --onefile \
     --hidden-import "alpaca" \
     --hidden-import "openai" \
     --hidden-import "broker_sync_service" \
+    --hidden-import "tzdata" \
+    --hidden-import "tastytrade" \
+    --hidden-import "tastytrade.account" \
+    --hidden-import "tastytrade.order" \
+    --hidden-import "tastytrade.utils" \
+    --collect-data "tzdata" \
+    --collect-submodules "tastytrade" \
     --add-data "broker_sync_service.py:." \
     --add-data "gui_app/templates:gui_app/templates" \
     --add-data "gui_app/static:gui_app/static" \

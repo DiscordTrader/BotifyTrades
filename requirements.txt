@@ -76,6 +76,7 @@ pytest-asyncio
 python-dateutil
 python-dotenv
 pytz
+tzdata
 requests
 ta
 websocket-client
