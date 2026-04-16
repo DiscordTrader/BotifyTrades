@@ -434,16 +434,100 @@ class UnifiedPriceHub:
                 pass
         return updated
 
-    def shadow_compare(self, symbol: str, consumer_price: float, consumer_source: str) -> Optional[Dict[str, Any]]:
+    _BROKER_NAME_TO_HUB = {
+        'SCHWAB': 'schwab', 'SCHWAB_LIVE': 'schwab', 'SCHWAB_PAPER': 'schwab',
+        'WEBULL': 'webull', 'WEBULL_LIVE': 'webull', 'WEBULL_PAPER': 'webull',
+        'IBKR': 'ibkr', 'IBKR_LIVE': 'ibkr', 'IBKR_PAPER': 'ibkr',
+        'TASTYTRADE': 'tastytrade', 'TASTYTRADE_LIVE': 'tastytrade', 'TASTYTRADE_PAPER': 'tastytrade',
+        'TRADING212': 'trading212', 'TRADING212_LIVE': 'trading212', 'TRADING212_PAPER': 'trading212',
+    }
+
+    def _resolve_hub_key(self, broker_name: Optional[str]) -> Optional[str]:
+        if not broker_name:
+            return None
+        return self._BROKER_NAME_TO_HUB.get(str(broker_name).upper().strip())
+
+    def shadow_compare(
+        self,
+        symbol: str,
+        consumer_price: float,
+        consumer_source: str,
+        asset_type: str = 'stock',
+        broker_hint: Optional[str] = None,
+        raw_symbol: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         if not self._shadow_mode:
             return None
-        quote = self.get_quote(symbol)
-        if not quote or quote.last <= 0 or consumer_price <= 0:
-            return None
-        if quote.freshness in ('unverified', 'degraded', 'stale'):
+        if consumer_price <= 0:
             return None
 
-        diff = abs(quote.last - consumer_price)
+        is_option = (str(asset_type or 'stock').lower() == 'option')
+
+        if is_option:
+            hub_key = self._resolve_hub_key(broker_hint)
+            if not hub_key or not raw_symbol:
+                with self._stats_lock:
+                    self._stats.setdefault('shadow_skipped_option_unresolvable', 0)
+                    self._stats['shadow_skipped_option_unresolvable'] += 1
+                return None
+            hubs = self._get_hubs()
+            hub = hubs.get(hub_key)
+            if not hub or not hasattr(hub, 'get_quote_detailed'):
+                with self._stats_lock:
+                    self._stats.setdefault('shadow_skipped_option_no_hub', 0)
+                    self._stats['shadow_skipped_option_no_hub'] += 1
+                return None
+            try:
+                try:
+                    data = hub.get_quote_detailed(raw_symbol, max_age=FRESHNESS_STALE)
+                except TypeError:
+                    data = hub.get_quote_detailed(raw_symbol)
+            except Exception:
+                return None
+            if not data:
+                with self._stats_lock:
+                    self._stats.setdefault('shadow_skipped_option_uncached', 0)
+                    self._stats['shadow_skipped_option_uncached'] += 1
+                return None
+            quote_ts = float(data.get('timestamp') or 0)
+            age = (time.time() - quote_ts) if quote_ts > 0 else 999.0
+            if age <= FRESHNESS_FRESH:
+                ref_freshness = 'fresh'
+            elif age <= FRESHNESS_PROBE:
+                ref_freshness = 'aging'
+            elif age <= FRESHNESS_STALE:
+                ref_freshness = 'stale'
+            else:
+                with self._stats_lock:
+                    self._stats.setdefault('shadow_skipped_option_stale', 0)
+                    self._stats['shadow_skipped_option_stale'] += 1
+                return None
+            if ref_freshness in ('stale',):
+                with self._stats_lock:
+                    self._stats.setdefault('shadow_skipped_option_stale', 0)
+                    self._stats['shadow_skipped_option_stale'] += 1
+                return None
+            ref_last = float(data.get('last') or 0)
+            ref_bid = float(data.get('bid') or 0)
+            ref_ask = float(data.get('ask') or 0)
+            if ref_last <= 0 and ref_bid > 0 and ref_ask > 0:
+                ref_last = round((ref_bid + ref_ask) / 2, 4)
+            if ref_last <= 0:
+                return None
+            ref_source = f"{hub_key}_option"
+            display_symbol = raw_symbol
+        else:
+            quote = self.get_quote(symbol)
+            if not quote or quote.last <= 0:
+                return None
+            if quote.freshness in ('unverified', 'degraded', 'stale'):
+                return None
+            ref_last = quote.last
+            ref_source = quote.source_hub
+            ref_freshness = quote.freshness
+            display_symbol = symbol
+
+        diff = abs(ref_last - consumer_price)
         pct = (diff / consumer_price) * 100 if consumer_price > 0 else 0
 
         with self._stats_lock:
@@ -455,10 +539,11 @@ class UnifiedPriceHub:
 
         if pct > 5.0:
             result = {
-                'symbol': symbol,
-                'uph_price': quote.last,
-                'uph_source': quote.source_hub,
-                'uph_freshness': quote.freshness,
+                'symbol': display_symbol,
+                'asset_type': 'option' if is_option else 'stock',
+                'uph_price': ref_last,
+                'uph_source': ref_source,
+                'uph_freshness': ref_freshness,
                 'consumer_price': consumer_price,
                 'consumer_source': consumer_source,
                 'diff_pct': round(pct, 2),
@@ -468,7 +553,7 @@ class UnifiedPriceHub:
                 self._shadow_discrepancies.append(result)
                 if len(self._shadow_discrepancies) > 500:
                     self._shadow_discrepancies = self._shadow_discrepancies[-250:]
-            print(f"[UPH] ⚠️ Shadow discrepancy: {symbol} | {consumer_source}=${consumer_price:.4f} vs UPH=${quote.last:.4f} ({quote.source_hub}/{quote.freshness}) | diff={pct:.2f}%", flush=True)
+            print(f"[UPH] ⚠️ Shadow discrepancy: {display_symbol} | {consumer_source}=${consumer_price:.4f} vs UPH=${ref_last:.4f} ({ref_source}/{ref_freshness}) | diff={pct:.2f}%", flush=True)
             return result
         return None
 

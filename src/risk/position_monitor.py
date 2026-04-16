@@ -8281,7 +8281,14 @@ class RiskManager:
                         broker_upper = (pos.broker or '').upper()
                         if broker_upper in ('TRADING212',):
                             continue
-                        uph.shadow_compare(pos.symbol, pos.current_price, f"{pos.broker}_risk")
+                        uph.shadow_compare(
+                            pos.symbol,
+                            pos.current_price,
+                            f"{pos.broker}_risk",
+                            asset_type=pos.asset,
+                            broker_hint=pos.broker,
+                            raw_symbol=pos.raw_symbol,
+                        )
         except Exception:
             pass
 
