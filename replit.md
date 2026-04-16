@@ -136,3 +136,8 @@ The web control panel, built with Flask, provides real-time dashboards for broke
 - **PySide6**
 - **paho-mqtt**
 - **Chart.js**
+
+## Reference Documents
+- `docs/RISK_SETTINGS_VALIDATION_REFERENCE.md` — Master checklist for all 42 risk management settings. Documents the complete end-to-end data flow (UI → API → DB → Risk Engine) with row index maps, cache invalidation sets, constructor locations, and step-by-step checklists for adding/modifying/removing settings. **Consult this document whenever adding or changing any risk management setting.**
+- `docs/BRACKET_ORDER_ARCHITECTURE.md` — Broker bracket order system documentation
+- `docs/balance_pipeline_gap_analysis.md` — Balance pipeline gap analysis

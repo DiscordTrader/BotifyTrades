@@ -132,3 +132,9 @@ id = "fTSvAUaeOUl6Ipz0S_Fwl"
 uri = "file://docs/balance_pipeline_gap_analysis.md"
 type = "text"
 title = "Balance Pipeline & Risk Engine Gap Analysis"
+
+[[outputs]]
+id = "ENC_ezpoXKY5L9TSrmt4t"
+uri = "file://docs/RISK_SETTINGS_VALIDATION_REFERENCE.md"
+type = "text"
+title = "Risk Settings Validation Reference"
