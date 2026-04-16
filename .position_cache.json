@@ -2067,7 +2067,7 @@
     "broker_orders_placed": false
   },
   "TRADING212_IINDl_stock": {
-    "entry_price": 6.89903826,
+    "entry_price": 6.80810845,
     "highest_price": 6.569,
     "trailing_activated": false,
     "closing": false,
@@ -2223,7 +2223,7 @@
     "broker_orders_placed": false
   },
   "TRADING212_CBUKd_stock": {
-    "entry_price": 4.38334061,
+    "entry_price": 4.30883659,
     "highest_price": 4.1762,
     "trailing_activated": false,
     "closing": false,
@@ -2341,7 +2341,7 @@
   },
   "Webull_VSA_stock": {
     "entry_price": 0.7995,
-    "highest_price": 0.82,
+    "highest_price": 0.8146,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2355,7 +2355,7 @@
     "tier4_hit": false,
     "original_qty": 100,
     "pending_orders": {},
-    "created_at": "2026-04-16T19:53:49.906024",
+    "created_at": "2026-04-16T22:05:02.722726",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,

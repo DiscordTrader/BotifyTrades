@@ -38,6 +38,30 @@ class PositionCache:
     
     FLIP_FLOP_HISTORY_SIZE = 3
     ENTRY_PRICE_CHANGE_TOLERANCE = 0.05
+    ENTRY_PRICE_ABS_FLOOR = 0.05
+    ENTRY_PRICE_LOW_PRICE_THRESHOLD = 10.0
+
+    @classmethod
+    def _entry_change_is_material(cls, old_price: float, new_price: float) -> bool:
+        """A price change is material if EITHER the percent change exceeds the
+        relative tolerance OR (for low-priced instruments where small absolute
+        moves are large in percent-of-spread terms) the absolute change exceeds
+        the cents floor. This prevents the 5% relative gate from silently
+        suppressing real broker corrections like $3.87 -> $3.77 on a sub-$10
+        stock (2.6% relative, $0.10 absolute)."""
+        if old_price is None or new_price is None or old_price <= 0:
+            return True
+        abs_diff = abs(new_price - old_price)
+        if abs_diff < 0.001:
+            return False
+        pct_diff = abs_diff / old_price
+        if pct_diff >= cls.ENTRY_PRICE_CHANGE_TOLERANCE:
+            return True
+        if (old_price < cls.ENTRY_PRICE_LOW_PRICE_THRESHOLD or
+                new_price < cls.ENTRY_PRICE_LOW_PRICE_THRESHOLD) and \
+                abs_diff >= cls.ENTRY_PRICE_ABS_FLOOR:
+            return True
+        return False
 
     def __init__(self, cache_file: Optional[Path] = None):
         self.cache_file = cache_file or Path.cwd() / '.position_cache.json'
@@ -426,7 +450,8 @@ class PositionCache:
                 old_price = cached_entry.entry_price
                 is_trade_rollover = False
                 pct_diff = abs(broker_entry_price - old_price) / old_price if old_price > 0 else 1.0
-                if pct_diff >= self.ENTRY_PRICE_CHANGE_TOLERANCE:
+                is_material = self._entry_change_is_material(old_price, broker_entry_price)
+                if is_material:
                     current_trade_id = self._trade_id_map.get(pos_key)
                     if current_trade_id:
                         try:
@@ -478,6 +503,7 @@ class PositionCache:
                         del self._locked_entry_prices[pos_key]
                     if pos_key in self._last_entry_prices:
                         del self._last_entry_prices[pos_key]
+                    self._guard_against_corrupt_risk_levels(pos_key, cached_entry, old_price, broker_entry_price)
                 else:
                     if pos_key in self._locked_entry_prices:
                         locked = self._locked_entry_prices[pos_key]
@@ -486,8 +512,7 @@ class PositionCache:
                         else:
                             cached_entry.entry_price = locked
                     else:
-                        pct_diff = abs(broker_entry_price - old_price) / old_price if old_price > 0 else 1.0
-                        if pct_diff < self.ENTRY_PRICE_CHANGE_TOLERANCE:
+                        if not is_material:
                             pass
                         else:
                             history = self._last_entry_prices.get(pos_key, [])
@@ -505,9 +530,56 @@ class PositionCache:
                             else:
                                 cached_entry.entry_price = broker_entry_price
                                 print(f"[RISK] ✓ Updated {pos_key} entry price: ${old_price:.2f} → ${broker_entry_price:.2f} (broker sync)")
+                                self._guard_against_corrupt_risk_levels(pos_key, cached_entry, old_price, broker_entry_price)
         
         return self._cache[pos_key]
     
+    def _guard_against_corrupt_risk_levels(self, pos_key: str, cached_entry,
+                                           old_entry_price: float,
+                                           new_entry_price: float) -> None:
+        """After an entry-price correction, detect and clear stop-loss /
+        profit-target values that are now mathematically impossible for a long
+        position (SL must be below entry, PT must be above entry).
+
+        This is a safety net: if a stale linked-conditional or DB-loaded SL was
+        based on a different (wrong) entry price, the corrected entry will
+        expose it as guaranteed-to-trigger nonsense. Clearing forces a clean
+        re-derivation on the next risk evaluation cycle.
+
+        Conservative scope:
+        - Only clears when SL/PT are clearly invalid (>= or <= new entry).
+        - Skipped when trailing has activated or meaningful profit was seen,
+          because in those states an SL above the original entry is legitimate
+          (locked-in profit / break-even stop).
+        - Manual overrides (manual_sl_price / manual_pt_targets) are NOT
+          touched — user-set values win.
+        """
+        try:
+            if getattr(cached_entry, 'trailing_activated', False):
+                return
+            if getattr(cached_entry, 'max_pnl_seen', 0.0) >= 0.5:
+                return
+            if getattr(cached_entry, 'manual_sl_price', None) is not None:
+                return
+
+            sl = getattr(cached_entry, 'stop_loss_price', None)
+            pt = getattr(cached_entry, 'profit_target_price', None)
+
+            if sl is not None and sl > 0 and sl >= new_entry_price:
+                print(f"[RISK] ⚠️ CORRUPT SL DETECTED for {pos_key}: stored SL=${sl:.4f} "
+                      f">= corrected entry=${new_entry_price:.4f} (was based on stale entry "
+                      f"${old_entry_price:.4f}). Clearing — will re-derive next cycle.")
+                cached_entry.stop_loss_price = None
+                cached_entry.source_order_id = None
+
+            if pt is not None and pt > 0 and pt <= new_entry_price:
+                print(f"[RISK] ⚠️ CORRUPT PT DETECTED for {pos_key}: stored PT=${pt:.4f} "
+                      f"<= corrected entry=${new_entry_price:.4f} (was based on stale entry "
+                      f"${old_entry_price:.4f}). Clearing — will re-derive next cycle.")
+                cached_entry.profit_target_price = None
+        except Exception as guard_err:
+            print(f"[RISK] ⚠️ Corruption guard error for {pos_key}: {guard_err}")
+
     def update_from_db(self, position_key: str, 
                        stop_loss_price: Optional[float],
                        profit_target_price: Optional[float]) -> None:

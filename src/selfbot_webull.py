@@ -2023,7 +2023,7 @@ class WebullBroker:
             else:
                 err_msg = result.get('msg', str(result)) if isinstance(result, dict) else str(result)
                 print(f"[{self.name}] ⚠️ Cancel order {order_id} response: {err_msg}")
-                return {'success': True, 'result': result}
+                return {'success': False, 'result': result, 'error': err_msg}
         except Exception as e:
             print(f"[{self.name}] ❌ Cancel order {order_id} failed: {e}")
             return {'success': False, 'error': str(e)}
