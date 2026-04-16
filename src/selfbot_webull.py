@@ -8948,13 +8948,27 @@ class SelfClient(discord.Client):
             hour_et = now_et.hour
             minute_et = now_et.minute
 
-            if hour_et >= 4:
-                _original_print("[SOD] Bot started after 4 AM ET — capturing pre-market snapshot now...")
-                await sod.capture_all_brokers(self, snapshot_type="pre_market")
+            _any_broker_name = None
+            for _ba in ['broker', 'schwab_broker', 'tastytrade_broker', 'paper_broker', 'robinhood_broker', 'ibkr_broker']:
+                _bi = getattr(self, _ba, None)
+                if _bi and hasattr(_bi, 'name'):
+                    _any_broker_name = _bi.name
+                    break
 
-            if hour_et > 9 or (hour_et == 9 and minute_et >= 30):
-                _original_print("[SOD] Bot started after 9:30 AM ET — capturing start-of-day snapshot now...")
+            _pm_exists = sod.is_captured_today(_any_broker_name, snapshot_type="pre_market") if _any_broker_name else False
+            _sod_exists = sod.is_captured_today(_any_broker_name, snapshot_type="start_of_day") if _any_broker_name else False
+
+            if hour_et >= 4 and not _pm_exists:
+                _original_print("[SOD] Bot started after 4 AM ET and no pre-market snapshot found — capturing now (this uses CURRENT balance, not 4 AM)...")
+                await sod.capture_all_brokers(self, snapshot_type="pre_market")
+            elif hour_et >= 4 and _pm_exists:
+                _original_print(f"[SOD] ✓ Pre-market snapshot already exists from disk — using persisted 4 AM values")
+
+            if (hour_et > 9 or (hour_et == 9 and minute_et >= 30)) and not _sod_exists:
+                _original_print("[SOD] Bot started after 9:30 AM ET and no SOD snapshot found — capturing now (this uses CURRENT balance, not 9:30 AM)...")
                 await sod.capture_all_brokers(self, snapshot_type="start_of_day")
+            elif (hour_et > 9 or (hour_et == 9 and minute_et >= 30)) and _sod_exists:
+                _original_print(f"[SOD] ✓ Start-of-day snapshot already exists from disk — using persisted 9:30 AM values")
         except Exception as e:
             _original_print(f"[SOD] Initial capture failed: {e}")
 

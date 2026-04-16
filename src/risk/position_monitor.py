@@ -3961,6 +3961,15 @@ class RiskManager:
                 return
             if hasattr(self, '_after_hours_logged'):
                 self._after_hours_logged.discard(pos_key)
+            if getattr(decision, '_broker_pt_needs_cancel', False):
+                _pt_oid = getattr(decision, '_broker_pt_order_id', None)
+                _t = getattr(decision, '_broker_pt_tier_hit', 1)
+                if _pt_oid:
+                    self._enqueue_broker_op(pos_key, 'CANCEL_PT_FOR_LOCAL', 5,
+                        lambda _p=position, _c=cache: self._cancel_broker_bracket_orders(_p, _c, cancel_stop=False, cancel_pt=True))
+                    print(f"[RISK] 📋 PT{_t} hit: cancelling broker PT order #{_pt_oid} — local partial sell will execute")
+                self._enqueue_broker_op(pos_key, f'PLACE_PT{_t+1}', 20,
+                    lambda _p=position, _c=cache, _cs=channel_settings, _th=_t: self._place_next_pt_bracket(_p, _c, _cs, _th))
             await self._execute_exit(position, cache, decision, channel_settings)
     
     def _evaluate_exit_conditions(
@@ -4109,16 +4118,10 @@ class RiskManager:
                     _tier_hit = getattr(decision, 'tier_hit', None) or getattr(decision, 'tier', None)
                     _broker_manages_pt = _tier_hit and cache.broker_orders_placed and cache.broker_pt_order_id
                     if _broker_manages_pt:
-                        pos_key = position.position_key
-                        _t = _tier_hit
-                        self._enqueue_broker_op(pos_key, f'PLACE_PT{_t+1}', 20,
-                            lambda _p=position, _c=cache, _cs=channel_settings, _th=_t: self._place_next_pt_bracket(_p, _c, _cs, _th))
-                        if decision.is_partial:
-                            print(f"[RISK] 📋 BROKER-MANAGED PT{_tier_hit}: Suppressing local partial sell — broker PT order handles execution")
-                        else:
-                            return decision
-                    else:
-                        return decision
+                        decision._broker_pt_needs_cancel = True
+                        decision._broker_pt_order_id = cache.broker_pt_order_id
+                        decision._broker_pt_tier_hit = _tier_hit
+                    return decision
         
         if channel_settings and channel_settings.ema_risk_enabled and channel_settings.stop_loss_pct > 0:
             try:
