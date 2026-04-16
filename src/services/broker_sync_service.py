@@ -3017,25 +3017,28 @@ class BrokerSyncService:
                 # Use metadata values if available, else fall back to params
                 candidate_channel = channel_id or (meta['channel_id'] if meta else None)
                 
-                # FALLBACK: If still no channel_id, look up from matching trades table
+                # FALLBACK: If still no channel_id, look up from matching OPEN trades table
+                # SAFETY: Only match OPEN/PENDING trades with trusted sources — never historical/closed trades
                 if not candidate_channel or candidate_channel == 'UNKNOWN':
                     try:
                         conn = get_connection()
                         cursor = conn.cursor()
                         cursor.execute("""
-                            SELECT channel_id FROM trades 
+                            SELECT channel_id, source FROM trades 
                             WHERE symbol = ? 
                             AND (UPPER(broker) = UPPER(?) OR broker IS NULL)
                             AND channel_id IS NOT NULL 
                             AND channel_id != 'UNKNOWN'
                             AND channel_id != ''
-                            ORDER BY executed_at DESC
+                            AND status IN ('OPEN', 'PENDING', 'PARTIAL')
+                            AND COALESCE(LOWER(TRIM(source)), '') IN ('discord', 'signal', 'sync_routing')
+                            ORDER BY id DESC
                             LIMIT 1
                         """, (symbol, broker))
                         row = cursor.fetchone()
                         if row and row['channel_id']:
                             candidate_channel = row['channel_id']
-                            print(f"[SYNC] ✓ Recovered channel_id={candidate_channel} for {symbol} from trades table")
+                            print(f"[SYNC] ✓ Recovered channel_id={candidate_channel} for {symbol} from OPEN trades (source='{row['source']}')")
                     except Exception as lookup_err:
                         print(f"[SYNC] ⚠️ Channel lookup fallback failed: {lookup_err}")
                 
