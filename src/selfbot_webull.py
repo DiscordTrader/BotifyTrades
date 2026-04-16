@@ -17573,7 +17573,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if order_id and signal.get('action', '').upper() in ('BTO', 'BUY'):
                     try:
                         from gui_app.database import save_pending_order_metadata
-                        from datetime import datetime
                         save_pending_order_metadata(
                             broker=broker_name,
                             broker_order_id=str(order_id),
