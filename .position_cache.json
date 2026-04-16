@@ -2380,7 +2380,7 @@
   },
   "Webull_VSA_stock": {
     "entry_price": 0.7995,
-    "highest_price": 0.832,
+    "highest_price": 0.82,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2394,7 +2394,7 @@
     "tier4_hit": false,
     "original_qty": 100,
     "pending_orders": {},
-    "created_at": "2026-04-16T16:54:27.953126",
+    "created_at": "2026-04-16T19:53:49.906024",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
