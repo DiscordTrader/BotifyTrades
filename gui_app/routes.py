@@ -7854,10 +7854,12 @@ def register_routes(app):
                                        for t in trades if t['status'] == 'OPEN')
                         broker_avg_cost = (total_cost / total_qty) if total_qty > 0 else 0
                     
-                    # Get channel info for risk settings (use Discord channel ID lookup)
+                    _TRUSTED_UI_SOURCES = ('discord', 'signal', 'sync_routing')
                     channel_id = first_trade.get('channel_id')
+                    first_source = (first_trade.get('source') or '').lower().strip()
+                    first_status = (first_trade.get('status') or '').upper()
                     channel_info = None
-                    if channel_id:
+                    if channel_id and first_source in _TRUSTED_UI_SOURCES and first_status in ('OPEN', 'PENDING', 'PARTIAL'):
                         try:
                             channel_info = db.get_channel_by_discord_id(channel_id)
                         except:
@@ -7875,11 +7877,12 @@ def register_routes(app):
                         'pnl': live_pos['unrealized_pl'],
                         'pnl_percent': ((live_pos['current_price'] - broker_avg_cost) / broker_avg_cost * 100) if broker_avg_cost > 0 else 0,
                         'source': 'live_brokerage',
-                        'status': 'OPEN',  # Live brokerage positions are always OPEN
+                        'status': 'OPEN',
                         'fill_status': 'Filled',
                         'option_id': live_pos.get('option_id') or first_trade.get('option_id'),
                         'source_display': first_trade.get('source_display') or db.get_trade_source_display(first_trade),
                         'channel_name': channel_info.get('name') if channel_info else 'Global',
+                        'channel_id': channel_id if channel_info else None,
                         'profit_target_1_pct': channel_info.get('profit_target_1_pct', 20) if channel_info else 20,
                         'profit_target_2_pct': channel_info.get('profit_target_2_pct', 50) if channel_info else 50,
                         'profit_target_3_pct': channel_info.get('profit_target_3_pct', 100) if channel_info else 100,
@@ -7896,10 +7899,11 @@ def register_routes(app):
                         elif trade['status'] == 'OPEN':
                             fill_status = 'Filled'
                         
-                        # Get channel info for risk settings (use Discord channel ID lookup)
                         channel_id = trade.get('channel_id')
+                        trade_source = (trade.get('source') or '').lower().strip()
+                        trade_status = (trade.get('status') or '').upper()
                         channel_info = None
-                        if channel_id:
+                        if channel_id and trade_source in _TRUSTED_UI_SOURCES and trade_status in ('OPEN', 'PENDING', 'PARTIAL'):
                             try:
                                 channel_info = db.get_channel_by_discord_id(channel_id)
                             except:
@@ -7912,6 +7916,7 @@ def register_routes(app):
                             'fill_status': fill_status,
                             'source_display': trade.get('source_display') or db.get_trade_source_display(trade),
                             'channel_name': channel_info.get('name') if channel_info else 'Global',
+                            'channel_id': channel_id if channel_info else None,
                             'profit_target_1_pct': channel_info.get('profit_target_1_pct', 20) if channel_info else 20,
                             'profit_target_2_pct': channel_info.get('profit_target_2_pct', 50) if channel_info else 50,
                             'profit_target_3_pct': channel_info.get('profit_target_3_pct', 100) if channel_info else 100,
@@ -7953,6 +7958,8 @@ def register_routes(app):
                                     OR t.channel_id = c.telegram_chat_id)
                                 WHERE t.symbol = ? AND t.asset_type = 'option' AND LOWER(t.broker) = LOWER(?)
                                 AND t.direction = 'BTO'
+                                AND t.status IN ('OPEN', 'PENDING', 'PARTIAL')
+                                AND COALESCE(LOWER(TRIM(t.source)), '') IN ('discord', 'signal', 'sync_routing')
                                 ORDER BY t.id DESC LIMIT 1
                             ''', (pos['symbol'], pos_broker))
                         else:
@@ -7965,6 +7972,8 @@ def register_routes(app):
                                     OR t.channel_id = c.telegram_chat_id)
                                 WHERE t.symbol = ? AND t.asset_type = 'stock' AND LOWER(t.broker) = LOWER(?)
                                 AND t.direction = 'BTO'
+                                AND t.status IN ('OPEN', 'PENDING', 'PARTIAL')
+                                AND COALESCE(LOWER(TRIM(t.source)), '') IN ('discord', 'signal', 'sync_routing')
                                 ORDER BY t.id DESC LIMIT 1
                             ''', (pos['symbol'], pos_broker))
                         recovered_channel = cur_ch.fetchone()

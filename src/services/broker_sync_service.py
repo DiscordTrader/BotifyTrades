@@ -2804,8 +2804,9 @@ class BrokerSyncService:
                                 cursor = conn.cursor()
                                 cursor.execute("""
                                     SELECT risk_trigger, channel_id FROM trades
-                                    WHERE symbol = ? AND broker = ? AND direction = 'STC'
+                                    WHERE symbol = ? AND UPPER(broker) = UPPER(?) AND direction = 'STC'
                                     AND risk_trigger IS NOT NULL AND risk_trigger != ''
+                                    AND COALESCE(LOWER(TRIM(source)), '') IN ('discord', 'signal', 'sync_routing')
                                     ORDER BY id DESC LIMIT 1
                                 """, (order.get('symbol', ''), broker_name))
                                 stc_row = cursor.fetchone()
