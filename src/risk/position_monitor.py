@@ -5975,10 +5975,8 @@ class RiskManager:
             if cache.broker_stop_order_id or cache.broker_pt_order_id:
                 try:
                     if decision.is_partial:
-                        if cache.broker_pt_order_id:
+                        if cache.broker_pt_order_id and not getattr(decision, '_broker_pt_needs_cancel', False):
                             await self._cancel_broker_bracket_orders(position, cache, cancel_stop=False, cancel_pt=True)
-                        if cache.broker_stop_order_id:
-                            await self._cancel_broker_bracket_orders(position, cache, cancel_stop=True, cancel_pt=False)
                     else:
                         await self._cancel_broker_bracket_orders(position, cache)
                 except Exception as e:
