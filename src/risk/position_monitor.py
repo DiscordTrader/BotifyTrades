@@ -3785,6 +3785,76 @@ class RiskManager:
                 if _recovered:
                     pass
                 else:
+                    # GHOST POSITION SUPPRESSION:
+                    # If the broker REST cache still echoes a position that the local DB has
+                    # legitimately CLOSED (risk-engine exit, manual exit, signal STC, etc.),
+                    # do NOT continue evaluating or logging — it misleads the user into thinking
+                    # the position is still active. Skip silently and let cleanup_stale() drop
+                    # the cache entry once the broker stream catches up.
+                    try:
+                        from gui_app.database import get_connection as _get_ghost_conn
+                        _ghc = _get_ghost_conn()
+                        _ghcur = _ghc.cursor()
+                        _ghost_call_put = self._normalize_call_put(position.direction) if position.asset == 'option' else None
+                        # First, check for ANY conflicting OPEN/PENDING/PARTIAL trade for the same
+                        # instrument identity. If one exists, the broker echo belongs to a legitimate
+                        # active trade — do NOT suppress (e.g., rapid re-entry into same contract).
+                        if position.asset == 'option':
+                            _ghcur.execute('''
+                                SELECT 1 FROM trades
+                                WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                                  AND status IN ('OPEN','PENDING','PARTIAL') AND asset_type = 'option'
+                                  AND strike = ? AND expiry = ? AND call_put = ?
+                                LIMIT 1
+                            ''', (position.symbol, position.broker, position.strike,
+                                  position.expiry, _ghost_call_put))
+                        else:
+                            _ghcur.execute('''
+                                SELECT 1 FROM trades
+                                WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                                  AND status IN ('OPEN','PENDING','PARTIAL') AND asset_type = 'stock'
+                                LIMIT 1
+                            ''', (position.symbol, position.broker))
+                        _conflict = _ghcur.fetchone()
+                        _ghost_row = None
+                        if not _conflict:
+                            if position.asset == 'option':
+                                _ghcur.execute('''
+                                    SELECT id, close_reason, closed_at FROM trades
+                                    WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                                      AND status = 'CLOSED' AND asset_type = 'option'
+                                      AND strike = ? AND expiry = ? AND call_put = ?
+                                      AND closed_at >= datetime('now', '-10 minutes')
+                                      AND (close_reason IS NULL OR LOWER(close_reason) != 'broker_closed_position')
+                                    ORDER BY closed_at DESC LIMIT 1
+                                ''', (position.symbol, position.broker, position.strike,
+                                      position.expiry, _ghost_call_put))
+                            else:
+                                _ghcur.execute('''
+                                    SELECT id, close_reason, closed_at FROM trades
+                                    WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                                      AND status = 'CLOSED' AND asset_type = 'stock'
+                                      AND closed_at >= datetime('now', '-10 minutes')
+                                      AND (close_reason IS NULL OR LOWER(close_reason) != 'broker_closed_position')
+                                    ORDER BY closed_at DESC LIMIT 1
+                                ''', (position.symbol, position.broker))
+                            _ghost_row = _ghcur.fetchone()
+                        if _ghost_row:
+                            if not hasattr(self, '_ghost_position_logged'):
+                                self._ghost_position_logged = set()
+                            broker_position_keys.discard(pos_key)
+                            if pos_key not in self._ghost_position_logged:
+                                self._ghost_position_logged.add(pos_key)
+                                _gh_id = _ghost_row[0] if not hasattr(_ghost_row, 'keys') else _ghost_row['id']
+                                _gh_reason = (_ghost_row[1] if not hasattr(_ghost_row, 'keys') else _ghost_row['close_reason']) or 'manual'
+                                _gh_at = (_ghost_row[2] if not hasattr(_ghost_row, 'keys') else _ghost_row['closed_at']) or 'unknown'
+                                print(f"[RISK] 👻 GHOST POSITION: {pos_key} closed in DB "
+                                      f"(trade #{_gh_id}, reason={_gh_reason}, at {_gh_at}) "
+                                      f"but broker still echoes — suppressing eval until broker cache clears")
+                            return
+                    except Exception as _ghost_err:
+                        print(f"[RISK] ⚠️ Ghost position check error: {_ghost_err}")
+
                     if not hasattr(self, '_pending_trade_match_keys'):
                         self._pending_trade_match_keys = set()
                     self._pending_trade_match_keys.add(pos_key)
@@ -8451,6 +8521,24 @@ class RiskManager:
         current = position.current_price
         entry = cache.entry_price
         qty = position.quantity
+
+        # COLD-START / STALE INDICATOR:
+        # If current_price equals entry exactly AND we have NEVER observed a
+        # price different from entry for this position, the broker REST is just
+        # echoing the fill price (marketValue = qty × avg_cost) because the live
+        # quote/stream hasn't arrived yet. Tag the line so the user knows it's
+        # not real movement. The tag clears permanently the moment ANY tick
+        # differs from entry — even if price later returns to entry.
+        if not hasattr(self, '_init_real_tick_seen'):
+            self._init_real_tick_seen = set()
+        _init_tag = ""
+        try:
+            if current and entry and abs(current - entry) >= 1e-6:
+                self._init_real_tick_seen.add(pos_key)
+            elif current and entry and pos_key not in self._init_real_tick_seen:
+                _init_tag = " | [INIT]"
+        except Exception:
+            pass
         
         channel_name = channel_settings.channel_name if channel_settings else 'Global'
         sl_price = cache.stop_loss_price
@@ -8523,7 +8611,7 @@ class RiskManager:
         
         if sl_price or target_price:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
-                  f"Entry: ${entry:.2f} | SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'} | Qty: {qty}{trailing_status}{enhanced_status}")
+                  f"Entry: ${entry:.2f} | SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'} | Qty: {qty}{trailing_status}{enhanced_status}{_init_tag}")
         elif channel_settings:
             sl_display = f"{channel_settings.stop_loss_pct}%"
             if cache and cache.manual_sl_price is not None:
@@ -8533,7 +8621,7 @@ class RiskManager:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Targets: {channel_settings.profit_target_1_pct}/"
                   f"{channel_settings.profit_target_2_pct}/{channel_settings.profit_target_3_pct}% | "
-                  f"SL: {sl_display} | {trailing_display} | Qty: {qty}{trailing_status}{enhanced_status}")
+                  f"SL: {sl_display} | {trailing_display} | Qty: {qty}{trailing_status}{enhanced_status}{_init_tag}")
         else:
             print(f"[RISK] [Manual Trade] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
-                  f"Entry: ${entry:.2f} | Qty: {qty}{trailing_status}")
+                  f"Entry: ${entry:.2f} | Qty: {qty}{trailing_status}{_init_tag}")
