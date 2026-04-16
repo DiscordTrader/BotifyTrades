@@ -523,6 +523,7 @@ class RiskDBAdapter:
                             WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
                             AND LOWER(t.broker) = LOWER(?)
                             AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                            AND COALESCE(LOWER(TRIM(t.source)), '') NOT IN ('sync', 'risk_auto_import')
                             ORDER BY t.id DESC LIMIT 1
                         ''', (*symbols_to_check, strike, exp_try, call_put, broker_name))
                     else:
@@ -549,6 +550,7 @@ class RiskDBAdapter:
                                 OR t.channel_id = c.telegram_chat_id)
                             WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
                             AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                            AND COALESCE(LOWER(TRIM(t.source)), '') NOT IN ('sync', 'risk_auto_import')
                             ORDER BY t.id DESC LIMIT 1
                         ''', (*symbols_to_check, strike, exp_try, call_put))
                     row = cursor.fetchone()
@@ -580,6 +582,7 @@ class RiskDBAdapter:
                             OR t.channel_id = c.telegram_chat_id)
                         WHERE t.id = ?
                         AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                        AND COALESCE(LOWER(TRIM(t.source)), '') NOT IN ('sync', 'risk_auto_import')
                         ORDER BY t.id DESC LIMIT 1
                     ''', (trade_id,))
                     row = cursor.fetchone()
@@ -616,6 +619,7 @@ class RiskDBAdapter:
                         WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'stock'
                         AND LOWER(t.broker) = LOWER(?)
                         AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                        AND COALESCE(LOWER(TRIM(t.source)), '') NOT IN ('sync', 'risk_auto_import')
                         ORDER BY t.id DESC LIMIT 1
                     ''', (*symbols_to_check, broker_name))
                 else:
@@ -642,6 +646,7 @@ class RiskDBAdapter:
                             OR t.channel_id = c.telegram_chat_id)
                         WHERE t.symbol IN ({sym_placeholders}) AND t.asset_type = 'stock'
                         AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                        AND COALESCE(LOWER(TRIM(t.source)), '') NOT IN ('sync', 'risk_auto_import')
                         ORDER BY t.id DESC LIMIT 1
                     ''', (*symbols_to_check,))
                 row = cursor.fetchone()
@@ -670,6 +675,7 @@ class RiskDBAdapter:
                             OR t.channel_id = c.telegram_chat_id)
                         WHERE t.id = ?
                         AND t.status IN ('OPEN', 'PENDING', 'PARTIAL') AND t.direction = 'BTO'
+                        AND COALESCE(LOWER(TRIM(t.source)), '') NOT IN ('sync', 'risk_auto_import')
                         ORDER BY t.id DESC LIMIT 1
                     ''', (trade_id,))
                     row = cursor.fetchone()
@@ -1288,6 +1294,9 @@ class RiskDBAdapter:
                     if ((ot.get('symbol') or '').upper() == position.symbol.upper() and
                         (ot.get('broker') or '').upper() == position.broker.upper() and
                         ot.get('channel_id')):
+                        _ot_source = (ot.get('source') or '').strip().lower()
+                        if _ot_source in ('sync', 'risk_auto_import'):
+                            continue
                         if position.asset == 'option':
                             _ot_strike = str(ot.get('strike') or '').rstrip('0').rstrip('.')
                             _pos_strike = str(position.strike or '').rstrip('0').rstrip('.')
@@ -1298,12 +1307,12 @@ class RiskDBAdapter:
                                 _ot_cp == _pos_cp):
                                 inherited_channel_id = ot['channel_id']
                                 print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
-                                      f"existing trade #{ot.get('id')} for {position.symbol}")
+                                      f"existing trade #{ot.get('id')} (source='{_ot_source}') for {position.symbol}")
                                 break
                         else:
                             inherited_channel_id = ot['channel_id']
                             print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
-                                  f"existing trade #{ot.get('id')} for {position.symbol}")
+                                  f"existing trade #{ot.get('id')} (source='{_ot_source}') for {position.symbol}")
                             break
                 if not inherited_channel_id:
                     recent_closed = get_trades(status='CLOSED', limit=50)
@@ -1311,6 +1320,9 @@ class RiskDBAdapter:
                         if ((rc.get('symbol') or '').upper() == position.symbol.upper() and
                             (rc.get('broker') or '').upper() == position.broker.upper() and
                             rc.get('channel_id')):
+                            _rc_source = (rc.get('source') or '').strip().lower()
+                            if _rc_source not in ('discord', 'signal', 'sync_discord', 'sync_routing'):
+                                continue
                             if position.asset == 'option':
                                 _rc_strike = str(rc.get('strike') or '').rstrip('0').rstrip('.')
                                 _rc_cp = (rc.get('call_put') or '').upper()[:1]
@@ -1329,12 +1341,16 @@ class RiskDBAdapter:
                                     if 0 <= elapsed < 3600:
                                         inherited_channel_id = rc['channel_id']
                                         print(f"[RISK] ✓ Inherited channel_id={inherited_channel_id} from "
-                                              f"recently-closed trade #{rc.get('id')} for {position.symbol}")
+                                              f"recently-closed trade #{rc.get('id')} (source='{_rc_source}') for {position.symbol}")
                                         break
                                 except Exception:
                                     pass
             except Exception:
                 pass
+
+            if not inherited_channel_id:
+                print(f"[RISK] 🛡️ AUTO-IMPORT {position.symbol} on {position.broker}: "
+                      f"no trusted signal trade found — importing as MANUAL trade (no channel risk)")
 
             trade_data = {
                 'symbol': position.symbol,
@@ -3870,17 +3886,58 @@ class RiskManager:
                     _conn = self.db_adapter._db.get_connection() if self.db_adapter._db else None
                     if _conn:
                         _cur = _conn.cursor()
-                        _cur.execute('SELECT source FROM trades WHERE id = ?', (trade_id,))
+                        _cur.execute('SELECT source, channel_id FROM trades WHERE id = ?', (trade_id,))
                         _src_row = _cur.fetchone()
                         _trade_source = (_src_row[0] or '').strip().lower() if _src_row else ''
-                        if _trade_source in ('sync', 'risk_auto_import'):
+                        _trade_channel_id = _src_row[1] if _src_row else None
+                        _TRUSTED_SOURCES = ('discord', 'signal', 'sync_routing')
+                        _BLOCKED_SOURCES = ('sync', 'risk_auto_import')
+                        if _trade_source in _BLOCKED_SOURCES:
                             print(f"[RISK] 🛡️ BLOCKED channel settings for {position.symbol}: trade #{trade_id} was auto-imported "
                                   f"(source='{_trade_source}'), NOT a real signal from '{channel_settings.channel_name}' — treating as manual trade")
                             channel_settings = None
+                        elif _trade_source not in _TRUSTED_SOURCES and _trade_channel_id:
+                            _has_real_signal_trade = False
+                            try:
+                                _SYMBOL_ALIASES = {
+                                    'SPX': ['SPXW'], 'SPXW': ['SPX'],
+                                    'NDX': ['NDXP'], 'NDXP': ['NDX'],
+                                    'VIX': ['VIXW'], 'VIXW': ['VIX'],
+                                    'RUT': ['RUTW'], 'RUTW': ['RUT'],
+                                    'DJX': ['DJXW'], 'DJXW': ['DJX'],
+                                }
+                                _syms = [position.symbol] + _SYMBOL_ALIASES.get(position.symbol.upper(), [])
+                                _sym_phs = ','.join(['?' for _ in _syms])
+                                _cur.execute(f'''
+                                    SELECT COUNT(*) FROM trades 
+                                    WHERE id != ? AND UPPER(symbol) IN ({_sym_phs}) AND UPPER(broker) = UPPER(?)
+                                    AND channel_id = ? AND source IN ('discord', 'signal', 'sync_routing')
+                                    AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                                ''', (trade_id, *[s.upper() for s in _syms], position.broker, _trade_channel_id))
+                                _signal_count = _cur.fetchone()[0]
+                                _has_real_signal_trade = _signal_count > 0
+                            except Exception:
+                                pass
+                            if not _has_real_signal_trade:
+                                print(f"[RISK] 🛡️ BLOCKED channel settings for {position.symbol}: trade #{trade_id} "
+                                      f"(source='{_trade_source}') has channel_id={_trade_channel_id} but no active signal trade "
+                                      f"from '{channel_settings.channel_name}' justifies it — treating as manual trade")
+                                channel_settings = None
+                            else:
+                                print(f"[RISK] ✓ Trade #{trade_id} (source='{_trade_source}') validated: "
+                                      f"active signal trade exists for {position.symbol} on channel '{channel_settings.channel_name}'")
                 except Exception as _src_err:
                     print(f"[RISK] ⚠️ Could not verify trade source for #{trade_id}: {_src_err}")
             
             self.cache.apply_settings_with_versioning(pos_key, channel_settings)
+            if channel_settings:
+                print(f"[RISK] 📋 {position.symbol} (trade #{trade_id}, broker={position.broker}): "
+                      f"CHANNEL RISK active — channel='{channel_settings.channel_name}', "
+                      f"SL={channel_settings.stop_loss_pct}%, "
+                      f"PT1={channel_settings.profit_target_1_pct}%")
+            else:
+                print(f"[RISK] 📋 {position.symbol} (trade #{trade_id}, broker={position.broker}): "
+                      f"NO CHANNEL RISK — using global settings only (manual/unlinked trade)")
             
             if channel_settings:
                 print(f"[RISK] Using per-channel settings from '{channel_settings.channel_name}': "

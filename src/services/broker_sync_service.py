@@ -2254,8 +2254,12 @@ class BrokerSyncService:
             for orphan_key, orphan_trade in orphaned_trades_by_key.items():
                 recovered = False
                 # Pass 1: Try to find a matching OPEN Discord trade with channel_id
+                # SAFETY: Only inherit from trades with trusted sources (discord, signal)
                 for discord_trade in discord_trades_with_channel:
                     if discord_trade.get('status', '').upper() not in ('OPEN', 'PENDING'):
+                        continue
+                    _dt_source = (discord_trade.get('source') or '').strip().lower()
+                    if _dt_source in ('sync', 'risk_auto_import'):
                         continue
                     if discord_trade.get('id') == orphan_trade.get('id'):
                         continue
@@ -2273,7 +2277,7 @@ class BrokerSyncService:
                         if not _channel_has_broker_enabled(ch_id, broker_name):
                             continue
                         orphan_id = orphan_trade.get('id')
-                        print(f"[SYNC] ✓ Recovered orphan #{orphan_id} ({orphan_trade['symbol']}) → channel_id={ch_id}")
+                        print(f"[SYNC] ✓ Recovered orphan #{orphan_id} ({orphan_trade['symbol']}) → channel_id={ch_id} (from signal trade #{discord_trade.get('id')}, source='{_dt_source}')")
                         try:
                             self.db.update_trade(orphan_id, channel_id=ch_id, source='sync_discord', hide_in_ui=0)
                         except Exception as e:
@@ -2332,6 +2336,7 @@ class BrokerSyncService:
             )
             
             # Pass 1: Match by order_id (most reliable) — ONLY OPEN/PENDING trades on same broker
+            # SAFETY: Skip trades with untrusted sources to prevent channel contamination
             pos_order_id = position.get('position_id') or position.get('order_id')
             if pos_order_id:
                 for t in discord_trades_with_channel:
@@ -2339,6 +2344,9 @@ class BrokerSyncService:
                         if t.get('status', '').upper() not in ('OPEN', 'PENDING', 'PARTIAL'):
                             continue
                         if not self._is_broker_match(broker_name, t.get('broker', '')):
+                            continue
+                        _t_source = (t.get('source') or '').strip().lower()
+                        if _t_source in ('sync', 'risk_auto_import'):
                             continue
                         ch_id = t.get('channel_id')
                         if ch_id and _channel_has_broker_enabled(ch_id, broker_name):
@@ -2348,10 +2356,14 @@ class BrokerSyncService:
             # This prevents manual positions from inheriting channel_id from closed/historical
             # trades that happened to have the same symbol (e.g. phoenix traded AHMA months ago,
             # user manually buys AHMA now — should NOT inherit phoenix risk settings)
+            # SAFETY: Skip trades with untrusted sources to prevent channel contamination
             pos_qty = float(position.get('quantity', 0))
             matching_trades = []
             for t in discord_trades_with_channel:
                 if t.get('status', '').upper() not in ('OPEN', 'PENDING'):
+                    continue
+                _t_source = (t.get('source') or '').strip().lower()
+                if _t_source in ('sync', 'risk_auto_import'):
                     continue
                 trade_key = self._build_position_key(
                     t['symbol'],
