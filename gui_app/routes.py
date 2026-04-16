@@ -7837,6 +7837,7 @@ def register_routes(app):
                 # Check if this position has a live broker match
                 has_live_position = pos_key in live_position_map
                 
+                _TRUSTED_UI_SOURCES = ('discord', 'signal', 'sync_routing')
                 if has_live_position:
                     # CONSOLIDATE: Show single row with LIVE broker quantity and current price
                     live_pos = live_position_map[pos_key]
@@ -7853,8 +7854,6 @@ def register_routes(app):
                         total_cost = sum(t.get('quantity', 0) * (t.get('executed_price') or t.get('intended_price', 0)) 
                                        for t in trades if t['status'] == 'OPEN')
                         broker_avg_cost = (total_cost / total_qty) if total_qty > 0 else 0
-                    
-                    _TRUSTED_UI_SOURCES = ('discord', 'signal', 'sync_routing')
                     channel_id = first_trade.get('channel_id')
                     first_source = (first_trade.get('source') or '').lower().strip()
                     first_status = (first_trade.get('status') or '').upper()
