@@ -220,6 +220,41 @@ class UnfilledOrderChaser:
         else:
             self._sync_broker_pt_order_id(position_key, old_order_id, new_order_id)
 
+    def _update_db_trade_order_id(self, old_order_id: str, new_order_id: str, symbol: str):
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE trades SET order_id = ? WHERE order_id = ? AND status = 'PENDING'",
+                (new_order_id, old_order_id)
+            )
+            if cursor.rowcount > 0:
+                conn.commit()
+                print(f"[ORDER_CHASER] ✓ Updated DB trade order_id: {old_order_id} → {new_order_id} ({symbol})")
+            else:
+                conn.commit()
+                print(f"[ORDER_CHASER] ⚠️ No PENDING trade found with order_id {old_order_id} to update ({symbol})")
+        except Exception as e:
+            print(f"[ORDER_CHASER] ⚠️ Failed to update DB trade order_id: {e}")
+
+    def is_actively_chasing_order(self, order_id: str) -> bool:
+        if order_id in self._tracked_entry_orders:
+            entry = self._tracked_entry_orders[order_id]
+            if entry.status in (OrderChaseStatus.PENDING, OrderChaseStatus.CHASING):
+                return True
+        return False
+
+    def is_chasing_symbol(self, symbol: str, broker: str) -> bool:
+        symbol_upper = symbol.upper()
+        broker_upper = broker.upper()
+        for oid, entry in self._tracked_entry_orders.items():
+            if (entry.symbol.upper() == symbol_upper and
+                entry.broker_id.upper() == broker_upper and
+                entry.status in (OrderChaseStatus.PENDING, OrderChaseStatus.CHASING, OrderChaseStatus.REPLACED)):
+                return True
+        return False
+
     async def _atomic_pt_id_clear_and_cancel(self, position_key: str, order_id: str, broker, asset_type: str, broker_id: str) -> bool:
         pos_lock = self._get_position_lock(position_key)
         if pos_lock:
@@ -1740,6 +1775,8 @@ class UnfilledOrderChaser:
                 print(f"[ORDER_CHASER] ✓ Placed replacement entry order: {new_order_id} @ ${chase_price:.2f} qty={replace_qty}")
                 order.replacement_order_id = new_order_id
                 order.status = OrderChaseStatus.REPLACED
+
+                self._update_db_trade_order_id(order.order_id, new_order_id, order.symbol)
                 
                 async with self._lock:
                     if order.order_id in self._tracked_entry_orders:
@@ -1776,6 +1813,7 @@ class UnfilledOrderChaser:
                     print(f"[ORDER_CHASER] ✓ Entry retry succeeded: {retry_order_id} @ ${chase_price:.2f}")
                     order.replacement_order_id = retry_order_id
                     order.status = OrderChaseStatus.REPLACED
+                    self._update_db_trade_order_id(order.order_id, retry_order_id, order.symbol)
                     async with self._lock:
                         if order.order_id in self._tracked_entry_orders:
                             del self._tracked_entry_orders[order.order_id]

@@ -1738,6 +1738,19 @@ class BrokerSyncService:
                         if _skip_cancel:
                             continue
 
+                    try:
+                        _chaser = getattr(self.broker_manager, 'order_chaser', None) or getattr(self.broker_manager, '_order_chaser', None)
+                        if not _chaser:
+                            from src.services.unfilled_order_chaser import get_order_chaser as _get_oc
+                            _chaser = _get_oc()
+                        if _chaser and hasattr(_chaser, 'is_chasing_symbol'):
+                            if _chaser.is_chasing_symbol(symbol, broker_name):
+                                print(f"[SYNC] ⚠️ ORDER CHASER GUARD: Trade #{trade_id} ({symbol}) "
+                                      f"— order chaser is actively replacing this entry order, skipping cancellation")
+                                continue
+                    except Exception as _chaser_err:
+                        print(f"[SYNC] ⚠️ Order chaser check error: {_chaser_err}")
+
                     if hasattr(self, '_risk_manager') and self._risk_manager:
                         if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
                             _risk_found = self._find_risk_cache_entry(
