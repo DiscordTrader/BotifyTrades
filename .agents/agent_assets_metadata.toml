@@ -138,3 +138,9 @@ id = "ENC_ezpoXKY5L9TSrmt4t"
 uri = "file://docs/RISK_SETTINGS_VALIDATION_REFERENCE.md"
 type = "text"
 title = "Risk Settings Validation Reference"
+
+[[outputs]]
+id = "0DgHShAsMMp9Z0-nDE9Ui"
+uri = "file://MYSE_Investigation_Report.md"
+type = "text"
+title = "MYSE Investigation Report"
