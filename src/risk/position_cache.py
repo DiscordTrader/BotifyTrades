@@ -524,6 +524,32 @@ class PositionCache:
                     # naked because a previous attempt was rejected.
                     if hasattr(cached_entry, '_webull_stp_unsupported'):
                         cached_entry._webull_stp_unsupported = False
+                    # Stale absolute SL/PT prices computed from the OLD entry price would
+                    # mislead the engine if anything reads them before the new bracket
+                    # is placed. Clear them so they get recomputed from the new entry.
+                    if hasattr(cached_entry, 'stop_loss_price'):
+                        cached_entry.stop_loss_price = None
+                    if hasattr(cached_entry, 'profit_target_price'):
+                        cached_entry.profit_target_price = None
+                    # A "permanent failure" flag from the prior position (e.g. expired
+                    # symbol, no-position) would otherwise immediately mark the freshly
+                    # opened position as dead-on-arrival.
+                    if hasattr(cached_entry, 'permanent_failure'):
+                        cached_entry.permanent_failure = False
+                    if hasattr(cached_entry, 'permanent_failure_reason'):
+                        cached_entry.permanent_failure_reason = None
+                    if hasattr(cached_entry, 'no_position_streak'):
+                        cached_entry.no_position_streak = 0
+                    # EMA tracking is per-position; stale candle counts/cross-state from
+                    # the prior trade would corrupt the first few cycles' EMA decisions.
+                    if hasattr(cached_entry, 'ema_no_trend_count'):
+                        cached_entry.ema_no_trend_count = 0
+                    if hasattr(cached_entry, 'ema_last_cross_state'):
+                        cached_entry.ema_last_cross_state = 'unknown'
+                    if hasattr(cached_entry, 'ema_last_eval_candle_ts'):
+                        cached_entry.ema_last_eval_candle_ts = None
+                    if hasattr(cached_entry, 'ema_post_entry_candles'):
+                        cached_entry.ema_post_entry_candles = 0
                     if pos_key in self._locked_entry_prices:
                         del self._locked_entry_prices[pos_key]
                     if pos_key in self._last_entry_prices:

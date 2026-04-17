@@ -580,6 +580,7 @@ class SplashScreen(QWidget):
     def _auto_license_check(self):
         """Automatically check for existing license when splash is shown"""
         if self.skip_license:
+            self.license_validated_ok = True  # dev / explicit skip — closeEvent must not flag rejection
             self.status_label.setText("License verified - starting...")
             QTimer.singleShot(0, self.startup_ready.emit)
             return
@@ -588,10 +589,13 @@ class SplashScreen(QWidget):
         QApplication.processEvents()
         
         if self.license_controller:
+            # Result delivered async via state_changed → _on_license_state_changed
+            # which sets license_validated_ok when state is ACTIVATED/OFFLINE_GRACE.
             self.license_controller.check_existing_license()
         else:
             license_key = os.getenv('LICENSE_KEY', '').strip()
             if license_key:
+                self.license_validated_ok = True  # env-var fallback validated — protect against close-event rejection
                 self.license_info.setText("License: Active")
                 self.status_label.setText("Starting...")
                 QTimer.singleShot(0, self.startup_ready.emit)
@@ -602,6 +606,7 @@ class SplashScreen(QWidget):
     def start_license_check(self):
         """Start the license validation process"""
         if self.skip_license:
+            self.license_validated_ok = True
             self._show_progress_panel()
             self.startup_ready.emit()
             return
@@ -611,6 +616,7 @@ class SplashScreen(QWidget):
             self._show_validating()
             self.license_controller.check_existing_license()
         elif license_key:
+            self.license_validated_ok = True  # env-var trusted fallback (no controller available)
             self._show_progress_panel()
             self.license_info.setText(f"License: Active")
             self.startup_ready.emit()
@@ -663,6 +669,10 @@ class SplashScreen(QWidget):
         if state == LicenseState.VALIDATING:
             self.status_label.setText("Validating license...")
         elif state == LicenseState.ACTIVATED or state == LicenseState.OFFLINE_GRACE:
+            # Mark validated so closeEvent doesn't flag rejection while the bot is
+            # still spinning up. Activated/offline-grace are both authoritative
+            # "license OK" states from the controller.
+            self.license_validated_ok = True
             self.status_label.setText("License valid - starting...")
             self._show_progress_panel()
             QTimer.singleShot(0, self.startup_ready.emit)
