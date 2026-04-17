@@ -874,8 +874,17 @@ if not LICENSE_VALID:
 
 # Step 3: If no valid license, try setup wizard (for EXE) or block startup (for Replit)
 # IMPORTANT: In GUI/frozen mode, skip console prompts - let splash screen handle license
+# SECURITY: Only defer to splash on platforms where a Qt splash can actually display.
+# On headless Linux (frozen build with no DISPLAY) the splash never shows, so deferring
+# would mean the bot runs unlicensed forever. Enforce license at startup in that case.
+import platform as _platform_check
 IS_GUI_MODE = getattr(sys, 'frozen', False)  # PyInstaller frozen EXE = GUI mode
-DEFER_TO_SPLASH_SCREEN = IS_GUI_MODE  # GUI mode defers license handling to splash screen
+_HAS_DISPLAY = bool(os.environ.get('DISPLAY')) or bool(os.environ.get('WAYLAND_DISPLAY'))
+_IS_LINUX = _platform_check.system() == 'Linux'
+_CAN_SHOW_SPLASH = IS_GUI_MODE and (not _IS_LINUX or _HAS_DISPLAY)
+DEFER_TO_SPLASH_SCREEN = _CAN_SHOW_SPLASH  # Only defer when a splash screen can actually run
+if IS_GUI_MODE and _IS_LINUX and not _HAS_DISPLAY:
+    print("[LICENSE] 🔒 Headless Linux detected (no DISPLAY) — license must be set via LICENSE_KEY env var, splash deferral disabled")
 
 if not LICENSE_VALID and not DEFER_TO_SPLASH_SCREEN:
     import sys
