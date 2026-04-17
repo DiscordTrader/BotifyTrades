@@ -499,6 +499,31 @@ class PositionCache:
                     cached_entry.source_order_id = None
                     cached_entry.source_trade_id = None
                     cached_entry.seed_time = None
+                    # MYSE Phase 2 fix (ABLV regression): clear bracket-placement gates so a
+                    # rapid same-key re-entry (previous position closed by PT, new BTO fills
+                    # within seconds) places a fresh PT/SL bracket. Without this, the engine
+                    # carried over `broker_orders_placed=True` and the stale order IDs from
+                    # the closed position, then silently skipped placement and only fired a
+                    # market STC when price crossed PT% — leaving the position naked between
+                    # fill and the next risk cycle that crossed the threshold.
+                    if hasattr(cached_entry, 'broker_orders_placed'):
+                        cached_entry.broker_orders_placed = False
+                    if hasattr(cached_entry, 'broker_stop_order_id'):
+                        cached_entry.broker_stop_order_id = None
+                    if hasattr(cached_entry, 'broker_pt_order_id'):
+                        cached_entry.broker_pt_order_id = None
+                    if hasattr(cached_entry, '_bracket_attempt_count'):
+                        cached_entry._bracket_attempt_count = 0
+                    # Reset tier-progression marker so the new position starts at PT1
+                    # (otherwise an old position that reached PT2/PT3 would carry over
+                    # and skip earlier targets on the fresh fill).
+                    if hasattr(cached_entry, 'broker_pt_tier'):
+                        cached_entry.broker_pt_tier = 0
+                    # Webull-specific: clear the "stop order unsupported" sticky flag so
+                    # the new position retries SL placement instead of silently going
+                    # naked because a previous attempt was rejected.
+                    if hasattr(cached_entry, '_webull_stp_unsupported'):
+                        cached_entry._webull_stp_unsupported = False
                     if pos_key in self._locked_entry_prices:
                         del self._locked_entry_prices[pos_key]
                     if pos_key in self._last_entry_prices:

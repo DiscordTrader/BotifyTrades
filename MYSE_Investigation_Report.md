@@ -156,7 +156,23 @@ The next risk-evaluation cycle re-derives SL from channel settings → no premat
 
 ---
 
-### ⏳ Phase 2 — PENDING (needs paper-trading validation before shipping)
+### ✅ Phase 2A — SHIPPED (17 April 2026): Same-key re-entry bracket carryover
+**Triggered by ABLV regression in `bot_(34)_1776390744728.log`** — second BTO of the same stock within ~90s of the first PT-fill silently failed to place a fresh PT/SL bracket. Position sat naked until price crossed PT% on its own and a market STC fired.
+
+**Root cause:** The "♻️ New position detected at same key" reset block in `src/risk/position_cache.py` (lines 469-503) cleared tier_hit / closing / trailing / max_pnl_seen flags but **left the bracket-placement gates intact**:
+- `broker_orders_placed` (still True from the now-closed prior position)
+- `broker_stop_order_id`, `broker_pt_order_id` (still pointing at the filled prior PT order)
+- `_bracket_attempt_count` (carried over)
+- `broker_pt_tier` (would skip PT1 if prior position had reached PT2/PT3)
+- `_webull_stp_unsupported` (sticky Webull "stop unsupported" flag)
+
+The bracket-placement gate at `position_monitor.py:282` (`if entry.broker_orders_placed and not entry.broker_stop_order_id and not entry.broker_pt_order_id`) only handles the crash-recovery case (flag=True but IDs cleared). Same-key re-entry preserved both flag AND IDs, so placement was skipped silently.
+
+**Fix:** `src/risk/position_cache.py:505-529` — extended the rollover reset block to also clear all six bracket-related fields (with `hasattr` guards for cache-version compatibility).
+
+**Verified:** Architect-approved; clean restart on Replit; no LSP errors.
+
+### ⏳ Phase 2B — PENDING (needs paper-trading validation before shipping)
 Targets root causes #1 and #4 above. Cannot be safely unit-tested — requires real broker latency to tune.
 
 #### Issue 2A: Cancel→reconcile→sell race window
