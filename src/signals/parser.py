@@ -936,11 +936,37 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     # Validate the matched symbol is not a trade keyword (SL, PT, TP, etc.)
     # These are stop-loss/profit-target prefixes, not ticker symbols
     trade_keywords = {'SL', 'PT', 'TP', 'BE', 'STOP', 'LOSS', 'TRAIL', 'TARG'}
+    # Common English words that get falsely matched as tickers in hype messages
+    # e.g. "NOTHING BUT BANGERS THIS WEEK\n\nOver 3500% OF GAINS" -> "WEEK over $3500"
+    english_stopwords = {
+        'WEEK', 'WEEKS', 'DAY', 'DAYS', 'MONTH', 'YEAR', 'TODAY', 'TONITE',
+        'GAINS', 'GAIN', 'LOSS', 'LOSSES', 'PROFIT', 'PROFITS', 'WIN', 'WINS',
+        'THIS', 'THAT', 'THESE', 'THOSE', 'WITH', 'FROM', 'INTO', 'OVER',
+        'UNDER', 'ABOVE', 'BELOW', 'JUST', 'ONLY', 'BUT', 'AND', 'NOT',
+        'ALL', 'ANY', 'NEW', 'OLD', 'BIG', 'HUGE', 'TINY', 'NICE',
+        'GOOD', 'BAD', 'BEST', 'HIGH', 'LOW', 'UP', 'DOWN', 'IN', 'OUT',
+        'HERE', 'THERE', 'NOW', 'SOON', 'NEXT', 'LAST', 'FIRST', 'WAY',
+        'WAYS', 'TIME', 'TIMES', 'LOL', 'OMG', 'WOW', 'YES', 'NO',
+    }
     trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(text) or CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text)
     if trigger_match:
         matched_symbol = trigger_match.group(1).upper()
         if matched_symbol in trade_keywords:
             return False
+        if matched_symbol in english_stopwords:
+            print(f"[CONDITIONAL] ⚠️ Skipped hype/stopword as ticker: '{matched_symbol}' in: {text[:80]}")
+            return False
+        # Reject if the matched price is immediately followed by '%' — that's a
+        # percentage in marketing copy ("Over 3500% OF GAINS"), not a price level.
+        try:
+            price_str = trigger_match.group(2)
+            tail_idx = trigger_match.end(2)
+            tail = text[tail_idx:tail_idx + 4]
+            if re.match(r'\s*%', tail):
+                print(f"[CONDITIONAL] ⚠️ Skipped percentage (not price): '{matched_symbol} ... {price_str}%' in: {text[:80]}")
+                return False
+        except (IndexError, AttributeError):
+            pass
     
     # If require_sl_pt is False, allow trigger-only signals (SL/PT can come in follow-up)
     if not require_sl_pt:
