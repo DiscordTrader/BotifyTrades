@@ -2359,7 +2359,7 @@
     "max_pnl_seen": 1.8001241464928561,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 2.2925,
+    "last_evaluated_price": 2.2703,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
@@ -2379,8 +2379,8 @@
     "broker_orders_placed": true
   },
   "SCHWAB_XOM_140.0_2026-04-24_P": {
-    "entry_price": 1.085,
-    "highest_price": 1.26,
+    "entry_price": 1.07,
+    "highest_price": 1.14,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2388,7 +2388,7 @@
     "profit_target_price": null,
     "broker": "SCHWAB",
     "raw_symbol": "XOM   260424P00140000",
-    "tier1_hit": true,
+    "tier1_hit": false,
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
@@ -2412,7 +2412,7 @@
     "ema_last_cross_state": "unknown",
     "ema_last_eval_candle_ts": null,
     "ema_post_entry_candles": 0,
-    "broker_stop_order_id": "1006045639075",
+    "broker_stop_order_id": "1006045639909",
     "broker_pt_order_id": null,
     "broker_pt_tier": 0,
     "broker_orders_placed": true

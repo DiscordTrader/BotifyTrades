@@ -1135,7 +1135,8 @@ def _refresh_snapshot(bot_instance, force_all: bool = False):
         try:
             open_trades = db.get_trades(status='OPEN', limit=500)
             pending_trades = db.get_trades(status='PENDING', limit=100)
-            db_trades = open_trades + pending_trades
+            partial_trades = db.get_trades(status='PARTIAL', limit=200)
+            db_trades = open_trades + pending_trades + partial_trades
         except Exception as e:
             _log(f"DB trades fetch error: {e}")
 
