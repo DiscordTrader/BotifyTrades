@@ -4194,6 +4194,52 @@ def find_open_trade_for_stc(broker_name: str, symbol: str, strike: float = None,
     return dict(row) if row else None
 
 
+def get_origin_status_after_stc(origin_trade_id: int) -> str:
+    """
+    Compute the correct status for an origin BTO trade after an STC has been recorded.
+
+    Returns 'CLOSED' if all original contracts/shares have been sold (sum of all
+    CLOSED/FILLED STC quantities >= BTO original_quantity), otherwise 'PARTIAL'.
+
+    The new STC trade must already be inserted with status CLOSED/FILLED before
+    calling this — its quantity is included in the sum.
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT original_quantity, quantity FROM trades WHERE id = ?',
+            (origin_trade_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return 'CLOSED'
+        orig_qty = 0
+        try:
+            orig_qty = int(row['original_quantity'] or row['quantity'] or 0)
+        except (TypeError, ValueError):
+            orig_qty = 0
+        if orig_qty <= 0:
+            return 'CLOSED'
+
+        cursor.execute('''
+            SELECT COALESCE(SUM(quantity), 0) AS total FROM trades
+            WHERE origin_trade_id = ? AND direction = 'STC'
+              AND status IN ('CLOSED', 'FILLED')
+        ''', (origin_trade_id,))
+        total_row = cursor.fetchone()
+        closed_qty = 0
+        try:
+            closed_qty = int(total_row['total'] or 0)
+        except (TypeError, ValueError):
+            closed_qty = 0
+
+        return 'CLOSED' if closed_qty >= orig_qty else 'PARTIAL'
+    except Exception as e:
+        print(f"[ORIGIN-STATUS] ⚠️ Error computing post-STC status for #{origin_trade_id}: {e}")
+        return 'CLOSED'
+
+
 def update_trade(trade_id: int, **kwargs):
     """Generic function to update any trade fields"""
     if not kwargs:

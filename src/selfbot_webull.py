@@ -18800,10 +18800,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 stc_trade_id = db.add_trade(trade_data)
                                                 _original_print(f"[RISK] ✓ Trade #{stc_trade_id} saved with risk_trigger={signal.get('risk_trigger')}")
                                                 
-                                                # Close the original BTO trade
+                                                # Close (or partially close) the original BTO trade
                                                 if signal.get('origin_trade_id'):
-                                                    db.update_trade(signal['origin_trade_id'], status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
-                                                    _original_print(f"[RISK] ✓ Closed origin trade #{signal['origin_trade_id']}")
+                                                    _origin_id = signal['origin_trade_id']
+                                                    _new_status = db.get_origin_status_after_stc(_origin_id)
+                                                    if _new_status == 'CLOSED':
+                                                        db.update_trade(_origin_id, status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
+                                                        _original_print(f"[RISK] ✓ Closed origin trade #{_origin_id}")
+                                                    else:
+                                                        db.update_trade(_origin_id, status='OPEN', current_price=signal.get('price'))
+                                                        _original_print(f"[RISK] ✓ Marked origin trade #{_origin_id} PARTIAL (contracts remain open)")
                                                 
                                                 # Process lot matching for PNL calculation
                                                 try:
@@ -20558,8 +20564,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             try:
                                                 origin_trade = db.get_trade_by_id(stc_origin_trade_id)
                                                 if origin_trade and (origin_trade.get('broker') or '').upper() == broker_name_upper:
-                                                    db.update_trade(stc_origin_trade_id, status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
-                                                    _original_print(f"[DATABASE] ✓ Closed origin trade #{stc_origin_trade_id} for {broker_name_upper}")
+                                                    _new_status = db.get_origin_status_after_stc(stc_origin_trade_id)
+                                                    if _new_status == 'CLOSED':
+                                                        db.update_trade(stc_origin_trade_id, status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
+                                                        _original_print(f"[DATABASE] ✓ Closed origin trade #{stc_origin_trade_id} for {broker_name_upper}")
+                                                    else:
+                                                        db.update_trade(stc_origin_trade_id, status='OPEN', current_price=signal.get('price'))
+                                                        _original_print(f"[DATABASE] ✓ Marked origin trade #{stc_origin_trade_id} PARTIAL for {broker_name_upper} (contracts remain open)")
                                             except Exception:
                                                 pass
                                 else:
@@ -20588,8 +20599,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']} qty={broker_executed_qty} channel={channel_id_str or 'NONE'}")
 
                                     if stc_origin_trade_id:
-                                        db.update_trade(stc_origin_trade_id, status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
-                                        _original_print(f"[DATABASE] ✓ Closed origin trade #{stc_origin_trade_id}")
+                                        _new_status = db.get_origin_status_after_stc(stc_origin_trade_id)
+                                        if _new_status == 'CLOSED':
+                                            db.update_trade(stc_origin_trade_id, status='CLOSED', closed_at=datetime.now().isoformat(), current_price=signal.get('price'))
+                                            _original_print(f"[DATABASE] ✓ Closed origin trade #{stc_origin_trade_id}")
+                                        else:
+                                            db.update_trade(stc_origin_trade_id, status='OPEN', current_price=signal.get('price'))
+                                            _original_print(f"[DATABASE] ✓ Marked origin trade #{stc_origin_trade_id} PARTIAL (contracts remain open)")
 
                                 if signal.get('_risk_management_order'):
                                     try:
