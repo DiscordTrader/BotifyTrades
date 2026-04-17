@@ -108,10 +108,23 @@ class SplashScreen(QWidget):
         self.license_controller = LicenseController() if LicenseController else None
         self._license_check_started = False
         self.license_rejected = False
+        self.license_validated_ok = False  # set True only on successful activation
         self._drag_pos = None
         self._setup_ui()
         self._connect_signals()
         self._setup_shortcuts()
+
+    def closeEvent(self, event):
+        """SECURITY: If the user closes the splash window (X / ESC / Ctrl+Q) before
+        license activation succeeded, mark as rejected so the startup watchdog
+        refuses to launch the bot. Without this, closing the splash silently
+        bypassed license enforcement after the 60s watchdog timer."""
+        try:
+            if not self.skip_license and not self.license_validated_ok:
+                self.license_rejected = True
+        except Exception:
+            self.license_rejected = True
+        super().closeEvent(event)
     
     def _setup_shortcuts(self):
         """Setup keyboard shortcuts for clipboard operations and window management"""
@@ -674,6 +687,7 @@ class SplashScreen(QWidget):
     def _on_license_activated(self, license_data: dict):
         """Handle successful license activation"""
         self.license_rejected = False
+        self.license_validated_ok = True
         days = license_data.get('days_remaining', 0)
         license_type = license_data.get('license_type', 'subscription').title()
         

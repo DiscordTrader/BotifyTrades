@@ -21248,7 +21248,19 @@ Environment Variables:
             sys.exit(1)
     
     # Check if running in GUI mode (with splash screen and system tray)
-    use_gui_mode = not args.no_gui and getattr(sys, 'frozen', False)
+    # SECURITY: Apply same display-availability check as DEFER_TO_SPLASH_SCREEN.
+    # On headless Linux frozen builds, never attempt Qt splash (it would crash with
+    # "Could not connect to display"), and force enforcement of license below.
+    use_gui_mode = not args.no_gui and getattr(sys, 'frozen', False) and _CAN_SHOW_SPLASH
+
+    # SECURITY: If splash will NOT run (--no-gui, headless Linux, or non-frozen) and
+    # license is not valid, refuse to start. Without this, the deferred-to-splash
+    # path becomes a permanent bypass when splash never gets a chance to enforce.
+    if not use_gui_mode and not LICENSE_VALID:
+        _original_print("[LICENSE] ❌ Splash screen will not run and no valid license is loaded.")
+        _original_print("[LICENSE]    Set LICENSE_KEY environment variable or activate via GUI on a desktop install.")
+        logging.error("[LICENSE] Console/headless startup blocked - no valid license")
+        sys.exit("ERROR: Valid license required to run this bot.")
     
     if use_gui_mode:
         # GUI mode: Show splash screen with progress, then minimize to system tray
@@ -21378,14 +21390,17 @@ Environment Variables:
                     logging.warning("[STARTUP WATCHDOG] License rejected by splash screen - startup blocked")
                     return
                 if not startup_state.get('license_ready'):
-                    _original_print("[STARTUP WATCHDOG] ⚠️ No license signal received after 60s and no startup thread exists")
-                    _original_print("[STARTUP WATCHDOG] Attempting startup (license signal may have been lost)...")
-                    logging.warning("[STARTUP WATCHDOG] No license signal after 60s - attempting startup")
-                    startup_state['license_ready'] = True
-                    _start_network_monitor_safe()
-                    t = threading.Thread(target=do_startup, daemon=True)
-                    startup_state['startup_thread'] = t
-                    t.start()
+                    # SECURITY: If no license signal received after 60s, treat as a
+                    # rejection. Previously this would auto-start the bot under the
+                    # theory that "the signal may have been lost," which created a
+                    # bypass: a user could simply close the splash window (X / ESC /
+                    # Ctrl+Q) without activating, then the bot started 60s later
+                    # unlicensed. Now we hard-exit instead.
+                    _original_print("[STARTUP WATCHDOG] ❌ No license signal received after 60s - treating as rejection")
+                    _original_print("[STARTUP WATCHDOG]    Bot will NOT start without a validated license. Re-launch and complete activation.")
+                    logging.error("[STARTUP WATCHDOG] No license signal after 60s - startup blocked (closed splash without activation)")
+                    import os as _os
+                    _os._exit(1)
 
             if not license_bypass:
                 watchdog = threading.Thread(target=_startup_watchdog, daemon=True, name="StartupWatchdog")
