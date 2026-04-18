@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Risk Engine vs SnapTrade — Capability Comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0f172a; --ink-2:#1f2937; --ink-3:#374151;
+    --muted:#64748b; --muted-2:#94a3b8;
+    --line:#e5e7eb; --line-2:#eef2f7;
+    --bg:#fbfbfd; --bg-soft:#f6f7fb; --bg-soft-2:#f1f5f9;
+    --brand:#1d4ed8; --brand-ink:#1e3a8a; --brand-2:#0ea5e9;
+    --accent:#7c3aed;
+    --good:#15803d; --good-bg:#ecfdf5;
+    --warn:#a16207; --warn-bg:#fef9c3;
+    --bad:#b91c1c; --bad-bg:#fef2f2;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,.06);
+    --shadow-md: 0 6px 22px rgba(15,23,42,.08);
+    --radius: 14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);font-size:15.5px;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .serif{font-family:'Source Serif 4','Iowan Old Style',Georgia,serif}
+  .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
+  a{color:var(--brand);text-decoration:none;border-bottom:1px solid rgba(29,78,216,.25)}
+  a:hover{border-bottom-color:var(--brand)}
+  code{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-size:.86em;background:var(--bg-soft-2);padding:1.5px 6px;border-radius:5px;color:var(--ink-2);border:1px solid var(--line)}
+  pre{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-size:.83rem;line-height:1.55;background:#0b1220;color:#e5e7eb;border-radius:10px;padding:16px 18px;overflow:auto;margin:14px 0;border:1px solid #0b1220}
+  hr{border:none;border-top:1px solid var(--line);margin:32px 0}
+  h1,h2,h3,h4,h5{font-family:'Inter',sans-serif;letter-spacing:-0.015em;color:var(--ink);margin:0}
+  h1{font-weight:800;font-size:clamp(2.2rem,4.4vw,3.4rem);line-height:1.05}
+  h2{font-weight:800;font-size:1.78rem;line-height:1.18;margin:0 0 4px}
+  h3{font-weight:700;font-size:1.22rem;line-height:1.25;margin:22px 0 10px}
+  h4{font-weight:700;font-size:1.0rem;line-height:1.3;margin:18px 0 6px;color:var(--ink-2)}
+  p{margin:.55em 0}
+  small{color:var(--muted)}
+
+  .page{max-width:1240px;margin:0 auto;padding:0 28px}
+  .layout{display:grid;grid-template-columns:280px 1fr;gap:48px;align-items:start}
+  @media (max-width:1024px){.layout{grid-template-columns:1fr}}
+  aside.toc{position:sticky;top:24px;align-self:start;border-right:1px solid var(--line);padding:24px 18px 24px 0;max-height:calc(100vh - 48px);overflow:auto}
+  @media (max-width:1024px){aside.toc{position:static;border-right:none;border-bottom:1px solid var(--line);padding:14px 0}}
+  .toc .label{font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:14px}
+  .toc ol{list-style:none;margin:0;padding:0;counter-reset:section}
+  .toc li{counter-increment:section;margin:0;border-left:2px solid transparent;padding:6px 0 6px 14px;font-size:.92rem;color:var(--ink-2)}
+  .toc li::before{content:"0" counter(section);font-variant-numeric:tabular-nums;color:var(--muted-2);font-weight:700;font-size:.72rem;margin-right:8px}
+  .toc a{color:var(--ink-2);border:none}
+  .toc a:hover{color:var(--brand)}
+  main{min-width:0;padding:24px 0 80px}
+
+  header.cover{border-bottom:1px solid var(--line);background:radial-gradient(900px 380px at 0% -20%, rgba(14,165,233,.08), transparent 60%),radial-gradient(900px 380px at 100% -20%, rgba(124,58,237,.08), transparent 60%),#fff;padding:64px 0 56px}
+  .cover-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:48px;align-items:end}
+  @media (max-width:900px){.cover-grid{grid-template-columns:1fr;gap:24px}}
+  .eyebrow{display:inline-flex;gap:10px;align-items:center;font-size:.74rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--brand-ink);background:#eff6ff;border:1px solid #dbeafe;padding:6px 12px;border-radius:999px}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--brand-2);box-shadow:0 0 0 4px rgba(14,165,233,.15)}
+  .cover h1{margin-top:18px}
+  .cover .lede{font-family:'Source Serif 4',serif;font-size:1.18rem;color:var(--ink-3);margin-top:16px;max-width:720px;line-height:1.55}
+  .cover-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+  .cover-meta .pill{background:#fff;border:1px solid var(--line);padding:7px 12px;border-radius:8px;font-size:.84rem;color:var(--ink-2);box-shadow:var(--shadow-sm)}
+  .cover-meta .pill b{color:var(--ink);font-weight:700}
+
+  .verdict{border:1px solid #fee2e2;background:linear-gradient(180deg,#fef2f2,#fff);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-md)}
+  .verdict .tag{font-size:.7rem;font-weight:800;letter-spacing:.14em;color:var(--bad);text-transform:uppercase}
+  .verdict h3{font-size:1.45rem;margin:6px 0 10px;color:var(--bad)}
+  .verdict p{margin:0;color:var(--ink-3)}
+  .verdict .row{display:flex;gap:14px;margin-top:14px}
+  .verdict .kpi{flex:1;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .verdict .kpi .v{font-weight:800;font-size:1.15rem;color:var(--bad)}
+  .verdict .kpi .l{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+
+  section{padding:48px 0;border-top:1px solid var(--line)}
+  section.first{border-top:none}
+  .section-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+  .section-num{font-family:'JetBrains Mono',monospace;font-size:.86rem;color:var(--brand);font-weight:700;letter-spacing:.06em}
+  .section-kicker{color:var(--muted);font-size:.95rem;margin:0 0 24px}
+
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media (max-width:820px){.g2,.g3,.g4{grid-template-columns:1fr}}
+  @media (max-width:1024px){.g4{grid-template-columns:repeat(2,1fr)}}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow-sm)}
+  .card.soft{background:var(--bg-soft);border-color:var(--line)}
+  .card h3{margin-top:0}
+  .stat .v{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;line-height:1.05}
+  .stat .l{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:700}
+  .stat .sub{font-size:.84rem;color:var(--muted);margin-top:6px}
+
+  .table-wrap{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);background:#fff}
+  table{width:100%;border-collapse:collapse;font-size:.93rem}
+  thead th{background:var(--bg-soft);text-align:left;padding:11px 14px;font-weight:700;color:var(--ink);border-bottom:1px solid var(--line);font-size:.78rem;letter-spacing:.04em;text-transform:uppercase}
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:#fcfcfd}
+  th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+  td strong{color:var(--ink)}
+  td.indent{padding-left:32px;color:var(--muted)}
+
+  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.7rem;font-weight:700;border:1px solid transparent;letter-spacing:.02em;white-space:nowrap}
+  .t-good{background:var(--good-bg);color:var(--good);border-color:#a7f3d0}
+  .t-bad{background:var(--bad-bg);color:var(--bad);border-color:#fecaca}
+  .t-warn{background:var(--warn-bg);color:var(--warn);border-color:#fde68a}
+  .t-info{background:#eff6ff;color:var(--brand-ink);border-color:#dbeafe}
+  .t-muted{background:#f3f4f6;color:var(--muted);border-color:#e5e7eb}
+
+  .pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:820px){.pros-cons{grid-template-columns:1fr}}
+  .pros, .cons{border-radius:var(--radius);padding:16px 18px;border:1px solid var(--line);background:#fff}
+  .pros{border-color:#bbf7d0;background:#f0fdf4}
+  .cons{border-color:#fecaca;background:#fef2f2}
+  .pros h4{color:var(--good)} .cons h4{color:var(--bad)}
+  .pros ul,.cons ul{margin:8px 0 0;padding-left:18px}
+  .pros li,.cons li{margin:4px 0}
+
+  .callout{border:1px solid var(--line);border-left:4px solid var(--brand-2);background:#f0f9ff;border-radius:10px;padding:14px 16px;margin:14px 0}
+  .callout.warn{border-left-color:var(--warn);background:#fefce8}
+  .callout.bad{border-left-color:var(--bad);background:#fef2f2}
+  .callout.good{border-left-color:var(--good);background:#f0fdf4}
+  .callout p{margin:.2em 0}
+
+  .field-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 0.7fr;gap:0;border-bottom:1px solid var(--line)}
+  .field-row.head{background:var(--bg-soft);font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--ink)}
+  .field-row > div{padding:10px 14px}
+  .field-row .name{font-weight:600;color:var(--ink)}
+  .field-row .name .sub{display:block;font-weight:400;font-size:.78rem;color:var(--muted);margin-top:2px}
+
+  svg.diagram{display:block;max-width:100%;height:auto}
+
+  footer{padding:30px 0 60px;color:var(--muted);font-size:.86rem;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="page">
+    <div class="cover-grid">
+      <div>
+        <span class="eyebrow"><span class="dot"></span>Internal Capability Comparison · v1.0</span>
+        <h1>The Risk Engine vs <span style="color:var(--brand)">SnapTrade</span></h1>
+        <p class="lede">A field-by-field audit of every per-channel risk, sizing, and execution control that BotifyTrades exposes today — measured against what a SnapTrade-only stack would actually be able to enforce. Spoiler: SnapTrade is a router, not a risk manager.</p>
+        <div class="cover-meta">
+          <div class="pill">Scope · <b>per-channel risk + execution settings</b></div>
+          <div class="pill">Surfaces · <b>Trading → Channels &amp; Trading → Execution</b></div>
+          <div class="pill">Fields audited · <b>62</b></div>
+          <div class="pill">Format · <b>HTML, light theme</b></div>
+        </div>
+      </div>
+      <aside class="verdict">
+        <div class="tag">Headline finding</div>
+        <h3>SnapTrade can replace ~12% of the Risk Engine.</h3>
+        <p>SnapTrade exposes order primitives (Market, Limit, Stop, Stop-Limit, TIF) and partial-fill status. It does not run profit-target ladders, dynamic SL escalation, EMA exits, giveback guards, early trailing, signal-update automation, NDX→QQQ remap, or ticker filters — all of which are server-side state machines living inside this codebase.</p>
+        <div class="row">
+          <div class="kpi"><div class="v">62</div><div class="l">Engine fields</div></div>
+          <div class="kpi"><div class="v">7</div><div class="l">Mappable to SnapTrade</div></div>
+          <div class="kpi"><div class="v">55</div><div class="l">Must stay in-app</div></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+<div class="layout">
+  <aside class="toc">
+    <div class="label">Contents</div>
+    <ol>
+      <li><a href="#tldr">Executive Summary</a></li>
+      <li><a href="#surfaces">UI Surfaces &amp; Setting Inventory</a></li>
+      <li><a href="#sizing">Channel Sizing &amp; Position Controls</a></li>
+      <li><a href="#riskctrl">Channel Risk Controls</a></li>
+      <li><a href="#ordertypes">Order Types &amp; Conditional</a></li>
+      <li><a href="#targets">Targets &amp; Stop Loss (Risk Mgmt → Targets &amp; SL)</a></li>
+      <li><a href="#advanced">Advanced Risk (DYN-SL, Giveback, EMA)</a></li>
+      <li><a href="#tickerfilter">Ticker Filter</a></li>
+      <li><a href="#snaptrade">What SnapTrade Actually Provides</a></li>
+      <li><a href="#matrix">Master Coverage Matrix</a></li>
+      <li><a href="#architecture">Architecture: Risk Engine vs Router</a></li>
+      <li><a href="#decision">Recommendation</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+  <!-- 1. TLDR -->
+  <section id="tldr" class="first">
+    <div class="section-head"><div class="section-num">01</div><h2>Executive Summary</h2></div>
+    <p class="section-kicker">What SnapTrade is, what the risk engine is, and why one cannot stand in for the other.</p>
+
+    <div class="grid g3">
+      <div class="card stat">
+        <div class="l">Per-channel risk fields</div>
+        <div class="v">42</div>
+        <div class="sub">Validated registry in <code>RISK_SETTINGS_VALIDATION_REFERENCE.md</code> (rows 1–48)</div>
+      </div>
+      <div class="card stat">
+        <div class="l">Channel-tab control fields</div>
+        <div class="v">20</div>
+        <div class="sub">Sizing, Risk Controls, Order Types, Conditional</div>
+      </div>
+      <div class="card stat">
+        <div class="l">SnapTrade-mappable</div>
+        <div class="v" style="color:var(--bad)">7 / 62</div>
+        <div class="sub">Order type, TIF, limit price, qty, side, account routing, partial-fill status</div>
+      </div>
+    </div>
+
+    <div class="callout bad" style="margin-top:18px">
+      <p><strong>Core message.</strong> SnapTrade is an <em>order router</em>: a unified REST API that translates one order intent into the target broker's order intent. It has no concept of profit-target ladders, no EMA candle builder, no millisecond-cadence position monitor, no per-channel state machine, no signal-update automation, and no ticker filter. Those live entirely in <code>src/risk/position_monitor.py</code>, <code>src/risk/risk_types.py</code>, and the channel/execution surfaces of the GUI.</p>
+    </div>
+
+    <div class="callout">
+      <p><strong>Practical takeaway.</strong> If SnapTrade replaces broker SDKs, the Risk Engine still owns 100% of the trade lifecycle decisions — it would simply emit normalized SnapTrade order requests at the moments it currently emits broker-specific ones. The risk engine is not a "feature you can replace"; it is the product.</p>
+    </div>
+  </section>
+
+  <!-- 2. Surfaces -->
+  <section id="surfaces">
+    <div class="section-head"><div class="section-num">02</div><h2>UI Surfaces &amp; Setting Inventory</h2></div>
+    <p class="section-kicker">Where each setting lives in the GUI, and the file it ships from.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Surface</th><th>Tab</th><th>Source</th><th class="num">Fields</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Trading → Channels</strong></td><td>Sizing</td><td><code>channels.html</code> · <code>buildSizingTab()</code></td><td class="num">7</td></tr>
+          <tr><td>Trading → Channels</td><td>Risk Controls</td><td><code>channels.html</code> · <code>buildRiskControlsTab()</code></td><td class="num">8</td></tr>
+          <tr><td>Trading → Channels</td><td>Order Types</td><td><code>channels.html</code> · <code>buildOrderTypesTab()</code></td><td class="num">3</td></tr>
+          <tr><td>Trading → Channels</td><td>Conditional</td><td><code>channels.html</code> · <code>buildConditionalTab()</code></td><td class="num">2</td></tr>
+          <tr><td><strong>Trading → Execution</strong></td><td>Risk Mgmt → Targets &amp; SL</td><td><code>channels.js</code> lines 271–481</td><td class="num">22</td></tr>
+          <tr><td>Trading → Execution</td><td>Risk Mgmt → Advanced</td><td><code>channels.js</code> lines 484–624</td><td class="num">16</td></tr>
+          <tr><td>Trading → Execution</td><td>Ticker Filter</td><td><code>channels.js</code> lines 630–664</td><td class="num">2</td></tr>
+          <tr><td>—</td><td>Quick Presets (Default / Swing / Momentum / Trend)</td><td><code>channels.js</code> · <code>applyRiskPreset()</code></td><td class="num">4 (curated bundles)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. Sizing -->
+  <section id="sizing">
+    <div class="section-head"><div class="section-num">03</div><h2>Channel Sizing &amp; Position Controls</h2></div>
+    <p class="section-kicker"><code>buildSizingTab()</code> — what gets bought, how big, and whether to override the trader's quantity.</p>
+
+    <div class="field-row head">
+      <div>Field</div><div>Behavior</div><div>SnapTrade equivalent</div><div>Coverage</div>
+    </div>
+    <div class="field-row"><div class="name">position_size_pct<span class="sub">% of buying power per signal</span></div><div>Engine reads account BP, computes contracts, rounds down.</div><div>None — SnapTrade requires a final qty.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">default_quantity<span class="sub">Static contracts per signal</span></div><div>Used if % sizing returns 0 / disabled.</div><div>SnapTrade accepts <code>units</code> on the order.</div><div><span class="tag t-warn">Computed upstream</span></div></div>
+    <div class="field-row"><div class="name">ignore_signal_position_size<span class="sub">"Force My Size" toggle</span></div><div>Drops the trader's qty in favor of channel sizing.</div><div>None — pre-routing decision.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">sizing_mode<span class="sub">live / pre_market / start_of_day</span></div><div>Selects which BP snapshot drives % sizing (intraday vs. open-of-day fairness).</div><div>None — SnapTrade doesn't track snapshots.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">tracking_position_size_pct<span class="sub">Paper / TRACK channels</span></div><div>Independent sizing for tracked-only channels.</div><div>None.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">tracking_default_quantity</div><div>Static fallback for tracked channels.</div><div>None.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">channel_max_position_size<span class="sub">Hard cap per signal</span></div><div>Engine clamps computed qty before routing.</div><div>SnapTrade has no cap; broker may reject.</div><div><span class="tag t-bad">Engine only</span></div></div>
+  </section>
+
+  <!-- 4. Risk Controls -->
+  <section id="riskctrl">
+    <div class="section-head"><div class="section-num">04</div><h2>Channel Risk Controls</h2></div>
+    <p class="section-kicker"><code>buildRiskControlsTab()</code> — automation triggers that fire <em>before</em> any order is built.</p>
+
+    <div class="field-row head"><div>Field</div><div>Behavior</div><div>SnapTrade equivalent</div><div>Coverage</div></div>
+
+    <div class="field-row"><div class="name">signal_update_automation<span class="sub">Re-route on signal edits</span></div><div>Watches Discord/Telegram message edits and re-prices live brackets when the trader changes PT/SL after entry.</div><div>None — SnapTrade has no concept of upstream signals.</div><div><span class="tag t-bad">Engine only</span></div></div>
+
+    <div class="field-row"><div class="name">slippage_protection_enabled<span class="sub">+ max_pct + wait_minutes</span></div><div>If quoted ask drifts &gt; <code>max_pct</code> from signal price, defer up to <code>wait_minutes</code> for re-quote, otherwise skip.</div><div>None — SnapTrade routes whatever you send.</div><div><span class="tag t-bad">Engine only</span></div></div>
+
+    <div class="field-row"><div class="name">limit_cap_enabled + limit_cap_pct<span class="sub">Max price the engine is willing to pay</span></div><div>Caps limit price at <code>signal_price × (1+pct)</code>; rejects above.</div><div>You can pass a limit price — but the cap calculation is upstream.</div><div><span class="tag t-warn">Output mappable</span></div></div>
+
+    <div class="field-row"><div class="name">ndx_to_qqq_enabled + ndx_to_qqq_delta<span class="sub">Index → ETF remap</span></div><div>Rewrites NDX 18000C → QQQ 437C using a delta table; same trade idea, retail-tradable contract.</div><div>None — SnapTrade doesn't transform symbols.</div><div><span class="tag t-bad">Engine only</span></div></div>
+  </section>
+
+  <!-- 5. Order Types & Conditional -->
+  <section id="ordertypes">
+    <div class="section-head"><div class="section-num">05</div><h2>Order Types &amp; Conditional</h2></div>
+    <p class="section-kicker"><code>buildOrderTypesTab()</code> + <code>buildConditionalTab()</code> — how orders are placed and what makes them fire later.</p>
+
+    <div class="grid g2">
+      <div class="card">
+        <h3>Order Types</h3>
+        <table>
+          <tbody>
+            <tr><td><strong>entry_order_mode</strong> <small>(market / limit)</small></td><td><span class="tag t-good">SnapTrade ✓</span></td></tr>
+            <tr><td><strong>trim_order_mode</strong> <small>(market / limit)</small></td><td><span class="tag t-good">SnapTrade ✓</span></td></tr>
+            <tr><td><strong>sl_order_mode</strong> <small>(market / limit, w/ offset)</small></td><td><span class="tag t-good">SnapTrade ✓ (Stop / StopLimit)</span></td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top:10px"><small>These three are the cleanest SnapTrade win — type + price + TIF map directly.</small></p>
+      </div>
+      <div class="card">
+        <h3>Conditional Triggers</h3>
+        <table>
+          <tbody>
+            <tr><td><strong>conditional_order_enabled</strong></td><td><span class="tag t-bad">Engine state machine</span></td></tr>
+            <tr><td><strong>order_timeout_minutes</strong></td><td><span class="tag t-bad">Engine timer</span></td></tr>
+            <tr><td><strong>conditional_order_timeout_minutes</strong></td><td><span class="tag t-bad">Engine timer</span></td></tr>
+            <tr><td><strong>entry_confirmation_pct</strong></td><td><span class="tag t-bad">Engine quote watcher</span></td></tr>
+            <tr><td><strong>breakout_reset_enabled</strong></td><td><span class="tag t-bad">Engine logic</span></td></tr>
+            <tr><td><strong>trigger_offset_mode + value</strong></td><td><span class="tag t-bad">Engine pre-trigger</span></td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top:10px"><small>SnapTrade's <em>Conditional Orders</em> endpoint exists at IBKR/Schwab but is not a unified primitive — and none of these support a Discord-signal trigger anyway.</small></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Targets & SL -->
+  <section id="targets">
+    <div class="section-head"><div class="section-num">06</div><h2>Targets &amp; Stop Loss</h2></div>
+    <p class="section-kicker">Trading → Execution → Risk Management → <strong>Targets &amp; SL</strong> tab. This is the heart of the product.</p>
+
+    <h3>Profit Target Ladder (P1–P4)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Field</th><th>Default</th><th>Behavior</th><th>SnapTrade?</th></tr></thead>
+        <tbody>
+          <tr><td><code>profit_target_1_pct</code> … <code>profit_target_4_pct</code></td><td>10 / 20 / 30 / 40</td><td>Four cumulative profit thresholds. Engine arms a partial-sell when <em>any</em> target is crossed and not yet filled.</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>profit_target_qty_1..4</code></td><td>Auto</td><td>Optional override: exact contracts to trim at each target. Engine falls back to even split when null.</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>profit_target_trim_pct_1..4</code></td><td>Auto</td><td>Optional override: % of remaining position to trim at each target. Custom qty wins if both are set.</td><td><span class="tag t-bad">No</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn">
+      <p><strong>Why SnapTrade can't do this.</strong> A "PT ladder" is a stateful contract: as each target fills, the engine recomputes remaining qty, may re-issue the next limit, may cancel the prior on a reversal. SnapTrade exposes single-leg orders only; a ladder of four would need four cancel/replace cycles plus client-side bookkeeping — which is exactly what the Risk Engine already does.</p>
+    </div>
+
+    <h3>Stop Loss &amp; Trailing</h3>
+    <div class="field-row head"><div>Field</div><div>Behavior</div><div>SnapTrade equivalent</div><div>Coverage</div></div>
+    <div class="field-row"><div class="name">stop_loss_pct</div><div>Hard stop, computed against avg fill price.</div><div>SnapTrade Stop / StopLimit at the calculated price.</div><div><span class="tag t-warn">Output mappable</span></div></div>
+    <div class="field-row"><div class="name">trailing_stop_pct + trailing_activation_pct</div><div>Engine watches NBBO; once price &gt; activation, drags stop by trailing_pct off the high.</div><div>SnapTrade has no trailing primitive (Schwab/IBKR have native trailing but routing is broker-specific).</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">enable_early_trailing<br/>+ early_trailing_activation_pct<br/>+ early_trailing_step_pct</div><div>"Lock breakeven at +X%, then ratchet stop +Y% every Y% gain". Mutually exclusive with legacy trailing.</div><div>None — discrete ratchet logic.</div><div><span class="tag t-bad">Engine only</span></div></div>
+
+    <h3>Exit Strategy Mode</h3>
+    <div class="grid g3">
+      <div class="card"><h4 style="color:var(--brand)">Signal</h4><p>Risk engine is silent; only trader-issued STC signals close positions.</p></div>
+      <div class="card"><h4 style="color:var(--brand)">Risk</h4><p>Engine ignores trader STC; only PT/SL/trailing exits.</p></div>
+      <div class="card"><h4 style="color:var(--brand)">Hybrid</h4><p>First trigger wins — whichever fires first (signal or risk) closes the position.</p></div>
+    </div>
+    <p><small>SnapTrade has no concept of "trader-signal exits" — exits would be reduced to whatever order you happen to place. The mode itself is a routing/policy decision in the engine.</small></p>
+
+    <h3>Order-Shape Sub-Settings</h3>
+    <div class="field-row head"><div>Field</div><div>Values</div><div>SnapTrade</div><div>Coverage</div></div>
+    <div class="field-row"><div class="name">trim_order_mode + trim_limit_offset (+ mode $/%)</div><div>market / limit · 0–5 $ or 0–20 %</div><div>SnapTrade Limit price field.</div><div><span class="tag t-good">Mappable</span></div></div>
+    <div class="field-row"><div class="name">sl_order_mode + sl_limit_offset</div><div>market / limit · default 0.03 (3%)</div><div>SnapTrade Stop / StopLimit (offset is engine-side).</div><div><span class="tag t-good">Mappable</span></div></div>
+    <div class="field-row"><div class="name">broker_bracket_mode</div><div>both / sl_only / pt_only / none</div><div>SnapTrade has no bracket primitive — must place legs separately.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">order_chase</div><div>off / entry / exit / both</div><div>None — chase is a quote-driven re-quote loop.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">leave_runner_enabled + leave_runner_pct</div><div>Hold N% past final PT.</div><div>None — engine state.</div><div><span class="tag t-bad">Engine only</span></div></div>
+    <div class="field-row"><div class="name">presets (default / swing / momentum / trend)</div><div>4 curated bundles touching ~15 fields each.</div><div>None.</div><div><span class="tag t-bad">Engine only</span></div></div>
+  </section>
+
+  <!-- 7. Advanced -->
+  <section id="advanced">
+    <div class="section-head"><div class="section-num">07</div><h2>Advanced Risk</h2></div>
+    <p class="section-kicker">Trading → Execution → Risk Management → <strong>Advanced</strong> tab. The differentiated, alpha-bearing controls.</p>
+
+    <div class="grid g2">
+      <div class="card">
+        <h3 style="color:var(--bad)">Dynamic Stop-Loss Escalation</h3>
+        <ul>
+          <li><strong>enable_dynamic_sl</strong> — turns the escalator on.</li>
+          <li><strong>dynamic_sl_profile</strong> — <code>conservative</code> (PT1: BE, PT2: +3%, PT3: +8%, PT4: +15%) · <code>standard</code> (BE / +5 / +10 / +17) · <code>aggressive</code> (-2 / BE / +8 / +15).</li>
+          <li><strong>escalation_only_mode</strong> — targets only ratchet the stop; never partial-sell.</li>
+        </ul>
+        <p style="color:var(--muted)"><small>Each PT fill rewrites the stop; engine must be live in-process to do this. SnapTrade has zero hooks for it.</small></p>
+      </div>
+
+      <div class="card">
+        <h3 style="color:var(--warn)">Max Profit Giveback Guard</h3>
+        <ul>
+          <li><strong>enable_giveback_guard</strong> — switch.</li>
+          <li><strong>giveback_allowed_pct</strong> — close if peak P/L drops by &gt; X% (5–80, default 30).</li>
+          <li>Activates only after PT2 or trailing-activation has been hit.</li>
+        </ul>
+        <p style="color:var(--muted)"><small>Requires a peak-P/L watermark per position — purely engine state.</small></p>
+      </div>
+
+      <div class="card" style="grid-column:1 / -1">
+        <h3 style="color:var(--brand-2)">EMA Risk Management</h3>
+        <p>The engine builds live OHLC candles per position, computes an EMA, and exits / escalates on unfavorable crosses.</p>
+        <div class="grid g3" style="margin-top:8px">
+          <div><strong>ema_period</strong><br/><small>3 / 5 / 8 / 13 / 21</small></div>
+          <div><strong>ema_timeframe_minutes</strong><br/><small>1 / 2 / 3 / 5 min candles</small></div>
+          <div><strong>ema_buffer_pct</strong><br/><small>0–2 % cushion before signal</small></div>
+          <div><strong>ema_exit_enabled</strong><br/><small>Close on adverse cross</small></div>
+          <div><strong>ema_escalation_enabled</strong><br/><small>Tighten stop on adverse cross</small></div>
+          <div><strong>ema_no_trend_candles</strong><br/><small>Stagnant-trend bailout (1–20)</small></div>
+          <div><strong>ema_use_underlying</strong><br/><small>Use underlying chart vs option chart</small></div>
+          <div><strong>ema_extended_hours</strong><br/><small>Build candles in pre/post market</small></div>
+          <div><strong>trade_summary_enabled</strong><br/><small>Post P/L recap to Discord on close</small></div>
+        </div>
+        <div class="callout bad" style="margin-top:14px">
+          <p><strong>SnapTrade gap.</strong> SnapTrade is a unified order API — it doesn't ship market data, doesn't compute indicators, and doesn't run a per-position scheduler. Ripping the EMA engine out and trying to recreate it client-side just to call SnapTrade for the close order would be strictly more code, not less.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. Ticker Filter -->
+  <section id="tickerfilter">
+    <div class="section-head"><div class="section-num">08</div><h2>Ticker Filter</h2></div>
+    <p class="section-kicker">Per-channel allow/block list applied to the signal's underlying symbol.</p>
+
+    <div class="grid g2">
+      <div class="card">
+        <h4>Modes</h4>
+        <ul>
+          <li><strong>off</strong> — no filtering.</li>
+          <li><strong>allow</strong> — only signals matching the list trade.</li>
+          <li><strong>block</strong> — signals matching the list are skipped.</li>
+        </ul>
+        <p><small>For options, the underlying is matched (e.g., <code>SPY 450C</code> matches <code>SPY</code>). Case-insensitive comma-separated list.</small></p>
+      </div>
+      <div class="card">
+        <h4>SnapTrade equivalent</h4>
+        <p><span class="tag t-bad">None.</span> SnapTrade ingests orders, not signals. The filter is a routing decision <em>before</em> any order is constructed.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. SnapTrade what they DO have -->
+  <section id="snaptrade">
+    <div class="section-head"><div class="section-num">09</div><h2>What SnapTrade Actually Provides</h2></div>
+    <p class="section-kicker">A fair accounting of the surface area we'd actually be buying.</p>
+
+    <div class="grid g2">
+      <div class="pros">
+        <h4>SnapTrade strengths (the genuine value)</h4>
+        <ul>
+          <li>One unified <code>POST /trade/place</code> endpoint across ~14 brokers.</li>
+          <li>Order types: <strong>Market</strong>, <strong>Limit</strong>, <strong>Stop</strong>, <strong>StopLimit</strong>.</li>
+          <li>TIF: <strong>DAY</strong>, <strong>GTC</strong> (broker-dependent).</li>
+          <li>Account &amp; positions normalization (cash, equity, BP).</li>
+          <li>Order status &amp; partial-fill webhook (<code>PARTIALLY_FILLED</code>, <code>FILLED</code>, <code>CANCELLED</code>).</li>
+          <li>OAuth-based broker linking → no password storage.</li>
+          <li>Replaces selfbot / scraping flows for Webull, Robinhood, Trading212 (subject to broker availability).</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>SnapTrade gaps vs the Risk Engine</h4>
+        <ul>
+          <li>No PT ladder, no per-target qty/% override, no trim presets.</li>
+          <li>No native trailing, no early-trailing breakeven ratchet.</li>
+          <li>No DYN-SL escalation profiles, no escalation-only mode.</li>
+          <li>No giveback guard / peak-P/L watermark.</li>
+          <li>No EMA engine (no candles, no indicators, no per-position scheduler).</li>
+          <li>No exit-strategy modes (signal / risk / hybrid).</li>
+          <li>No signal-update automation (it doesn't see Discord/Telegram).</li>
+          <li>No NDX→QQQ delta-aware remap.</li>
+          <li>No slippage / limit-cap / order-chase loops.</li>
+          <li>No conditional triggers tied to upstream messages.</li>
+          <li>No ticker filter (allow/block by underlying).</li>
+          <li>No bracket primitive — PT and SL legs must be placed separately.</li>
+          <li>No "force my size" / sizing modes / paper-track sizing split.</li>
+          <li>No Quick Presets (Default / Swing / Momentum / Trend).</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. Coverage Matrix -->
+  <section id="matrix">
+    <div class="section-head"><div class="section-num">10</div><h2>Master Coverage Matrix</h2></div>
+    <p class="section-kicker">Every audited field, scored against SnapTrade.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Surface · Field</th><th>What it does</th><th>SnapTrade coverage</th></tr></thead>
+        <tbody>
+          <tr><td colspan="3" style="background:#eff6ff;font-weight:700;color:var(--brand-ink)">Channels → Sizing</td></tr>
+          <tr><td><code>position_size_pct</code></td><td>% of BP per signal</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>default_quantity</code></td><td>Static fallback qty</td><td><span class="tag t-warn">Output mappable</span></td></tr>
+          <tr><td><code>ignore_signal_position_size</code></td><td>Force My Size</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>sizing_mode</code></td><td>live / pre_market / start_of_day BP snapshot</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>tracking_position_size_pct</code></td><td>Paper-track % sizing</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>tracking_default_quantity</code></td><td>Paper-track qty</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>channel_max_position_size</code></td><td>Hard cap</td><td><span class="tag t-bad">No</span></td></tr>
+
+          <tr><td colspan="3" style="background:#eff6ff;font-weight:700;color:var(--brand-ink)">Channels → Risk Controls</td></tr>
+          <tr><td><code>signal_update_automation</code></td><td>Re-route on signal edits</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>slippage_protection_enabled / max_pct / wait_minutes</code></td><td>Defer if quote drift &gt; X% for up to N min</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>limit_cap_enabled / pct</code></td><td>Cap entry limit at signal+X%</td><td><span class="tag t-warn">Output mappable</span></td></tr>
+          <tr><td><code>ndx_to_qqq_enabled / delta</code></td><td>Index → ETF symbol remap</td><td><span class="tag t-bad">No</span></td></tr>
+
+          <tr><td colspan="3" style="background:#eff6ff;font-weight:700;color:var(--brand-ink)">Channels → Order Types</td></tr>
+          <tr><td><code>entry_order_mode</code></td><td>market / limit</td><td><span class="tag t-good">Yes</span></td></tr>
+          <tr><td><code>trim_order_mode</code></td><td>market / limit</td><td><span class="tag t-good">Yes</span></td></tr>
+          <tr><td><code>sl_order_mode</code></td><td>market / limit</td><td><span class="tag t-good">Yes</span></td></tr>
+
+          <tr><td colspan="3" style="background:#eff6ff;font-weight:700;color:var(--brand-ink)">Channels → Conditional</td></tr>
+          <tr><td><code>conditional_order_enabled</code></td><td>Hold-and-watch state</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>order_timeout_minutes</code></td><td>Auto-cancel timer</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>conditional_order_timeout_minutes</code></td><td>Conditional expiry</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>entry_confirmation_pct</code></td><td>Wait for X% confirmation move</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>breakout_reset_enabled</code></td><td>Re-arm on retrace</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>trigger_offset_mode + value</code></td><td>$/% pre-trigger above signal</td><td><span class="tag t-bad">No</span></td></tr>
+
+          <tr><td colspan="3" style="background:#fef2f2;font-weight:700;color:var(--bad)">Execution → Risk Mgmt → Targets &amp; SL</td></tr>
+          <tr><td><code>profit_target_1..4_pct</code></td><td>Tiered PT ladder</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>profit_target_qty_1..4</code></td><td>Per-target custom qty</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>profit_target_trim_pct_1..4</code></td><td>Per-target custom %</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>stop_loss_pct</code></td><td>Hard SL %</td><td><span class="tag t-warn">Output mappable</span></td></tr>
+          <tr><td><code>trailing_stop_pct + trailing_activation_pct</code></td><td>Server-side trailing</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>enable_early_trailing + activation + step</code></td><td>Breakeven + ratchet</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>exit_strategy_mode</code></td><td>signal / risk / hybrid</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>trim_limit_offset (+ mode $/%) + trim_limit_offset_pct</code></td><td>Limit price for partials</td><td><span class="tag t-good">Yes</span></td></tr>
+          <tr><td><code>sl_limit_offset</code></td><td>StopLimit offset</td><td><span class="tag t-good">Yes</span></td></tr>
+          <tr><td><code>broker_bracket_mode</code></td><td>both / sl_only / pt_only / none</td><td><span class="tag t-bad">No bracket primitive</span></td></tr>
+          <tr><td><code>order_chase</code> (entry / exit / both)</td><td>Mid-price re-quote loop</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>leave_runner_enabled + pct</code></td><td>Keep N% past final PT</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>presets</code> (Default/Swing/Momentum/Trend)</td><td>Curated multi-field bundles</td><td><span class="tag t-bad">No</span></td></tr>
+
+          <tr><td colspan="3" style="background:#fef2f2;font-weight:700;color:var(--bad)">Execution → Risk Mgmt → Advanced</td></tr>
+          <tr><td><code>enable_dynamic_sl + dynamic_sl_profile</code></td><td>SL escalator (3 profiles)</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>escalation_only_mode</code></td><td>Ratchet-only, no partials</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>enable_giveback_guard + pct</code></td><td>Peak-P/L watermark exit</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>ema_risk_enabled</code></td><td>EMA engine master switch</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>ema_period / timeframe / buffer</code></td><td>Indicator config</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>ema_exit_enabled / escalation_enabled</code></td><td>Cross-action selectors</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>ema_no_trend_candles</code></td><td>Stagnation bailout</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>ema_use_underlying / extended_hours</code></td><td>Data-source switches</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>trade_summary_enabled</code></td><td>Discord P/L recap on close</td><td><span class="tag t-bad">No</span></td></tr>
+
+          <tr><td colspan="3" style="background:#fffbeb;font-weight:700;color:var(--warn)">Execution → Ticker Filter</td></tr>
+          <tr><td><code>ticker_filter_mode</code></td><td>off / allow / block</td><td><span class="tag t-bad">No</span></td></tr>
+          <tr><td><code>ticker_filter_list</code></td><td>Comma-separated underlyings</td><td><span class="tag t-bad">No</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 11. Architecture diagram -->
+  <section id="architecture">
+    <div class="section-head"><div class="section-num">11</div><h2>Architecture: Risk Engine vs Router</h2></div>
+    <p class="section-kicker">A picture of the two layers and where SnapTrade would actually slot in.</p>
+
+    <div class="card" style="padding:24px">
+      <svg class="diagram" viewBox="0 0 980 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Risk Engine vs SnapTrade architecture">
+        <defs>
+          <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#eff6ff"/><stop offset="100%" stop-color="#dbeafe"/>
+          </linearGradient>
+          <linearGradient id="g2" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#fef2f2"/><stop offset="100%" stop-color="#fecaca"/>
+          </linearGradient>
+          <linearGradient id="g3" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#f0fdf4"/><stop offset="100%" stop-color="#bbf7d0"/>
+          </linearGradient>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+          </marker>
+        </defs>
+
+        <!-- Signal sources -->
+        <rect x="20" y="20" width="170" height="60" rx="10" fill="url(#g1)" stroke="#93c5fd"/>
+        <text x="105" y="46" text-anchor="middle" font-family="Inter" font-weight="700" font-size="14" fill="#1e3a8a">Discord / Telegram</text>
+        <text x="105" y="64" text-anchor="middle" font-family="Inter" font-size="11" fill="#1e3a8a">signals · edits · STC</text>
+
+        <!-- Risk Engine (BIG) -->
+        <rect x="240" y="20" width="500" height="380" rx="14" fill="url(#g2)" stroke="#fca5a5"/>
+        <text x="490" y="46" text-anchor="middle" font-family="Inter" font-weight="800" font-size="16" fill="#7f1d1d">BotifyTrades Risk Engine (in-process, server-side)</text>
+
+        <!-- Components inside engine -->
+        <g font-family="Inter" font-size="11" fill="#7f1d1d">
+          <rect x="260" y="70"  width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="370" y="90"  text-anchor="middle" font-weight="700">Channel Settings &amp; Presets</text>
+          <text x="370" y="106" text-anchor="middle">42 fields · per-channel state machine</text>
+
+          <rect x="500" y="70"  width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="610" y="90"  text-anchor="middle" font-weight="700">Sizing &amp; Pre-Route Filters</text>
+          <text x="610" y="106" text-anchor="middle">% BP · Force My Size · ticker filter</text>
+
+          <rect x="260" y="135" width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="370" y="155" text-anchor="middle" font-weight="700">Position Monitor</text>
+          <text x="370" y="171" text-anchor="middle">PT ladder · trailing · early trailing</text>
+
+          <rect x="500" y="135" width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="610" y="155" text-anchor="middle" font-weight="700">DYN-SL Escalator</text>
+          <text x="610" y="171" text-anchor="middle">conservative / standard / aggressive</text>
+
+          <rect x="260" y="200" width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="370" y="220" text-anchor="middle" font-weight="700">EMA Engine</text>
+          <text x="370" y="236" text-anchor="middle">live candles · cross exits / escalation</text>
+
+          <rect x="500" y="200" width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="610" y="220" text-anchor="middle" font-weight="700">Giveback Guard</text>
+          <text x="610" y="236" text-anchor="middle">peak-P/L watermark exit</text>
+
+          <rect x="260" y="265" width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="370" y="285" text-anchor="middle" font-weight="700">Conditional / Chase / Slippage</text>
+          <text x="370" y="301" text-anchor="middle">timers · re-quote loops · breakout reset</text>
+
+          <rect x="500" y="265" width="220" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="610" y="285" text-anchor="middle" font-weight="700">Bracket Builder</text>
+          <text x="610" y="301" text-anchor="middle">both / sl_only / pt_only / none</text>
+
+          <rect x="260" y="330" width="460" height="50" rx="8" fill="#fff" stroke="#fca5a5"/>
+          <text x="490" y="350" text-anchor="middle" font-weight="700">Order Emitter (normalized)</text>
+          <text x="490" y="366" text-anchor="middle">Market · Limit · Stop · StopLimit · TIF · qty · side · account</text>
+        </g>
+
+        <!-- Arrow signal -> engine -->
+        <line x1="190" y1="50" x2="237" y2="50" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+        <!-- SnapTrade (SMALL) -->
+        <rect x="780" y="170" width="180" height="100" rx="10" fill="url(#g3)" stroke="#86efac"/>
+        <text x="870" y="196" text-anchor="middle" font-family="Inter" font-weight="800" font-size="14" fill="#166534">SnapTrade</text>
+        <text x="870" y="214" text-anchor="middle" font-family="Inter" font-size="11" fill="#166534">unified routing only</text>
+        <text x="870" y="232" text-anchor="middle" font-family="Inter" font-size="10" fill="#166534">place/cancel/status</text>
+        <text x="870" y="250" text-anchor="middle" font-family="Inter" font-size="10" fill="#166534">Mkt · Lmt · Stop · StpLmt</text>
+
+        <!-- Arrow engine -> snaptrade -->
+        <line x1="725" y1="355" x2="780" y2="240" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+        <!-- Brokers -->
+        <rect x="780" y="20" width="180" height="100" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <text x="870" y="46" text-anchor="middle" font-family="Inter" font-weight="700" font-size="13" fill="#0f172a">Brokers</text>
+        <text x="870" y="68" text-anchor="middle" font-family="Inter" font-size="10" fill="#475569">Webull · Schwab · Alpaca</text>
+        <text x="870" y="84" text-anchor="middle" font-family="Inter" font-size="10" fill="#475569">IBKR · TastyTrade · T212</text>
+        <text x="870" y="100" text-anchor="middle" font-family="Inter" font-size="10" fill="#475569">Robinhood</text>
+
+        <line x1="870" y1="170" x2="870" y2="125" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+        <text x="490" y="430" text-anchor="middle" font-family="Inter" font-size="12" fill="#475569" font-style="italic">
+          ~88% of the system lives in the red box. SnapTrade is the green box: an order verb, not a strategy.
+        </text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- 12. Decision -->
+  <section id="decision">
+    <div class="section-head"><div class="section-num">12</div><h2>Recommendation</h2></div>
+    <p class="section-kicker">How to think about adopting SnapTrade without losing the product.</p>
+
+    <div class="grid g3">
+      <div class="card">
+        <h4 style="color:var(--good)">Keep</h4>
+        <p>Every red-box component above. Profit-target ladder, DYN-SL escalator, EMA engine, giveback guard, early trailing, exit-strategy modes, signal-update automation, NDX→QQQ remap, slippage / chase / conditional / breakout loops, ticker filter, presets.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--brand)">Wrap</h4>
+        <p>Replace direct broker SDK calls inside the <em>Order Emitter</em> with a thin SnapTrade adapter for the brokers SnapTrade actually supports better than the current code paths (Webull, Robinhood, T212 selfbot). Keep IBKR/Schwab/Alpaca/Tasty native where SnapTrade is more restrictive.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--warn)">Defer</h4>
+        <p>Conditional / bracket / TIF behaviors should remain engine-side until SnapTrade exposes a unified bracket primitive. Today, every "bracket" through SnapTrade would still be three separate calls and three reconciliations — exactly what we already do natively.</p>
+      </div>
+    </div>
+
+    <div class="callout good" style="margin-top:18px">
+      <p><strong>Net effect of a SnapTrade-only stack.</strong> You delete ~12% of the routing code (broker-specific order placement) and lose ~88% of the product (everything that decides <em>when</em>, <em>how much</em>, and <em>at what price</em>). The right move is the inverse: keep the engine, treat SnapTrade as one of several optional output adapters.</p>
+    </div>
+  </section>
+
+  </main>
+</div>
+</div>
+
+<footer>
+  <div class="page">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div>BotifyTrades · Risk Engine vs SnapTrade Comparison · v1.0</div>
+      <div>Generated from <code>channels.html</code>, <code>channels.js</code>, <code>RISK_SETTINGS_VALIDATION_REFERENCE.md</code></div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
