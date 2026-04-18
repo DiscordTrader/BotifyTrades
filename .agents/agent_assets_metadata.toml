@@ -144,3 +144,9 @@ id = "0DgHShAsMMp9Z0-nDE9Ui"
 uri = "file://MYSE_Investigation_Report.md"
 type = "text"
 title = "MYSE Investigation Report"
+
+[[outputs]]
+id = "FdzpuacloHZTzydSSC2uQ"
+uri = "file://docs/snaptrade-analysis.pdf"
+type = "pdf"
+title = "SnapTrade vs BotifyTrades — Architectural Analysis (v2)"
