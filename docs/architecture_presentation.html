@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades - Architecture Review & SaaS Transformation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg-primary: #0a0e1a;
+    --bg-secondary: #111827;
+    --bg-card: #1a2234;
+    --bg-card-hover: #1f2a40;
+    --border: #2a3654;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-blue: #3b82f6;
+    --accent-cyan: #06b6d4;
+    --accent-purple: #8b5cf6;
+    --accent-green: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-pink: #ec4899;
+    --gradient-1: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    --gradient-2: linear-gradient(135deg, #06b6d4, #3b82f6);
+    --gradient-3: linear-gradient(135deg, #10b981, #06b6d4);
+    --gradient-4: linear-gradient(135deg, #f59e0b, #ef4444);
+    --shadow-lg: 0 20px 60px rgba(0,0,0,0.4);
+    --shadow-glow-blue: 0 0 40px rgba(59,130,246,0.15);
+    --shadow-glow-purple: 0 0 40px rgba(139,92,246,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* Navigation */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(10,14,26,0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    z-index: 100;
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .nav-logo {
+    width: 36px;
+    height: 36px;
+    background: var(--gradient-1);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 16px;
+    color: white;
+  }
+
+  .nav-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .nav-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .slide-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .nav-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 16px;
+  }
+
+  .nav-btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+    border-color: var(--accent-blue);
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    height: 3px;
+    background: var(--gradient-1);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 99;
+  }
+
+  /* Slide Container */
+  .slides-container {
+    position: fixed;
+    top: 67px;
+    left: 0;
+    right: 0;
+    bottom: 48px;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 48px 64px;
+    display: none;
+    overflow-y: auto;
+    animation: slideIn 0.4s ease;
+  }
+
+  .slide.active { display: block; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide::-webkit-scrollbar { width: 6px; }
+  .slide::-webkit-scrollbar-track { background: transparent; }
+  .slide::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Footer */
+  .footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 48px;
+    background: rgba(10,14,26,0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 32px;
+  }
+
+  .footer-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .footer-dot.active {
+    background: var(--accent-blue);
+    width: 24px;
+    border-radius: 4px;
+  }
+
+  .footer-dot:hover { background: var(--accent-blue); opacity: 0.7; }
+
+  /* Typography */
+  .slide-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    color: var(--accent-cyan);
+    margin-bottom: 12px;
+  }
+
+  .slide-title {
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    letter-spacing: -1px;
+  }
+
+  .slide-title .gradient-text {
+    background: var(--gradient-1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .slide-subtitle {
+    font-size: 18px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 720px;
+    margin-bottom: 40px;
+  }
+
+  h2 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    letter-spacing: -0.5px;
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+  }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: all 0.3s;
+  }
+
+  .card:hover {
+    border-color: rgba(59,130,246,0.3);
+    box-shadow: var(--shadow-glow-blue);
+    transform: translateY(-2px);
+  }
+
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-bottom: 16px;
+  }
+
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .card-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* Architecture Diagram */
+  .arch-diagram {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+    overflow-x: auto;
+    white-space: pre;
+    margin-bottom: 24px;
+  }
+
+  .arch-diagram .hl-blue { color: var(--accent-blue); font-weight: 600; }
+  .arch-diagram .hl-green { color: var(--accent-green); font-weight: 600; }
+  .arch-diagram .hl-purple { color: var(--accent-purple); font-weight: 600; }
+  .arch-diagram .hl-amber { color: var(--accent-amber); font-weight: 600; }
+  .arch-diagram .hl-cyan { color: var(--accent-cyan); font-weight: 600; }
+  .arch-diagram .hl-red { color: var(--accent-red); font-weight: 600; }
+
+  /* Tables */
+  .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+    font-size: 13px;
+  }
+
+  .data-table thead th {
+    background: rgba(59,130,246,0.08);
+    padding: 14px 20px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--accent-cyan);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table tbody td {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(42,54,84,0.5);
+    color: var(--text-secondary);
+  }
+
+  .data-table tbody tr:last-child td { border-bottom: none; }
+
+  .data-table tbody tr:hover { background: rgba(59,130,246,0.04); }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); }
+  .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); }
+  .badge-amber { background: rgba(245,158,11,0.12); color: var(--accent-amber); }
+  .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); }
+  .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); }
+  .badge-cyan { background: rgba(6,182,212,0.12); color: var(--accent-cyan); }
+
+  /* Metric Cards */
+  .metric-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+  }
+
+  .metric-value {
+    font-size: 36px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    letter-spacing: -1px;
+  }
+
+  .metric-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Flow Arrows */
+  .flow-container {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 32px;
+    overflow-x: auto;
+  }
+
+  .flow-step {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    min-width: 140px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .flow-step-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .flow-step-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .flow-arrow {
+    font-size: 18px;
+    color: var(--accent-blue);
+    flex-shrink: 0;
+    padding: 0 8px;
+  }
+
+  /* Phase Timeline */
+  .timeline {
+    position: relative;
+    padding-left: 32px;
+    margin-bottom: 24px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-bottom: 32px;
+  }
+
+  .timeline-item:last-child { padding-bottom: 0; }
+
+  .timeline-dot {
+    position: absolute;
+    left: -32px;
+    top: 4px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+  }
+
+  .timeline-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+
+  .timeline-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .timeline-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .timeline-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* Comparison Columns */
+  .compare-cols {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 0;
+    align-items: start;
+    margin-bottom: 24px;
+  }
+
+  .compare-col {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+  }
+
+  .compare-vs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-muted);
+    align-self: center;
+  }
+
+  .compare-header {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .compare-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+  }
+
+  .compare-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .compare-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* Lists */
+  .check-list {
+    list-style: none;
+    margin-bottom: 24px;
+  }
+
+  .check-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .check-list li::before {
+    content: '\2713';
+    color: var(--accent-green);
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .x-list li::before {
+    content: '\2717';
+    color: var(--accent-red);
+  }
+
+  /* Section divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 32px 0;
+  }
+
+  /* Highlight box */
+  .highlight-box {
+    background: rgba(59,130,246,0.06);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+
+  .highlight-box.green {
+    background: rgba(16,185,129,0.06);
+    border-color: rgba(16,185,129,0.2);
+  }
+
+  .highlight-box.amber {
+    background: rgba(245,158,11,0.06);
+    border-color: rgba(245,158,11,0.2);
+  }
+
+  .highlight-box.red {
+    background: rgba(239,68,68,0.06);
+    border-color: rgba(239,68,68,0.2);
+  }
+
+  .highlight-box .hl-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .highlight-box .hl-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* Kbd */
+  kbd {
+    display: inline-block;
+    padding: 2px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+  }
+
+  /* Two Column Layout */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .slide { padding: 32px; }
+    .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+    .slide-title { font-size: 32px; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  /* Cover specific */
+  .cover-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 100%;
+    min-height: 500px;
+  }
+
+  .cover-center .slide-title { max-width: 800px; }
+  .cover-center .slide-subtitle { max-width: 600px; text-align: center; }
+
+  .cover-meta {
+    display: flex;
+    gap: 32px;
+    margin-top: 16px;
+  }
+
+  .cover-meta-item {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .cover-meta-item span {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  /* Verdict card */
+  .verdict-card {
+    background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08));
+    border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+
+  .verdict-card h3 {
+    background: var(--gradient-1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 20px;
+    margin-bottom: 12px;
+  }
+
+  /* Latency bars */
+  .latency-bar-container {
+    margin-bottom: 16px;
+  }
+
+  .latency-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  .latency-bar {
+    height: 28px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .latency-fill {
+    height: 100%;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding-left: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    transition: width 1s ease;
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">BT</div>
+    <div>
+      <div class="nav-title">BotifyTrades</div>
+      <div class="nav-subtitle">Architecture Review</div>
+    </div>
+  </div>
+  <div class="nav-controls">
+    <span class="slide-counter" id="slideCounter">01 / 12</span>
+    <button class="nav-btn" onclick="prevSlide()">&#8592;</button>
+    <button class="nav-btn" onclick="nextSlide()">&#8594;</button>
+  </div>
+</nav>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Slides -->
+<div class="slides-container">
+
+  <!-- SLIDE 1: Cover -->
+  <div class="slide active" data-slide="1">
+    <div class="cover-center">
+      <div class="slide-label">Architecture Review & Transformation Plan</div>
+      <h1 class="slide-title">
+        Centralized Market Data &<br>
+        <span class="gradient-text">Multi-Tenant SaaS Architecture</span>
+      </h1>
+      <p class="slide-subtitle">
+        Transforming BotifyTrades from a single-user desktop bot into a scalable, cloud-native SaaS platform with centralized price streaming, SnapTrade broker integration, and enterprise-grade risk management.
+      </p>
+      <div class="cover-meta">
+        <div class="cover-meta-item">Prepared <span>April 2026</span></div>
+        <div class="cover-meta-item">Version <span>1.0</span></div>
+        <div class="cover-meta-item">Classification <span>Internal</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: Current Architecture -->
+  <div class="slide" data-slide="2">
+    <div class="slide-label">Current State</div>
+    <h1 class="slide-title">Current <span class="gradient-text">Architecture</span></h1>
+    <p class="slide-subtitle">Each user runs an independent bot instance with direct broker connections for both price data and order execution.</p>
+
+    <div class="arch-diagram"><span class="hl-cyan">CURRENT MODEL: Single-User Bot Instance</span>
+
+<span class="hl-blue">Discord Signal</span>  ──>  <span class="hl-green">Signal Parser</span>  ──>  <span class="hl-purple">Conditional Order Monitor</span>
+                                               |
+                                    <span class="hl-amber">Price from User's Own Broker</span>
+                                    (Webull MQTT / Schwab WS / Tastytrade DXLink)
+                                               |
+                                    <span class="hl-green">Condition Met ──> Execute on Broker</span>
+                                               |
+                                    <span class="hl-red">Risk Engine Monitors via Broker Stream</span>
+                                    (Position price from same broker connection)
+                                               |
+                                    <span class="hl-red">Exit Condition ──> Close Position</span></div>
+
+    <div class="card-grid grid-4">
+      <div class="card">
+        <div class="card-icon" style="background:rgba(59,130,246,0.12);color:var(--accent-blue)">&#9889;</div>
+        <div class="card-title">UnifiedPriceHub</div>
+        <div class="card-desc">Aggregates prices from all connected broker data hubs into a single source of truth per bot instance.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(16,185,129,0.12);color:var(--accent-green)">&#9881;</div>
+        <div class="card-title">Risk Engine</div>
+        <div class="card-desc">1-second monitoring cycle with SL, PT tiers (1-4), trailing stops, giveback guard, EMA exits, and early trailing.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(139,92,246,0.12);color:var(--accent-purple)">&#128279;</div>
+        <div class="card-title">Direct Broker SDK</div>
+        <div class="card-desc">Custom integrations for Webull, Schwab, Tastytrade, IBKR, Alpaca with per-broker streaming clients.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(245,158,11,0.12);color:var(--accent-amber)">&#128202;</div>
+        <div class="card-title">Position Ledger</div>
+        <div class="card-desc">Tracks all positions with partial exits, P&L, risk state, and broker sync reconciliation every 30 seconds.</div>
+      </div>
+    </div>
+
+    <div class="highlight-box amber">
+      <div class="hl-title">&#9888; Key Limitation</div>
+      <div class="hl-text">Every user must independently authenticate and maintain their own broker streaming connections. Price data quality depends entirely on each user's broker credentials and network stability.</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Proposed Architecture -->
+  <div class="slide" data-slide="3">
+    <div class="slide-label">Proposed Architecture</div>
+    <h1 class="slide-title">Centralized <span class="gradient-text">Master Application</span></h1>
+    <p class="slide-subtitle">A single Master Application handles all market data streaming, distributing real-time prices to every user bot via WebSocket API.</p>
+
+    <div class="arch-diagram"><span class="hl-cyan">PROPOSED MODEL: Centralized Price + SnapTrade Execution</span>
+
+<span class="hl-blue">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; MASTER APPLICATION &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
+<span class="hl-blue">&#9474;</span>                                                                              <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9474;</span>  <span class="hl-green">Polygon.io WS</span>    <span class="hl-amber">Schwab WS</span>      <span class="hl-purple">Webull MQTT</span>    <span class="hl-red">Tastytrade DXLink</span>   <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9474;</span>  (Primary)          (Backup #1)     (Backup #2)     (Backup #3)          <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9474;</span>       &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;                    <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9474;</span>                     <span class="hl-cyan">Price Aggregator</span>                                       <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9474;</span>                     <span class="hl-cyan">Redis Pub/Sub</span>                                          <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9474;</span>                     <span class="hl-cyan">WebSocket Gateway</span>                                      <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9474;</span>                    &#9487;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9491;                                      <span class="hl-blue">&#9474;</span>
+<span class="hl-blue">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>
+                     &#9474;    &#9474;    &#9474;
+                  <span class="hl-green">User1</span> <span class="hl-green">User2</span> <span class="hl-green">UserN</span>    (Lightweight Bots)
+                     &#9474;    &#9474;    &#9474;
+                  <span class="hl-amber">&#9492;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9496;</span>
+                     <span class="hl-amber">SnapTrade API</span>
+                  <span class="hl-amber">(Broker Execution)</span></div>
+
+    <div class="card-grid grid-3">
+      <div class="card">
+        <div class="card-icon" style="background:rgba(6,182,212,0.12);color:var(--accent-cyan)">&#127760;</div>
+        <div class="card-title">Centralized Data</div>
+        <div class="card-desc">One Polygon connection serves all users. No per-user broker streaming setup required.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(16,185,129,0.12);color:var(--accent-green)">&#128274;</div>
+        <div class="card-title">SnapTrade Execution</div>
+        <div class="card-desc">20+ brokers via unified API. User credentials stay with SnapTrade, never touch your servers.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(139,92,246,0.12);color:var(--accent-purple)">&#128640;</div>
+        <div class="card-title">Lightweight Bot</div>
+        <div class="card-desc">User bot only handles signal parsing and UI. All heavy lifting moves to the Master Application.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Broker vs Polygon -->
+  <div class="slide" data-slide="4">
+    <div class="slide-label">Data Source Analysis</div>
+    <h1 class="slide-title">Broker-Only vs <span class="gradient-text">Dedicated Market Data</span></h1>
+    <p class="slide-subtitle">Can broker connections alone provide real-time data to all users? Deep analysis of data source options.</p>
+
+    <div class="compare-cols">
+      <div class="compare-col" style="border-color: rgba(239,68,68,0.3);">
+        <div class="compare-header" style="color:var(--accent-red)">&#10006; Broker-Only Data</div>
+        <div class="compare-sub">Using Webull/Schwab/Tastytrade connections</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-red)">&#10006;</span> Session-dependent: token expire = all users lose data</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-red)">&#10006;</span> No SLA: brokers can change APIs without notice</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-red)">&#10006;</span> ~500 symbol limit per connection</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-red)">&#10006;</span> Redistributing data violates broker ToS</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-red)">&#10006;</span> Single point of failure per broker</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-green)">&#10004;</span> Free (no additional cost)</div>
+      </div>
+      <div class="compare-vs">VS</div>
+      <div class="compare-col" style="border-color: rgba(16,185,129,0.3);">
+        <div class="compare-header" style="color:var(--accent-green)">&#10004; Polygon.io + Broker Backup</div>
+        <div class="compare-sub">Primary: Polygon | Fallback: Schwab/Webull</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-green)">&#10004;</span> API key auth: no user sessions needed</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-green)">&#10004;</span> 99.9% SLA with contractual guarantees</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-green)">&#10004;</span> Unlimited symbols (all US equities + options)</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-green)">&#10004;</span> Licensed for redistribution (paid tier)</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-green)">&#10004;</span> Multi-source failover eliminates SPOF</div>
+        <div class="compare-item"><span class="compare-icon" style="color:var(--accent-amber)">&#9679;</span> $199-499/mo (covered by ~15 subscribers)</div>
+      </div>
+    </div>
+
+    <div class="verdict-card">
+      <h3>&#9654; Verdict: Hybrid Approach Required</h3>
+      <p style="color:var(--text-secondary);font-size:14px;line-height:1.7;">Broker-only data is too fragile for production SaaS and likely violates Terms of Service for redistribution. Use <strong>Polygon.io as primary</strong> ($199/mo) with existing broker streams as automated failover. The cost is trivially recovered from 10-20 user subscriptions.</p>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Market Data Vendor Comparison -->
+  <div class="slide" data-slide="5">
+    <div class="slide-label">Vendor Comparison</div>
+    <h1 class="slide-title">Market Data <span class="gradient-text">Vendor Analysis</span></h1>
+    <p class="slide-subtitle">Comprehensive comparison of available market data providers for the centralized price feed.</p>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Polygon.io</th>
+          <th>Alpaca Data</th>
+          <th>Tradier</th>
+          <th>IEX Cloud</th>
+          <th>Broker-Only</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">Monthly Cost</td>
+          <td><span class="badge badge-amber">$199-499</span></td>
+          <td><span class="badge badge-amber">$99</span></td>
+          <td><span class="badge badge-green">$0*</span></td>
+          <td><span class="badge badge-green">$9-49</span></td>
+          <td><span class="badge badge-green">$0</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">Latency</td>
+          <td><span class="badge badge-green">10-50ms</span></td>
+          <td><span class="badge badge-blue">30-100ms</span></td>
+          <td><span class="badge badge-blue">50-150ms</span></td>
+          <td><span class="badge badge-amber">100-500ms</span></td>
+          <td><span class="badge badge-blue">50-200ms</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">Stock Coverage</td>
+          <td>All US Stocks</td>
+          <td>All US Stocks</td>
+          <td>All US Stocks</td>
+          <td>All US Stocks</td>
+          <td>Subscribed Only</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">Options Data</td>
+          <td><span class="badge badge-green">Full Chain + Greeks</span></td>
+          <td><span class="badge badge-green">Full Chain</span></td>
+          <td><span class="badge badge-green">Full Chain</span></td>
+          <td><span class="badge badge-red">None</span></td>
+          <td><span class="badge badge-amber">Limited</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">WebSocket Push</td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td><span class="badge badge-amber">SSE Only</span></td>
+          <td><span class="badge badge-green">Yes</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">Redistribution</td>
+          <td><span class="badge badge-green">Allowed</span></td>
+          <td><span class="badge badge-green">Allowed</span></td>
+          <td><span class="badge badge-amber">Check ToS</span></td>
+          <td><span class="badge badge-green">Allowed</span></td>
+          <td><span class="badge badge-red">Violates ToS</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">SLA / Uptime</td>
+          <td><span class="badge badge-green">99.9%</span></td>
+          <td><span class="badge badge-blue">99.5%</span></td>
+          <td><span class="badge badge-blue">99.5%</span></td>
+          <td><span class="badge badge-blue">99.5%</span></td>
+          <td><span class="badge badge-red">None</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">After Hours</td>
+          <td><span class="badge badge-green">Full</span></td>
+          <td><span class="badge badge-green">Full</span></td>
+          <td><span class="badge badge-green">Full</span></td>
+          <td><span class="badge badge-amber">Limited</span></td>
+          <td><span class="badge badge-amber">Partial</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="highlight-box green">
+      <div class="hl-title">&#10004; Recommendation: Polygon.io (Business Plan)</div>
+      <div class="hl-text">Best combination of low latency (10-50ms), full options chain with Greeks, licensed redistribution rights, and 99.9% SLA. The $199-499/mo cost is trivially offset by subscriber revenue and eliminates all legal risk of broker data redistribution.</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Latency Analysis -->
+  <div class="slide" data-slide="6">
+    <div class="slide-label">Performance Analysis</div>
+    <h1 class="slide-title">Latency <span class="gradient-text">Deep Dive</span></h1>
+    <p class="slide-subtitle">End-to-end latency analysis for the centralized price delivery pipeline.</p>
+
+    <h3>Price Delivery Pipeline</h3>
+    <div class="flow-container">
+      <div class="flow-step">
+        <div class="flow-step-label">Source</div>
+        <div class="flow-step-text">Exchange Tick</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="border-color:rgba(16,185,129,0.4)">
+        <div class="flow-step-label">~10-30ms</div>
+        <div class="flow-step-text">Polygon WS</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="border-color:rgba(59,130,246,0.4)">
+        <div class="flow-step-label">~1-2ms</div>
+        <div class="flow-step-text">Master App</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="border-color:rgba(139,92,246,0.4)">
+        <div class="flow-step-label">~10-50ms</div>
+        <div class="flow-step-text">User Bot WS</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="border-color:rgba(245,158,11,0.4)">
+        <div class="flow-step-label">~0.5ms</div>
+        <div class="flow-step-text">Order Eval</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="border-color:rgba(239,68,68,0.4)">
+        <div class="flow-step-label">~200-500ms</div>
+        <div class="flow-step-text">SnapTrade</div>
+      </div>
+    </div>
+
+    <h3>Protocol Options: Master &#8594; User Bot</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Protocol</th>
+          <th>LAN Latency</th>
+          <th>Internet Latency</th>
+          <th>Max Clients</th>
+          <th>Best For</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">WebSocket</td>
+          <td><span class="badge badge-green">1-3ms</span></td>
+          <td><span class="badge badge-green">10-50ms</span></td>
+          <td>10K-50K</td>
+          <td>Real-time push, bidirectional</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">gRPC Streaming</td>
+          <td><span class="badge badge-green">0.5-2ms</span></td>
+          <td><span class="badge badge-green">5-30ms</span></td>
+          <td>10K-100K</td>
+          <td>High throughput, typed schemas</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">Server-Sent Events</td>
+          <td><span class="badge badge-blue">2-5ms</span></td>
+          <td><span class="badge badge-blue">15-60ms</span></td>
+          <td>5K-10K</td>
+          <td>Simple one-way push</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary)">Redis Pub/Sub</td>
+          <td><span class="badge badge-green">0.5-1ms</span></td>
+          <td><span class="badge badge-amber">N/A (internal)</span></td>
+          <td>100K+</td>
+          <td>Backend microservices</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>End-to-End Latency Comparison</h3>
+    <div class="latency-bar-container">
+      <div class="latency-label">
+        <span style="color:var(--text-primary);font-weight:600">Proposed: Same Cloud (AWS/GCP)</span>
+        <span class="badge badge-green">15-40ms</span>
+      </div>
+      <div class="latency-bar">
+        <div class="latency-fill" style="width:20%;background:var(--gradient-3)">15-40ms</div>
+      </div>
+    </div>
+    <div class="latency-bar-container">
+      <div class="latency-label">
+        <span style="color:var(--text-primary);font-weight:600">Proposed: Cloud &#8594; Home PC</span>
+        <span class="badge badge-blue">50-150ms</span>
+      </div>
+      <div class="latency-bar">
+        <div class="latency-fill" style="width:50%;background:var(--gradient-2)">50-150ms</div>
+      </div>
+    </div>
+    <div class="latency-bar-container">
+      <div class="latency-label">
+        <span style="color:var(--text-primary);font-weight:600">Current: Direct Broker Streaming</span>
+        <span class="badge badge-amber">50-200ms</span>
+      </div>
+      <div class="latency-bar">
+        <div class="latency-fill" style="width:60%;background:var(--gradient-4)">50-200ms</div>
+      </div>
+    </div>
+
+    <div class="highlight-box green" style="margin-top:24px">
+      <div class="hl-title">&#9889; Key Insight</div>
+      <div class="hl-text">Centralized architecture is <strong>comparable or faster</strong> than the current model. Polygon data arrives faster than broker MQTT/WS, and one optimized connection eliminates per-user auth overhead. The bottleneck is SnapTrade order execution (200-500ms), not price delivery.</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: SnapTrade Integration -->
+  <div class="slide" data-slide="7">
+    <div class="slide-label">Broker Integration</div>
+    <h1 class="slide-title">SnapTrade <span class="gradient-text">Integration Analysis</span></h1>
+    <p class="slide-subtitle">Unified broker API replacing direct SDK integrations for order execution across 20+ brokers.</p>
+
+    <div class="two-col">
+      <div>
+        <h3>What SnapTrade Provides</h3>
+        <ul class="check-list">
+          <li>Unified API for 20+ brokers (Schwab, Webull, Tastytrade, IBKR, etc.)</li>
+          <li>OAuth2 broker connection flow (user connects via redirect)</li>
+          <li>Order placement API (market, limit, stop orders)</li>
+          <li>Position and account balance fetching</li>
+          <li>User credentials never touch your servers</li>
+          <li>Handles broker token refresh automatically</li>
+        </ul>
+
+        <h3 style="margin-top:24px">What SnapTrade Does NOT Provide</h3>
+        <ul class="check-list x-list">
+          <li>Real-time price streaming (REST only, polling)</li>
+          <li>Full bracket order support (limited)</li>
+          <li>Complex order modifications</li>
+          <li>Options chain depth for all brokers</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Comparison: Direct SDK vs SnapTrade</h3>
+        <table class="data-table" style="font-size:12px">
+          <thead>
+            <tr><th>Feature</th><th>Direct SDK</th><th>SnapTrade</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Order Placement</td>
+              <td><span class="badge badge-green">Full</span></td>
+              <td><span class="badge badge-green">Yes</span></td>
+            </tr>
+            <tr>
+              <td>Real-time Prices</td>
+              <td><span class="badge badge-green">Streaming</span></td>
+              <td><span class="badge badge-red">None</span></td>
+            </tr>
+            <tr>
+              <td>Bracket Orders</td>
+              <td><span class="badge badge-green">Full</span></td>
+              <td><span class="badge badge-amber">Limited</span></td>
+            </tr>
+            <tr>
+              <td>Order Latency</td>
+              <td><span class="badge badge-green">100-300ms</span></td>
+              <td><span class="badge badge-amber">200-500ms</span></td>
+            </tr>
+            <tr>
+              <td>Broker Coverage</td>
+              <td><span class="badge badge-amber">5 brokers</span></td>
+              <td><span class="badge badge-green">20+ brokers</span></td>
+            </tr>
+            <tr>
+              <td>Auth Complexity</td>
+              <td><span class="badge badge-red">High</span></td>
+              <td><span class="badge badge-green">Low</span></td>
+            </tr>
+            <tr>
+              <td>Maintenance</td>
+              <td><span class="badge badge-red">Per-broker</span></td>
+              <td><span class="badge badge-green">Managed</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="verdict-card" style="margin-top:24px">
+      <h3>&#128274; Critical Confirmation</h3>
+      <p style="color:var(--text-secondary);font-size:14px;line-height:1.7;">SnapTrade <strong>cannot provide real-time streaming prices</strong> &#8212; this confirms the Master Application with Polygon.io is mandatory for price data. SnapTrade handles execution only, while all price monitoring (conditional orders + risk engine) relies on the centralized price feed.</p>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Multi-Tenant Models -->
+  <div class="slide" data-slide="8">
+    <div class="slide-label">Architecture Models</div>
+    <h1 class="slide-title">Multi-Tenant <span class="gradient-text">SaaS Models</span></h1>
+    <p class="slide-subtitle">Three transformation models from current single-user bot to full SaaS platform.</p>
+
+    <div class="card-grid grid-3">
+      <div class="card" style="border-color:rgba(16,185,129,0.3)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <span class="badge badge-green">RECOMMENDED</span>
+          <span style="font-size:24px">A</span>
+        </div>
+        <div class="card-title" style="font-size:18px;margin-bottom:4px">Centralized Price Only</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Phase 1 Target</div>
+        <div class="card-desc" style="margin-bottom:16px">
+          <strong>Master:</strong> Price streaming only<br>
+          <strong>User Bot:</strong> Conditional orders, Risk engine, Signal parsing<br>
+          <strong>Broker:</strong> SnapTrade per user
+        </div>
+        <div class="divider" style="margin:16px 0"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+          <div><span style="color:var(--text-muted)">Complexity</span><br><span class="badge badge-green">Low-Med</span></div>
+          <div><span style="color:var(--text-muted)">Timeline</span><br><span class="badge badge-green">4-6 weeks</span></div>
+          <div><span style="color:var(--text-muted)">Risk</span><br><span class="badge badge-green">Low</span></div>
+          <div><span style="color:var(--text-muted)">Scale</span><br><span class="badge badge-blue">100-500</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:rgba(59,130,246,0.3)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <span class="badge badge-blue">PHASE 2</span>
+          <span style="font-size:24px">B</span>
+        </div>
+        <div class="card-title" style="font-size:18px;margin-bottom:4px">Full SaaS Backend</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Backend Processing</div>
+        <div class="card-desc" style="margin-bottom:16px">
+          <strong>Master:</strong> Price + Conditional orders + Risk engine<br>
+          <strong>User Bot:</strong> Signal parsing, UI only<br>
+          <strong>Broker:</strong> SnapTrade managed by backend
+        </div>
+        <div class="divider" style="margin:16px 0"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+          <div><span style="color:var(--text-muted)">Complexity</span><br><span class="badge badge-amber">High</span></div>
+          <div><span style="color:var(--text-muted)">Timeline</span><br><span class="badge badge-amber">3-6 months</span></div>
+          <div><span style="color:var(--text-muted)">Risk</span><br><span class="badge badge-amber">Med-High</span></div>
+          <div><span style="color:var(--text-muted)">Scale</span><br><span class="badge badge-blue">1,000+</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:rgba(139,92,246,0.3)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <span class="badge badge-purple">PHASE 3</span>
+          <span style="font-size:24px">C</span>
+        </div>
+        <div class="card-title" style="font-size:18px;margin-bottom:4px">Full Multi-Tenant</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Pure Web SaaS</div>
+        <div class="card-desc" style="margin-bottom:16px">
+          <strong>Backend:</strong> Everything (signals, orders, risk, execution)<br>
+          <strong>User:</strong> Web dashboard only, no local bot<br>
+          <strong>Broker:</strong> SnapTrade fully managed
+        </div>
+        <div class="divider" style="margin:16px 0"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+          <div><span style="color:var(--text-muted)">Complexity</span><br><span class="badge badge-red">Very High</span></div>
+          <div><span style="color:var(--text-muted)">Timeline</span><br><span class="badge badge-red">6-12 months</span></div>
+          <div><span style="color:var(--text-muted)">Risk</span><br><span class="badge badge-red">High</span></div>
+          <div><span style="color:var(--text-muted)">Scale</span><br><span class="badge badge-purple">10,000+</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Advantages -->
+  <div class="slide" data-slide="9">
+    <div class="slide-label">Benefits Analysis</div>
+    <h1 class="slide-title">Strategic <span class="gradient-text">Advantages</span></h1>
+    <p class="slide-subtitle">Key benefits of transitioning to the centralized market data + SnapTrade architecture.</p>
+
+    <div class="card-grid grid-2">
+      <div class="card">
+        <div class="card-icon" style="background:rgba(6,182,212,0.12);color:var(--accent-cyan)">&#127919;</div>
+        <div class="card-title">Single Price Source</div>
+        <div class="card-desc">No per-user broker streaming setup. All users see the same price at the same time, ensuring fair execution with zero price discrepancy between users.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(16,185,129,0.12);color:var(--accent-green)">&#128200;</div>
+        <div class="card-title">Linear Scalability</div>
+        <div class="card-desc">Add users without adding broker connections. One Polygon subscription serves unlimited users. WebSocket gateway scales horizontally.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(59,130,246,0.12);color:var(--accent-blue)">&#128279;</div>
+        <div class="card-title">20+ Broker Coverage</div>
+        <div class="card-desc">SnapTrade integration replaces 5 custom broker SDKs with one unified API covering Schwab, Webull, Tastytrade, IBKR, Fidelity, and more.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(139,92,246,0.12);color:var(--accent-purple)">&#128187;</div>
+        <div class="card-title">Lightweight User Bot</div>
+        <div class="card-desc">No broker SDK dependencies, no streaming clients, fewer authentication issues. Dramatically simpler onboarding and distribution.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(245,158,11,0.12);color:var(--accent-amber)">&#128176;</div>
+        <div class="card-title">Revenue Model</div>
+        <div class="card-desc">Subscription-based SaaS pricing. Centralized infrastructure enables tiered plans, usage metering, and predictable unit economics.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(236,72,153,0.12);color:var(--accent-pink)">&#128737;</div>
+        <div class="card-title">Centralized Monitoring</div>
+        <div class="card-desc">One dashboard to monitor data health, user activity, system performance, and error rates. Faster incident response and debugging.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(16,185,129,0.12);color:var(--accent-green)">&#128272;</div>
+        <div class="card-title">Security & Trust</div>
+        <div class="card-desc">SnapTrade handles all broker credentials via OAuth2. User passwords never touch your servers. Compliant with financial data regulations.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:rgba(59,130,246,0.12);color:var(--accent-blue)">&#9889;</div>
+        <div class="card-title">Reduced API Load</div>
+        <div class="card-desc">1 Polygon connection vs N broker connections. Eliminates rate limit issues, token refresh failures, and per-user streaming instability.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Disadvantages & Gaps -->
+  <div class="slide" data-slide="10">
+    <div class="slide-label">Risk Assessment</div>
+    <h1 class="slide-title">Gaps & <span class="gradient-text">Disadvantages</span></h1>
+    <p class="slide-subtitle">Critical challenges and mitigation strategies for the proposed architecture.</p>
+
+    <div class="two-col">
+      <div>
+        <h3 style="color:var(--accent-red)">Disadvantages</h3>
+        <table class="data-table" style="font-size:12px">
+          <thead><tr><th>#</th><th>Issue</th><th>Mitigation</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-red">1</span></td>
+              <td style="color:var(--text-primary)">Single Point of Failure</td>
+              <td>Multi-region deployment + broker failover</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-red">2</span></td>
+              <td style="color:var(--text-primary)">Added Latency (+10-50ms)</td>
+              <td>Negligible for signal-based trading</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">3</span></td>
+              <td style="color:var(--text-primary)">Polygon Cost ($199-499/mo)</td>
+              <td>Covered by 10-20 subscribers</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">4</span></td>
+              <td style="color:var(--text-primary)">SnapTrade Execution Latency</td>
+              <td>200-500ms acceptable for signal trading</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">5</span></td>
+              <td style="color:var(--text-primary)">SnapTrade Options Gaps</td>
+              <td>Direct SDK fallback for power users</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">6</span></td>
+              <td style="color:var(--text-primary)">Operational Complexity</td>
+              <td>Cloud hosting with auto-restart</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-blue">7</span></td>
+              <td style="color:var(--text-primary)">Data Licensing Requirements</td>
+              <td>Polygon paid tier covers redistribution</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3 style="color:var(--accent-amber)">Critical Gaps</h3>
+        <table class="data-table" style="font-size:12px">
+          <thead><tr><th>Priority</th><th>Gap</th><th>Impact</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-red">HIGH</span></td>
+              <td style="color:var(--text-primary)">Options Greeks Streaming</td>
+              <td>Polygon options may be delayed for some contracts</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-red">HIGH</span></td>
+              <td style="color:var(--text-primary)">Index Options (SPX/NDX)</td>
+              <td>Special handling needed, yfinance won't scale</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-red">HIGH</span></td>
+              <td style="color:var(--text-primary)">Bracket Order Support</td>
+              <td>SnapTrade limited, may need direct SDK</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-red">CRITICAL</span></td>
+              <td style="color:var(--text-primary)">User Bot Offline = No Risk</td>
+              <td>Must move risk engine to backend (Phase 2)</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">MED</span></td>
+              <td style="color:var(--text-primary)">After-Hours Coverage</td>
+              <td>Polygon covers pre/post market</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">MED</span></td>
+              <td style="color:var(--text-primary)">Migration Path</td>
+              <td>Run both modes in parallel during transition</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="highlight-box red" style="margin-top:16px">
+      <div class="hl-title">&#9888; Critical Risk: User Bot Offline</div>
+      <div class="hl-text">In Model A, if a user closes their bot, the risk engine stops monitoring their open positions. This is the strongest argument for moving to Model B (backend risk engine) as soon as possible. Open positions without active risk monitoring can result in catastrophic losses.</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Implementation Roadmap -->
+  <div class="slide" data-slide="11">
+    <div class="slide-label">Implementation Plan</div>
+    <h1 class="slide-title">Phased <span class="gradient-text">Roadmap</span></h1>
+    <p class="slide-subtitle">Progressive transformation from current single-user model to full multi-tenant SaaS.</p>
+
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--gradient-3)">1</div>
+        <div class="timeline-content" style="border-color:rgba(16,185,129,0.3)">
+          <div class="timeline-title" style="color:var(--accent-green)">Phase 1: Centralized Price + SnapTrade</div>
+          <div class="timeline-meta">4-6 Weeks &bull; Low Risk &bull; 100-500 Users</div>
+          <div class="timeline-desc">
+            <strong>Build:</strong> Master Price Server (Python, WebSocket gateway) &bull; Polygon.io integration &bull; Price API client replaces UnifiedPriceHub source in user bot &bull; SnapTrade integration for order execution &bull; Keep risk engine + conditional orders on user bot
+            <br><br>
+            <strong>Result:</strong> Users get prices from Master, execute via SnapTrade. Validates architecture before deeper investment.
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--gradient-2)">2</div>
+        <div class="timeline-content" style="border-color:rgba(59,130,246,0.3)">
+          <div class="timeline-title" style="color:var(--accent-blue)">Phase 2: Backend Risk Engine</div>
+          <div class="timeline-meta">2-3 Months &bull; Medium Risk &bull; 1,000+ Users</div>
+          <div class="timeline-desc">
+            <strong>Build:</strong> Move conditional order monitoring to Master &bull; Move risk engine to Master &bull; User bot becomes thin client (signal parse + UI) &bull; WebSocket push for trade notifications &bull; Solve the "bot offline = no risk" problem
+            <br><br>
+            <strong>Result:</strong> Full backend processing. User bot is lightweight and optional for risk monitoring.
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--gradient-1)">3</div>
+        <div class="timeline-content" style="border-color:rgba(139,92,246,0.3)">
+          <div class="timeline-title" style="color:var(--accent-purple)">Phase 3: Full Multi-Tenant SaaS</div>
+          <div class="timeline-meta">3-6 Months &bull; High Effort &bull; 10,000+ Users</div>
+          <div class="timeline-desc">
+            <strong>Build:</strong> Web dashboard replacing desktop bot &bull; Multi-tenant user management &bull; Subscription billing (Stripe) &bull; Admin panel for monitoring all users &bull; Mobile-responsive UI
+            <br><br>
+            <strong>Result:</strong> No local bot needed. Pure web-based SaaS platform with recurring revenue.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 12: Summary -->
+  <div class="slide" data-slide="12">
+    <div class="slide-label">Executive Summary</div>
+    <h1 class="slide-title">Key <span class="gradient-text">Takeaways</span></h1>
+    <p class="slide-subtitle">Final recommendations and next steps for the BotifyTrades architecture transformation.</p>
+
+    <div class="card-grid grid-4" style="margin-bottom:32px">
+      <div class="metric-card">
+        <div class="metric-value" style="color:var(--accent-green)">Yes</div>
+        <div class="metric-label">Achievable</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value" style="color:var(--accent-cyan)">15-40ms</div>
+        <div class="metric-label">Best Latency</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value" style="color:var(--accent-purple)">20+</div>
+        <div class="metric-label">Brokers via SnapTrade</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value" style="color:var(--accent-amber)">$199</div>
+        <div class="metric-label">Monthly Data Cost</div>
+      </div>
+    </div>
+
+    <div class="verdict-card">
+      <h3>&#9654; Final Recommendation</h3>
+      <p style="color:var(--text-secondary);font-size:14px;line-height:1.8;margin-bottom:16px;">
+        The transformation is <strong>fully achievable</strong>. Broker-only data is insufficient for production SaaS &#8212; you need <strong>Polygon.io</strong> (or equivalent) for reliable, licensed, low-latency market data redistribution. The centralized model actually <strong>reduces latency</strong> compared to current per-user broker streaming and eliminates authentication complexity.
+      </p>
+      <p style="color:var(--text-secondary);font-size:14px;line-height:1.8;">
+        <strong>Start with Phase 1</strong> to validate the architecture with minimal risk. SnapTrade solves broker coverage (20+ vs current 5). The $199/mo Polygon cost is trivially covered by subscriber revenue. Move risk engine to backend in Phase 2 to solve the critical "bot offline" gap. Full SaaS in Phase 3 unlocks recurring revenue at scale.
+      </p>
+    </div>
+
+    <div class="card-grid grid-3" style="margin-top:24px">
+      <div class="highlight-box green">
+        <div class="hl-title">&#10004; Start Now</div>
+        <div class="hl-text">Set up Polygon.io account and build WebSocket price gateway prototype. Integrate SnapTrade SDK.</div>
+      </div>
+      <div class="highlight-box">
+        <div class="hl-title">&#128203; Plan Next</div>
+        <div class="hl-text">Design the Master &#8594; User Bot WebSocket protocol. Define subscription schema for smart symbol filtering.</div>
+      </div>
+      <div class="highlight-box amber">
+        <div class="hl-title">&#9888; Watch For</div>
+        <div class="hl-text">SnapTrade bracket order limitations. Index options (SPX/NDX) data gaps. User migration path from direct broker.</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:40px;color:var(--text-muted);font-size:13px">
+      <kbd>&#8592;</kbd> <kbd>&#8594;</kbd> Navigate &emsp; Prepared for BotifyTrades Architecture Review &emsp; April 2026
+    </div>
+  </div>
+
+</div>
+
+<!-- Footer dots -->
+<div class="footer" id="footerDots"></div>
+
+<script>
+  const totalSlides = 12;
+  let currentSlide = 1;
+
+  function updateSlide() {
+    document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+    document.querySelector(`[data-slide="${currentSlide}"]`).classList.add('active');
+
+    document.getElementById('slideCounter').textContent =
+      String(currentSlide).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+
+    document.getElementById('progressBar').style.width =
+      ((currentSlide / totalSlides) * 100) + '%';
+
+    document.querySelectorAll('.footer-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i + 1 === currentSlide);
+    });
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides) { currentSlide++; updateSlide(); }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 1) { currentSlide--; updateSlide(); }
+  }
+
+  function goToSlide(n) {
+    currentSlide = n;
+    updateSlide();
+  }
+
+  // Build footer dots
+  const footer = document.getElementById('footerDots');
+  for (let i = 1; i <= totalSlides; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'footer-dot' + (i === 1 ? ' active' : '');
+    dot.onclick = () => goToSlide(i);
+    footer.appendChild(dot);
+  }
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+    if (e.key === 'Home') { e.preventDefault(); goToSlide(1); }
+    if (e.key === 'End') { e.preventDefault(); goToSlide(totalSlides); }
+  });
+
+  // Touch swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? nextSlide() : prevSlide(); }
+  });
+
+  updateSlide();
+</script>
+
+</body>
+</html>
