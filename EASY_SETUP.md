@@ -12,7 +12,7 @@ This is the **easiest and most reliable** way to set up the bot on your local ma
 2. Extract the zip to a folder (e.g., `C:\TradingBot`)
 
 ### Step 2: Install Python and Dependencies
-
+##### Uday Botify
 ```bash
 # Check if Python 3.11+ is installed
 python --version
