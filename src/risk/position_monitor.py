@@ -2052,11 +2052,21 @@ class RiskManager:
 
             self._tick_eval_count += 1
             self._tick_eval_total_latency_ms += tick_to_eval_ms
+            if tick_to_eval_ms > getattr(self, '_tick_eval_max_latency_ms', 0):
+                self._tick_eval_max_latency_ms = tick_to_eval_ms
 
-            if self._tick_eval_count <= 3 or self._tick_eval_count % 500 == 0:
+            _should_log_tick = (
+                self._tick_eval_count <= 5
+                or self._tick_eval_count % 100 == 0
+                or tick_to_eval_ms > 200
+                or eval_elapsed_ms > 100
+            )
+            if _should_log_tick:
                 avg_latency = self._tick_eval_total_latency_ms / self._tick_eval_count
-                print(f"[RISK] ⚡ Tick eval #{self._tick_eval_count}: {evaluated} positions in {eval_elapsed_ms:.1f}ms | "
-                      f"tick→eval: {tick_to_eval_ms:.1f}ms | avg: {avg_latency:.1f}ms")
+                _max_lat = getattr(self, '_tick_eval_max_latency_ms', 0)
+                print(f"[RISK] ⚡ Tick eval #{self._tick_eval_count}: {evaluated} pos in {eval_elapsed_ms:.0f}ms | "
+                      f"tick→eval: {tick_to_eval_ms:.0f}ms | avg: {avg_latency:.0f}ms | max: {_max_lat:.0f}ms | "
+                      f"dirty: {', '.join(sorted(dirty_symbol_names)[:3])}")
 
     async def start_monitoring(self) -> None:
         """Start the position monitoring loop with enable gate and standby support."""
@@ -2105,14 +2115,20 @@ class RiskManager:
                     if not hasattr(self, '_cycle_timing_log_counter'):
                         self._cycle_timing_log_counter = 0
                     self._cycle_timing_log_counter += 1
+                    if not hasattr(self, '_cycle_max_ms'):
+                        self._cycle_max_ms = 0
+                    if _cycle_elapsed_ms > self._cycle_max_ms:
+                        self._cycle_max_ms = _cycle_elapsed_ms
                     _should_log_timing = (
                         self._cycle_timing_log_counter <= 5
-                        or self._cycle_timing_log_counter % 100 == 0
+                        or self._cycle_timing_log_counter % 50 == 0
                         or _cycle_elapsed_ms > 500
                     )
                     if _should_log_timing:
                         _detail = getattr(self, '_last_cycle_timing_detail', '')
-                        print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms{_detail}")
+                        _slow = " ⚠️ SLOW" if _cycle_elapsed_ms > 1000 else ""
+                        _ticks = getattr(self, '_tick_eval_count', 0)
+                        print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms{_detail} | ticks={_ticks} max_cycle={self._cycle_max_ms:.0f}ms{_slow}")
                     interval = self._get_adaptive_interval()
                     _sleep_start = _cycle_t.monotonic()
                     _order_event_woke = False
@@ -2171,10 +2187,25 @@ class RiskManager:
                     await asyncio.sleep(5)
                 
                 self._heartbeat_counter += 1
-                if self._heartbeat_counter >= 60:
+                if self._heartbeat_counter >= 150:
                     self._heartbeat_counter = 0
                     cache_count = len(self.cache.get_all_risk_states()) if self.cache else 0
-                    print(f"[RISK] ♥ Heartbeat: loop alive, {cache_count} risk states cached, standby={self._standby_mode}")
+                    _tc = getattr(self, '_tick_eval_count', 0)
+                    _cc = getattr(self, '_cycle_timing_log_counter', 0)
+                    _max_c = getattr(self, '_cycle_max_ms', 0)
+                    _max_t = getattr(self, '_tick_eval_max_latency_ms', 0)
+                    _avg_t = (self._tick_eval_total_latency_ms / _tc) if _tc > 0 else 0
+                    _stream_status = "live" if not self._standby_mode else "standby"
+                    try:
+                        from src.services.schwab_data_hub import get_schwab_data_hub
+                        _s_hub = get_schwab_data_hub()
+                        if _s_hub.is_streaming():
+                            _s_age = self._get_hub_quote_age(_s_hub, 'AKAN')
+                            _stream_status = f"schwab-stream(age={_s_age:.0f}s)" if _s_age is not None else "schwab-stream(no-quote)"
+                    except Exception:
+                        pass
+                    print(f"[RISK] ♥ Heartbeat: cycles={_cc} ticks={_tc} | cycle_max={_max_c:.0f}ms tick_avg={_avg_t:.0f}ms tick_max={_max_t:.0f}ms | "
+                          f"cache={cache_count} stream={_stream_status}")
                     
             except asyncio.CancelledError:
                 print("[RISK] ⚠️ Monitoring task cancelled - exiting loop")
@@ -2710,20 +2741,42 @@ class RiskManager:
 
         if not hasattr(self, '_risk_status_log_ts'):
             self._risk_status_log_ts = 0
+        if not hasattr(self, '_risk_last_logged_prices'):
+            self._risk_last_logged_prices = {}
         import time as _rsl_t
         _rsl_now = _rsl_t.monotonic()
-        if positions and (_rsl_now - self._risk_status_log_ts) >= 15:
+        _status_interval_elapsed = (_rsl_now - self._risk_status_log_ts) >= 10
+        for pos in positions:
+            _rk = self._pos_tracking_key(pos)
+            _cache = self.cache.get(_rk) or self.cache.get(f"{pos.broker}_{pos.symbol}")
+            if not _cache or not _cache.entry_price or _cache.entry_price <= 0:
+                continue
+            _pnl_pct = ((pos.current_price - _cache.entry_price) / _cache.entry_price) * 100
+            _sl_val = getattr(_cache, 'dynamic_sl_price', None) or getattr(_cache, 'stop_loss_price', None)
+            _pt_val = getattr(_cache, 'profit_target_price', None)
+            _sl_str = f"SL=${_sl_val:.2f}" if _sl_val and _sl_val > 0 else "SL=—"
+            _pt_str = f"PT=${_pt_val:.2f}" if _pt_val and _pt_val > 0 else "PT=—"
+            _prev_price = self._risk_last_logged_prices.get(_rk, 0)
+            _price_changed = abs(pos.current_price - _prev_price) > 0.0001
+            _sl_dist = ""
+            if _sl_val and _sl_val > 0:
+                _sl_dist_pct = ((pos.current_price - _sl_val) / _sl_val) * 100
+                _sl_dist = f" | SL-dist={_sl_dist_pct:.1f}%"
+            _should_log = (
+                _status_interval_elapsed
+                or (_price_changed and abs(pos.current_price - _prev_price) / max(_prev_price, 0.01) > 0.003)
+            )
+            if _should_log:
+                _trailing_str = ""
+                _ts_price = getattr(_cache, 'trailing_stop_price', None)
+                if _ts_price and _ts_price > 0:
+                    _trailing_str = f" | TS=${_ts_price:.2f}"
+                _high = getattr(_cache, 'highest_price', 0)
+                _high_str = f" | high=${_high:.2f}" if _high and _high > 0 else ""
+                print(f"[RISK] 📡 {pos.symbol} ${pos.current_price:.2f} ({_pnl_pct:+.1f}%) | entry=${_cache.entry_price:.2f} | {_sl_str} {_pt_str}{_trailing_str}{_high_str}{_sl_dist} | {pos.broker}")
+                self._risk_last_logged_prices[_rk] = pos.current_price
+        if _status_interval_elapsed:
             self._risk_status_log_ts = _rsl_now
-            for pos in positions:
-                _rk = self._pos_tracking_key(pos)
-                _cache = self.cache.get(_rk) or self.cache.get(f"{pos.broker}_{pos.symbol}")
-                if _cache and _cache.entry_price and _cache.entry_price > 0:
-                    _pnl_pct = ((pos.current_price - _cache.entry_price) / _cache.entry_price) * 100
-                    _sl_val = getattr(_cache, 'dynamic_sl_price', None) or getattr(_cache, 'stop_loss_price', None)
-                    _pt_val = getattr(_cache, 'profit_target_price', None)
-                    _sl_str = f"SL=${_sl_val:.2f}" if _sl_val and _sl_val > 0 else "SL=—"
-                    _pt_str = f"PT=${_pt_val:.2f}" if _pt_val and _pt_val > 0 else "PT=—"
-                    print(f"[RISK] 📡 {pos.symbol} ${pos.current_price:.2f} ({_pnl_pct:+.1f}%) | entry=${_cache.entry_price:.2f} | {_sl_str} {_pt_str} | {pos.broker}")
 
         _mc_t4 = _mc_time.monotonic()
         _setup_ms = (_mc_t1 - _mc_t0) * 1000

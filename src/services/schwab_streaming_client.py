@@ -227,10 +227,17 @@ class SchwabStreamingClient:
             self._last_heartbeat = time.time()
             if not hasattr(self, '_data_msg_count'):
                 self._data_msg_count = 0
+                self._data_msg_first_ts = time.time()
             self._data_msg_count += 1
-            if self._data_msg_count <= 3 or self._data_msg_count % 1000 == 0:
+            _log_data = (
+                self._data_msg_count <= 3
+                or self._data_msg_count % 500 == 0
+            )
+            if _log_data:
+                _elapsed = time.time() - self._data_msg_first_ts
+                _rate = self._data_msg_count / max(_elapsed, 1)
                 services = [item.get('service', '?') for item in data['data']]
-                print(f"[SCHWAB_STREAM] Data msg #{self._data_msg_count}: {', '.join(services)}")
+                print(f"[SCHWAB_STREAM] Data msg #{self._data_msg_count} ({_rate:.1f}/s): {', '.join(services)}")
             for item in data['data']:
                 service = item.get('service', '')
                 content = item.get('content', [])
