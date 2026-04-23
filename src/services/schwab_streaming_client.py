@@ -218,6 +218,13 @@ class SchwabStreamingClient:
                     self._last_heartbeat = time.time()
 
         if 'data' in data:
+            self._last_heartbeat = time.time()
+            if not hasattr(self, '_data_msg_count'):
+                self._data_msg_count = 0
+            self._data_msg_count += 1
+            if self._data_msg_count <= 3 or self._data_msg_count % 1000 == 0:
+                services = [item.get('service', '?') for item in data['data']]
+                print(f"[SCHWAB_STREAM] Data msg #{self._data_msg_count}: {', '.join(services)}")
             for item in data['data']:
                 service = item.get('service', '')
                 content = item.get('content', [])
@@ -373,15 +380,19 @@ class SchwabStreamingClient:
                     await self._auto_subscribe_positions()
 
                     msg_count = 0
+                    _recv_timeouts = 0
                     while self._running:
                         try:
                             message = await asyncio.wait_for(ws.recv(), timeout=30)
                             self._decode_message(message)
                             msg_count += 1
+                            _recv_timeouts = 0
                             if msg_count % 5 == 0:
                                 await asyncio.sleep(0)
                         except asyncio.TimeoutError:
-                            pass
+                            _recv_timeouts += 1
+                            if _recv_timeouts == 1 or _recv_timeouts % 3 == 0:
+                                print(f"[SCHWAB_STREAM] No data for {_recv_timeouts * 30}s ({msg_count} msgs received so far)")
 
                         now = time.time()
                         if now - self._last_qos_time >= 25:
