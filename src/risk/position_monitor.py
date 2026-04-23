@@ -1628,7 +1628,7 @@ class RiskManager:
         self._connected_broker_names_ts = 0
         
         self._stuck_price_tracker = {}
-        self._STUCK_PRICE_THRESHOLD = 3
+        self._STUCK_PRICE_THRESHOLD = 2
         self._rest_repaired_prices = {}
         self._rest_repair_cycle_keys = {}
         self._STALENESS_EXIT_BLOCK_THRESHOLD = 5
@@ -7751,24 +7751,6 @@ class RiskManager:
             effective_threshold = self._STUCK_PRICE_THRESHOLD
             if session == 'extended':
                 effective_threshold = 15.0
-
-            hub_fresh = False
-            try:
-                broker_upper = (pos.broker or '').upper()
-                if 'SCHWAB' in broker_upper:
-                    from src.services.schwab_data_hub import get_schwab_data_hub
-                    _hub_age = self._get_hub_quote_age(get_schwab_data_hub(), pos.symbol)
-                    if _hub_age is not None and _hub_age < 10:
-                        hub_fresh = True
-                elif 'WEBULL' in broker_upper:
-                    from src.services.webull_data_hub import get_webull_data_hub
-                    _hub_age = self._get_hub_quote_age(get_webull_data_hub(), pos.symbol)
-                    if _hub_age is not None and _hub_age < 10:
-                        hub_fresh = True
-            except Exception:
-                pass
-            if hub_fresh:
-                effective_threshold = max(effective_threshold, 15.0)
 
             if stuck_seconds < effective_threshold:
                 continue
