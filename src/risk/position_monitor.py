@@ -2708,6 +2708,23 @@ class RiskManager:
             self.cache.save()
             self._last_cache_save_ts = _now_save
 
+        if not hasattr(self, '_risk_status_log_ts'):
+            self._risk_status_log_ts = 0
+        import time as _rsl_t
+        _rsl_now = _rsl_t.monotonic()
+        if positions and (_rsl_now - self._risk_status_log_ts) >= 15:
+            self._risk_status_log_ts = _rsl_now
+            for pos in positions:
+                _rk = self._pos_tracking_key(pos)
+                _cache = self.cache.get(_rk) or self.cache.get(f"{pos.broker}_{pos.symbol}")
+                if _cache and _cache.entry_price and _cache.entry_price > 0:
+                    _pnl_pct = ((pos.current_price - _cache.entry_price) / _cache.entry_price) * 100
+                    _sl_val = getattr(_cache, 'dynamic_sl_price', None) or getattr(_cache, 'stop_loss_price', None)
+                    _pt_val = getattr(_cache, 'profit_target_price', None)
+                    _sl_str = f"SL=${_sl_val:.2f}" if _sl_val and _sl_val > 0 else "SL=—"
+                    _pt_str = f"PT=${_pt_val:.2f}" if _pt_val and _pt_val > 0 else "PT=—"
+                    print(f"[RISK] 📡 {pos.symbol} ${pos.current_price:.2f} ({_pnl_pct:+.1f}%) | entry=${_cache.entry_price:.2f} | {_sl_str} {_pt_str} | {pos.broker}")
+
         _mc_t4 = _mc_time.monotonic()
         _setup_ms = (_mc_t1 - _mc_t0) * 1000
         _fetch_ms = (_mc_t3 - _mc_t2) * 1000
