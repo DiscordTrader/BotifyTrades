@@ -368,6 +368,23 @@ class SchwabStreamingClient:
                     self._last_qos_time = time.time()
                     print("[SCHWAB_STREAM] ✓ Connected and streaming")
 
+                    try:
+                        si_qos = self._streamer_info or {}
+                        qos_init = {
+                            "requests": [{
+                                "service": "ADMIN",
+                                "requestid": self._next_request_id(),
+                                "command": "QOS",
+                                "SchwabClientCustomerId": si_qos.get('schwabClientCustomerId', self._app_id or ''),
+                                "SchwabClientCorrelId": si_qos.get('schwabClientCorrelId', ''),
+                                "parameters": {"qoslevel": 0}
+                            }]
+                        }
+                        await ws.send(json.dumps(qos_init))
+                        print("[SCHWAB_STREAM] QOS level 0 (fastest) requested")
+                    except Exception as e:
+                        print(f"[SCHWAB_STREAM] QOS request failed: {e}")
+
                     if self._subscribed_equities:
                         old_eq = list(self._subscribed_equities)
                         self._subscribed_equities.clear()
@@ -405,7 +422,7 @@ class SchwabStreamingClient:
                                         "command": "QOS",
                                         "SchwabClientCustomerId": si.get('schwabClientCustomerId', self._app_id or ''),
                                         "SchwabClientCorrelId": si.get('schwabClientCorrelId', ''),
-                                        "parameters": {"qoslevel": "0"}
+                                        "parameters": {"qoslevel": 0}
                                     }]
                                 }
                                 await ws.send(json.dumps(qos_request))
