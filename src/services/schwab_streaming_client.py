@@ -206,6 +206,12 @@ class SchwabStreamingClient:
                         self._connected = True
                     else:
                         print(f"[SCHWAB_STREAM] ❌ Login failed (code={code}): {resp.get('content', {}).get('msg', '')}")
+                elif command == 'QOS':
+                    if code == 0:
+                        print("[SCHWAB_STREAM] ✓ QOS level accepted")
+                    else:
+                        msg = resp.get('content', {}).get('msg', '') if isinstance(resp.get('content'), dict) else ''
+                        print(f"[SCHWAB_STREAM] ⚠️ QOS rejected (code={code}): {msg}")
                 elif command == 'SUBS' or command == 'ADD':
                     if code == 0:
                         print(f"[SCHWAB_STREAM] ✓ Subscribed to {service}")
@@ -368,23 +374,6 @@ class SchwabStreamingClient:
                     self._last_qos_time = time.time()
                     print("[SCHWAB_STREAM] ✓ Connected and streaming")
 
-                    try:
-                        si_qos = self._streamer_info or {}
-                        qos_init = {
-                            "requests": [{
-                                "service": "ADMIN",
-                                "requestid": self._next_request_id(),
-                                "command": "QOS",
-                                "SchwabClientCustomerId": si_qos.get('schwabClientCustomerId', self._app_id or ''),
-                                "SchwabClientCorrelId": si_qos.get('schwabClientCorrelId', ''),
-                                "parameters": {"qoslevel": 0}
-                            }]
-                        }
-                        await ws.send(json.dumps(qos_init))
-                        print("[SCHWAB_STREAM] QOS level 0 (fastest) requested")
-                    except Exception as e:
-                        print(f"[SCHWAB_STREAM] QOS request failed: {e}")
-
                     if self._subscribed_equities:
                         old_eq = list(self._subscribed_equities)
                         self._subscribed_equities.clear()
@@ -412,23 +401,8 @@ class SchwabStreamingClient:
                                 print(f"[SCHWAB_STREAM] No data for {_recv_timeouts * 30}s ({msg_count} msgs received so far)")
 
                         now = time.time()
-                        if now - self._last_qos_time >= 25:
-                            try:
-                                si = self._streamer_info or {}
-                                qos_request = {
-                                    "requests": [{
-                                        "service": "ADMIN",
-                                        "requestid": self._next_request_id(),
-                                        "command": "QOS",
-                                        "SchwabClientCustomerId": si.get('schwabClientCustomerId', self._app_id or ''),
-                                        "SchwabClientCorrelId": si.get('schwabClientCorrelId', ''),
-                                        "parameters": {"qoslevel": 0}
-                                    }]
-                                }
-                                await ws.send(json.dumps(qos_request))
-                                self._last_qos_time = now
-                            except Exception:
-                                break
+                        if now - self._last_qos_time >= 300:
+                            self._last_qos_time = now
 
                         if now - self._last_heartbeat > 180:
                             print("[SCHWAB_STREAM] ⚠️ No heartbeat for 180s, reconnecting...")

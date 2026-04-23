@@ -63,6 +63,7 @@ class TastytradeDataHub:
         self._initialized = True
 
         self._quotes: Dict[str, QuoteData] = {}
+        self._quotes_lock = threading.Lock()
         self._positions: List[Dict[str, Any]] = []
         self._positions_time: float = 0
         self._pending_orders: List[Dict[str, Any]] = []
@@ -73,6 +74,7 @@ class TastytradeDataHub:
         self._order_history_time: float = 0
 
         self._event_handlers: Dict[str, List[Callable]] = {}
+        self._event_lock = threading.Lock()
         self._streaming_active = False
         self._last_quote_ts: float = 0
         self._subscribed_symbols: Set[str] = set()
@@ -98,63 +100,69 @@ class TastytradeDataHub:
         self._broker = broker
 
     def on(self, event: str, handler: Callable):
-        handlers = self._event_handlers.get(event)
-        if handlers is None:
-            self._event_handlers[event] = [handler]
-        else:
-            new_list = list(handlers)
-            new_list.append(handler)
-            self._event_handlers[event] = new_list
+        with self._event_lock:
+            handlers = self._event_handlers.get(event)
+            if handlers is None:
+                self._event_handlers[event] = [handler]
+            else:
+                new_list = list(handlers)
+                new_list.append(handler)
+                self._event_handlers[event] = new_list
 
     def off(self, event: str, handler: Callable):
-        handlers = self._event_handlers.get(event)
-        if handlers is not None:
-            self._event_handlers[event] = [h for h in handlers if h != handler]
+        with self._event_lock:
+            handlers = self._event_handlers.get(event)
+            if handlers is not None:
+                self._event_handlers[event] = [h for h in handlers if h != handler]
 
     def _emit(self, event: str, data: Any = None):
-        handlers = self._event_handlers.get(event)
+        with self._event_lock:
+            handlers = list(self._event_handlers.get(event, []))
         if not handlers:
             return
-        for handler in list(handlers):
+        for handler in handlers:
             try:
                 handler(data)
             except Exception as e:
                 print(f"[TASTYTRADE_HUB] Event handler error ({event}): {e}")
 
     def update_quote(self, symbol: str, quote_data: Dict[str, Any], source: str = "stream"):
-        existing = self._quotes.get(symbol)
-        if existing is None:
-            existing = QuoteData(symbol=symbol)
-            self._quotes[symbol] = existing
+        with self._quotes_lock:
+            existing = self._quotes.get(symbol)
+            if existing is None:
+                existing = QuoteData(symbol=symbol)
+                self._quotes[symbol] = existing
 
-        if 'bid' in quote_data:
-            existing.bid = float(quote_data.get('bid', existing.bid) or 0)
-        if 'ask' in quote_data:
-            existing.ask = float(quote_data.get('ask', existing.ask) or 0)
-        if 'last' in quote_data:
-            existing.last = float(quote_data.get('last', existing.last) or 0)
-        if existing.last == 0 and existing.bid > 0 and existing.ask > 0:
-            existing.last = (existing.bid + existing.ask) / 2
-        if 'volume' in quote_data:
-            existing.volume = int(quote_data.get('volume', existing.volume) or 0)
-        if 'delta' in quote_data:
-            existing.delta = float(quote_data.get('delta', 0) or 0)
-        if 'gamma' in quote_data:
-            existing.gamma = float(quote_data.get('gamma', 0) or 0)
-        if 'theta' in quote_data:
-            existing.theta = float(quote_data.get('theta', 0) or 0)
-        if 'vega' in quote_data:
-            existing.vega = float(quote_data.get('vega', 0) or 0)
-        if 'iv' in quote_data:
-            existing.implied_volatility = float(quote_data.get('iv', 0) or 0)
+            if 'bid' in quote_data:
+                existing.bid = float(quote_data.get('bid', existing.bid) or 0)
+            if 'ask' in quote_data:
+                existing.ask = float(quote_data.get('ask', existing.ask) or 0)
+            if 'last' in quote_data:
+                existing.last = float(quote_data.get('last', existing.last) or 0)
+            if existing.last == 0 and existing.bid > 0 and existing.ask > 0:
+                existing.last = (existing.bid + existing.ask) / 2
+            if 'volume' in quote_data:
+                existing.volume = int(quote_data.get('volume', existing.volume) or 0)
+            if 'delta' in quote_data:
+                existing.delta = float(quote_data.get('delta', 0) or 0)
+            if 'gamma' in quote_data:
+                existing.gamma = float(quote_data.get('gamma', 0) or 0)
+            if 'theta' in quote_data:
+                existing.theta = float(quote_data.get('theta', 0) or 0)
+            if 'vega' in quote_data:
+                existing.vega = float(quote_data.get('vega', 0) or 0)
+            if 'iv' in quote_data:
+                existing.implied_volatility = float(quote_data.get('iv', 0) or 0)
 
-        existing.timestamp = time.time()
-        existing.source = source
-        self._last_quote_ts = existing.timestamp
+            existing.timestamp = time.time()
+            existing.source = source
+            self._last_quote_ts = existing.timestamp
+
         self._emit('quote_updated', {'symbol': symbol, 'quote': existing})
 
     def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[QuoteData]:
-        quote = self._quotes.get(symbol)
+        with self._quotes_lock:
+            quote = self._quotes.get(symbol)
         threshold = max_age if max_age is not None else self.QUOTE_STALE_THRESHOLD
         if quote and (time.time() - quote.timestamp) < threshold:
             return quote

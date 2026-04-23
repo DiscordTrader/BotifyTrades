@@ -81,6 +81,7 @@ class SchwabDataHub:
         self._order_history_time: float = 0
 
         self._event_handlers: Dict[str, List[Callable]] = {}
+        self._event_lock = threading.Lock()
 
         self._streaming_active = False
         self._last_quote_ts: float = 0
@@ -98,24 +99,27 @@ class SchwabDataHub:
         print("[SCHWAB_HUB] ✓ SchwabDataHub initialized (singleton)")
 
     def on(self, event: str, handler: Callable):
-        handlers = self._event_handlers.get(event)
-        if handlers is None:
-            self._event_handlers[event] = [handler]
-        else:
-            new_list = list(handlers)
-            new_list.append(handler)
-            self._event_handlers[event] = new_list
+        with self._event_lock:
+            handlers = self._event_handlers.get(event)
+            if handlers is None:
+                self._event_handlers[event] = [handler]
+            else:
+                new_list = list(handlers)
+                new_list.append(handler)
+                self._event_handlers[event] = new_list
 
     def off(self, event: str, handler: Callable):
-        handlers = self._event_handlers.get(event)
-        if handlers is not None:
-            self._event_handlers[event] = [h for h in handlers if h != handler]
+        with self._event_lock:
+            handlers = self._event_handlers.get(event)
+            if handlers is not None:
+                self._event_handlers[event] = [h for h in handlers if h != handler]
 
     def _emit(self, event: str, data: Any = None):
-        handlers = self._event_handlers.get(event)
+        with self._event_lock:
+            handlers = list(self._event_handlers.get(event, []))
         if not handlers:
             return
-        for handler in list(handlers):
+        for handler in handlers:
             try:
                 handler(data)
             except Exception as e:

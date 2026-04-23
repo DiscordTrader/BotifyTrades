@@ -1857,8 +1857,7 @@ class RiskManager:
             import time as _t
             tick_ts = _t.monotonic()
             with self._dirty_lock:
-                if symbol not in self._dirty_symbols or tick_ts < self._dirty_symbols[symbol]:
-                    self._dirty_symbols[symbol] = tick_ts
+                self._dirty_symbols[symbol] = tick_ts
             tick_price = 0.0
             if q:
                 if hasattr(q, 'last') and q.last and q.last > 0:
@@ -2372,6 +2371,24 @@ class RiskManager:
             _streaming_live = _check_hub().is_streaming()
         except Exception:
             pass
+        if not _streaming_live:
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub as _check_schwab
+                _streaming_live = _check_schwab().is_streaming()
+            except Exception:
+                pass
+        if not _streaming_live:
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub as _check_ibkr
+                _streaming_live = _check_ibkr().is_streaming()
+            except Exception:
+                pass
+        if not _streaming_live:
+            try:
+                from src.services.tastytrade_data_hub import get_tastytrade_data_hub as _check_tt
+                _streaming_live = _check_tt().is_streaming()
+            except Exception:
+                pass
 
         _fill_watch_active = self._has_active_fill_watches()
         if _fill_watch_active:
