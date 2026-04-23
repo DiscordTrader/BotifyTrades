@@ -592,7 +592,7 @@ class SchwabBroker(BrokerInterface):
                     await self._http_client.aclose()
                 except Exception:
                     pass
-            self._http_client = httpx.AsyncClient(timeout=8.0, http2=False, limits=httpx.Limits(max_connections=5, max_keepalive_connections=3))
+            self._http_client = httpx.AsyncClient(timeout=8.0, http2=False, limits=httpx.Limits(max_connections=15, max_keepalive_connections=8))
             self._http_client_loop_id = current_loop_id
 
         response = await asyncio.wait_for(
