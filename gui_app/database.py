@@ -5490,7 +5490,44 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
                 if cursor.rowcount > 0:
                     pnl_sign = '+' if total_pnl >= 0 else ''
                     print(f"[FILL-RECONCILE] ✓ BTO trade #{origin_id} PNL recalculated: {pnl_sign}${total_pnl:.2f} ({pnl_percent:.2f}%) [from {len(all_stcs)} STC exits, {total_closed_qty}/{bto_orig_qty} shares]")
-        
+
+        # Also reconcile lot_closures if they exist for this trade
+        try:
+            cursor.execute('''
+                SELECT lc.id, lc.close_price, lc.exit_fill_price
+                FROM lot_closures lc
+                JOIN signal_lots sl ON lc.lot_id = sl.id
+                WHERE sl.trade_id = ? AND (lc.exit_fill_price IS NULL OR ABS(lc.exit_fill_price - ?) > 0.0001)
+            ''', (stc_id, fill_price))
+            unreconciled_closures = cursor.fetchall()
+            for lc_row in unreconciled_closures:
+                lc_id = lc_row['id']
+                old_close = lc_row['close_price']
+                # Update close_price and exit_fill_price with actual broker fill
+                cursor.execute('''
+                    UPDATE lot_closures SET close_price = ?, exit_fill_price = ?, exit_fill_broker = ?,
+                    exit_fill_order_id = ?, exit_filled_at = ?
+                    WHERE id = ?
+                ''', (fill_price, fill_price, broker, broker_order_id, filled_at, lc_id))
+                # Recalculate lot closure PNL
+                cursor.execute('''
+                    SELECT sl.entry_fill_price, sl.open_price, sl.asset_type, lc.closed_qty
+                    FROM lot_closures lc JOIN signal_lots sl ON lc.lot_id = sl.id
+                    WHERE lc.id = ?
+                ''', (lc_id,))
+                lc_info = cursor.fetchone()
+                if lc_info:
+                    lc_entry = float(lc_info['entry_fill_price'] or lc_info['open_price'] or 0)
+                    lc_mult = 100 if lc_info['asset_type'] == 'option' else 1
+                    lc_qty = int(lc_info['closed_qty'] or 0)
+                    if lc_entry > 0 and lc_qty > 0:
+                        lc_pnl = round((fill_price - lc_entry) * lc_qty * lc_mult, 2)
+                        lc_pnl_pct = round(((fill_price - lc_entry) / lc_entry) * 100, 4)
+                        cursor.execute('UPDATE lot_closures SET pnl = ?, pnl_percent = ? WHERE id = ?', (lc_pnl, lc_pnl_pct, lc_id))
+                        print(f"[FILL-RECONCILE] ✓ Lot closure #{lc_id}: close_price ${old_close} → ${fill_price:.4f}, PNL ${lc_pnl:+.2f} ({lc_pnl_pct:+.2f}%)")
+        except Exception as lc_err:
+            print(f"[FILL-RECONCILE] ⚠️ Lot closure reconcile error: {lc_err}")
+
         conn.commit()
         return True
         

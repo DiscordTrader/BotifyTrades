@@ -6563,7 +6563,16 @@ class RiskManager:
                         stc_signal['price'] = hub_mid
                         print(f"[RISK] 💰 Penny stock exit (mid-only): ${hub_mid:.4f} (last ${last_price:.4f}) via {hub_src}")
                 elif is_stop_exit or is_trailing_exit or is_giveback_exit:
-                    if hub_bid > 0:
+                    if hub_bid > 0 and spread_pct < 50 and last_price > 0:
+                        stc_signal['price'] = hub_bid
+                        print(f"[RISK] 💰 Exit price: bid ${hub_bid:.2f} "
+                              f"(ask ${hub_ask:.2f}, mid ${hub_mid:.2f}, last ${last_price:.2f}, spread {spread_pct:.1f}%) "
+                              f"via {hub_src}")
+                    elif hub_bid > 0 and spread_pct >= 50 and last_price > 0:
+                        stc_signal['price'] = last_price
+                        print(f"[RISK] ⚠️ Wide spread {spread_pct:.1f}% on SL exit (bid ${hub_bid:.2f}, ask ${hub_ask:.2f}) — "
+                              f"using last ${last_price:.2f} instead of stale bid via {hub_src}")
+                    elif hub_bid > 0:
                         stc_signal['price'] = hub_bid
                         print(f"[RISK] 💰 Exit price: bid ${hub_bid:.2f} "
                               f"(ask ${hub_ask:.2f}, mid ${hub_mid:.2f}, last ${last_price:.2f}, spread {spread_pct:.1f}%) "
