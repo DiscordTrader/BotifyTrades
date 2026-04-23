@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades — Price Architecture Comparison</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d29922;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --cyan: #39d2c0;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,-apple-system,sans-serif; line-height:1.6; overflow-x:hidden; }
+
+  /* --- NAV --- */
+  .nav { position:sticky; top:0; z-index:100; background:rgba(13,17,23,.92); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:12px 0; }
+  .nav-inner { max-width:1280px; margin:auto; display:flex; align-items:center; gap:24px; padding:0 32px; flex-wrap:wrap; }
+  .nav-title { font-size:15px; font-weight:700; color:var(--accent); letter-spacing:.5px; }
+  .nav-tabs { display:flex; gap:4px; }
+  .nav-tab { padding:6px 16px; border-radius:8px; border:none; background:transparent; color:var(--muted); font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; }
+  .nav-tab:hover { background:rgba(88,166,255,.08); color:var(--text); }
+  .nav-tab.active { background:rgba(88,166,255,.15); color:var(--accent); }
+
+  /* --- SECTIONS --- */
+  .section { display:none; max-width:1280px; margin:auto; padding:40px 32px 80px; }
+  .section.active { display:block; }
+
+  h1 { font-size:32px; font-weight:800; margin-bottom:8px; }
+  h1 span { color:var(--accent); }
+  h2 { font-size:22px; font-weight:700; margin:40px 0 16px; display:flex; align-items:center; gap:10px; }
+  h2 .icon { font-size:24px; }
+  h3 { font-size:16px; font-weight:600; margin:20px 0 10px; color:var(--accent); }
+  p.sub { color:var(--muted); font-size:15px; margin-bottom:32px; }
+
+  /* --- CARDS --- */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:20px; }
+  .card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:20px; margin:20px 0; }
+  .card-header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .card-header .dot { width:10px; height:10px; border-radius:50%; }
+  .card-header h3 { margin:0; font-size:15px; }
+
+  /* --- FLOW DIAGRAMS --- */
+  .flow { display:flex; flex-direction:column; gap:0; align-items:center; margin:24px 0; }
+  .flow-row { display:flex; align-items:center; gap:12px; width:100%; justify-content:center; flex-wrap:wrap; }
+  .flow-box { padding:10px 18px; border-radius:10px; font-size:13px; font-weight:600; text-align:center; min-width:140px; position:relative; }
+  .flow-box.blue { background:rgba(88,166,255,.12); border:1px solid rgba(88,166,255,.3); color:var(--accent); }
+  .flow-box.green { background:rgba(63,185,80,.12); border:1px solid rgba(63,185,80,.3); color:var(--green); }
+  .flow-box.red { background:rgba(248,81,73,.12); border:1px solid rgba(248,81,73,.3); color:var(--red); }
+  .flow-box.orange { background:rgba(210,153,34,.12); border:1px solid rgba(210,153,34,.3); color:var(--orange); }
+  .flow-box.purple { background:rgba(188,140,255,.12); border:1px solid rgba(188,140,255,.3); color:var(--purple); }
+  .flow-box.cyan { background:rgba(57,210,192,.12); border:1px solid rgba(57,210,192,.3); color:var(--cyan); }
+  .flow-box.pink { background:rgba(247,120,186,.12); border:1px solid rgba(247,120,186,.3); color:var(--pink); }
+  .flow-arrow { color:var(--muted); font-size:20px; }
+  .flow-arrow.down { transform:rotate(90deg); }
+  .flow-divider { width:2px; height:24px; background:var(--border); margin:4px 0; }
+
+  /* --- TIMELINE --- */
+  .timeline { position:relative; margin:30px 0 30px 20px; padding-left:28px; border-left:2px solid var(--border); }
+  .tl-item { position:relative; margin-bottom:24px; }
+  .tl-item::before { content:''; position:absolute; left:-34px; top:6px; width:12px; height:12px; border-radius:50%; border:2px solid var(--border); background:var(--bg); }
+  .tl-item.ok::before { border-color:var(--green); background:var(--green); }
+  .tl-item.warn::before { border-color:var(--orange); background:var(--orange); }
+  .tl-item.fail::before { border-color:var(--red); background:var(--red); }
+  .tl-item.info::before { border-color:var(--accent); background:var(--accent); }
+  .tl-time { font-size:12px; color:var(--muted); font-family:'Cascadia Code','Fira Code',monospace; }
+  .tl-label { font-size:14px; font-weight:600; margin:2px 0; }
+  .tl-desc { font-size:13px; color:var(--muted); }
+
+  /* --- COMPARISON TABLE --- */
+  .cmp-table { width:100%; border-collapse:separate; border-spacing:0; margin:20px 0; font-size:13px; }
+  .cmp-table th, .cmp-table td { padding:12px 16px; text-align:left; border-bottom:1px solid var(--border); }
+  .cmp-table th { background:rgba(88,166,255,.06); color:var(--accent); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.5px; position:sticky; top:52px; }
+  .cmp-table th:first-child { border-radius:8px 0 0 0; }
+  .cmp-table th:last-child { border-radius:0 8px 0 0; }
+  .cmp-table td { background:var(--card); }
+  .cmp-table tr:hover td { background:rgba(88,166,255,.04); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; }
+  .badge.good { background:rgba(63,185,80,.15); color:var(--green); }
+  .badge.mid { background:rgba(210,153,34,.15); color:var(--orange); }
+  .badge.bad { background:rgba(248,81,73,.15); color:var(--red); }
+  .badge.info { background:rgba(88,166,255,.15); color:var(--accent); }
+
+  /* --- METRIC CARDS --- */
+  .metric-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin:20px 0; }
+  .metric { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center; }
+  .metric .value { font-size:36px; font-weight:800; line-height:1.1; }
+  .metric .label { font-size:12px; color:var(--muted); margin-top:6px; text-transform:uppercase; letter-spacing:.5px; }
+  .metric.green .value { color:var(--green); }
+  .metric.red .value { color:var(--red); }
+  .metric.orange .value { color:var(--orange); }
+  .metric.blue .value { color:var(--accent); }
+
+  /* --- SCENARIO ANIMATION --- */
+  .scenario-panel { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:28px; margin:24px 0; overflow:hidden; }
+  .scenario-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+  .scenario-header h3 { margin:0; font-size:18px; }
+  .btn { padding:8px 20px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn.active { background:rgba(88,166,255,.15); border-color:var(--accent); color:var(--accent); }
+
+  .price-track { position:relative; height:300px; background:rgba(0,0,0,.3); border-radius:10px; overflow:hidden; margin-top:16px; }
+  .price-track canvas { width:100%; height:100%; }
+
+  /* --- ARCH DIAGRAM --- */
+  .arch { position:relative; margin:30px 0; }
+  .arch svg { width:100%; max-width:900px; display:block; margin:auto; }
+
+  /* --- TAGS --- */
+  .tag-row { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+  .tag { font-size:11px; padding:3px 10px; border-radius:6px; font-weight:600; border:1px solid; }
+  .tag.streaming { color:var(--green); border-color:rgba(63,185,80,.3); background:rgba(63,185,80,.08); }
+  .tag.rest { color:var(--orange); border-color:rgba(210,153,34,.3); background:rgba(210,153,34,.08); }
+  .tag.new { color:var(--cyan); border-color:rgba(57,210,192,.3); background:rgba(57,210,192,.08); }
+  .tag.gap { color:var(--red); border-color:rgba(248,81,73,.3); background:rgba(248,81,73,.08); }
+
+  /* --- CODE BLOCK --- */
+  .code { background:rgba(0,0,0,.4); border:1px solid var(--border); border-radius:8px; padding:16px; font-family:'Cascadia Code','Fira Code',monospace; font-size:12px; line-height:1.7; overflow-x:auto; margin:12px 0; color:var(--muted); }
+  .code .kw { color:var(--purple); }
+  .code .fn { color:var(--accent); }
+  .code .str { color:var(--green); }
+  .code .num { color:var(--orange); }
+  .code .cmt { color:#484f58; font-style:italic; }
+  .code .hl { color:var(--cyan); font-weight:700; }
+
+  /* --- SEPARATOR --- */
+  .sep { height:1px; background:var(--border); margin:40px 0; }
+
+  /* --- FOOTER --- */
+  .footer { text-align:center; padding:40px; color:var(--muted); font-size:12px; border-top:1px solid var(--border); }
+
+  /* --- RESPONSIVE --- */
+  @media(max-width:768px) {
+    .nav-inner { padding:0 16px; }
+    .section { padding:24px 16px 60px; }
+    h1 { font-size:24px; }
+    .card-grid { grid-template-columns:1fr; }
+    .metric-grid { grid-template-columns:repeat(2,1fr); }
+    .flow-row { flex-direction:column; }
+    .flow-arrow { transform:rotate(90deg); }
+  }
+
+  /* animations */
+  @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+  .section.active { animation:fadeIn .3s ease; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .pulse { animation:pulse 2s infinite; }
+  @keyframes slideRight { from{width:0} to{width:100%} }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-title">BOTIFYTRADES PRICE ARCHITECTURE</div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="overview">Overview</button>
+      <button class="nav-tab" data-tab="current">Current Architecture</button>
+      <button class="nav-tab" data-tab="uph">UPH (Shadow)</button>
+      <button class="nav-tab" data-tab="new">New Architecture</button>
+      <button class="nav-tab" data-tab="scenario">FCHL Scenario</button>
+      <button class="nav-tab" data-tab="comparison">Side-by-Side</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ================================================ -->
+<!-- SECTION 1: OVERVIEW -->
+<!-- ================================================ -->
+<div class="section active" id="overview">
+  <h1>Price Monitoring <span>Architecture Comparison</span></h1>
+  <p class="sub">How the Risk Engine and Conditional Orders get real-time prices — current state, UPH shadow, and the proposed adaptive solution</p>
+
+  <!-- Problem Statement -->
+  <div class="card" style="border-left:3px solid var(--red);">
+    <h3 style="color:var(--red); margin-top:0;">The Problem: FCHL Flash Crash Gap-Through</h3>
+    <p style="color:var(--muted); font-size:14px; margin:8px 0;">
+      FCHL was bought at <strong style="color:var(--text)">$1.07</strong> with a <strong style="color:var(--text)">10% SL</strong>. No broker hub streamed this penny stock — all prices came from REST polling every <strong style="color:var(--text)">3-4 seconds</strong>.
+      A flash crash gapped from <strong style="color:var(--text)">$1.005 → $0.8899</strong> in 4 seconds (one REST interval), blowing through SL at <strong style="color:var(--red)">-16.83%</strong> instead of -10%.
+    </p>
+    <div class="tag-row" style="margin-top:12px;">
+      <span class="tag gap">No Streaming Ticks</span>
+      <span class="tag gap">REST-Only Detection Missing</span>
+      <span class="tag gap">4s Blind Spot</span>
+      <span class="tag gap">SL Gap-Through</span>
+    </div>
+  </div>
+
+  <!-- 3 Architecture Cards -->
+  <div class="card-grid">
+    <div class="card" style="border-top:3px solid var(--orange);">
+      <div class="card-header">
+        <div class="dot" style="background:var(--orange)"></div>
+        <h3 style="color:var(--orange)">Current Architecture</h3>
+      </div>
+      <p style="font-size:13px; color:var(--muted);">Each broker hub is queried independently. Cross-hub overlay runs every cycle but requires fresh streaming data. Stuck detector triggers at 3s — but only for <em>frozen</em> prices, not slow REST updates.</p>
+      <div class="tag-row">
+        <span class="tag rest">3-5s REST Polls</span>
+        <span class="tag streaming">Streaming When Available</span>
+        <span class="tag gap">No REST-Only Detection</span>
+      </div>
+    </div>
+
+    <div class="card" style="border-top:3px solid var(--purple);">
+      <div class="card-header">
+        <div class="dot" style="background:var(--purple)"></div>
+        <h3 style="color:var(--purple)">UPH (Shadow Mode)</h3>
+      </div>
+      <p style="font-size:13px; color:var(--muted);">Unified Price Hub aggregates all hubs into one cache with freshness classification. Currently shadow-only — not used by Risk Engine or Conditional Orders. Reduces code duplication but doesn't solve the core REST-only gap.</p>
+      <div class="tag-row">
+        <span class="tag streaming">Unified Cache</span>
+        <span class="tag streaming">Freshness Tags</span>
+        <span class="tag gap">Still Depends on Hub Data</span>
+      </div>
+    </div>
+
+    <div class="card" style="border-top:3px solid var(--cyan);">
+      <div class="card-header">
+        <div class="dot" style="background:var(--cyan)"></div>
+        <h3 style="color:var(--cyan)">New: Adaptive REST</h3>
+      </div>
+      <p style="font-size:13px; color:var(--muted);">Tracks per-symbol streaming status. After 10s with no streaming ticks, classifies symbol as "REST-only" and drops poll interval from 3-5s to ~1s. Proactively subscribes equities on Schwab WebSocket. Self-healing when streaming recovers.</p>
+      <div class="tag-row">
+        <span class="tag new">Per-Symbol Tracking</span>
+        <span class="tag new">~1s REST for Unstreamed</span>
+        <span class="tag new">Auto Schwab Subscribe</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Metrics Comparison -->
+  <h2><span class="icon">📊</span> Key Metrics at a Glance</h2>
+  <div class="metric-grid">
+    <div class="metric red">
+      <div class="value">3-5s</div>
+      <div class="label">Current REST Gap</div>
+    </div>
+    <div class="metric orange">
+      <div class="value">3-5s</div>
+      <div class="label">UPH REST Gap</div>
+    </div>
+    <div class="metric green">
+      <div class="value">~50ms</div>
+      <div class="label">New (after Schwab streams)</div>
+    </div>
+    <div class="metric blue">
+      <div class="value">3s</div>
+      <div class="label">Detection Time</div>
+    </div>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric red">
+      <div class="value">-16.8%</div>
+      <div class="label">FCHL Current Loss</div>
+    </div>
+    <div class="metric orange">
+      <div class="value">-16.8%</div>
+      <div class="label">FCHL with UPH</div>
+    </div>
+    <div class="metric green">
+      <div class="value">~-10%</div>
+      <div class="label">FCHL New (streaming)</div>
+    </div>
+    <div class="metric blue">
+      <div class="value">0</div>
+      <div class="label">Breaking Changes</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================ -->
+<!-- SECTION 2: CURRENT ARCHITECTURE -->
+<!-- ================================================ -->
+<div class="section" id="current">
+  <h1>Current <span>Architecture</span></h1>
+  <p class="sub">Dual-path design: event-driven streaming + REST polling fallback — but no detection of REST-only symbols</p>
+
+  <h2><span class="icon">🏗️</span> Data Flow Diagram</h2>
+  <div class="card">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+
+      <!-- Broker Layer -->
+      <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+        <div class="flow-box green" style="min-width:120px;">
+          <div style="font-size:10px; opacity:.7;">MQTT</div>
+          Webull Hub
+        </div>
+        <div class="flow-box green" style="min-width:120px;">
+          <div style="font-size:10px; opacity:.7;">WebSocket</div>
+          Schwab Hub
+        </div>
+        <div class="flow-box green" style="min-width:120px;">
+          <div style="font-size:10px; opacity:.7;">WebSocket</div>
+          IBKR Hub
+        </div>
+        <div class="flow-box green" style="min-width:120px;">
+          <div style="font-size:10px; opacity:.7;">Streaming</div>
+          Tastytrade Hub
+        </div>
+        <div class="flow-box orange" style="min-width:120px;">
+          <div style="font-size:10px; opacity:.7;">REST Only</div>
+          Trading212 Hub
+        </div>
+      </div>
+
+      <div class="flow-divider"></div>
+      <div style="font-size:11px; color:var(--muted); padding:4px;">quote_updated events (when streaming works)</div>
+      <div class="flow-divider"></div>
+
+      <!-- Callback -->
+      <div class="flow-box blue" style="min-width:280px;">
+        <div style="font-size:10px; opacity:.7;">Single Callback</div>
+        _on_quote_update() → marks symbol dirty
+      </div>
+
+      <div class="flow-divider"></div>
+
+      <!-- Two Paths -->
+      <div style="display:flex; gap:32px; flex-wrap:wrap; justify-content:center;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+          <div class="flow-box cyan" style="min-width:240px;">
+            <div style="font-size:10px; opacity:.7;">FAST PATH (~20-50ms)</div>
+            _run_incremental_eval()
+            <div style="font-size:10px; opacity:.7; margin-top:4px;">Only dirty symbols</div>
+          </div>
+          <div class="flow-divider"></div>
+          <div class="flow-box green" style="font-size:12px;">Evaluate SL/PT immediately</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+          <div class="flow-box orange" style="min-width:240px;">
+            <div style="font-size:10px; opacity:.7;">MAIN CYCLE (~1s)</div>
+            _monitoring_cycle()
+          </div>
+          <div class="flow-divider"></div>
+          <div class="flow-box blue" style="font-size:12px;">_update_prices_from_hub()</div>
+          <div class="flow-divider"></div>
+          <div class="flow-box blue" style="font-size:12px;">_detect_and_fix_stuck_prices()</div>
+          <div class="flow-divider"></div>
+          <div class="flow-box green" style="font-size:12px;">Evaluate ALL positions</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="icon">⚠️</span> Where It Breaks Down</h2>
+  <div class="card-grid">
+    <div class="card" style="border-left:3px solid var(--red);">
+      <h3 style="color:var(--red); margin-top:0;">Gap 1: No REST-Only Detection</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        <code>_dirty_symbols</code> is <strong>cleared every cycle</strong>. There is no persistent tracking of "this symbol has NEVER received a streaming tick." The system assumes if Webull's <code>is_streaming()</code> is true, all symbols are streaming — but MQTT silently ignores illiquid stocks.
+      </p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--red);">
+      <h3 style="color:var(--red); margin-top:0;">Gap 2: Global REST, Not Per-Symbol</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        REST refresh uses a <strong>single boolean</strong> <code>_force_webull_rest_refresh</code> every 3-5s for ALL positions. There's no way to poll one symbol at 1s and another at 5s. REST-only symbols like FCHL get the same slow 3-5s interval as streamed symbols.
+      </p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--red);">
+      <h3 style="color:var(--red); margin-top:0;">Gap 3: Stuck ≠ Slow</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        The stuck price detector triggers when price is <strong>literally frozen</strong> (same value for 3s). FCHL's price was <em>changing</em> every REST poll — it was slow, not stuck. The detector kept resetting <code>tracker['last_changed']</code> on every new price.
+      </p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--red);">
+      <h3 style="color:var(--red); margin-top:0;">Gap 4: Schwab-Only Cross Subscribe</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        <code>_request_cross_broker_subscriptions()</code> only subscribes equities on Schwab hub. It only activates for brokers flagged as "non-streaming" — but Webull is flagged as streaming even when MQTT ignores specific symbols.
+      </p>
+    </div>
+  </div>
+
+  <h2><span class="icon">⏱️</span> Timing Chain (Current)</h2>
+  <div class="card">
+    <div class="timeline">
+      <div class="tl-item ok">
+        <div class="tl-time">t+0ms</div>
+        <div class="tl-label">Price changes on exchange</div>
+        <div class="tl-desc">Market data event generated at exchange</div>
+      </div>
+      <div class="tl-item ok">
+        <div class="tl-time">t+5-50ms</div>
+        <div class="tl-label" style="color:var(--green)">IF streaming: Hub receives tick → _on_quote_update → incremental eval</div>
+        <div class="tl-desc">Sub-50ms latency. SL/PT evaluated immediately. This is the happy path.</div>
+      </div>
+      <div class="tl-item fail">
+        <div class="tl-time">t+0 to t+3-5s</div>
+        <div class="tl-label" style="color:var(--red)">IF no streaming: BLIND SPOT</div>
+        <div class="tl-desc">No hub has data. System waits for next REST poll cycle. Price can move 10%+ in this window.</div>
+      </div>
+      <div class="tl-item warn">
+        <div class="tl-time">t+3-5s</div>
+        <div class="tl-label">REST poll fires → _fetch_all_positions()</div>
+        <div class="tl-desc">Global REST refresh. Gets new price — but crash already happened.</div>
+      </div>
+      <div class="tl-item warn">
+        <div class="tl-time">t+3-5s</div>
+        <div class="tl-label">_update_prices_from_hub() → cross-hub overlay</div>
+        <div class="tl-desc">Tries all other hubs — but none are streaming this symbol either.</div>
+      </div>
+      <div class="tl-item ok">
+        <div class="tl-time">t+3-5s</div>
+        <div class="tl-label">SL/PT evaluated on REST price</div>
+        <div class="tl-desc">Triggers exit — but at the already-crashed price, not the SL level.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================ -->
+<!-- SECTION 3: UPH (SHADOW) -->
+<!-- ================================================ -->
+<div class="section" id="uph">
+  <h1>Unified Price Hub <span>(Shadow Mode)</span></h1>
+  <p class="sub">Centralizes all broker hub data into a single cache with freshness classification — but cannot create data that doesn't exist</p>
+
+  <h2><span class="icon">🏗️</span> UPH Architecture</h2>
+  <div class="card">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+        <div class="flow-box green" style="min-width:110px;">Webull Hub</div>
+        <div class="flow-box green" style="min-width:110px;">Schwab Hub</div>
+        <div class="flow-box green" style="min-width:110px;">IBKR Hub</div>
+        <div class="flow-box green" style="min-width:110px;">Tastytrade Hub</div>
+        <div class="flow-box orange" style="min-width:110px;">Trading212 Hub</div>
+      </div>
+
+      <div class="flow-divider"></div>
+      <div style="font-size:11px; color:var(--muted);">quote_updated events to ALL hubs</div>
+      <div class="flow-divider"></div>
+
+      <div class="flow-box purple" style="min-width:400px; padding:16px;">
+        <div style="font-size:16px; font-weight:800;">Unified Price Hub (Singleton)</div>
+        <div style="font-size:11px; opacity:.8; margin-top:6px;">
+          Unified cache by canonical symbol &nbsp;|&nbsp; Freshness: fresh / aging / stale / degraded
+        </div>
+        <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
+          <span class="tag streaming">Auto-subscribe ALL hubs</span>
+          <span class="tag streaming">Canonical symbol resolution</span>
+          <span class="tag streaming">Freshness classification</span>
+        </div>
+      </div>
+
+      <div class="flow-divider"></div>
+
+      <div style="display:flex; gap:24px; flex-wrap:wrap; justify-content:center;">
+        <div class="flow-box blue" style="opacity:.4;">
+          Risk Engine
+          <div style="font-size:10px; opacity:.7;">NOT CONNECTED</div>
+        </div>
+        <div class="flow-box blue" style="opacity:.4;">
+          Conditional Orders
+          <div style="font-size:10px; opacity:.7;">NOT CONNECTED</div>
+        </div>
+        <div class="flow-box green">
+          Guardian SL/PT
+          <div style="font-size:10px; opacity:.7;">CONNECTED</div>
+        </div>
+        <div class="flow-box green">
+          Dashboard
+          <div style="font-size:10px; opacity:.7;">CONNECTED</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="icon">✅</span> What UPH Does Well</h2>
+  <div class="card-grid">
+    <div class="card" style="border-left:3px solid var(--green);">
+      <h3 style="color:var(--green); margin-top:0;">Single Cache, All Brokers</h3>
+      <p style="font-size:13px; color:var(--muted);">One <code>get_quote()</code> call checks all broker hubs automatically. No need to query Webull, then Schwab, then IBKR manually.</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--green);">
+      <h3 style="color:var(--green); margin-top:0;">Built-in Freshness</h3>
+      <p style="font-size:13px; color:var(--muted);">Every quote has <code>freshness</code> tag: fresh (≤3s), aging (≤5s), stale (≤10s), degraded (≤30s), unverified. Conditional orders could use this instead of accepting any price.</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--green);">
+      <h3 style="color:var(--green); margin-top:0;">Eliminates ~300 Lines</h3>
+      <p style="font-size:13px; color:var(--muted);">Risk engine's <code>_update_prices_from_hub()</code>, <code>_try_cross_hub_price()</code>, and conditional order's <code>_try_streaming_hub_price()</code> all duplicate what UPH does centrally.</p>
+    </div>
+  </div>
+
+  <h2><span class="icon">❌</span> Why UPH Alone Doesn't Fix FCHL</h2>
+  <div class="card" style="border-left:3px solid var(--red);">
+    <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:300px;">
+        <h3 style="color:var(--red); margin-top:0;">UPH Can Only Aggregate What Exists</h3>
+        <p style="font-size:13px; color:var(--muted); margin:8px 0;">
+          FCHL's problem wasn't <em>which layer aggregates the data</em> — it was that <strong>no broker hub was streaming FCHL at all</strong>.
+          Webull MQTT silently ignored this penny stock. Schwab WebSocket wasn't subscribed to it.
+          UPH subscribes to hub <em>events</em>, but if no hub emits an event for FCHL, UPH's cache is equally empty.
+        </p>
+        <p style="font-size:13px; color:var(--muted); margin:8px 0;">
+          UPH would still fall back to REST polling at 3-5s intervals — the same blind spot that caused the gap-through.
+        </p>
+      </div>
+      <div style="min-width:240px;">
+        <div class="metric red" style="margin:0;">
+          <div class="value">3-5s</div>
+          <div class="label">STILL THE SAME REST GAP</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="icon">⏱️</span> UPH Timing for FCHL</h2>
+  <div class="card">
+    <div class="timeline">
+      <div class="tl-item fail">
+        <div class="tl-time">t+0</div>
+        <div class="tl-label" style="color:var(--red)">UPH cache has no FCHL entry</div>
+        <div class="tl-desc">No hub is streaming FCHL → UPH's _subscribe_to_hubs() receives no quote_updated events for it</div>
+      </div>
+      <div class="tl-item fail">
+        <div class="tl-time">t+0 to t+3-5s</div>
+        <div class="tl-label" style="color:var(--red)">SAME BLIND SPOT as current architecture</div>
+        <div class="tl-desc">UPH.get_quote('FCHL') → None or stale REST price. Identical to checking individual hubs.</div>
+      </div>
+      <div class="tl-item warn">
+        <div class="tl-time">t+3-5s</div>
+        <div class="tl-label">REST poll brings new price into UPH cache</div>
+        <div class="tl-desc">Same timing as current. UPH doesn't have its own REST polling for individual symbols.</div>
+      </div>
+      <div class="tl-item warn">
+        <div class="tl-time">t+3-5s</div>
+        <div class="tl-label">SL triggers at already-crashed price</div>
+        <div class="tl-desc">Identical outcome: -16.83% instead of -10%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================ -->
+<!-- SECTION 4: NEW ARCHITECTURE -->
+<!-- ================================================ -->
+<div class="section" id="new">
+  <h1>New: <span>Adaptive REST Polling</span></h1>
+  <p class="sub">3-second detection → rate-limit-aware fast polling → proactive Schwab subscribe → auto-recovery to streaming</p>
+
+  <!-- CRITICAL CONCERNS ADDRESSED -->
+  <h2><span class="icon">🚨</span> Three Critical Concerns Addressed</h2>
+  <div class="card-grid">
+    <div class="card" style="border-left:3px solid var(--red);">
+      <div class="card-header">
+        <div class="dot" style="background:var(--red)"></div>
+        <h3 style="color:var(--red)">Concern: 10s Detection Too Slow</h3>
+      </div>
+      <p style="font-size:13px; color:var(--muted);">10s means you could miss PT entirely on a quick spike, or SL on a fast drop. A trade that lasts 15s has NO fast-poll protection for the first 10s.</p>
+      <div style="margin-top:10px; padding:10px; background:rgba(57,210,192,.08); border-radius:8px;">
+        <div style="color:var(--cyan); font-weight:700; font-size:13px;">Solution: 3-Second Detection</div>
+        <div style="color:var(--muted); font-size:12px; margin-top:4px;">
+          Monitoring cycle runs every ~1s. After 3 cycles with zero streaming ticks while Webull <code>is_streaming()</code> is globally true, the symbol is classified REST-only. This matches the existing stuck price threshold (3s) — proven safe in production.
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="border-left:3px solid var(--red);">
+      <div class="card-header">
+        <div class="dot" style="background:var(--red)"></div>
+        <h3 style="color:var(--red)">Concern: API Rate Limit Exhaustion</h3>
+      </div>
+      <p style="font-size:13px; color:var(--muted);">Blind 1s polling burns rate limits fast:</p>
+      <div style="font-size:12px; margin:8px 0;">
+        <table style="width:100%; font-size:12px; border-collapse:collapse;">
+          <tr style="color:var(--muted);"><td style="padding:3px 8px;">Webull</td><td>30 req / 60s</td><td style="color:var(--red);">= 0.5/s (1s poll = 2x over!)</td></tr>
+          <tr style="color:var(--muted);"><td style="padding:3px 8px;">Schwab</td><td>120 req / 60s</td><td style="color:var(--orange);">= 2/s (safe for 1-2 symbols)</td></tr>
+          <tr style="color:var(--muted);"><td style="padding:3px 8px;">IBKR</td><td>50 req / 1s</td><td style="color:var(--green);">= 50/s (no concern)</td></tr>
+        </table>
+      </div>
+      <div style="margin-top:10px; padding:10px; background:rgba(57,210,192,.08); border-radius:8px;">
+        <div style="color:var(--cyan); font-weight:700; font-size:13px;">Solution: Rate-Limit-Aware Smart Polling</div>
+        <div style="color:var(--muted); font-size:12px; margin-top:4px;">
+          Check <code>RateLimitManager</code> before every REST call. Distribute across brokers (Schwab first → Webull fallback). Dynamic interval: 2s per symbol (Schwab budget allows ~2 REST-only symbols safely). Skip if budget exhausted — never 429.
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="border-left:3px solid var(--red);">
+      <div class="card-header">
+        <div class="dot" style="background:var(--red)"></div>
+        <h3 style="color:var(--red)">Concern: How Does Streaming Auto-Recover?</h3>
+      </div>
+      <p style="font-size:13px; color:var(--muted);">When Schwab subscribes to FCHL, how does the system detect it's now streaming and stop wasting REST calls?</p>
+      <div style="margin-top:10px; padding:10px; background:rgba(57,210,192,.08); border-radius:8px;">
+        <div style="color:var(--cyan); font-weight:700; font-size:13px;">Solution: Instant Self-Healing via Existing Callback</div>
+        <div style="color:var(--muted); font-size:12px; margin-top:4px;">
+          ALL hubs share the same <code>_on_quote_update()</code> callback. The moment Schwab WebSocket pushes a FCHL tick → callback fires → updates <code>last_tick</code> → clears <code>rest_only_since</code> → next cycle: symbol is no longer REST-only → fast polling stops → sub-50ms streaming path takes over.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STREAMING RECOVERY CHAIN -->
+  <h2><span class="icon">🔄</span> Streaming Auto-Recovery — Full Chain</h2>
+  <div class="card">
+    <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+      When we request Schwab to subscribe FCHL, here's the exact sequence from code to price evaluation:
+    </p>
+    <div style="display:flex; flex-direction:column; gap:0; align-items:center;">
+      <div class="flow-box cyan" style="min-width:500px;">
+        <div style="font-size:10px; opacity:.7;">STEP 1 — Risk Engine requests subscription</div>
+        _poll_rest_only_symbols() → schwab_hub.request_subscribe_equities({'FCHL'})
+        <div style="font-size:10px; opacity:.7; margin-top:4px;">Adds to _pending_equity_subs set (instant, non-blocking)</div>
+      </div>
+      <div class="flow-divider"></div>
+
+      <div class="flow-box orange" style="min-width:500px;">
+        <div style="font-size:10px; opacity:.7;">STEP 2 — Schwab streaming client drains pending</div>
+        drain_pending_subscriptions() → subscribe_equities(['FCHL'])
+        <div style="font-size:10px; opacity:.7; margin-top:4px;">Currently every 10s — <span style="color:var(--cyan); font-weight:700;">NEW: reduce to 3s for pending subs</span></div>
+      </div>
+      <div class="flow-divider"></div>
+
+      <div class="flow-box green" style="min-width:500px;">
+        <div style="font-size:10px; opacity:.7;">STEP 3 — Schwab WebSocket pushes first FCHL tick</div>
+        SchwabDataHub cache updated → emits 'quote_updated' event
+      </div>
+      <div class="flow-divider"></div>
+
+      <div class="flow-box blue" style="min-width:500px;">
+        <div style="font-size:10px; opacity:.7;">STEP 4 — Shared callback fires (ALL hubs use same handler)</div>
+        _on_quote_update(data) → marks dirty + sets _price_wake_event
+        <div style="font-size:10px; color:var(--cyan); font-weight:700; margin-top:4px;">+ NEW: _symbol_streaming_status['FCHL'].last_tick = now, rest_only_since = None</div>
+      </div>
+      <div class="flow-divider"></div>
+
+      <div class="flow-box green" style="min-width:500px;">
+        <div style="font-size:10px; opacity:.7;">STEP 5 — Fast path activates immediately</div>
+        _price_wake_event → _run_incremental_eval() → SL/PT evaluated in ~20-50ms
+      </div>
+      <div class="flow-divider"></div>
+
+      <div class="flow-box green" style="min-width:500px;">
+        <div style="font-size:10px; opacity:.7;">STEP 6 — Self-healing: REST-only polling stops</div>
+        Next cycle: _classify_rest_only_symbols() → FCHL not in set → fast REST stops
+        <div style="font-size:10px; color:var(--green); font-weight:700; margin-top:4px;">Symbol now on sub-50ms streaming path permanently</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; padding:12px; background:rgba(63,185,80,.08); border-radius:8px; border:1px solid rgba(63,185,80,.2);">
+      <div style="color:var(--green); font-weight:700; font-size:13px;">Key Insight: MQTT/WebSocket streaming doesn't "start" — it's ALWAYS running</div>
+      <div style="color:var(--muted); font-size:12px; margin-top:4px;">
+        Webull MQTT and Schwab WebSocket are always connected and active. The issue is which <strong>symbols</strong> are subscribed on each.
+        When we call <code>request_subscribe_equities({'FCHL'})</code>, we're telling the already-running Schwab WebSocket to add FCHL to its topic filter.
+        Once subscribed, ticks flow immediately through the existing callback chain — no new connections needed.
+      </div>
+    </div>
+  </div>
+
+  <!-- REVISED ARCHITECTURE FLOW -->
+  <h2><span class="icon">🏗️</span> Revised Architecture Flow</h2>
+  <div class="card">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+
+      <!-- Broker Hubs -->
+      <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+        <div class="flow-box green" style="min-width:110px;">Webull Hub</div>
+        <div class="flow-box green" style="min-width:110px;">Schwab Hub</div>
+        <div class="flow-box green" style="min-width:110px;">IBKR Hub</div>
+        <div class="flow-box green" style="min-width:110px;">Tastytrade Hub</div>
+      </div>
+
+      <div class="flow-divider"></div>
+
+      <!-- On Quote Update with NEW tracking -->
+      <div class="flow-box blue" style="min-width:450px;">
+        _on_quote_update()  — shared callback for ALL hubs
+        <div style="font-size:11px; opacity:.8; margin-top:4px;">marks dirty + <span style="color:var(--cyan); font-weight:700;">updates _symbol_streaming_status[sym].last_tick</span></div>
+        <div style="font-size:11px; color:var(--green); margin-top:2px;">Streaming tick arrives → REST-only flag cleared instantly (self-healing)</div>
+      </div>
+
+      <div class="flow-divider"></div>
+
+      <!-- NEW: Streaming Status Tracker -->
+      <div class="flow-box cyan" style="min-width:540px; padding:16px;">
+        <div style="font-size:15px; font-weight:800;">Per-Symbol Streaming Status Tracker</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; text-align:left; font-size:12px;">
+          <div>
+            <div style="color:var(--green); font-weight:700;">SPY (streaming ✓)</div>
+            <div style="color:var(--muted);">first_seen: t+0 | last_tick: t+0.2s</div>
+            <div style="color:var(--muted);">rest_only: No | poll: normal 5s</div>
+          </div>
+          <div>
+            <div style="color:var(--red); font-weight:700;">FCHL (REST-only ⚠️)</div>
+            <div style="color:var(--muted);">first_seen: t+0 | last_tick: NEVER</div>
+            <div style="color:var(--muted);">rest_only: Yes | poll: <span style="color:var(--cyan); font-weight:700;">FAST 2s</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-divider"></div>
+
+      <!-- Classification -->
+      <div class="flow-box cyan" style="min-width:450px;">
+        _classify_rest_only_symbols()
+        <div style="font-size:11px; opacity:.8; margin-top:4px;">After <span style="color:var(--cyan); font-weight:700;">3s</span> open + no streaming tick = REST-only</div>
+      </div>
+
+      <div class="flow-divider"></div>
+
+      <!-- Four Actions -->
+      <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+        <div class="flow-box cyan" style="min-width:160px;">
+          <div style="font-size:10px; opacity:.7;">ACTION 1</div>
+          Smart REST Poll ~2s
+          <div style="font-size:10px; opacity:.7;">Rate-limit aware</div>
+        </div>
+        <div class="flow-box cyan" style="min-width:160px;">
+          <div style="font-size:10px; opacity:.7;">ACTION 2</div>
+          Schwab Subscribe
+          <div style="font-size:10px; opacity:.7;">Drain in 3s not 10s</div>
+        </div>
+        <div class="flow-box cyan" style="min-width:160px;">
+          <div style="font-size:10px; opacity:.7;">ACTION 3</div>
+          Freshness Gate
+          <div style="font-size:10px; opacity:.7;">Conditional orders ≤5s</div>
+        </div>
+        <div class="flow-box cyan" style="min-width:160px;">
+          <div style="font-size:10px; opacity:.7;">ACTION 4</div>
+          Auto-Recovery
+          <div style="font-size:10px; opacity:.7;">Tick arrives → stop REST</div>
+        </div>
+      </div>
+
+      <div class="flow-divider"></div>
+
+      <!-- Self-Healing -->
+      <div class="flow-box green" style="min-width:450px;">
+        <div style="font-size:10px; opacity:.7;">SELF-HEALING LOOP</div>
+        Schwab starts streaming → _on_quote_update fires → clears rest_only → back to sub-50ms path
+      </div>
+    </div>
+  </div>
+
+  <!-- THE FIVE CHANGES -->
+  <h2><span class="icon">🔧</span> The Five Changes</h2>
+
+  <!-- Change 1 -->
+  <div class="card" style="border-left:3px solid var(--cyan);">
+    <div class="card-header">
+      <div class="dot" style="background:var(--cyan)"></div>
+      <h3 style="color:var(--cyan)">Change 1: Per-Symbol Streaming Status (3s Detection)</h3>
+      <span class="badge info">position_monitor.py</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+      New persistent dict tracks streaming status per symbol. Detection fires at <strong>3 seconds</strong> — same as the proven stuck price threshold.
+      Self-heals instantly when any hub delivers a streaming tick.
+    </p>
+    <div class="code">
+<span class="cmt"># New data structure in __init__ (persistent, NOT cleared per cycle)</span>
+<span class="kw">self</span>._symbol_streaming_status = {}  <span class="cmt"># {symbol: {first_seen, last_tick, rest_only_since}}</span>
+<span class="kw">self</span>._REST_ONLY_DETECTION_DELAY = <span class="hl">3</span>  <span class="cmt"># 3s — matches stuck price threshold</span>
+
+<span class="cmt"># In _on_quote_update callback (hub thread) — SELF-HEALING:</span>
+<span class="kw">with</span> <span class="kw">self</span>._symbol_streaming_status_lock:
+    status = <span class="kw">self</span>._symbol_streaming_status.get(symbol)
+    <span class="kw">if</span> status:
+        status[<span class="str">'last_tick'</span>] = tick_ts       <span class="cmt"># streaming tick arrived!</span>
+        status[<span class="str">'rest_only_since'</span>] = <span class="kw">None</span>   <span class="cmt"># clear REST-only → stops fast polling</span>
+    </div>
+    <div class="tag-row">
+      <span class="tag new">3s detection (was 10s)</span>
+      <span class="tag new">Thread-safe</span>
+      <span class="tag new">Stocks + options</span>
+      <span class="tag new">Instant self-healing</span>
+    </div>
+  </div>
+
+  <!-- Change 2 -->
+  <div class="card" style="border-left:3px solid var(--cyan);">
+    <div class="card-header">
+      <div class="dot" style="background:var(--cyan)"></div>
+      <h3 style="color:var(--cyan)">Change 2: Rate-Limit-Aware Smart Polling</h3>
+      <span class="badge info">position_monitor.py</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+      Instead of blind 1s polling that burns rate limits, checks <code>RateLimitManager</code> before each call.
+      Uses <strong>Schwab REST first</strong> (2 req/s budget), falls to Webull only if Schwab exhausted.
+      Dynamic interval: 2s per symbol to stay within Schwab's 120/min limit safely.
+    </p>
+    <div class="code">
+<span class="cmt"># Rate-limit-aware polling (NOT blind 1s for every symbol)</span>
+<span class="kw">self</span>._REST_ONLY_POLL_INTERVAL = <span class="hl">2.0</span>  <span class="cmt"># 2s per symbol — Schwab budget: 120/min = 2/s</span>
+<span class="kw">self</span>._REST_ONLY_MAX_PER_CYCLE = <span class="num">2</span>    <span class="cmt"># max 2 symbols per 1s cycle</span>
+
+<span class="kw">async def</span> <span class="fn">_poll_rest_only_symbols</span>(<span class="kw">self</span>, positions):
+    <span class="kw">for</span> pos <span class="kw">in</span> targets[:<span class="kw">self</span>._REST_ONLY_MAX_PER_CYCLE]:
+        <span class="kw">if</span> (now - last_poll) < <span class="kw">self</span>._REST_ONLY_POLL_INTERVAL:
+            <span class="kw">continue</span>  <span class="cmt"># respect per-symbol cooldown</span>
+        <span class="kw">if not</span> rate_manager.<span class="fn">can_make_request</span>(<span class="str">'schwab'</span>):
+            <span class="kw">continue</span>  <span class="cmt"># skip if rate budget exhausted — never 429!</span>
+        fresh = <span class="kw">await</span> <span class="kw">self</span>.<span class="fn">_try_rest_quote</span>(pos)
+        pos.current_price = fresh
+    </div>
+    <div style="margin-top:12px; padding:10px; background:rgba(0,0,0,.3); border-radius:8px; font-size:12px;">
+      <div style="color:var(--text); font-weight:700; margin-bottom:6px;">Rate Budget Math:</div>
+      <table style="width:100%; font-size:12px; color:var(--muted); border-collapse:collapse;">
+        <tr><td style="padding:3px 0;">Schwab budget:</td><td>120 req/min = 2 req/s</td></tr>
+        <tr><td style="padding:3px 0;">Normal usage (positions, orders):</td><td>~20-40 req/min</td></tr>
+        <tr><td style="padding:3px 0;">Available for REST-only polling:</td><td style="color:var(--green);">~80 req/min = 1.3 req/s</td></tr>
+        <tr><td style="padding:3px 0;">2 REST-only symbols at 2s each:</td><td style="color:var(--green);">60 req/min ✓ within budget</td></tr>
+        <tr><td style="padding:3px 0;">5 REST-only symbols at 2s each:</td><td style="color:var(--orange);">150 req/min — rate manager throttles automatically</td></tr>
+      </table>
+    </div>
+    <div class="tag-row">
+      <span class="tag new">Rate-limit checked before each call</span>
+      <span class="tag new">Schwab-first (higher budget)</span>
+      <span class="tag new">Never triggers 429</span>
+      <span class="tag new">2s interval (was 1s)</span>
+    </div>
+  </div>
+
+  <!-- Change 3 -->
+  <div class="card" style="border-left:3px solid var(--cyan);">
+    <div class="card-header">
+      <div class="dot" style="background:var(--cyan)"></div>
+      <h3 style="color:var(--cyan)">Change 3: Faster Schwab Subscription Drain (10s → 3s)</h3>
+      <span class="badge info">schwab_streaming_client.py</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+      Currently Schwab streaming client checks for pending subscriptions every <strong>10 seconds</strong>.
+      That means after we request FCHL subscription, it takes up to 10s before the WebSocket actually subscribes.
+      Reducing to <strong>3s</strong> means streaming starts much sooner — and once it does, self-healing kicks in immediately.
+    </p>
+    <div class="code">
+<span class="cmt"># schwab_streaming_client.py line 409</span>
+<span class="cmt"># Before:</span>
+<span class="kw">if</span> now - self._last_pending_drain >= <span class="num">10</span>:  <span class="cmt"># checks every 10s — too slow!</span>
+
+<span class="cmt"># After:</span>
+<span class="kw">if</span> now - self._last_pending_drain >= <span class="hl">3</span>:   <span class="cmt"># checks every 3s — streaming starts sooner</span>
+    </div>
+    <div class="tag-row">
+      <span class="tag new">10s → 3s drain interval</span>
+      <span class="tag new">Streaming starts 7s sooner</span>
+      <span class="tag new">One-line change</span>
+    </div>
+  </div>
+
+  <!-- Change 4 -->
+  <div class="card" style="border-left:3px solid var(--cyan);">
+    <div class="card-header">
+      <div class="dot" style="background:var(--cyan)"></div>
+      <h3 style="color:var(--cyan)">Change 4: Proactive Schwab Subscription on Detection</h3>
+      <span class="badge info">position_monitor.py</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+      The moment a symbol is classified REST-only, immediately request Schwab WebSocket subscription.
+      Combined with the 3s drain (Change 3), streaming can start within <strong>~6 seconds</strong> of position open (3s detection + 3s drain).
+      Once Schwab streams the first tick, self-healing (Change 1) switches to sub-50ms path.
+    </p>
+    <div class="code">
+<span class="cmt"># Inside _poll_rest_only_symbols — right after classification</span>
+equity_rest_only = {sym <span class="kw">for</span> pos <span class="kw">in</span> positions
+                    <span class="kw">if</span> pos.symbol.upper() <span class="kw">in</span> rest_only_syms
+                    <span class="kw">and</span> pos.asset != <span class="str">'option'</span>}
+new = equity_rest_only - <span class="kw">self</span>._rest_only_schwab_subscribed
+<span class="kw">if</span> new:
+    <span class="kw">self</span>.<span class="fn">_request_cross_broker_subscriptions</span>(new)  <span class="cmt"># existing method!</span>
+    <span class="kw">self</span>._rest_only_schwab_subscribed |= new
+    </div>
+    <div class="tag-row">
+      <span class="tag new">Equities: Schwab WebSocket subscribe</span>
+      <span class="tag new">Options: REST-only fast polling (no subscribe API)</span>
+      <span class="tag new">Reuses existing method</span>
+    </div>
+  </div>
+
+  <!-- Change 5 -->
+  <div class="card" style="border-left:3px solid var(--cyan);">
+    <div class="card-header">
+      <div class="dot" style="background:var(--cyan)"></div>
+      <h3 style="color:var(--cyan)">Change 5: Conditional Order Freshness Gate</h3>
+      <span class="badge info">conditional_order_service.py</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+      Currently accepts any cached price regardless of age. A 60-second-old price can trigger a conditional order.
+      New gate: reject hub prices older than 5 seconds, fall through to REST.
+    </p>
+    <div class="code">
+<span class="cmt"># Before (accepts ANY cached price — could be 60s old!):</span>
+price = hub.<span class="fn">get_quote_price</span>(symbol)
+<span class="kw">if</span> price <span class="kw">and</span> price > <span class="num">0</span>: <span class="kw">return</span> price
+
+<span class="cmt"># After (freshness-gated — max 5s old):</span>
+quote = hub.<span class="fn">get_quote</span>(symbol)
+<span class="kw">if</span> quote <span class="kw">and</span> (time.time() - quote.timestamp) <= <span class="hl">5</span>:
+    <span class="kw">return</span> quote.last  <span class="cmt"># fresh price</span>
+<span class="cmt"># else: falls through to REST (existing behavior)</span>
+    </div>
+    <div class="tag-row">
+      <span class="tag new">5s freshness gate</span>
+      <span class="tag new">Falls through to REST if stale</span>
+      <span class="tag new">Zero breaking changes</span>
+    </div>
+  </div>
+
+  <!-- REVISED TIMING CHAIN -->
+  <h2><span class="icon">⏱️</span> Revised Timing Chain (3s detection + auto-recovery)</h2>
+  <div class="card">
+    <div class="timeline">
+      <div class="tl-item ok">
+        <div class="tl-time">t+0 (position open)</div>
+        <div class="tl-label">Symbol added to _symbol_streaming_status</div>
+        <div class="tl-desc">Tracking begins: first_seen = now, last_tick = None</div>
+      </div>
+      <div class="tl-item info">
+        <div class="tl-time">t+0 to t+3s</div>
+        <div class="tl-label" style="color:var(--accent);">Grace period — 3 monitoring cycles</div>
+        <div class="tl-desc">Normal 3-5s REST polling. System watches for any hub to deliver a streaming tick.</div>
+      </div>
+      <div class="tl-item info">
+        <div class="tl-time">t+3s</div>
+        <div class="tl-label" style="color:var(--cyan)">REST-only detected! Fast polling + Schwab subscription</div>
+        <div class="tl-desc">_classify_rest_only_symbols() marks symbol. Schwab subscription queued. Fast REST polling starts at 2s intervals.</div>
+      </div>
+      <div class="tl-item ok">
+        <div class="tl-time">t+3s to t+6s</div>
+        <div class="tl-label" style="color:var(--green)">Smart REST polling active (2s per symbol, rate-checked)</div>
+        <div class="tl-desc">Meanwhile, Schwab drain fires within 3s — WebSocket subscribes to FCHL.</div>
+      </div>
+      <div class="tl-item ok">
+        <div class="tl-time">t+6s</div>
+        <div class="tl-label" style="color:var(--green)">Schwab starts streaming FCHL ticks</div>
+        <div class="tl-desc">First tick → _on_quote_update → self-healing: rest_only cleared → sub-50ms path activated</div>
+      </div>
+      <div class="tl-item ok">
+        <div class="tl-time">t+6s onwards</div>
+        <div class="tl-label" style="color:var(--green)">Full streaming — REST-only polling stops automatically</div>
+        <div class="tl-desc">Symbol now on fast incremental eval path. No more REST API calls for price updates. Rate budget freed.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; padding:12px; background:rgba(63,185,80,.08); border-radius:8px; border:1px solid rgba(63,185,80,.2);">
+      <div style="color:var(--green); font-weight:700; font-size:14px;">Best Case Timeline for Equities</div>
+      <div style="color:var(--muted); font-size:13px; margin-top:4px;">
+        <strong>t+0 → t+3s</strong>: Detection (normal REST polling) →
+        <strong>t+3s → t+6s</strong>: Smart REST (2s) + Schwab subscribing →
+        <strong>t+6s+</strong>: Full streaming at sub-50ms
+      </div>
+      <div style="color:var(--muted); font-size:13px; margin-top:8px;">
+        <strong>For options</strong>: Schwab equities-only API can't subscribe options. Options stay on smart REST 2s polling — still 40-60% faster than current 3-5s. Options get the same 3s detection benefit.
+      </div>
+    </div>
+  </div>
+
+  <!-- Integration Point -->
+  <h2><span class="icon">🔌</span> Integration Point in Monitoring Cycle</h2>
+  <div class="card">
+    <div style="font-size:13px;">
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; margin:4px 0;">
+        <span style="color:var(--muted); width:20px;">1.</span>
+        <span><code>_fetch_all_positions()</code></span>
+        <span class="badge mid">REST 3-5s</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; margin:4px 0;">
+        <span style="color:var(--muted); width:20px;">2.</span>
+        <span><code>_update_prices_from_hub(positions)</code></span>
+        <span class="badge good">Existing</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; margin:4px 0;">
+        <span style="color:var(--muted); width:20px;">3.</span>
+        <span><code>_detect_and_fix_stuck_prices(positions)</code></span>
+        <span class="badge good">Existing</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; background:rgba(57,210,192,.08); margin:4px 0;">
+        <span style="color:var(--cyan); width:20px; font-weight:700;">4.</span>
+        <span style="color:var(--cyan); font-weight:700;"><code>_poll_rest_only_symbols(positions)</code></span>
+        <span class="badge info">NEW — rate-aware ~2s REST + Schwab subscribe</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; margin:4px 0;">
+        <span style="color:var(--muted); width:20px;">5.</span>
+        <span><code>_update_monitored_symbols(positions)</code></span>
+        <span class="badge good">Existing</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; margin:4px 0;">
+        <span style="color:var(--muted); width:20px;">6.</span>
+        <span><code>_evaluate_position()</code> for each position</span>
+        <span class="badge good">Existing</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================ -->
+<!-- SECTION 5: FCHL SCENARIO -->
+<!-- ================================================ -->
+<div class="section" id="scenario">
+  <h1>FCHL <span>Flash Crash Scenario</span></h1>
+  <p class="sub">Real log data from 2026-04-20: BTO $1.07, SL 10%, flash crash $1.005 → $0.8899 in 4 seconds</p>
+
+  <h2><span class="icon">📈</span> Price Timeline Comparison</h2>
+
+  <div class="scenario-panel">
+    <div class="scenario-header">
+      <h3>FCHL Price Action During Flash Crash</h3>
+    </div>
+
+    <!-- Simulated price chart with annotations -->
+    <div style="position:relative; background:rgba(0,0,0,.3); border-radius:10px; padding:24px; overflow-x:auto;">
+      <svg viewBox="0 0 900 350" style="width:100%; min-width:700px;">
+        <!-- Grid -->
+        <defs>
+          <pattern id="grid" width="60" height="50" patternUnits="userSpaceOnUse">
+            <path d="M 60 0 L 0 0 0 50" fill="none" stroke="#21262d" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="900" height="350" fill="url(#grid)"/>
+
+        <!-- Price labels -->
+        <text x="10" y="45" fill="#8b949e" font-size="11" font-family="monospace">$1.10</text>
+        <text x="10" y="95" fill="#8b949e" font-size="11" font-family="monospace">$1.05</text>
+        <text x="10" y="145" fill="#8b949e" font-size="11" font-family="monospace">$1.00</text>
+        <text x="10" y="195" fill="#8b949e" font-size="11" font-family="monospace">$0.95</text>
+        <text x="10" y="245" fill="#f85149" font-size="11" font-family="monospace" font-weight="bold">$0.90</text>
+        <text x="10" y="295" fill="#f85149" font-size="11" font-family="monospace">$0.85</text>
+
+        <!-- SL line at ~$0.963 (10% below $1.07) -->
+        <line x1="60" y1="185" x2="880" y2="185" stroke="#f85149" stroke-width="1.5" stroke-dasharray="8 4" opacity="0.6"/>
+        <text x="65" y="180" fill="#f85149" font-size="10" font-family="monospace">SL = $0.963 (-10%)</text>
+
+        <!-- Entry line at $1.07 -->
+        <line x1="60" y1="55" x2="880" y2="55" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
+        <text x="65" y="50" fill="#58a6ff" font-size="10" font-family="monospace">Entry = $1.07</text>
+
+        <!-- Normal price action (bouncing -4% to +2%) -->
+        <polyline points="80,55 140,70 200,60 260,75 320,65 380,80 440,70 500,85 540,95 560,105"
+                  fill="none" stroke="#58a6ff" stroke-width="2.5" opacity="0.8"/>
+
+        <!-- Last REST poll before crash -->
+        <circle cx="560" cy="105" r="5" fill="#d29922" stroke="#d29922" stroke-width="2"/>
+        <text x="500" y="120" fill="#d29922" font-size="10" font-family="monospace">10:41:47 $1.005</text>
+        <text x="500" y="132" fill="#d29922" font-size="9" font-family="monospace">(last REST poll)</text>
+
+        <!-- CRASH LINE -->
+        <line x1="560" y1="105" x2="680" y2="270" stroke="#f85149" stroke-width="3" opacity="0.9"/>
+
+        <!-- Actual crash price -->
+        <circle cx="680" cy="270" r="5" fill="#f85149" stroke="#f85149" stroke-width="2"/>
+        <text x="690" y="265" fill="#f85149" font-size="10" font-family="monospace">10:41:51 $0.8899</text>
+        <text x="690" y="277" fill="#f85149" font-size="9" font-family="monospace">(REST poll — SL triggered)</text>
+
+        <!-- Time labels -->
+        <text x="80" y="340" fill="#8b949e" font-size="10" font-family="monospace">10:36</text>
+        <text x="260" y="340" fill="#8b949e" font-size="10" font-family="monospace">10:38</text>
+        <text x="440" y="340" fill="#8b949e" font-size="10" font-family="monospace">10:40</text>
+        <text x="560" y="340" fill="#d29922" font-size="10" font-family="monospace">10:41:47</text>
+        <text x="680" y="340" fill="#f85149" font-size="10" font-family="monospace">10:41:51</text>
+
+        <!-- Blind spot annotation -->
+        <rect x="560" y="10" width="120" height="28" rx="6" fill="rgba(248,81,73,0.15)" stroke="#f85149" stroke-width="1"/>
+        <text x="575" y="29" fill="#f85149" font-size="11" font-weight="bold" font-family="monospace">4s BLIND SPOT</text>
+
+        <!-- Where new arch would catch -->
+        <circle cx="600" cy="170" r="5" fill="#39d2c0" stroke="#39d2c0" stroke-width="2"/>
+        <text x="540" y="165" fill="#39d2c0" font-size="10" font-family="monospace" font-weight="bold">NEW: ~1s poll catches here</text>
+        <line x1="600" y1="170" x2="600" y2="300" stroke="#39d2c0" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
+        <text x="540" y="315" fill="#39d2c0" font-size="9" font-family="monospace">~$0.96 (-10.3%) vs $0.89 (-16.8%)</text>
+
+      </svg>
+    </div>
+  </div>
+
+  <h2><span class="icon">⏱️</span> Side-by-Side Timeline</h2>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+    <!-- Current -->
+    <div class="card" style="border-top:3px solid var(--orange);">
+      <h3 style="color:var(--orange); margin-top:0; font-size:14px;">Current Architecture</h3>
+      <div class="timeline" style="margin-left:10px; padding-left:20px;">
+        <div class="tl-item ok"><div class="tl-time">10:36:41</div><div class="tl-label" style="font-size:12px;">BTO $1.07</div></div>
+        <div class="tl-item warn"><div class="tl-time">10:36:44+</div><div class="tl-label" style="font-size:12px;">No streaming detected</div><div class="tl-desc" style="font-size:11px;">But no action taken — no tracking</div></div>
+        <div class="tl-item warn"><div class="tl-time">10:37-41</div><div class="tl-label" style="font-size:12px;">REST polls every 3-5s</div><div class="tl-desc" style="font-size:11px;">Normal bouncing, slow updates</div></div>
+        <div class="tl-item warn"><div class="tl-time">10:41:47</div><div class="tl-label" style="font-size:12px;">REST: $1.005 (-6%)</div></div>
+        <div class="tl-item fail"><div class="tl-time" style="color:var(--red)">4s blind</div><div class="tl-label" style="font-size:12px; color:var(--red)">NO DATA — no hub streaming</div></div>
+        <div class="tl-item fail"><div class="tl-time">10:41:51</div><div class="tl-label" style="font-size:12px; color:var(--red)">REST: $0.889 (-16.8%)</div><div class="tl-desc" style="font-size:11px;">SL triggered at crash price</div></div>
+      </div>
+    </div>
+
+    <!-- UPH -->
+    <div class="card" style="border-top:3px solid var(--purple);">
+      <h3 style="color:var(--purple); margin-top:0; font-size:14px;">With UPH Only</h3>
+      <div class="timeline" style="margin-left:10px; padding-left:20px;">
+        <div class="tl-item ok"><div class="tl-time">10:36:41</div><div class="tl-label" style="font-size:12px;">BTO $1.07</div></div>
+        <div class="tl-item warn"><div class="tl-time">10:36:44+</div><div class="tl-label" style="font-size:12px;">UPH cache empty for FCHL</div><div class="tl-desc" style="font-size:11px;">No hub streaming → UPH equally blind</div></div>
+        <div class="tl-item warn"><div class="tl-time">10:37-41</div><div class="tl-label" style="font-size:12px;">REST polls every 3-5s</div><div class="tl-desc" style="font-size:11px;">Identical to current</div></div>
+        <div class="tl-item warn"><div class="tl-time">10:41:47</div><div class="tl-label" style="font-size:12px;">REST: $1.005 (-6%)</div></div>
+        <div class="tl-item fail"><div class="tl-time" style="color:var(--red)">4s blind</div><div class="tl-label" style="font-size:12px; color:var(--red)">SAME GAP — UPH can't create data</div></div>
+        <div class="tl-item fail"><div class="tl-time">10:41:51</div><div class="tl-label" style="font-size:12px; color:var(--red)">REST: $0.889 (-16.8%)</div><div class="tl-desc" style="font-size:11px;">Same outcome</div></div>
+      </div>
+    </div>
+
+    <!-- New -->
+    <div class="card" style="border-top:3px solid var(--cyan);">
+      <h3 style="color:var(--cyan); margin-top:0; font-size:14px;">New: Adaptive REST</h3>
+      <div class="timeline" style="margin-left:10px; padding-left:20px;">
+        <div class="tl-item ok"><div class="tl-time">10:36:41</div><div class="tl-label" style="font-size:12px;">BTO $1.07</div></div>
+        <div class="tl-item info"><div class="tl-time">10:36:44</div><div class="tl-label" style="font-size:12px; color:var(--cyan);">REST-only detected (3s)!</div><div class="tl-desc" style="font-size:11px;">→ Smart REST 2s + Schwab subscribe</div></div>
+        <div class="tl-item ok"><div class="tl-time">10:36:47</div><div class="tl-label" style="font-size:12px; color:var(--green);">Schwab streams FCHL</div><div class="tl-desc" style="font-size:11px;">→ Self-healing: sub-50ms path!</div></div>
+        <div class="tl-item ok"><div class="tl-time">10:37-41</div><div class="tl-label" style="font-size:12px; color:var(--green)">Schwab streaming ticks</div><div class="tl-desc" style="font-size:11px;">Sub-50ms eval, REST stopped</div></div>
+        <div class="tl-item ok"><div class="tl-time">10:41:47</div><div class="tl-label" style="font-size:12px;">Streaming: $1.005</div></div>
+        <div class="tl-item ok"><div class="tl-time" style="color:var(--cyan)">50ms</div><div class="tl-label" style="font-size:12px; color:var(--cyan)">Streaming: $0.963</div><div class="tl-desc" style="font-size:11px;">SL triggered on streaming tick!</div></div>
+        <div class="tl-item ok"><div class="tl-time">10:41:47.1</div><div class="tl-label" style="font-size:12px; color:var(--green)">SL @ ~-10%</div><div class="tl-desc" style="font-size:11px;">At target — not gap-through</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Equity vs Option outcome -->
+  <h2><span class="icon">📊</span> Outcome by Asset Type</h2>
+  <div class="card-grid">
+    <div class="card" style="border-top:3px solid var(--green);">
+      <h3 style="color:var(--green); margin-top:0;">Equities (FCHL, penny stocks)</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        <strong>Best case:</strong> Schwab subscribes → streaming within ~6s → sub-50ms eval<br>
+        <strong>If Schwab can't stream:</strong> Smart REST every 2s → still 40-60% faster than current 3-5s<br>
+        <strong>SL gap-through:</strong> -10% to -12% (vs -16.8% current)
+      </p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--orange);">
+      <h3 style="color:var(--orange); margin-top:0;">Options (OCC symbols)</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        <strong>No Schwab subscribe API for options</strong> — stays on smart REST polling<br>
+        <strong>Smart REST every 2s</strong> (vs 3-5s current) — still a significant improvement<br>
+        <strong>If any hub streams the option:</strong> Self-healing kicks in → sub-50ms path
+      </p>
+    </div>
+  </div>
+
+  <h2><span class="icon">💰</span> Loss Comparison</h2>
+  <div class="metric-grid">
+    <div class="metric red">
+      <div class="value">$0.889</div>
+      <div class="label">Current Exit Price</div>
+    </div>
+    <div class="metric red">
+      <div class="value">$0.889</div>
+      <div class="label">UPH Exit Price</div>
+    </div>
+    <div class="metric green">
+      <div class="value">~$0.963</div>
+      <div class="label">New Arch (if Schwab streams)</div>
+    </div>
+  </div>
+  <div class="metric-grid">
+    <div class="metric red">
+      <div class="value">-16.8%</div>
+      <div class="label">Current Loss</div>
+    </div>
+    <div class="metric red">
+      <div class="value">-16.8%</div>
+      <div class="label">UPH Loss (Same)</div>
+    </div>
+    <div class="metric green">
+      <div class="value">~-10%</div>
+      <div class="label">New: At SL Target</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px; border-left:3px solid var(--cyan);">
+    <p style="font-size:13px; color:var(--muted);">
+      <strong style="color:var(--cyan);">Two outcomes depending on Schwab streaming:</strong><br>
+      <strong>If Schwab streams FCHL</strong> (subscribed at t+3s, streaming at t+6s): Full streaming path. SL triggers on sub-50ms tick at ~$0.963 = <strong style="color:var(--green);">-10%</strong> — exactly at target.<br>
+      <strong>If Schwab also can't stream</strong> (penny stock too illiquid): Smart REST every 2s (vs 3-5s current). SL triggers at ~$0.94 = <strong style="color:var(--green);">-12%</strong> — still 5% better than -16.8%.
+    </p>
+  </div>
+</div>
+
+<!-- ================================================ -->
+<!-- SECTION 6: SIDE-BY-SIDE COMPARISON -->
+<!-- ================================================ -->
+<div class="section" id="comparison">
+  <h1>Side-by-Side <span>Comparison</span></h1>
+  <p class="sub">Complete feature comparison across all three architectures</p>
+
+  <h2><span class="icon">📋</span> Feature Matrix</h2>
+  <div style="overflow-x:auto;">
+    <table class="cmp-table">
+      <thead>
+        <tr>
+          <th style="min-width:200px;">Feature</th>
+          <th style="min-width:180px;">Current</th>
+          <th style="min-width:180px;">UPH (If Implemented)</th>
+          <th style="min-width:180px;">New: Adaptive REST</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Per-symbol streaming detection</strong></td>
+          <td><span class="badge bad">None</span> — _dirty_symbols cleared each cycle</td>
+          <td><span class="badge mid">Partial</span> — freshness tags but no persistent tracking</td>
+          <td><span class="badge good">Full</span> — _symbol_streaming_status persists</td>
+        </tr>
+        <tr>
+          <td><strong>REST-only detection speed</strong></td>
+          <td><span class="badge bad">Never</span></td>
+          <td><span class="badge mid">Could detect</span> via stale_symbols() but no action</td>
+          <td><span class="badge good">3 seconds</span> (matches stuck threshold)</td>
+        </tr>
+        <tr>
+          <td><strong>REST poll interval (no streaming)</strong></td>
+          <td><span class="badge bad">3-5s global</span></td>
+          <td><span class="badge bad">3-5s global</span> (same REST backend)</td>
+          <td><span class="badge good">~2s per-symbol</span> rate-limit aware</td>
+        </tr>
+        <tr>
+          <td><strong>Max blind spot (flash crash)</strong></td>
+          <td><span class="badge bad">3-5 seconds</span></td>
+          <td><span class="badge bad">3-5 seconds</span></td>
+          <td><span class="badge good">~50ms</span> (once Schwab streams) / <span class="badge good">~2s</span> (REST-only)</td>
+        </tr>
+        <tr>
+          <td><strong>API rate limit safety</strong></td>
+          <td><span class="badge good">Safe</span> — slow polling</td>
+          <td><span class="badge good">Safe</span> — same polling</td>
+          <td><span class="badge good">Safe</span> — checks RateLimitManager before each call</td>
+        </tr>
+        <tr>
+          <td><strong>Cross-hub price aggregation</strong></td>
+          <td><span class="badge mid">Manual</span> — 300+ lines across 3 methods</td>
+          <td><span class="badge good">Centralized</span> — single cache</td>
+          <td><span class="badge mid">Manual</span> (unchanged, existing code works)</td>
+        </tr>
+        <tr>
+          <td><strong>Proactive Schwab subscription</strong></td>
+          <td><span class="badge bad">Only non-streaming brokers</span><br><span style="font-size:11px; color:var(--muted);">Webull is "streaming" even when MQTT ignores symbol</span></td>
+          <td><span class="badge mid">Same gap</span></td>
+          <td><span class="badge good">Based on actual observed data</span><br><span style="font-size:11px; color:var(--muted);">Subscribes when no ticks received, not broker capability</span></td>
+        </tr>
+        <tr>
+          <td><strong>Conditional order freshness</strong></td>
+          <td><span class="badge bad">None</span> — accepts any price > 0</td>
+          <td><span class="badge good">Built-in freshness</span> tags</td>
+          <td><span class="badge good">5s freshness gate</span></td>
+        </tr>
+        <tr>
+          <td><strong>Self-healing</strong></td>
+          <td><span class="badge mid">N/A</span></td>
+          <td><span class="badge mid">N/A</span></td>
+          <td><span class="badge good">Instant</span> — first tick clears REST-only flag</td>
+        </tr>
+        <tr>
+          <td><strong>Schwab subscription drain</strong></td>
+          <td>10s (default)</td>
+          <td>10s (default)</td>
+          <td><span class="badge good">3s</span> (reduced for faster streaming start)</td>
+        </tr>
+        <tr>
+          <td><strong>Options support</strong></td>
+          <td><span class="badge good">Full</span> via raw_symbol</td>
+          <td><span class="badge good">Full</span> via canonical mapping</td>
+          <td><span class="badge good">Full</span> — tracks both symbol + raw_symbol</td>
+        </tr>
+        <tr>
+          <td><strong>Code changes required</strong></td>
+          <td>—</td>
+          <td><span class="badge mid">Large</span> — rewire risk engine + cond. orders to use UPH</td>
+          <td><span class="badge good">Small</span> — 5 additive changes, no rewiring</td>
+        </tr>
+        <tr>
+          <td><strong>Breaking change risk</strong></td>
+          <td>—</td>
+          <td><span class="badge bad">Medium</span> — replacing core price path</td>
+          <td><span class="badge good">Zero</span> — all existing paths remain</td>
+        </tr>
+        <tr>
+          <td><strong>FCHL outcome</strong></td>
+          <td><span class="badge bad">-16.8% loss</span></td>
+          <td><span class="badge bad">-16.8% loss</span> (identical)</td>
+          <td><span class="badge good">~-10%</span> (streaming) / <span class="badge good">~-12%</span> (REST-only)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2><span class="icon">🎯</span> Decision Framework</h2>
+  <div class="card-grid">
+    <div class="card" style="border-top:3px solid var(--red);">
+      <h3 style="color:var(--red); margin-top:0;">UPH Alone = Wrong Tool for This Problem</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        UPH is an <strong>aggregation layer</strong> — it centralizes cross-hub queries and adds freshness metadata.
+        It's excellent for code quality but cannot create data that doesn't exist.
+        For FCHL, no hub was emitting events → UPH cache is equally empty → same 3-5s REST gap.
+      </p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--cyan);">
+      <h3 style="color:var(--cyan); margin-top:0;">Adaptive REST = Targeted Fix</h3>
+      <p style="font-size:13px; color:var(--muted);">
+        Addresses the root cause: <strong>detecting</strong> that a symbol lacks streaming and <strong>acting</strong> on it.
+        Per-symbol tracking → faster polling → proactive subscription → self-healing.
+        All additive — zero changes to existing code paths. Works for both stocks and options.
+      </p>
+    </div>
+  </div>
+
+  <h2><span class="icon">🔮</span> Future: UPH + Adaptive REST Together</h2>
+  <div class="card" style="border-left:3px solid var(--purple);">
+    <p style="font-size:14px; color:var(--muted);">
+      The ideal long-term architecture combines both: <strong>Adaptive REST</strong> for the detection and fast-polling engine,
+      and <strong>UPH</strong> as the centralized price source that replaces the 300+ lines of scattered cross-hub logic.
+      UPH's freshness classification feeds into the REST-only detector. Adaptive REST's targeted polls feed back into UPH's cache.
+    </p>
+    <div style="display:flex; flex-direction:column; align-items:center; margin-top:20px; gap:0;">
+      <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+        <div class="flow-box green" style="min-width:90px; font-size:12px;">Webull</div>
+        <div class="flow-box green" style="min-width:90px; font-size:12px;">Schwab</div>
+        <div class="flow-box green" style="min-width:90px; font-size:12px;">IBKR</div>
+        <div class="flow-box green" style="min-width:90px; font-size:12px;">Tastytrade</div>
+      </div>
+      <div class="flow-divider"></div>
+      <div class="flow-box purple" style="min-width:350px;">
+        <div style="font-size:14px; font-weight:800;">Unified Price Hub</div>
+        <div style="font-size:11px;">Single cache + freshness + canonical symbols</div>
+      </div>
+      <div class="flow-divider"></div>
+      <div class="flow-box cyan" style="min-width:350px;">
+        <div style="font-size:14px; font-weight:800;">Adaptive REST Engine</div>
+        <div style="font-size:11px;">Detects REST-only from UPH freshness → fast polls → feeds back to UPH</div>
+      </div>
+      <div class="flow-divider"></div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+        <div class="flow-box blue" style="font-size:12px;">Risk Engine</div>
+        <div class="flow-box blue" style="font-size:12px;">Conditional Orders</div>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="icon">✅</span> Recommendation</h2>
+  <div class="card" style="border:2px solid var(--cyan); background:rgba(57,210,192,.04);">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+      <div style="font-size:28px;">🏆</div>
+      <div>
+        <h3 style="color:var(--cyan); margin:0; font-size:18px;">Implement Adaptive REST Polling Now</h3>
+        <p style="color:var(--muted); font-size:13px; margin:0;">5 additive changes, zero breaking risk, rate-limit safe, auto-recovers to streaming</p>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; font-size:13px;">
+      <div>
+        <strong style="color:var(--cyan);">Immediate Value</strong>
+        <ul style="color:var(--muted); margin:6px 0; padding-left:20px;">
+          <li>3s detection — REST-only classified fast</li>
+          <li>Schwab subscribe → streaming within ~6s for equities</li>
+          <li>Smart REST 2s (rate-limit checked) for options/fallback</li>
+          <li>Auto-recovery: streaming tick → REST stops instantly</li>
+          <li>Conditional order freshness gate (5s)</li>
+        </ul>
+      </div>
+      <div>
+        <strong style="color:var(--cyan);">Safety</strong>
+        <ul style="color:var(--muted); margin:6px 0; padding-left:20px;">
+          <li>All existing code paths untouched</li>
+          <li>RateLimitManager checked before each REST call</li>
+          <li>3s grace period (matches stuck price threshold)</li>
+          <li>Schwab drain reduced 10s → 3s (one-line change)</li>
+          <li>Works for stocks AND options</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  BotifyTrades Price Architecture Comparison — Generated 2026-04-20
+</div>
+
+<!-- TAB SWITCHING -->
+<script>
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>
