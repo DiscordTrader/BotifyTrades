@@ -1563,11 +1563,11 @@ input:checked + .slider:before {
         <div class="form-group">
             <div class="toggle-row">
                 <label class="toggle-label">
-                    <input type="checkbox" id="conditional-orders-enabled">
+                    <input type="checkbox" id="conditional-orders-enabled" checked>
                     <span class="toggle-slider"></span>
                 </label>
                 <span>Enable Conditional Order Service</span>
-                <span id="conditional-orders-status" class="toggle-status">OFF</span>
+                <span id="conditional-orders-status" class="toggle-status" style="color:#00ff88;">ON</span>
             </div>
             <p class="help-text">When enabled, the bot monitors for "SYMBOL over/under PRICE" signals and executes when triggered</p>
         </div>
@@ -1607,12 +1607,6 @@ input:checked + .slider:before {
             </div>
             <p class="help-text">Automatically place the order when price condition is met</p>
         </div>
-        <div class="form-group" style="margin-top: 16px; padding: 12px; background: rgba(0, 212, 255, 0.1); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.3);">
-            <p style="margin: 0; color: #00d4ff; font-size: 13px;">
-                <strong>📡 Price Data Sources:</strong> Broker APIs (Webull, Alpaca) → Finnhub API → yfinance (free fallback)
-            </p>
-        </div>
-        
         <div class="btn-group" style="margin-top: 20px;">
             <button id="save-conditional-orders" class="btn btn-success">💾 Save Conditional Orders</button>
             <span id="conditional-orders-save-status" style="margin-left: 12px; font-size: 13px;"></span>
@@ -3486,7 +3480,7 @@ async function loadConditionalOrdersSettings() {
         console.log('[Conditional Orders] API response:', settings);
         
         if (settings) {
-            document.getElementById('conditional-orders-enabled').checked = settings.enabled === true;
+            document.getElementById('conditional-orders-enabled').checked = settings.enabled !== false;
             document.getElementById('conditional-orders-expiry').value = settings.default_expiry || 'end_of_day';
             const offsetMode = settings.trigger_offset_mode || 'percent';
             document.getElementById('conditional-orders-offset-mode').value = offsetMode;

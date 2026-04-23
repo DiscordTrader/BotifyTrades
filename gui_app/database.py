@@ -12450,8 +12450,10 @@ def init_conditional_order_settings():
     default_settings = [
         ('conditional_order_enabled', 'true'),
         ('conditional_order_default_expiry', 'end_of_day'),
-        ('conditional_order_finnhub_fallback', 'true'),
-        ('conditional_order_rate_limit_threshold', '80'),
+        ('conditional_order_auto_execute', 'true'),
+        ('conditional_order_trigger_offset_mode', 'percent'),
+        ('conditional_order_trigger_offset_percent', '0'),
+        ('conditional_order_entry_price_offset_percent', '0'),
     ]
     
     try:
