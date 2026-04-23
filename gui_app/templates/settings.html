@@ -806,7 +806,18 @@ input:checked + .slider:before {
                 <span style="color: #ffc107;">If you don't provide this, you'll need to manually enter SMS codes during login.</span>
             </p>
         </div>
-        
+
+        <div style="background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.4); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <span style="font-size: 16px;">📱</span>
+                <span style="font-size: 12px; font-weight: 700; color: #ff5252;">2FA REQUIREMENT</span>
+            </div>
+            <p style="font-size: 12px; color: rgba(255, 255, 255, 0.85); margin: 0;">
+                Robinhood only works with <strong style="color: #ff5252;">2FA push notification</strong> (Authenticator app / TOTP).
+                SMS-based 2FA is <strong>not supported</strong> for automated login. You must switch your Robinhood 2FA to an authenticator app and provide the TOTP secret above.
+            </p>
+        </div>
+
         <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
             <p style="font-size: 11px; color: #ffc107; margin: 0; margin-bottom: 8px;">
                 <strong>Options Note:</strong> Robinhood only supports LIMIT orders for options (no market orders). 

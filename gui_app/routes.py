@@ -2039,17 +2039,63 @@ def register_routes(app):
             'early_trailing_activation_pct': (0, 100), 'early_trailing_step_pct': (0, 100),
             'trim_limit_offset': (0, 1), 'trim_limit_offset_pct': (0, 100),
             'ema_period': (1, 200), 'ema_timeframe_minutes': (1, 1440),
-            'ema_buffer_pct': (0, 50),
+            'ema_buffer_pct': (0, 50), 'ema_no_trend_candles': (1, 50),
+            'ndx_to_qqq_delta': (0.01, 1.0), 'slippage_max_pct': (0, 100),
+            'slippage_wait_minutes': (0, 60), 'limit_cap_pct': (0, 100),
+            'entry_confirmation_pct': (0, 50),
+            'channel_max_position_size': (0, 1000000),
+            'default_quantity': (0, 10000), 'tracking_default_quantity': (0, 10000),
+            'tracking_position_size_pct': (0, 100),
+            'order_timeout_minutes': (1, 1440), 'conditional_order_timeout_minutes': (1, 1440),
+            'trigger_offset_percent': (-100, 100), 'trigger_offset_value': (-100, 100),
+            'channel_daily_loss_limit': (0, 1000000), 'channel_max_positions': (0, 100),
+            'profit_target_pct': (0, 1000),
         }
+        BOOLEAN_FIELDS = [
+            'risk_management_enabled', 'enable_dynamic_sl', 'enable_giveback_guard',
+            'enable_early_trailing', 'leave_runner_enabled', 'escalation_only_mode',
+            'ema_risk_enabled', 'ema_exit_enabled', 'ema_escalation_enabled',
+            'ema_extended_hours', 'ema_use_underlying',
+            'order_chase_enabled', 'entry_chase_enabled', 'trade_summary_enabled',
+            'paper_trade_enabled', 'execute_enabled', 'track_enabled',
+            'conditional_order_enabled', 'breakout_reset_enabled',
+            'slippage_protection_enabled', 'limit_cap_enabled',
+            'ndx_to_qqq_enabled', 'ignore_signal_position_size', 'signal_update_automation',
+            'is_active', 'conditional_auto_execute', 'use_global_risk_settings', 'circuit_breaker_enabled',
+        ]
         VALID_DYNAMIC_SL_PROFILES = {'conservative', 'standard', 'aggressive'}
         if 'dynamic_sl_profile' in data and data['dynamic_sl_profile'] not in VALID_DYNAMIC_SL_PROFILES:
             return jsonify({'success': False, 'error': "dynamic_sl_profile must be 'conservative', 'standard', or 'aggressive'"}), 400
         ORDER_MODE_FIELDS = ['entry_order_mode', 'trim_order_mode', 'sl_order_mode']
-        
+        VALID_OFFSET_MODES = {'dollar', 'percent'}
+        VALID_BRACKET_MODES = {'both', 'sl_only', 'pt_only', 'none'}
+        VALID_TICKER_FILTER_MODES = {'off', 'allow', 'block'}
+        VALID_SIZING_MODES = {'live', 'pre_market', 'start_of_day'}
+        VALID_TRIGGER_OFFSET_MODES = {'percent', 'dollar'}
+        VALID_CONDITIONAL_EXPIRY = {'end_of_day', '1_hour', '4_hours', '1_day'}
+
         validation_errors = []
         for field in ORDER_MODE_FIELDS:
             if field in data and data[field] not in VALID_ORDER_MODES:
                 validation_errors.append(f"{field} must be 'market' or 'limit'")
+        if 'trim_limit_offset_mode' in data and data['trim_limit_offset_mode'] not in VALID_OFFSET_MODES:
+            validation_errors.append("trim_limit_offset_mode must be 'dollar' or 'percent'")
+        if 'broker_bracket_mode' in data and data['broker_bracket_mode'] not in VALID_BRACKET_MODES:
+            validation_errors.append("broker_bracket_mode must be 'both', 'sl_only', 'pt_only', or 'none'")
+        if 'ticker_filter_mode' in data and data['ticker_filter_mode'] not in VALID_TICKER_FILTER_MODES:
+            validation_errors.append("ticker_filter_mode must be 'off', 'allow', or 'block'")
+        if 'sizing_mode' in data and data['sizing_mode'] not in VALID_SIZING_MODES:
+            validation_errors.append("sizing_mode must be 'live', 'pre_market', or 'start_of_day'")
+        if 'trigger_offset_mode' in data and data['trigger_offset_mode'] not in VALID_TRIGGER_OFFSET_MODES:
+            validation_errors.append("trigger_offset_mode must be 'percent' or 'dollar'")
+        if 'conditional_order_expiry' in data and data['conditional_order_expiry'] not in VALID_CONDITIONAL_EXPIRY:
+            validation_errors.append("conditional_order_expiry must be 'end_of_day', '1_hour', '4_hours', or '1_day'")
+        for field in BOOLEAN_FIELDS:
+            if field in data and data[field] is not None:
+                try:
+                    data[field] = int(bool(int(data[field])))
+                except (ValueError, TypeError):
+                    validation_errors.append(f"{field} must be 0 or 1")
         for field, (min_val, max_val) in NUMERIC_FIELDS.items():
             if field in data and data[field] is not None:
                 try:
@@ -2077,7 +2123,12 @@ def register_routes(app):
         elif trailing_stop and float(trailing_stop) > 0:
             # If legacy trailing is being set, disable early trailing
             data['enable_early_trailing'] = 0
-        
+
+        # Bracket mode enforcement: when broker bracket PT is active, force trim to limit
+        bracket_mode = data.get('broker_bracket_mode', current_channel.get('broker_bracket_mode', 'none'))
+        if bracket_mode in ('both', 'pt_only'):
+            data['trim_order_mode'] = 'limit'
+
         channel_specific_risk_fields = (
             'risk_management_enabled', 'stop_loss_pct', 'profit_target_1_pct',
             'exit_strategy_mode', 'signal_update_automation', 'escalation_only_mode',

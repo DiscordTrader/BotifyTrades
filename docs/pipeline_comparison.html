@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades — Price Pipeline Deep Comparison</title>
+<style>
+  :root {
+    --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --blue:#58a6ff; --green:#3fb950; --red:#f85149; --orange:#d29922; --purple:#bc8cff;
+    --pink:#f778ba; --cyan:#39d2c0; --yellow:#e3b341;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6;}
+
+  .nav{position:sticky;top:0;z-index:100;background:rgba(13,17,23,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:10px 0;}
+  .nav-inner{max-width:1400px;margin:auto;display:flex;align-items:center;gap:20px;padding:0 28px;flex-wrap:wrap;}
+  .nav-title{font-size:14px;font-weight:700;color:var(--blue);letter-spacing:.5px;white-space:nowrap;}
+  .nav-tabs{display:flex;gap:3px;flex-wrap:wrap;}
+  .nav-tab{padding:5px 14px;border-radius:7px;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
+  .nav-tab:hover{background:rgba(88,166,255,.08);color:var(--text);}
+  .nav-tab.active{background:rgba(88,166,255,.15);color:var(--blue);}
+
+  .section{display:none;max-width:1400px;margin:auto;padding:32px 28px 80px;}
+  .section.active{display:block;animation:fadeIn .25s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+  h1{font-size:28px;font-weight:800;margin-bottom:6px;} h1 span{color:var(--blue);}
+  h2{font-size:20px;font-weight:700;margin:32px 0 14px;display:flex;align-items:center;gap:8px;}
+  h3{font-size:15px;font-weight:600;margin:16px 0 8px;color:var(--blue);}
+  p.sub{color:var(--muted);font-size:14px;margin-bottom:24px;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin:16px 0;}
+
+  /* pipeline columns */
+  .pipe-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:16px 0;}
+  @media(max-width:960px){.pipe-grid{grid-template-columns:1fr;}}
+
+  .pipe{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;position:relative;}
+  .pipe-tag{position:absolute;top:-1px;right:16px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 6px 6px;text-transform:uppercase;letter-spacing:.5px;}
+  .pipe-tag.old{background:var(--orange);color:#000;}
+  .pipe-tag.new{background:var(--cyan);color:#000;}
+  .pipe-tag.risk{background:var(--purple);color:#000;}
+
+  /* comparison table */
+  .cmp{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;margin:16px 0;}
+  .cmp th,.cmp td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);}
+  .cmp th{background:rgba(88,166,255,.06);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:46px;z-index:2;}
+  .cmp td{background:var(--card);vertical-align:top;}
+  .cmp tr:hover td{background:rgba(88,166,255,.03);}
+  .cmp td:first-child{font-weight:600;color:var(--text);min-width:170px;}
+  .cmp .col-old{border-left:3px solid var(--orange);}
+  .cmp .col-new{border-left:3px solid var(--cyan);}
+  .cmp .col-risk{border-left:3px solid var(--purple);}
+
+  .b{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;}
+  .b.g{background:rgba(63,185,80,.15);color:var(--green);}
+  .b.r{background:rgba(248,81,73,.15);color:var(--red);}
+  .b.o{background:rgba(210,153,34,.15);color:var(--orange);}
+  .b.i{background:rgba(88,166,255,.15);color:var(--blue);}
+  .b.p{background:rgba(188,140,255,.15);color:var(--purple);}
+  .b.c{background:rgba(57,210,192,.15);color:var(--cyan);}
+  .b.n{background:rgba(139,148,158,.15);color:var(--muted);}
+
+  /* flow */
+  .flow{display:flex;flex-direction:column;align-items:center;gap:0;margin:16px 0;}
+  .fb{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;text-align:center;min-width:120px;border:1px solid;}
+  .fb.bl{background:rgba(88,166,255,.1);border-color:rgba(88,166,255,.25);color:var(--blue);}
+  .fb.gr{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.25);color:var(--green);}
+  .fb.rd{background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.25);color:var(--red);}
+  .fb.or{background:rgba(210,153,34,.1);border-color:rgba(210,153,34,.25);color:var(--orange);}
+  .fb.cy{background:rgba(57,210,192,.1);border-color:rgba(57,210,192,.25);color:var(--cyan);}
+  .fb.pu{background:rgba(188,140,255,.1);border-color:rgba(188,140,255,.25);color:var(--purple);}
+  .fd{width:2px;height:18px;background:var(--border);margin:2px 0;}
+  .fl{font-size:10px;color:var(--muted);padding:2px 0;text-align:center;}
+
+  /* timeline */
+  .tl{position:relative;margin:20px 0 20px 16px;padding-left:24px;border-left:2px solid var(--border);}
+  .ti{position:relative;margin-bottom:18px;}
+  .ti::before{content:'';position:absolute;left:-30px;top:5px;width:10px;height:10px;border-radius:50%;border:2px solid var(--border);background:var(--bg);}
+  .ti.ok::before{border-color:var(--green);background:var(--green);}
+  .ti.w::before{border-color:var(--orange);background:var(--orange);}
+  .ti.f::before{border-color:var(--red);background:var(--red);}
+  .ti.info::before{border-color:var(--blue);background:var(--blue);}
+  .tt{font-size:11px;color:var(--muted);font-family:'Cascadia Code','Fira Code',monospace;}
+  .tla{font-size:13px;font-weight:600;margin:1px 0;}
+  .td{font-size:12px;color:var(--muted);}
+
+  /* metric */
+  .mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0;}
+  .m{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;}
+  .m .v{font-size:28px;font-weight:800;line-height:1.1;}
+  .m .l{font-size:10px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.3px;}
+
+  /* code */
+  .code{background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:'Cascadia Code','Fira Code',monospace;font-size:11px;line-height:1.6;overflow-x:auto;color:var(--muted);margin:8px 0;}
+  .code .k{color:var(--purple);} .code .f{color:var(--blue);} .code .s{color:var(--green);} .code .n{color:var(--orange);} .code .c{color:#484f58;font-style:italic;} .code .h{color:var(--cyan);font-weight:700;}
+
+  .sep{height:1px;background:var(--border);margin:32px 0;}
+  .footer{text-align:center;padding:32px;color:var(--muted);font-size:11px;border-top:1px solid var(--border);}
+
+  .tag{font-size:10px;padding:2px 8px;border-radius:5px;font-weight:600;border:1px solid;display:inline-block;margin:2px;}
+  .tag.yes{color:var(--green);border-color:rgba(63,185,80,.3);background:rgba(63,185,80,.06);}
+  .tag.no{color:var(--red);border-color:rgba(248,81,73,.3);background:rgba(248,81,73,.06);}
+  .tag.partial{color:var(--orange);border-color:rgba(210,153,34,.3);background:rgba(210,153,34,.06);}
+  .tag.info{color:var(--cyan);border-color:rgba(57,210,192,.3);background:rgba(57,210,192,.06);}
+
+  .warn-box{background:rgba(248,81,73,.06);border:1px solid rgba(248,81,73,.2);border-radius:8px;padding:14px;margin:12px 0;}
+  .ok-box{background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:14px;margin:12px 0;}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-title">PRICE PIPELINE DEEP COMPARISON</div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="overview">Overview</button>
+      <button class="nav-tab" data-tab="flows">Data Flow</button>
+      <button class="nav-tab" data-tab="matrix">Feature Matrix</button>
+      <button class="nav-tab" data-tab="thresholds">Thresholds & Timing</button>
+      <button class="nav-tab" data-tab="fallback">Fallback Chains</button>
+      <button class="nav-tab" data-tab="gaps">Gaps & Risks</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ==================== OVERVIEW ==================== -->
+<div class="section active" id="overview">
+  <h1>Three Price Pipelines, <span>One Bot</span></h1>
+  <p class="sub">The bot has three independent implementations for price monitoring — each with different thresholds, fallback chains, and recovery behavior</p>
+
+  <div class="pipe-grid">
+    <!-- OLD -->
+    <div class="pipe" style="border-top:3px solid var(--orange);">
+      <div class="pipe-tag old">Legacy</div>
+      <h3 style="color:var(--orange);margin-top:8px;">BrokerPriceMonitor</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">conditional_order_service.py &bull; Lines 121-296</div>
+      <p style="font-size:13px;color:var(--muted);">
+        Simple poll loop: try streaming hubs → fall to broker REST. <strong>No frozen detection</strong>, no state machine, no recovery. Still active for cancellations in routes.py.
+      </p>
+      <div style="margin-top:10px;">
+        <span class="tag partial">2s fixed poll</span>
+        <span class="tag no">No frozen detection</span>
+        <span class="tag no">No freshness check</span>
+        <span class="tag partial">4 hubs (no T212)</span>
+        <span class="tag no">No stream recovery</span>
+      </div>
+    </div>
+
+    <!-- NEW -->
+    <div class="pipe" style="border-top:3px solid var(--cyan);">
+      <div class="pipe-tag new">Primary</div>
+      <h3 style="color:var(--cyan);margin-top:8px;">StreamingPriceMonitor</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">conditional_orders/base.py &bull; Lines 146-632</div>
+      <p style="font-size:13px;color:var(--muted);">
+        Stream-first with frozen probe. 0.25s hub poll, 3s frozen detection, cross-broker hubs, REST fallback, auto-recovery on first hub hit. Tracks data source label.
+      </p>
+      <div style="margin-top:10px;">
+        <span class="tag yes">0.25s hub poll</span>
+        <span class="tag yes">3s frozen detection</span>
+        <span class="tag no">No hub freshness check</span>
+        <span class="tag yes">5 hubs (incl T212)</span>
+        <span class="tag yes">Auto stream recovery</span>
+      </div>
+    </div>
+
+    <!-- RISK -->
+    <div class="pipe" style="border-top:3px solid var(--purple);">
+      <div class="pipe-tag risk">Risk Engine</div>
+      <h3 style="color:var(--purple);margin-top:8px;">RiskManager Position Monitor</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">risk/position_monitor.py &bull; 8600+ lines</div>
+      <p style="font-size:13px;color:var(--muted);">
+        REST-snapshot base + stream overlay. Event-driven fast path on ticks (~20-50ms). Stuck price repair with cross-hub + REST. Staleness gate blocks SL on stale prices. Sanity guards on REST prices.
+      </p>
+      <div style="margin-top:10px;">
+        <span class="tag yes">~1s cycle + tick fast path</span>
+        <span class="tag yes">3s/15s stuck detection</span>
+        <span class="tag yes">30s/2s freshness checks</span>
+        <span class="tag yes">5 hubs + cross overlay</span>
+        <span class="tag yes">REST repair + sanity guards</span>
+      </div>
+    </div>
+  </div>
+
+  <h2>Why Three?</h2>
+  <div class="card">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <tr>
+        <td style="padding:8px;color:var(--orange);font-weight:600;width:180px;">BrokerPriceMonitor</td>
+        <td style="padding:8px;color:var(--muted);">Original implementation. Watches conditional orders (BTO triggers). Still active — routes.py imports it for order cancellations. Has the simplest architecture but weakest protection.</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;color:var(--cyan);font-weight:600;">StreamingPriceMonitor</td>
+        <td style="padding:8px;color:var(--muted);">Replacement for BrokerPriceMonitor. Stream-first with frozen detection and cross-broker probing. Primary path for new conditional orders via the router. Coexists with the old monitor.</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;color:var(--purple);font-weight:600;">RiskManager</td>
+        <td style="padding:8px;color:var(--muted);">Completely separate pipeline for open position SL/PT/trailing evaluation. REST-snapshot architecture with streaming overlays. Most sophisticated — has sanity guards, REST repair, staleness gates. Does not share code with either conditional order monitor.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="warn-box">
+    <strong style="color:var(--red);">Key Problem:</strong>
+    <span style="color:var(--muted);font-size:13px;">
+      Every threshold, every fallback chain, every symbol normalization rule must be maintained in <strong>three places</strong>. They have already diverged — frozen detection is 3s in one place, 3s/15s in another; freshness checks exist in the risk engine but not in either conditional order monitor; cross-broker REST chains use different broker orders.
+    </span>
+  </div>
+</div>
+
+<!-- ==================== DATA FLOWS ==================== -->
+<div class="section" id="flows">
+  <h1>Data Flow <span>Comparison</span></h1>
+  <p class="sub">How each pipeline gets prices — from broker connection to evaluation trigger</p>
+
+  <div class="pipe-grid">
+    <!-- OLD FLOW -->
+    <div class="pipe" style="border-top:3px solid var(--orange);">
+      <div class="pipe-tag old">Legacy</div>
+      <h3 style="color:var(--orange);margin-top:8px;">BrokerPriceMonitor Flow</h3>
+      <div class="flow">
+        <div class="fl">Every 2 seconds</div>
+        <div class="fd"></div>
+        <div class="fb bl" style="min-width:200px;">_try_streaming_hub_price()</div>
+        <div class="fl">Try own broker hub → all other hubs<br><span style="color:var(--red);">No freshness check — any price > 0</span></div>
+        <div class="fd"></div>
+        <div class="fb or" style="min-width:200px;">Hub returned None?</div>
+        <div class="fd"></div>
+        <div class="fb or" style="min-width:200px;">_fetch_price() — broker REST</div>
+        <div class="fl">Broker-specific: Alpaca/Webull/Schwab/<br>IBKR/Robinhood/Tastytrade/Upstox</div>
+        <div class="fd"></div>
+        <div class="fb gr" style="min-width:200px;">callback(symbol, price)</div>
+        <div class="fl">Notify trigger evaluation</div>
+      </div>
+      <div class="warn-box" style="font-size:12px;">
+        <strong style="color:var(--red);">No frozen detection.</strong> If hub returns stale price, it's used. No cross-broker probing. No state tracking. No stream recovery.
+      </div>
+    </div>
+
+    <!-- NEW FLOW -->
+    <div class="pipe" style="border-top:3px solid var(--cyan);">
+      <div class="pipe-tag new">Primary</div>
+      <h3 style="color:var(--cyan);margin-top:8px;">StreamingPriceMonitor Flow</h3>
+      <div class="flow">
+        <div class="fl">Every 0.25s (hub) / 3s (REST fallback)</div>
+        <div class="fd"></div>
+        <div class="fb cy" style="min-width:200px;">_try_subscribe_streaming()</div>
+        <div class="fl">Webull MQTT / Schwab WS / IBKR / Tastytrade</div>
+        <div class="fd"></div>
+        <div class="fb bl" style="min-width:200px;">_query_hub()</div>
+        <div class="fl"><span style="color:var(--red);">No freshness check — any price > 0</span></div>
+        <div class="fd"></div>
+        <div class="fb cy" style="min-width:200px;">Price unchanged ≥ 3s?</div>
+        <div class="fl" style="color:var(--cyan);">Frozen probe (US market hours only)</div>
+        <div class="fd"></div>
+        <div class="fb cy" style="min-width:200px;">_try_cross_broker_hubs()</div>
+        <div class="fl">5 hubs + index variant expansion</div>
+        <div class="fd"></div>
+        <div class="fb or" style="min-width:200px;">Cross-hub same/empty?</div>
+        <div class="fd"></div>
+        <div class="fb or" style="min-width:200px;">_fetch_rest_price_no_cross_hub()</div>
+        <div class="fl">Primary broker REST only</div>
+        <div class="fd"></div>
+        <div class="fb bl" style="min-width:200px;">4 consecutive hub misses?</div>
+        <div class="fl">→ REST fallback mode (3s interval)</div>
+        <div class="fd"></div>
+        <div class="fb or" style="min-width:200px;">_fetch_rest_price()</div>
+        <div class="fl">Cross-hub → primary REST → alt broker REST</div>
+        <div class="fd"></div>
+        <div class="fb gr" style="min-width:200px;">Hub returns price → auto-recovery</div>
+        <div class="fl" style="color:var(--green);">_using_rest_fallback = False</div>
+      </div>
+    </div>
+
+    <!-- RISK FLOW -->
+    <div class="pipe" style="border-top:3px solid var(--purple);">
+      <div class="pipe-tag risk">Risk Engine</div>
+      <h3 style="color:var(--purple);margin-top:8px;">RiskManager Flow</h3>
+      <div class="flow">
+        <div class="fl">~1s cycle + instant on streaming tick</div>
+        <div class="fd"></div>
+        <div class="fb pu" style="min-width:200px;">_fetch_all_positions()</div>
+        <div class="fl">REST snapshot every 3-5s</div>
+        <div class="fd"></div>
+        <div class="fb bl" style="min-width:200px;">_update_prices_from_hub()</div>
+        <div class="fl">Overlay streaming on REST. Freshness: ≤30s<br>REST repair guard: 30s TTL, >0.5% unlock</div>
+        <div class="fd"></div>
+        <div class="fb bl" style="min-width:200px;">Cross-hub overlay pass</div>
+        <div class="fl">Webull→Schwab→IBKR→TT→T212</div>
+        <div class="fd"></div>
+        <div class="fb pu" style="min-width:200px;">_detect_and_fix_stuck_prices()</div>
+        <div class="fl">3s regular / 15s extended threshold</div>
+        <div class="fd"></div>
+        <div class="fb cy" style="min-width:200px;">_try_cross_hub_price(max_age=2s)</div>
+        <div class="fl" style="color:var(--green);">Strict 2s freshness!</div>
+        <div class="fd"></div>
+        <div class="fb or" style="min-width:200px;">_try_rest_quote()</div>
+        <div class="fl">Schwab↔Webull cross-preference<br>Sanity: reject >30% from entry, >30% jump</div>
+        <div class="fd"></div>
+        <div class="fb pu" style="min-width:200px;">Staleness Gate (5s block)</div>
+        <div class="fl">Blocks SL if price unchanged >5s<br>unless REST confirmed</div>
+        <div class="fd"></div>
+        <div class="fb gr" style="min-width:200px;">Evaluate SL / PT / Trail / EMA</div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="fb gr" style="display:inline-block;font-size:11px;">FAST PATH: _on_quote_update → dirty → _run_incremental_eval (~20-50ms)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FEATURE MATRIX ==================== -->
+<div class="section" id="matrix">
+  <h1>Feature <span>Matrix</span></h1>
+  <p class="sub">Complete feature-by-feature comparison across all three implementations</p>
+
+  <div style="overflow-x:auto;">
+  <table class="cmp">
+    <thead>
+      <tr>
+        <th style="min-width:200px;">Feature</th>
+        <th class="col-old" style="min-width:200px;">OLD: BrokerPriceMonitor</th>
+        <th class="col-new" style="min-width:200px;">NEW: StreamingPriceMonitor</th>
+        <th class="col-risk" style="min-width:200px;">Risk Engine</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- ARCHITECTURE -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Architecture</td></tr>
+      <tr>
+        <td>Base strategy</td>
+        <td class="col-old">Hub-first, REST fallback</td>
+        <td class="col-new">Stream-first with state machine</td>
+        <td class="col-risk">REST-snapshot + stream overlay</td>
+      </tr>
+      <tr>
+        <td>Scope</td>
+        <td class="col-old">Single symbol per instance</td>
+        <td class="col-new">Single symbol per instance</td>
+        <td class="col-risk">All open positions (global cycle)</td>
+      </tr>
+      <tr>
+        <td>Event-driven fast path</td>
+        <td class="col-old"><span class="b r">No</span></td>
+        <td class="col-new"><span class="b r">No</span></td>
+        <td class="col-risk"><span class="b g">Yes</span> _on_quote_update → _run_incremental_eval<br><span style="font-size:10px;color:var(--green);">~20-50ms tick-to-eval latency</span></td>
+      </tr>
+      <tr>
+        <td>UPH integration</td>
+        <td class="col-old"><span class="b r">No</span> — direct hub calls</td>
+        <td class="col-new"><span class="b r">No</span> — direct hub calls</td>
+        <td class="col-risk"><span class="b r">No</span> — direct hub calls<br><span style="font-size:10px;color:var(--muted);">UPH exists but shadow-only</span></td>
+      </tr>
+
+      <!-- POLLING -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Polling & Timing</td></tr>
+      <tr>
+        <td>Hub poll interval</td>
+        <td class="col-old"><span class="b o">2.0s</span> fixed</td>
+        <td class="col-new"><span class="b g">0.25s</span> (hub mode)</td>
+        <td class="col-risk"><span class="b g">~1s</span> cycle + <span class="b g">instant</span> on tick</td>
+      </tr>
+      <tr>
+        <td>REST poll interval</td>
+        <td class="col-old"><span class="b o">2.0s</span> (same as hub)</td>
+        <td class="col-new"><span class="b o">3.0s</span> (REST_FALLBACK_INTERVAL)</td>
+        <td class="col-risk"><span class="b o">3s</span> dead / <span class="b o">5s</span> live<br><span style="font-size:10px;color:var(--muted);">_PERIODIC_REST_FALLBACK / _POSITION_REST_REFRESH</span></td>
+      </tr>
+
+      <!-- STREAMING -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Streaming & Subscription</td></tr>
+      <tr>
+        <td>Explicit symbol subscription</td>
+        <td class="col-old"><span class="b r">No</span> — reads hub cache passively</td>
+        <td class="col-new"><span class="b g">Yes</span> — _try_subscribe_streaming()<br><span style="font-size:10px;">Webull MQTT, Schwab WS, IBKR, Tastytrade</span></td>
+        <td class="col-risk"><span class="b o">Partial</span> — _subscribe_to_price_streams() subscribes callback to hub events. Cross-sub: <span class="b r">Schwab only</span></td>
+      </tr>
+      <tr>
+        <td>Cross-broker subscription</td>
+        <td class="col-old"><span class="b r">No</span></td>
+        <td class="col-new"><span class="b r">No</span> — reads other hubs but doesn't subscribe</td>
+        <td class="col-risk"><span class="b o">Schwab only</span> for non-streaming brokers<br><span style="font-size:10px;color:var(--red);">Webull-held symbols NOT cross-subscribed</span></td>
+      </tr>
+
+      <!-- FRESHNESS -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Freshness & Staleness</td></tr>
+      <tr>
+        <td>Hub price freshness check</td>
+        <td class="col-old"><span class="b r">None</span><br><span style="font-size:10px;color:var(--red);">Accepts any price > 0 regardless of age</span></td>
+        <td class="col-new"><span class="b r">None</span><br><span style="font-size:10px;color:var(--red);">_query_hub: any price > 0</span></td>
+        <td class="col-risk"><span class="b g">Yes</span><br>Overlay: <span class="b i">≤30s</span> | Repair: <span class="b g">≤2s</span><br>Hub live: <span class="b i">≤120s</span></td>
+      </tr>
+      <tr>
+        <td>Frozen price detection</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b g">3s</span> (FROZEN_THRESHOLD)<br>3s cooldown between probes<br><span style="font-size:10px;">US market hours only</span></td>
+        <td class="col-risk"><span class="b g">3s</span> regular / <span class="b o">15s</span> extended<br>(_STUCK_PRICE_THRESHOLD)<br><span style="font-size:10px;">Extended hours: also checks >15% from entry at 2s</span></td>
+      </tr>
+      <tr>
+        <td>Staleness exit block</td>
+        <td class="col-old"><span class="b n">N/A</span> — monitors entries, not exits</td>
+        <td class="col-new"><span class="b n">N/A</span> — monitors entries, not exits</td>
+        <td class="col-risk"><span class="b g">5s</span> regular / <span class="b o">300s</span> extended<br>Blocks SL unless REST-confirmed</td>
+      </tr>
+
+      <!-- CROSS-BROKER -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Cross-Broker Fallback</td></tr>
+      <tr>
+        <td>Cross-hub stream check</td>
+        <td class="col-old"><span class="b g">Yes</span> — 4 hubs<br><span style="font-size:10px;">webull→schwab→ibkr→tastytrade</span><br><span style="font-size:10px;color:var(--red);">No freshness, no is_streaming gate</span></td>
+        <td class="col-new"><span class="b g">Yes</span> — 5 hubs (+ T212)<br><span style="font-size:10px;">+ index variant expansion</span><br><span style="font-size:10px;color:var(--red);">No freshness check on cross-hub</span></td>
+        <td class="col-risk"><span class="b g">Yes</span> — 5 hubs<br><span style="font-size:10px;">Gated: is_streaming() AND _is_hub_live()</span><br><span style="font-size:10px;color:var(--green);">Overlay: ≤30s | Repair: ≤2s freshness</span></td>
+      </tr>
+      <tr>
+        <td>Cross-broker REST fallback</td>
+        <td class="col-old"><span class="b o">Via hub chain only</span><br><span style="font-size:10px;">Falls to own broker REST, no alt broker REST</span></td>
+        <td class="col-new"><span class="b g">Full chain</span><br><span style="font-size:10px;">cross-hub → primary REST → alt broker REST<br>+ alt_broker_instances iteration</span></td>
+        <td class="col-risk"><span class="b g">Full chain</span><br><span style="font-size:10px;">Webull↔Schwab cross-preference<br>+ _try_broker_get_quote primary<br>+ sanity guards (30% entry, 30/80% jump)</span></td>
+      </tr>
+      <tr>
+        <td>Symbol normalization</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b o">_IDX_VARIANTS</span> (local dict)<br><span style="font-size:10px;">SPX↔SPXW, NDX↔NDXP, etc.<br>Bidirectional list — tries both</span></td>
+        <td class="col-risk"><span class="b g">_normalize_symbol_for_hub</span><br><span style="font-size:10px;">+ _get_option_hub_keys (OCC format)<br>Hub-specific mapping per broker</span></td>
+      </tr>
+
+      <!-- SAFETY -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Safety & Guards</td></tr>
+      <tr>
+        <td>REST sanity check</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b r">None</span></td>
+        <td class="col-risk"><span class="b g">Two guards:</span><br>1. >30% from entry + streaming <10% → reject<br>2. >30% jump regular / >80% extended → reject</td>
+      </tr>
+      <tr>
+        <td>REST repair guard</td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b n">N/A</span></td>
+        <td class="col-risk"><span class="b g">30s TTL</span><br><span style="font-size:10px;">Hub overlay suppressed unless >0.5% diff from repair</span></td>
+      </tr>
+      <tr>
+        <td>Rate limit awareness</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b o">Partial</span> — can_make_call() check in REST</td>
+        <td class="col-risk"><span class="b o">Max 3 repairs/cycle</span> (7 if validated)</td>
+      </tr>
+
+      <!-- RECOVERY -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Stream Recovery</td></tr>
+      <tr>
+        <td>Detects streaming loss</td>
+        <td class="col-old"><span class="b r">No</span></td>
+        <td class="col-new"><span class="b g">Yes</span> — 4 hub misses → REST mode</td>
+        <td class="col-risk"><span class="b g">Yes</span> — is_streaming() global check</td>
+      </tr>
+      <tr>
+        <td>Recovers to streaming</td>
+        <td class="col-old"><span class="b r">No</span> — stays on REST forever</td>
+        <td class="col-new"><span class="b g">Instant</span> — first hub hit → stream mode<br><span style="font-size:10px;">_using_rest_fallback = False, no debounce</span></td>
+        <td class="col-risk"><span class="b g">Continuous</span> — overlay always checks hubs<br><span style="font-size:10px;">30s REST repair guard prevents flip-flop</span></td>
+      </tr>
+      <tr>
+        <td>Data source label tracking</td>
+        <td class="col-old"><span class="b r">No</span></td>
+        <td class="col-new"><span class="b g">Yes</span> — ds_label: "{broker}_stream" / "{broker}"<br><span style="font-size:10px;">Updated in DB on mode change</span></td>
+        <td class="col-risk"><span class="b r">No</span> — no equivalent tracking</td>
+      </tr>
+
+      <!-- BROKERS -->
+      <tr><td colspan="4" style="background:rgba(88,166,255,.04);color:var(--blue);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Broker Support</td></tr>
+      <tr>
+        <td>Streaming hubs queried</td>
+        <td class="col-old">Webull, Schwab, IBKR, Tastytrade</td>
+        <td class="col-new">Webull, Schwab, IBKR, Tastytrade, <span style="color:var(--green);">Trading212</span></td>
+        <td class="col-risk">Webull, Schwab, IBKR, Tastytrade, <span style="color:var(--green);">Trading212</span></td>
+      </tr>
+      <tr>
+        <td>REST brokers supported</td>
+        <td class="col-old">Alpaca, Webull, Upstox, Schwab, IBKR, Robinhood, Tastytrade</td>
+        <td class="col-new">All above + alt_broker_instances chain</td>
+        <td class="col-risk">Webull, Schwab, IBKR, Alpaca, Tastytrade, Trading212</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ==================== THRESHOLDS ==================== -->
+<div class="section" id="thresholds">
+  <h1>Thresholds & <span>Timing Constants</span></h1>
+  <p class="sub">Every hardcoded number across all three pipelines — where they match and where they diverge</p>
+
+  <div style="overflow-x:auto;">
+  <table class="cmp">
+    <thead>
+      <tr>
+        <th>Constant</th>
+        <th class="col-old">OLD</th>
+        <th class="col-new">NEW</th>
+        <th class="col-risk">Risk Engine</th>
+        <th>Aligned?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Hub poll interval</td>
+        <td class="col-old"><span class="b o">2.0s</span><br>poll_interval = 2</td>
+        <td class="col-new"><span class="b g">0.25s</span><br>HUB_POLL_INTERVAL</td>
+        <td class="col-risk"><span class="b g">~1s</span><br>DEFAULT_MONITORING_INTERVAL</td>
+        <td><span class="b r">DIVERGED</span></td>
+      </tr>
+      <tr>
+        <td>REST poll interval</td>
+        <td class="col-old"><span class="b o">2.0s</span><br>(same as hub)</td>
+        <td class="col-new"><span class="b o">3.0s</span><br>REST_FALLBACK_INTERVAL</td>
+        <td class="col-risk"><span class="b o">3s</span> / <span class="b o">5s</span><br>_PERIODIC / _POSITION</td>
+        <td><span class="b r">DIVERGED</span></td>
+      </tr>
+      <tr>
+        <td>Frozen/stuck threshold (regular)</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b g">3.0s</span><br>FROZEN_THRESHOLD</td>
+        <td class="col-risk"><span class="b g">3s</span><br>_STUCK_PRICE_THRESHOLD</td>
+        <td><span class="b g">MATCH</span><br><span style="font-size:10px;color:var(--muted);">(where both exist)</span></td>
+      </tr>
+      <tr>
+        <td>Frozen/stuck threshold (extended)</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b n">N/A</span><br><span style="font-size:10px;">US market hours only</span></td>
+        <td class="col-risk"><span class="b o">15s</span></td>
+        <td><span class="b o">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>Frozen probe cooldown</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b g">3.0s</span><br>FROZEN_PROBE_COOLDOWN</td>
+        <td class="col-risk"><span class="b o">3.0s</span><br>rest_cooldown (regular)</td>
+        <td><span class="b g">MATCH</span></td>
+      </tr>
+      <tr>
+        <td>Hub freshness gate (overlay)</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b r">None</span></td>
+        <td class="col-risk"><span class="b g">30s</span><br>_HUB_PRICE_MAX_AGE</td>
+        <td><span class="b r">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>Hub freshness gate (repair)</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b r">None</span></td>
+        <td class="col-risk"><span class="b g">2s</span><br>max_age=2 in _try_cross_hub_price</td>
+        <td><span class="b r">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>Hub "alive" threshold</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b r">None</span></td>
+        <td class="col-risk"><span class="b g">120s</span><br>_is_hub_live()</td>
+        <td><span class="b r">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>Hub "stale" threshold</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b o">10s</span><br>HUB_STALE_THRESHOLD</td>
+        <td class="col-risk"><span class="b n">N/A</span><br><span style="font-size:10px;">Uses is_streaming() globally</span></td>
+        <td><span class="b r">DIVERGED</span></td>
+      </tr>
+      <tr>
+        <td>SL staleness block</td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b n">N/A</span></td>
+        <td class="col-risk"><span class="b g">5s</span> regular / <span class="b o">300s</span> extended<br>_STALENESS_EXIT_BLOCK_THRESHOLD</td>
+        <td><span class="b p">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>REST repair TTL</td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b n">N/A</span></td>
+        <td class="col-risk"><span class="b g">30s</span><br>_HUB_PRICE_MAX_AGE</td>
+        <td><span class="b p">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>REST repair unlock threshold</td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b n">N/A</span></td>
+        <td class="col-risk"><span class="b g">>0.5%</span> or >$0.02<br>max(0.02, price * 0.005)</td>
+        <td><span class="b p">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>Hub miss count for REST mode</td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b g">4</span> consecutive misses</td>
+        <td class="col-risk"><span class="b n">N/A</span><br><span style="font-size:10px;">Uses global is_streaming()</span></td>
+        <td><span class="b o">DIFFERENT APPROACH</span></td>
+      </tr>
+      <tr>
+        <td>Cross-hub cache TTL</td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b g">30s</span><br>_CROSS_HUB_CACHE_TTL</td>
+        <td class="col-risk"><span class="b n">N/A</span><br><span style="font-size:10px;">Imports fresh each time</span></td>
+        <td><span class="b o">DIFFERENT APPROACH</span></td>
+      </tr>
+      <tr>
+        <td>REST sanity: entry deviation</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b r">None</span></td>
+        <td class="col-risk"><span class="b g">>30%</span> from entry rejected<br><span style="font-size:10px;">(if streaming <10% from entry)</span></td>
+        <td><span class="b r">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>REST sanity: price jump</td>
+        <td class="col-old"><span class="b r">None</span></td>
+        <td class="col-new"><span class="b r">None</span></td>
+        <td class="col-risk"><span class="b g">>30%</span> regular / <span class="b o">>80%</span> extended</td>
+        <td><span class="b r">RISK ONLY</span></td>
+      </tr>
+      <tr>
+        <td>Schwab pending drain interval</td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b n">N/A</span></td>
+        <td class="col-risk"><span class="b o">10s</span><br>schwab_streaming_client:409</td>
+        <td><span class="b o">SHARED (schwab client)</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="warn-box">
+    <strong style="color:var(--red);">17 timing constants, only 2 match.</strong>
+    <span style="color:var(--muted);font-size:13px;">
+      Frozen threshold (3s) and probe cooldown (3s) happen to align between StreamingPriceMonitor and Risk Engine. Everything else is either diverged or exists in only one pipeline. The OLD monitor has no thresholds at all.
+    </span>
+  </div>
+</div>
+
+<!-- ==================== FALLBACK CHAINS ==================== -->
+<div class="section" id="fallback">
+  <h1>Fallback <span>Chains</span></h1>
+  <p class="sub">Step-by-step: when streaming fails, what happens in each pipeline — and where the chains diverge</p>
+
+  <h2>Frozen Price Scenario: Hub returns same price for 3+ seconds</h2>
+  <div class="pipe-grid">
+    <div class="pipe" style="border-top:3px solid var(--orange);">
+      <div class="pipe-tag old">Legacy</div>
+      <h3 style="color:var(--orange);margin-top:8px;">OLD: No Detection</h3>
+      <div class="tl">
+        <div class="ti f"><div class="tt">t+0s</div><div class="tla" style="color:var(--red);">Price freezes</div><div class="td">Hub returns same cached price</div></div>
+        <div class="ti f"><div class="tt">t+2s</div><div class="tla" style="color:var(--red);">Same stale price used</div><div class="td">No detection. callback fires with stale price.</div></div>
+        <div class="ti f"><div class="tt">t+4s, 6s, 8s...</div><div class="tla" style="color:var(--red);">Continues using stale price forever</div><div class="td">No frozen detection. No escalation. No cross-broker probe. No REST fallback triggered.</div></div>
+      </div>
+    </div>
+
+    <div class="pipe" style="border-top:3px solid var(--cyan);">
+      <div class="pipe-tag new">Primary</div>
+      <h3 style="color:var(--cyan);margin-top:8px;">NEW: Frozen Probe at 3s</h3>
+      <div class="tl">
+        <div class="ti ok"><div class="tt">t+0s</div><div class="tla">Price freezes</div><div class="td">_last_hub_change_ts stops updating</div></div>
+        <div class="ti w"><div class="tt">t+3s</div><div class="tla" style="color:var(--cyan);">Frozen detected!</div><div class="td">frozen_seconds ≥ FROZEN_THRESHOLD (3s)</div></div>
+        <div class="ti info"><div class="tt">t+3s</div><div class="tla">_try_cross_broker_hubs()</div><div class="td">Check 5 hubs with index variants. No freshness gate.</div></div>
+        <div class="ti w"><div class="tt">t+3s</div><div class="tla">Cross-hub same/empty</div><div class="td">→ _fetch_rest_price_no_cross_hub()</div></div>
+        <div class="ti ok"><div class="tt">t+3s</div><div class="tla" style="color:var(--green);">Primary broker REST</div><div class="td">Gets fresh price. But <span style="color:var(--red);">no alt-broker REST</span> in frozen probe path.</div></div>
+      </div>
+    </div>
+
+    <div class="pipe" style="border-top:3px solid var(--purple);">
+      <div class="pipe-tag risk">Risk Engine</div>
+      <h3 style="color:var(--purple);margin-top:8px;">RISK: Stuck Repair at 3s</h3>
+      <div class="tl">
+        <div class="ti ok"><div class="tt">t+0s</div><div class="tla">Price freezes</div><div class="td">_stuck_price_tracker records last_changed</div></div>
+        <div class="ti info"><div class="tt">t+3s</div><div class="tla" style="color:var(--purple);">Stuck detected! (regular hours)</div><div class="td">stuck_seconds ≥ _STUCK_PRICE_THRESHOLD (3)</div></div>
+        <div class="ti ok"><div class="tt">t+3s</div><div class="tla">_try_cross_hub_price(max_age=2s)</div><div class="td">Check 4 hubs. <span style="color:var(--green);">Strict 2s freshness gate!</span> is_streaming + _is_hub_live required.</div></div>
+        <div class="ti w"><div class="tt">t+3s</div><div class="tla">Cross-hub fails → _try_rest_quote()</div><div class="td">Schwab↔Webull cross-preference</div></div>
+        <div class="ti ok"><div class="tt">t+3s</div><div class="tla" style="color:var(--green);">Sanity guards applied</div><div class="td">Reject if >30% from entry, >30% jump. REST repair guard set (30s).</div></div>
+        <div class="ti ok"><div class="tt">t+5s</div><div class="tla">Staleness gate lifts</div><div class="td">REST-confirmed → SL evaluation allowed</div></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Hub Complete Failure: Hub returns None repeatedly</h2>
+  <div class="pipe-grid">
+    <div class="pipe" style="border-top:3px solid var(--orange);">
+      <div class="pipe-tag old">Legacy</div>
+      <h3 style="color:var(--orange);margin-top:8px;">OLD: Immediate REST</h3>
+      <div class="tl">
+        <div class="ti w"><div class="tt">t+0s</div><div class="tla">Hub returns None</div></div>
+        <div class="ti ok"><div class="tt">t+0s</div><div class="tla" style="color:var(--green);">_fetch_price() immediately</div><div class="td">Broker-specific REST call. No delay.</div></div>
+        <div class="ti f"><div class="tt">t+2s, 4s...</div><div class="tla" style="color:var(--red);">REST forever</div><div class="td">No stream recovery. Never checks hub again after REST succeeds.</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">Actually checks hub every cycle — but if hub returns None, falls to REST. No explicit "REST mode" flag. If hub comes back, uses it next cycle.</div>
+    </div>
+
+    <div class="pipe" style="border-top:3px solid var(--cyan);">
+      <div class="pipe-tag new">Primary</div>
+      <h3 style="color:var(--cyan);margin-top:8px;">NEW: 4-Miss Threshold</h3>
+      <div class="tl">
+        <div class="ti w"><div class="tt">miss 1-3</div><div class="tla">Hub returns None</div><div class="td">_hub_miss_count increments. Still polling at 0.25s.</div></div>
+        <div class="ti info"><div class="tt">miss 4 (t+1s)</div><div class="tla" style="color:var(--cyan);">REST fallback mode activated</div><div class="td">_using_rest_fallback = True. ds_label → "{broker}"</div></div>
+        <div class="ti w"><div class="tt">REST mode</div><div class="tla">_fetch_rest_price() every 3s</div><div class="td">cross-hub → primary REST → alt REST</div></div>
+        <div class="ti ok"><div class="tt">Hub returns price</div><div class="tla" style="color:var(--green);">Instant stream recovery!</div><div class="td">_using_rest_fallback = False. ds_label → "{broker}_stream"</div></div>
+      </div>
+    </div>
+
+    <div class="pipe" style="border-top:3px solid var(--purple);">
+      <div class="pipe-tag risk">Risk Engine</div>
+      <h3 style="color:var(--purple);margin-top:8px;">RISK: Global Streaming Check</h3>
+      <div class="tl">
+        <div class="ti info"><div class="tt">Each cycle</div><div class="tla">is_streaming() → False?</div><div class="td">Checks Webull hub globally</div></div>
+        <div class="ti w"><div class="tt">Streaming dead</div><div class="tla">REST interval drops to 3s</div><div class="td">_PERIODIC_REST_FALLBACK_INTERVAL = 3</div></div>
+        <div class="ti ok"><div class="tt">Streaming alive</div><div class="tla">REST interval back to 5s</div><div class="td">_POSITION_REST_REFRESH_INTERVAL = 5</div></div>
+        <div class="ti ok"><div class="tt">Always</div><div class="tla" style="color:var(--green);">Hub overlay runs every cycle</div><div class="td">_update_prices_from_hub always tries to overlay fresh prices</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== GAPS ==================== -->
+<div class="section" id="gaps">
+  <h1>Gaps & <span>Risks</span></h1>
+  <p class="sub">What's missing, what's diverged, and what breaks in production</p>
+
+  <h2>Gap Summary</h2>
+  <div style="overflow-x:auto;">
+  <table class="cmp">
+    <thead>
+      <tr>
+        <th>Gap</th>
+        <th>Impact</th>
+        <th class="col-old">OLD</th>
+        <th class="col-new">NEW</th>
+        <th class="col-risk">Risk Engine</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>No hub freshness check</strong><br><span style="font-size:10px;color:var(--muted);">Stale cached prices accepted as current</span></td>
+        <td><span class="b r">HIGH</span></td>
+        <td class="col-old"><span class="b r">Missing</span><br>Any price > 0 accepted</td>
+        <td class="col-new"><span class="b r">Missing</span><br>_query_hub: any price > 0</td>
+        <td class="col-risk"><span class="b g">Present</span><br>30s overlay / 2s repair</td>
+      </tr>
+      <tr>
+        <td><strong>No frozen detection</strong><br><span style="font-size:10px;color:var(--muted);">Stale price used indefinitely</span></td>
+        <td><span class="b r">CRITICAL</span></td>
+        <td class="col-old"><span class="b r">Missing</span></td>
+        <td class="col-new"><span class="b g">Present</span><br>3s threshold</td>
+        <td class="col-risk"><span class="b g">Present</span><br>3s/15s threshold</td>
+      </tr>
+      <tr>
+        <td><strong>No per-symbol streaming tracking</strong><br><span style="font-size:10px;color:var(--muted);">Can't detect REST-only symbols</span></td>
+        <td><span class="b r">HIGH</span></td>
+        <td class="col-old"><span class="b r">Missing</span></td>
+        <td class="col-new"><span class="b r">Missing</span></td>
+        <td class="col-risk"><span class="b r">Missing</span><br>_dirty_symbols cleared each cycle</td>
+      </tr>
+      <tr>
+        <td><strong>No proactive cross-subscription</strong><br><span style="font-size:10px;color:var(--muted);">Webull symbol not warm-subscribed on Schwab</span></td>
+        <td><span class="b r">HIGH</span></td>
+        <td class="col-old"><span class="b r">Missing</span></td>
+        <td class="col-new"><span class="b r">Missing</span><br>Reads hubs but doesn't subscribe</td>
+        <td class="col-risk"><span class="b o">Schwab only</span><br>Only for non-streaming brokers</td>
+      </tr>
+      <tr>
+        <td><strong>Three diverged implementations</strong><br><span style="font-size:10px;color:var(--muted);">Bug fixes must be applied 3 times</span></td>
+        <td><span class="b r">HIGH</span></td>
+        <td class="col-old" colspan="3" style="text-align:center;"><span class="b r">All three pipelines</span> — no shared code, no shared config</td>
+      </tr>
+      <tr>
+        <td><strong>Old monitor still active</strong><br><span style="font-size:10px;color:var(--muted);">routes.py imports both old + new</span></td>
+        <td><span class="b o">MEDIUM</span></td>
+        <td class="col-old"><span class="b r">Active</span><br>Used for cancellations</td>
+        <td class="col-new"><span class="b g">Primary</span><br>via router</td>
+        <td class="col-risk"><span class="b n">N/A</span></td>
+      </tr>
+      <tr>
+        <td><strong>Frozen probe: no alt-broker REST</strong><br><span style="font-size:10px;color:var(--muted);">_fetch_rest_price_no_cross_hub only tries primary broker</span></td>
+        <td><span class="b o">MEDIUM</span></td>
+        <td class="col-old"><span class="b n">N/A</span></td>
+        <td class="col-new"><span class="b r">Missing</span><br>Primary REST only in frozen path</td>
+        <td class="col-risk"><span class="b g">Present</span><br>Schwab↔Webull cross</td>
+      </tr>
+      <tr>
+        <td><strong>Extended hours handling</strong><br><span style="font-size:10px;color:var(--muted);">Different behavior per pipeline</span></td>
+        <td><span class="b o">MEDIUM</span></td>
+        <td class="col-old"><span class="b r">No distinction</span></td>
+        <td class="col-new"><span class="b o">Partial</span><br>Frozen probe: US hours only</td>
+        <td class="col-risk"><span class="b g">Full</span><br>15s stuck, 300s staleness, 80% jump</td>
+      </tr>
+      <tr>
+        <td><strong>REST error swallowing</strong><br><span style="font-size:10px;color:var(--muted);">Exceptions silently caught, no metrics</span></td>
+        <td><span class="b o">MEDIUM</span></td>
+        <td class="col-old"><span class="b r">Yes</span><br>except Exception: pass</td>
+        <td class="col-new"><span class="b o">Partial</span><br>Some logging</td>
+        <td class="col-risk"><span class="b o">Partial</span><br>Some logging, no circuit breaker</td>
+      </tr>
+      <tr>
+        <td><strong>No failover state machine</strong><br><span style="font-size:10px;color:var(--muted);">No HEALTHY→DEGRADED→REST_ONLY→RECOVERY states</span></td>
+        <td><span class="b r">HIGH</span></td>
+        <td class="col-old"><span class="b r">Missing</span></td>
+        <td class="col-new"><span class="b o">Implicit</span><br>_using_rest_fallback boolean</td>
+        <td class="col-risk"><span class="b r">Missing</span><br>Global is_streaming() only</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>FCHL Incident: Which Pipeline Failed?</h2>
+  <div class="card" style="border-left:3px solid var(--red);">
+    <p style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:8px;">The Risk Engine evaluated the SL exit — and it triggered late at -16.83%</p>
+    <p style="font-size:13px;color:var(--muted);">Root cause chain through the Risk Engine pipeline:</p>
+    <div class="tl" style="margin-top:12px;">
+      <div class="ti f"><div class="tla" style="color:var(--red);">No hub streaming FCHL</div><div class="td">Webull MQTT silently ignored this penny stock. _update_prices_from_hub overlay had nothing to overlay.</div></div>
+      <div class="ti f"><div class="tla" style="color:var(--red);">_request_cross_broker_subscriptions skipped</div><div class="td">Webull is_streaming() = True globally → not flagged as "non-streaming broker" → Schwab subscription never requested</div></div>
+      <div class="ti f"><div class="tla" style="color:var(--red);">No per-symbol streaming tracking</div><div class="td">_dirty_symbols cleared each cycle → system doesn't know FCHL never received a streaming tick</div></div>
+      <div class="ti w"><div class="tla" style="color:var(--orange);">REST polling at 3-5s intervals</div><div class="td">Global REST refresh: $1.005 at 10:41:47 → next poll $0.889 at 10:41:51 (4s gap)</div></div>
+      <div class="ti w"><div class="tla" style="color:var(--orange);">Stuck detector NOT triggered</div><div class="td">Price was changing every REST poll → tracker['last_changed'] reset → stuck_seconds never reached 3s</div></div>
+      <div class="ti f"><div class="tla" style="color:var(--red);">SL gap-through: -10% → -16.83%</div><div class="td">Flash crash happened between two REST polls. No streaming to catch it.</div></div>
+    </div>
+  </div>
+
+  <h2>What Each Pipeline Needs</h2>
+  <div class="card-grid">
+    <div class="card" style="border-top:3px solid var(--orange);">
+      <h3 style="color:var(--orange);margin-top:0;">OLD: BrokerPriceMonitor</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Ideally: <strong>deprecate and remove</strong>. Move cancellation logic to new router.</p>
+      <div style="font-size:12px;color:var(--muted);">
+        If kept:<br>
+        <span class="tag no">Add hub freshness check (5s gate)</span><br>
+        <span class="tag no">Add frozen detection</span><br>
+        <span class="tag no">Add stream recovery state</span>
+      </div>
+    </div>
+    <div class="card" style="border-top:3px solid var(--cyan);">
+      <h3 style="color:var(--cyan);margin-top:0;">NEW: StreamingPriceMonitor</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Good foundation. Needs freshness gates and cross-broker REST in frozen path.</p>
+      <div style="font-size:12px;color:var(--muted);">
+        <span class="tag no">Add hub freshness check (5s gate)</span><br>
+        <span class="tag no">Add alt-broker REST to frozen probe</span><br>
+        <span class="tag no">Add proactive cross-subscription</span><br>
+        <span class="tag partial">Extend to options (Schwab subscribe)</span>
+      </div>
+    </div>
+    <div class="card" style="border-top:3px solid var(--purple);">
+      <h3 style="color:var(--purple);margin-top:0;">Risk Engine</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Most mature. Needs per-symbol streaming tracking and adaptive REST.</p>
+      <div style="font-size:12px;color:var(--muted);">
+        <span class="tag no">Add per-symbol streaming status</span><br>
+        <span class="tag no">Add REST-only detection (3s)</span><br>
+        <span class="tag no">Add adaptive REST polling (~2s)</span><br>
+        <span class="tag no">Add proactive Schwab subscription</span><br>
+        <span class="tag partial">Reduce Schwab drain from 10s to 3s</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ok-box">
+    <strong style="color:var(--green);">Long-term target:</strong>
+    <span style="color:var(--muted);font-size:13px;">
+      Promote UPH to the read path. Both conditional monitors and risk engine call UPH instead of broker hubs directly. UPH owns: cross-hub fill, REST fan-out, symbol normalization, freshness state, per-symbol streaming tracking. One implementation, one config, one set of thresholds.
+    </span>
+  </div>
+</div>
+
+<div class="footer">
+  BotifyTrades Price Pipeline Deep Comparison — Generated 2026-04-21 &bull; Review-only, no code changes
+</div>
+
+<script>
+document.querySelectorAll('.nav-tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.tab).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

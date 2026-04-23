@@ -328,6 +328,10 @@ class PositionCacheEntry:
     broker_pt_order_id: Optional[str] = None
     broker_pt_tier: int = 0
     broker_orders_placed: bool = False
+    broker_oco_order_id: Optional[str] = None
+    broker_oco_sl_price: Optional[float] = None
+    broker_oco_pt_price: Optional[float] = None
+    broker_oco_qty: int = 0
     
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
@@ -379,7 +383,11 @@ class PositionCacheEntry:
             'broker_stop_order_id': self.broker_stop_order_id,
             'broker_pt_order_id': self.broker_pt_order_id,
             'broker_pt_tier': self.broker_pt_tier,
-            'broker_orders_placed': self.broker_orders_placed
+            'broker_orders_placed': self.broker_orders_placed,
+            'broker_oco_order_id': self.broker_oco_order_id,
+            'broker_oco_sl_price': self.broker_oco_sl_price,
+            'broker_oco_pt_price': self.broker_oco_pt_price,
+            'broker_oco_qty': self.broker_oco_qty
         }
     
     @classmethod

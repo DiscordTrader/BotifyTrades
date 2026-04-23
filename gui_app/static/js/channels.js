@@ -309,34 +309,6 @@ async function loadChannels() {
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Stop % <span id="trailing-disabled-note-${channel.id}" style="color: #ff6b6b; font-size: 10px; display: ${channel.enable_early_trailing ? 'inline' : 'none'};">(disabled - Early Trailing active)</span></label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="100" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="500" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
                                 </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 200, 150, 0.05); border: 1px solid rgba(0, 200, 150, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">🔒</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
-                                        </div>
-                                        <div style="display:flex;align-items:center;gap:8px;">
-                                            <button type="button" onclick="showRiskHelp('early-trailing')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
-                                            <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
-                                                <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion('${channel.id}', this.checked)">
-                                                <span class="toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;">Move stop to breakeven after X% gain, then lock profit in step increments. Mutually exclusive with legacy Trailing Stop.</p>
-                                    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Breakeven at:</label>
-                                            <input type="number" id="risk-early-activation-${channel.id}" value="${channel.early_trailing_activation_pct || 5}" placeholder="5" step="0.5" min="1" max="20" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
-                                            <span style="font-size: 12px; color: #8E8E93;">% gain</span>
-                                        </div>
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Lock profit every:</label>
-                                            <input type="number" id="risk-early-step-${channel.id}" value="${channel.early_trailing_step_pct || 3}" placeholder="3" step="0.5" min="1" max="10" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
-                                            <span style="font-size: 12px; color: #8E8E93;">% more</span>
-                                        </div>
-                                    </div>
-                                </div>
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 10px;">
                                     <h5 style="margin:0;color:#10B981;font-size:12px;">🎯 Exit Strategy Mode</h5>
                                     <button type="button" onclick="showRiskHelp('exit-strategy')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
@@ -360,83 +332,6 @@ async function loadChannels() {
                                             <div style="font-size: 10px; color: #8E8E93;">Both active</div>
                                         </label>
                                     </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
-                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                        <label style="font-size:12px;font-weight:600;color:#ffb700;">Trim Order Type</label>
-                                        <button type="button" onclick="showRiskHelp('trim-order-type')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
-                                    </div>
-                                    <div style="display: flex; gap: 16px; align-items: center;">
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
-                                            <span style="font-size: 12px; color: white;">Market</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="trim-order-mode-${channel.id}" value="limit" ${channel.trim_order_mode === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='flex'">
-                                            <span style="font-size: 12px; color: white;">Limit</span>
-                                        </label>
-                                        <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; flex-wrap: wrap;" id="limit-offset-container-${channel.id}">
-                                            <select id="risk-trim-offset-mode-${channel.id}" style="padding: 4px 6px; font-size: 11px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;" onchange="toggleTrimOffsetMode('${channel.id}', this.value)">
-                                                <option value="dollar" ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'selected' : ''}>$</option>
-                                                <option value="percent" ${channel.trim_limit_offset_mode === 'percent' ? 'selected' : ''}>%</option>
-                                            </select>
-                                            <div id="trim-offset-dollar-${channel.id}" style="display: ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
-                                                <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="5" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
-                                            </div>
-                                            <div id="trim-offset-pct-${channel.id}" style="display: ${channel.trim_limit_offset_mode === 'percent' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
-                                                <input type="number" id="risk-trim-offset-pct-${channel.id}" value="${channel.trim_limit_offset_pct || 2.0}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
-                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                        <label style="font-size:12px;font-weight:600;color:#ff5252;">Stop Loss Order Type</label>
-                                        <button type="button" onclick="showRiskHelp('sl-order-type')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
-                                    </div>
-                                    <div style="display: flex; gap: 16px; align-items: center;">
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='flex'">
-                                            <span style="font-size: 12px; color: white;">Limit</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='none'">
-                                            <span style="font-size: 12px; color: white;">Market</span>
-                                        </label>
-                                    </div>
-                                    <div style="display: ${(channel.sl_order_mode || 'limit') === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; margin-top: 8px;" id="sl-limit-offset-container-${channel.id}">
-                                        <label style="font-size: 11px; color: #8E8E93;">Limit Offset %:</label>
-                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset != null ? channel.sl_limit_offset : 0.03) * 100}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
-                                        <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 188, 212, 0.05); border: 1px solid rgba(0, 188, 212, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">📋</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #00BCD4;">Broker Bracket Orders</label>
-                                        </div>
-                                        <button type="button" onclick="showRiskHelp('broker-bracket-mode')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(0,188,212,0.08);color:#00BCD4;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(0,188,212,0.2)';this.style.borderColor='#00BCD4';this.style.color='#4DD0E1'" onmouseout="this.style.background='rgba(0,188,212,0.08)';this.style.borderColor='#52525B';this.style.color='#00BCD4'" title="Click for help">?</button>
-                                    </div>
-                                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="both" ${(channel.broker_bracket_mode || 'both') === 'both' ? 'checked' : ''} style="cursor: pointer;">
-                                            <span style="font-size: 12px; color: white;">Both</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="sl_only" ${channel.broker_bracket_mode === 'sl_only' ? 'checked' : ''} style="cursor: pointer;">
-                                            <span style="font-size: 12px; color: white;">SL Only</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="pt_only" ${channel.broker_bracket_mode === 'pt_only' ? 'checked' : ''} style="cursor: pointer;">
-                                            <span style="font-size: 12px; color: white;">PT Only</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="none" ${channel.broker_bracket_mode === 'none' ? 'checked' : ''} style="cursor: pointer;">
-                                            <span style="font-size: 12px; color: white;">Disabled</span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 6px 0 0 0;">Which bracket orders to place on the broker. Risk engine always monitors regardless.</p>
-                                </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
@@ -482,7 +377,66 @@ async function loadChannels() {
 
                                 <!-- TAB 2: Advanced -->
                                 <div id="risk-tab-advanced-${channel.id}" style="display: none;">
-                                <div style="padding: 12px; background: rgba(255, 100, 100, 0.05); border: 1px solid rgba(255, 100, 100, 0.2); border-radius: 8px;">
+                                <div style="padding: 12px; background: rgba(0, 188, 212, 0.05); border: 1px solid rgba(0, 188, 212, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">📋</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00BCD4;">Broker Bracket Orders</label>
+                                        </div>
+                                        <button type="button" onclick="showRiskHelp('broker-bracket-mode')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(0,188,212,0.08);color:#00BCD4;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(0,188,212,0.2)';this.style.borderColor='#00BCD4';this.style.color='#4DD0E1'" onmouseout="this.style.background='rgba(0,188,212,0.08)';this.style.borderColor='#52525B';this.style.color='#00BCD4'" title="Click for help">?</button>
+                                    </div>
+                                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="both" ${(channel.broker_bracket_mode || 'both') === 'both' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
+                                            <span style="font-size: 12px; color: white;">Both</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="sl_only" ${channel.broker_bracket_mode === 'sl_only' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
+                                            <span style="font-size: 12px; color: white;">SL Only</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="pt_only" ${channel.broker_bracket_mode === 'pt_only' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
+                                            <span style="font-size: 12px; color: white;">PT Only</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="none" ${channel.broker_bracket_mode === 'none' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
+                                            <span style="font-size: 12px; color: white;">Disabled</span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 6px 0 0 0;">Which bracket orders to place on the broker. Risk engine always monitors regardless.</p>
+                                </div>
+                                <div style="margin-top: 12px; padding: 10px 12px; background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.15); border-radius: 8px; font-size: 11px; color: #A5B4FC;">
+                                    Order type settings (Trim & SL) are in <strong>Channels → Order Types</strong> tab.
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 200, 150, 0.05); border: 1px solid rgba(0, 200, 150, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔒</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
+                                        </div>
+                                        <div style="display:flex;align-items:center;gap:8px;">
+                                            <button type="button" onclick="showRiskHelp('early-trailing')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button>
+                                            <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
+                                                <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion('${channel.id}', this.checked)">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;">Move stop to breakeven after X% gain, then lock profit in step increments. Mutually exclusive with legacy Trailing Stop.</p>
+                                    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Breakeven at:</label>
+                                            <input type="number" id="risk-early-activation-${channel.id}" value="${channel.early_trailing_activation_pct || 5}" placeholder="5" step="0.5" min="1" max="20" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% gain</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Lock profit every:</label>
+                                            <input type="number" id="risk-early-step-${channel.id}" value="${channel.early_trailing_step_pct || 3}" placeholder="3" step="0.5" min="1" max="10" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% more</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 100, 100, 0.05); border: 1px solid rgba(255, 100, 100, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
                                             <span style="font-size: 16px;">🎯</span>
@@ -1470,6 +1424,27 @@ function toggleEarlyTrailingExclusion(channelId, enabled) {
     }
 }
 
+function handleBracketModeChange(channelId, mode) {
+    const ptEnabled = (mode === 'both' || mode === 'pt_only');
+    const trimMarketLabel = document.getElementById(`trim-market-label-${channelId}`);
+    const trimMarketRadio = document.querySelector(`input[name="trim-order-mode-${channelId}"][value="market"]`);
+    const trimLimitRadio = document.querySelector(`input[name="trim-order-mode-${channelId}"][value="limit"]`);
+    const autoNote = document.getElementById(`bracket-trim-auto-note-${channelId}`);
+    const limitContainer = document.getElementById(`limit-offset-container-${channelId}`);
+
+    if (ptEnabled) {
+        if (trimMarketRadio) { trimMarketRadio.disabled = true; trimMarketRadio.checked = false; }
+        if (trimLimitRadio) trimLimitRadio.checked = true;
+        if (trimMarketLabel) { trimMarketLabel.style.opacity = '0.4'; trimMarketLabel.style.pointerEvents = 'none'; }
+        if (autoNote) autoNote.style.display = 'block';
+        if (limitContainer) limitContainer.style.display = 'flex';
+    } else {
+        if (trimMarketRadio) trimMarketRadio.disabled = false;
+        if (trimMarketLabel) { trimMarketLabel.style.opacity = '1'; trimMarketLabel.style.pointerEvents = 'auto'; }
+        if (autoNote) autoNote.style.display = 'none';
+    }
+}
+
 function toggleTrimOffsetMode(channelId, mode) {
     const dollarDiv = document.getElementById(`trim-offset-dollar-${channelId}`);
     const pctDiv = document.getElementById(`trim-offset-pct-${channelId}`);
@@ -1497,12 +1472,6 @@ async function saveRiskManagement(channelId) {
         const trailingActivation = document.getElementById(`risk-trailing-activation-${channelId}`).value;
         const leaveRunnerEnabled = document.getElementById(`risk-leave-runner-enabled-${channelId}`)?.checked ? 1 : 0;
         const leaveRunnerPct = document.getElementById(`risk-leave-runner-pct-${channelId}`).value;
-        const trimOrderMode = document.querySelector(`input[name="trim-order-mode-${channelId}"]:checked`)?.value || 'market';
-        const trimLimitOffset = document.getElementById(`risk-trim-offset-${channelId}`).value;
-        const trimOffsetMode = document.getElementById(`risk-trim-offset-mode-${channelId}`)?.value || 'dollar';
-        const trimOffsetPct = document.getElementById(`risk-trim-offset-pct-${channelId}`)?.value;
-        const slOrderMode = document.querySelector(`input[name="sl-order-mode-${channelId}"]:checked`)?.value || 'limit';
-        const slLimitOffset = document.getElementById(`risk-sl-limit-offset-${channelId}`).value;
         const brokerBracketMode = document.querySelector(`input[name="broker-bracket-mode-${channelId}"]:checked`)?.value || 'both';
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         const escalationOnlyMode = document.getElementById(`risk-escalation-only-${channelId}`)?.checked ? 1 : 0;
@@ -1558,12 +1527,6 @@ async function saveRiskManagement(channelId) {
                 trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null,
                 leave_runner_enabled: leaveRunnerEnabled,
                 leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0,
-                trim_order_mode: trimOrderMode,
-                trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01,
-                trim_limit_offset_mode: trimOffsetMode,
-                trim_limit_offset_pct: trimOffsetPct ? parseFloat(trimOffsetPct) : 2.0,
-                sl_order_mode: slOrderMode,
-                sl_limit_offset: slLimitOffset != null && slLimitOffset !== '' ? parseFloat(slLimitOffset) / 100 : 0.03,
                 trade_summary_enabled: tradeSummaryEnabled,
                 enable_dynamic_sl: enableDynamicSl,
                 dynamic_sl_profile: dynamicSlProfile,
@@ -1754,23 +1717,24 @@ function applyRiskPreset(channelId, preset) {
     const chaseModePresetEl = document.getElementById(`risk-chase-mode-${channelId}`);
     if (chaseModePresetEl) chaseModePresetEl.value = p.chase ? 'exit' : 'off';
 
-    const trimRadio = document.querySelector(`input[name="trim-order-mode-${channelId}"][value="${p.trim_order}"]`);
-    if (trimRadio) trimRadio.checked = true;
-    const limContainer = document.getElementById(`limit-offset-container-${channelId}`);
-    if (limContainer) limContainer.style.display = p.trim_order === 'limit' ? 'flex' : 'none';
-    const slRadio = document.querySelector(`input[name="sl-order-mode-${channelId}"][value="${p.sl_order}"]`);
-    if (slRadio) slRadio.checked = true;
-    const slContainer = document.getElementById(`sl-limit-offset-container-${channelId}`);
-    if (slContainer) slContainer.style.display = p.sl_order === 'limit' ? 'flex' : 'none';
-
-    setVal(`risk-trim-offset-mode-${channelId}`, p.trim_offset_mode);
-    setVal(`risk-trim-offset-${channelId}`, p.trim_offset_dollar);
-    setVal(`risk-trim-offset-pct-${channelId}`, p.trim_offset_pct);
-    const dol = document.getElementById(`trim-offset-dollar-${channelId}`);
-    const pctD = document.getElementById(`trim-offset-pct-${channelId}`);
-    if (dol) dol.style.display = p.trim_offset_mode === 'dollar' ? 'flex' : 'none';
-    if (pctD) pctD.style.display = p.trim_offset_mode === 'percent' ? 'flex' : 'none';
-    setVal(`risk-sl-limit-offset-${channelId}`, p.sl_offset);
+    // Save order type settings via API (controls are in Channels → Order Types tab)
+    const orderTypePayload = {
+        trim_order_mode: p.trim_order,
+        trim_limit_offset_mode: p.trim_offset_mode,
+        trim_limit_offset: p.trim_offset_dollar,
+        trim_limit_offset_pct: p.trim_offset_pct,
+        sl_order_mode: p.sl_order,
+        sl_limit_offset: p.sl_offset / 100
+    };
+    fetch(`/api/channels/${channelId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderTypePayload)
+    }).then(r => r.json()).then(result => {
+        if (result.success) {
+            updateLocalChannel(channelId, orderTypePayload);
+        }
+    }).catch(err => console.error('Failed to save preset order types:', err));
 
     const exitRadio = document.querySelector(`input[name="exit-strategy-mode-${channelId}"][value="${p.exit_mode}"]`);
     if (exitRadio) exitRadio.checked = true;
