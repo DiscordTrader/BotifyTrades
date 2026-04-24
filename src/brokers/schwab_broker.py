@@ -559,6 +559,32 @@ class SchwabBroker(BrokerInterface):
             truncated = math.floor(price * 100) / 100
             return f"{truncated:.2f}"
 
+    def _create_http_client(self):
+        """Create a fresh httpx AsyncClient."""
+        import httpx
+        return httpx.AsyncClient(
+            timeout=8.0, http2=False,
+            limits=httpx.Limits(max_connections=15, max_keepalive_connections=8)
+        )
+
+    async def _reset_http_client(self, reason: str = ""):
+        """Close and recreate the HTTP client to recover from pool exhaustion."""
+        import httpx
+        if self._http_client is not None:
+            try:
+                await self._http_client.aclose()
+            except Exception:
+                pass
+        self._http_client = self._create_http_client()
+        try:
+            self._http_client_loop_id = id(asyncio.get_running_loop())
+        except RuntimeError:
+            self._http_client_loop_id = None
+        if not hasattr(self, '_pool_reset_count'):
+            self._pool_reset_count = 0
+        self._pool_reset_count += 1
+        print(f"[{self.name}] 🔄 HTTP client reset #{self._pool_reset_count}: {reason}")
+
     async def _make_request(self, method, url, is_exit_order: bool = False, is_entry_order: bool = False, **kwargs):
         """Make HTTP request with rate limit, budget tracking, and token refresh handling"""
         import httpx
@@ -592,13 +618,23 @@ class SchwabBroker(BrokerInterface):
                     await self._http_client.aclose()
                 except Exception:
                     pass
-            self._http_client = httpx.AsyncClient(timeout=8.0, http2=False, limits=httpx.Limits(max_connections=15, max_keepalive_connections=8))
+            self._http_client = self._create_http_client()
             self._http_client_loop_id = current_loop_id
 
-        response = await asyncio.wait_for(
-            self._http_client.request(method, url, headers=headers, **kwargs),
-            timeout=10.0
-        )
+        try:
+            response = await asyncio.wait_for(
+                self._http_client.request(method, url, headers=headers, **kwargs),
+                timeout=10.0
+            )
+        except (httpx.PoolTimeout, httpx.ConnectTimeout, httpx.ReadTimeout) as pool_err:
+            await self._reset_http_client(f"{type(pool_err).__name__} on {method} {short_url}")
+            response = await asyncio.wait_for(
+                self._http_client.request(method, url, headers=headers, **kwargs),
+                timeout=10.0
+            )
+        except (asyncio.TimeoutError, TimeoutError) as timeout_err:
+            await self._reset_http_client(f"TimeoutError on {method} {short_url}")
+            raise
 
         if response.status_code == 429:
             retry_after = int(response.headers.get('Retry-After', '60'))
@@ -806,7 +842,7 @@ class SchwabBroker(BrokerInterface):
                 return result
                     
         except Exception as e:
-            print(f"[{self.name}] Error getting account info: {e}")
+            print(f"[{self.name}] Error getting account info: {type(e).__name__}: {e}")
             if hasattr(self, '_last_account_info') and self._last_account_info:
                 print(f"[{self.name}] Returning last known good account info (BP=${self._last_account_info.get('buying_power', 0):.2f})")
                 return dict(self._last_account_info)
@@ -913,7 +949,7 @@ class SchwabBroker(BrokerInterface):
                 return result
                     
         except Exception as e:
-            print(f"[{self.name}] Error getting positions: {e}")
+            print(f"[{self.name}] Error getting positions: {type(e).__name__}: {e}")
         
         if hasattr(self, '_last_positions_simple') and self._last_positions_simple:
             return dict(self._last_positions_simple)
@@ -1336,13 +1372,14 @@ class SchwabBroker(BrokerInterface):
                 )
                     
         except Exception as e:
+            err_detail = str(e) or type(e).__name__
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"Exception: {err_detail}",
                 symbol=symbol,
                 action=action
             )
-    
+
     async def place_option_order(
         self,
         symbol: str,
@@ -1812,14 +1849,15 @@ class SchwabBroker(BrokerInterface):
                 )
                     
         except Exception as e:
+            err_detail = str(e) or type(e).__name__
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"Exception: {err_detail}",
                 symbol=symbol,
                 action=action
             )
-    
-    async def _verify_order_fill(self, order_id: str, action: str, option_symbol: str, 
+
+    async def _verify_order_fill(self, order_id: str, action: str, option_symbol: str,
                                 max_checks: int = 6, interval: float = 0.5) -> Dict[str, Any]:
         """Verify order fill status by polling Schwab order status API.
         
@@ -2462,9 +2500,7 @@ class SchwabBroker(BrokerInterface):
                 return result
                     
         except Exception as e:
-            print(f"[{self.name}] Error getting pending orders: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[{self.name}] Error getting pending orders: {type(e).__name__}: {e}")
         
         return getattr(self, '_last_pending_orders', [])
     
