@@ -5030,15 +5030,14 @@ class RiskManager:
                             _schwab_stop_symbol = None
 
                     _trim_mode = getattr(channel_settings, 'trim_order_mode', 'limit') or 'limit'
-                    _use_oco = sl_price and sl_price > 0 and pt1_price and pt1_price > 0 and pt1_qty > 0 and not is_option and _trim_mode != 'market'
-                    _remainder_qty = qty - pt1_qty if pt1_qty > 0 else qty
+                    _use_native_bracket = sl_price and sl_price > 0 and pt1_price and pt1_price > 0 and not is_option and _trim_mode != 'market'
                     if _trim_mode == 'market' and sl_price and sl_price > 0:
                         print(f"[RISK] 📋 trim_order_mode='market' — skipping OCO, risk engine will handle PT sells")
 
-                    if _use_oco and _schwab_stop_symbol:
+                    if _use_native_bracket and _schwab_stop_symbol:
                         oco_result = await self.schwab_broker.place_oco_order(
                             symbol=_schwab_stop_symbol,
-                            quantity=pt1_qty,
+                            quantity=qty,
                             stop_loss_price=sl_price,
                             profit_target_price=pt1_price,
                             side='sell',
@@ -5048,32 +5047,17 @@ class RiskManager:
                             cache.broker_oco_order_id = str(oco_result.order_id)
                             cache.broker_oco_sl_price = sl_price
                             cache.broker_oco_pt_price = pt1_price
-                            cache.broker_oco_qty = pt1_qty
+                            cache.broker_oco_qty = qty
+                            cache.broker_stop_order_id = str(oco_result.order_id)
                             cache.broker_pt_order_id = str(oco_result.order_id)
                             cache.broker_pt_tier = 1
-                            print(f"[RISK] ✅ Schwab OCO placed: #{oco_result.order_id} SL=${sl_price:.2f} PT=${pt1_price:.2f} (qty={pt1_qty})")
+                            print(f"[RISK] ✅ Schwab NATIVE BRACKET OCO placed: #{oco_result.order_id} SL=${sl_price:.2f} PT=${pt1_price:.2f} (full qty={qty})")
                         else:
                             msg = getattr(oco_result, 'message', 'unknown') if oco_result else 'no result'
-                            print(f"[RISK] ⚠️ Schwab OCO order failed: {msg} — falling back to separate orders")
-                            _use_oco = False
+                            print(f"[RISK] ⚠️ Schwab native bracket OCO failed: {msg} — falling back to separate orders")
+                            _use_native_bracket = False
 
-                        if _use_oco and _remainder_qty > 0 and _schwab_stop_symbol:
-                            sl_result = await self.schwab_broker.place_stop_order(
-                                symbol=_schwab_stop_symbol,
-                                quantity=_remainder_qty,
-                                stop_price=sl_price,
-                                side='sell',
-                                asset_type=_asset_type,
-                                duration='GOOD_TILL_CANCEL'
-                            )
-                            if sl_result and sl_result.success and sl_result.order_id:
-                                cache.broker_stop_order_id = str(sl_result.order_id)
-                                print(f"[RISK] ✅ Schwab standalone SL placed: #{sl_result.order_id} at ${sl_price:.2f} (qty={_remainder_qty})")
-                            else:
-                                msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
-                                print(f"[RISK] ⚠️ Schwab standalone SL failed: {msg}")
-
-                    if not _use_oco:
+                    if not _use_native_bracket:
                         if sl_price and sl_price > 0 and _schwab_stop_symbol:
                             sl_result = await self.schwab_broker.place_stop_order(
                                 symbol=_schwab_stop_symbol,
