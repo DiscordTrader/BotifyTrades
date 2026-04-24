@@ -5010,6 +5010,12 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Schwab not authenticated, skip initial bracket")
                         return
 
+                    if hasattr(self.schwab_broker, '_cancel_conflicting_sell_orders'):
+                        try:
+                            await self.schwab_broker._cancel_conflicting_sell_orders(symbol, 'OPTION' if is_option else 'EQUITY')
+                        except Exception as _cc_err:
+                            print(f"[RISK] ⚠️ Pre-bracket cancel for {symbol} failed: {_cc_err}")
+
                     _asset_type = 'OPTION' if is_option else 'EQUITY'
                     _schwab_stop_symbol = symbol
                     if is_option and hasattr(self.schwab_broker, '_build_option_symbol'):

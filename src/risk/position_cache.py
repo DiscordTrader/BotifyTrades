@@ -279,16 +279,33 @@ class PositionCache:
                         entry.closing = False
                         entry.closing_cycles = 0
                         closing_reset += 1
-                    if entry.broker_orders_placed and not entry.broker_stop_order_id and not entry.broker_pt_order_id:
-                        entry.broker_orders_placed = False
-                        entry._bracket_attempt_count = 0
-                        bracket_reset += 1
+                    if entry.broker_orders_placed:
+                        _has_oco = getattr(entry, 'broker_oco_order_id', None)
+                        _has_stop = getattr(entry, 'broker_stop_order_id', None)
+                        _has_pt = getattr(entry, 'broker_pt_order_id', None)
+                        if not _has_stop and not _has_pt and not _has_oco:
+                            entry.broker_orders_placed = False
+                            entry._bracket_attempt_count = 0
+                            bracket_reset += 1
+                        else:
+                            entry.broker_orders_placed = False
+                            entry.broker_stop_order_id = None
+                            entry.broker_pt_order_id = None
+                            if hasattr(entry, 'broker_oco_order_id'):
+                                entry.broker_oco_order_id = None
+                            if hasattr(entry, 'broker_oco_qty'):
+                                entry.broker_oco_qty = 0
+                            if hasattr(entry, '_bracket_attempt_count'):
+                                entry._bracket_attempt_count = 0
+                            if hasattr(entry, '_bracket_placed_qty'):
+                                entry._bracket_placed_qty = 0
+                            bracket_reset += 1
                     self._cache[key] = entry
                 
                 if closing_reset > 0:
                     print(f"[RISK] ♻️ Cleared {closing_reset} stale closing flag(s) from previous session")
                 if bracket_reset > 0:
-                    print(f"[RISK] ♻️ Reset {bracket_reset} bracket flag(s) with no actual broker orders — will re-attempt")
+                    print(f"[RISK] ♻️ Reset {bracket_reset} bracket flag(s) on restart — will place fresh brackets for current qty")
                 
                 return len(self._cache)
         except Exception as e:
