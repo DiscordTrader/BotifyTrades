@@ -4134,6 +4134,22 @@ class RiskManager:
             cache.broker_orders_placed = False
             cache._bracket_attempt_count = 0
 
+        _current_qty = int(position.quantity)
+        _bracket_qty = getattr(cache, '_bracket_placed_qty', 0)
+        if cache.broker_orders_placed and _bracket_qty > 0 and _current_qty > _bracket_qty and _bbm_check != 'none':
+            print(f"[RISK] 🔄 Scale-in detected for {position.symbol}: bracket qty={_bracket_qty} → position qty={_current_qty} — cancelling old brackets and re-placing")
+            try:
+                await self._cancel_broker_bracket_orders(position, cache, cancel_stop=True, cancel_pt=True)
+            except Exception as _cancel_err:
+                print(f"[RISK] ⚠️ Failed to cancel old brackets on scale-in: {_cancel_err}")
+            cache.broker_orders_placed = False
+            cache.broker_stop_order_id = None
+            cache.broker_pt_order_id = None
+            cache.broker_oco_order_id = None
+            cache.broker_oco_qty = 0
+            cache._bracket_attempt_count = 0
+            cache._bracket_placed_qty = 0
+
         if channel_settings and not cache.broker_orders_placed:
             _bracket_attempts = getattr(cache, '_bracket_attempt_count', 0)
             if _bracket_attempts >= 3:
@@ -4147,6 +4163,8 @@ class RiskManager:
                     try:
                         cache._bracket_attempt_count = _bracket_attempts + 1
                         await self._place_initial_broker_bracket(position, cache, channel_settings)
+                        if cache.broker_orders_placed:
+                            cache._bracket_placed_qty = int(position.quantity)
                     except Exception as e:
                         print(f"[RISK] ⚠️ Initial broker bracket failed attempt {_bracket_attempts + 1}/3 (non-blocking): {e}")
                 elif not _has_levels:
