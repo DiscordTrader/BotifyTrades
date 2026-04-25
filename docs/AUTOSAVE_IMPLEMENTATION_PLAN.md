@@ -1,6 +1,6 @@
 # BotifyTradesv2 Auto-Save & Recovery System - Implementation Plan
 
-> **Status:** IN PROGRESS  
+> **Status:** IN PROGRESS (Phase 1+2 COMPLETE, Phase 3-4 remaining)  
 > **Created:** 2026-04-25  
 > **Last Updated:** 2026-04-25  
 > **Branch:** fix/conditional-orders-defaults  
@@ -694,7 +694,7 @@ bash scripts/recover.sh status
 - [x] **2.2** Create `scripts/autosave.bat` (Windows wrapper) (2026-04-25)
 - [x] **2.3** Create `.git/hooks/pre-commit` (allowlist-based) (2026-04-25)
 - [x] **2.4** Configure `.claude/settings.json` hooks (2026-04-25)
-- [ ] **2.5** Create Windows Task Scheduler job
+- [x] **2.5** Create Windows Task Scheduler job (2026-04-25)
 - [x] **2.6** Create `scripts/recover.sh` recovery tool (2026-04-25)
 
 ### Phase 3 - Hardening (First Week)
