@@ -44,6 +44,16 @@ config.ini.local
 schwab_token.json
 token.json
 
+# Encryption keys, salts, device IDs, credentials
+.encryption_key
+src/.encryption_key
+.schwab_salt
+schwab_tokens.enc
+wizard_credentials.json
+did.bin
+src/did.bin
+cookies.txt
+
 # License Server - NEVER include in client builds or public repos
 license_server/
 admin_server.py
@@ -83,10 +93,46 @@ build/linux/build_temp_hardened/
 bot_data.db
 *.db
 
-# Runtime SOD snapshots (daily P&L baseline persistence)
+# SQLite WAL/journal files (change every second during trading)
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Database backups
+bot_data.db.*
+bot_data_corrupted.*
+
+# Runtime data (live bot state - changes constantly)
+.position_cache.json
+.position_cache.json.tmp
 sod_snapshots.json
+executed_trades.json
+.permanent_failures.json
 
 # Attached assets (may contain sensitive data)
 attached_assets/*.ini
 attached_assets/
 .git_backup/
+
+# Large data files (Discord channel extracts)
+extracted_*.json
+
+# Package archives and build artifacts
+*.tar.gz
+*.zip
+*.pkg
+*.pyz
+india_bot_package/
+india_trading_bot_package/
+
+# Build artifacts (compiled output)
+build/botifytrades/
+
+# Canvas/Replit assets
+.canvas/
+
+# Auto-save infrastructure (runtime only)
+.autosave_heartbeat
+.autosave_push.log
+.autosave.lock
+autosave_errors.log

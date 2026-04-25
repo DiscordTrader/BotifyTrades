@@ -114,8 +114,11 @@ print_success "BUILD_DATE = \"$BUILD_DATE\""
 
 # Step 3: Stage changes
 print_step 3 6 "Staging changes..."
-git add -A
-print_success "All changes staged"
+git add \
+    src/ gui_app/ scripts/ tests/ ui/ upgrade/ docs/ .github/ qa/ \
+    requirements.txt Makefile pytest.ini .gitignore CLAUDE.md README.md \
+    2>/dev/null
+print_success "Source files staged (safe directories only)"
 
 # Step 4: Commit
 print_step 4 6 "Committing..."

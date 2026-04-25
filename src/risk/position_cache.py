@@ -4,6 +4,7 @@ Position Cache Management
 Handles persistence and state management for monitored positions.
 """
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Dict, Optional, Any
@@ -315,9 +316,12 @@ class PositionCache:
     def save(self) -> bool:
         """Save cache to file. Returns True on success."""
         try:
-            data = {key: entry.to_dict() for key, entry in self._cache.items()}
-            with open(self.cache_file, 'w') as f:
+            with self._cache_lock:
+                data = {key: entry.to_dict() for key, entry in self._cache.items()}
+            tmp_path = str(self.cache_file) + '.tmp'
+            with open(tmp_path, 'w') as f:
                 json.dump(data, f, indent=2)
+            os.replace(tmp_path, str(self.cache_file))
             return True
         except Exception as e:
             print(f"[RISK] Warning: Could not save position cache: {e}")
