@@ -32,11 +32,24 @@ if [ -z "$branch" ] || [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
     exit 0
 fi
 
-# --- Mutex: use flock to prevent concurrent runs ---
-exec 200>"$LOCKFILE"
-if ! flock -n 200 2>/dev/null; then
-    exit 0
+# --- Mutex: prevent concurrent runs (mkdir is atomic on all platforms) ---
+MUTEX_DIR="$REPO_DIR/.git/autosave_mutex"
+if ! mkdir "$MUTEX_DIR" 2>/dev/null; then
+    # Another instance is running — check if it's stale (>120s old)
+    if [ -f "$MUTEX_DIR/pid" ]; then
+        mutex_age=$(( $(date +%s) - $(stat -c %Y "$MUTEX_DIR/pid" 2>/dev/null || echo 0) ))
+        if [ "$mutex_age" -gt 120 ]; then
+            rm -rf "$MUTEX_DIR"
+            mkdir "$MUTEX_DIR" 2>/dev/null || exit 0
+        else
+            exit 0
+        fi
+    else
+        exit 0
+    fi
 fi
+echo $$ > "$MUTEX_DIR/pid"
+trap 'rm -rf "$MUTEX_DIR"' EXIT
 
 # --- Debounce: skip if last auto-save was too recent ---
 if [ -f "$HEARTBEAT_FILE" ]; then
