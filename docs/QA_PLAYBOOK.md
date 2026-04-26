@@ -180,6 +180,7 @@ These fields are set via the Risk Management panel on the Execution page (Sectio
 - Risk Management: `risk_management_enabled`, `stop_loss_pct`, `profit_target_1-4_pct`, `profit_target_qty_1-4`, `profit_target_trim_pct_1-4`, `trailing_stop_pct`, `trailing_activation_pct`, `enable_early_trailing`, `early_trailing_activation_pct`, `early_trailing_step_pct`, `leave_runner_enabled`, `leave_runner_pct`, `exit_strategy_mode`, `enable_dynamic_sl`, `dynamic_sl_profile`, `escalation_only_mode`, `enable_giveback_guard`, `giveback_allowed_pct`, `ema_risk_enabled`, `ema_period`, `ema_timeframe_minutes`, `ema_buffer_pct`, `ema_exit_enabled`, `ema_escalation_enabled`, `ema_no_trend_candles`, `ema_use_underlying`, `ema_extended_hours`, `trim_limit_offset`, `trim_limit_offset_mode`, `trim_limit_offset_pct`, `order_chase_enabled`, `entry_chase_enabled`, `broker_bracket_mode`, `trade_summary_enabled`
 - Multi-broker: `enabled_brokers`, `use_global_risk_settings`, `channel_daily_loss_limit`, `channel_max_positions`, `circuit_breaker_enabled`
 - Telegram: `telegram_chat_id`, `telegram_chat_type`, `telegram_username`
+- Legacy/Additional: `category`, `broker_override`, `paper_trade_enabled`, `profit_target_pct`, `signal_update_automation_override`, `exit_strategy_mode_override`, `conditional_order_expiry`, `conditional_auto_execute`, `ticker_filter_mode`, `ticker_filter_list`
 
 ---
 
@@ -1480,7 +1481,7 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 
 **API Endpoints:**
 - [ ] `POST /api/system/backfill-fill-prices` — backfill
-- [ ] `POST /api/system/consistency-check` — consistency
+- [ ] `GET /api/system/consistency-check` — consistency
 - [ ] `GET /api/system/validate-channel/<id>` — validate channel
 - [ ] `POST /api/sync-positions` — sync positions
 - [ ] `GET /api/trade_monitor/synced_orders` — synced orders
@@ -1564,14 +1565,17 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 
 ### Table Count Check [GATE]
 
-**Expected: 74 tables across 4 databases** (as of v9.2.5)
+**Expected: 82+ tables across 4 databases** (as of v9.2.5)
 
 | Database | Tables | Purpose |
 |----------|--------|---------|
-| `bot_data.db` | ~54 | Main trading database |
+| `bot_data.db` | 72 | Main trading database |
 | `agent_data.db` | 6 | Agent Studio orchestration |
 | `india_bot.db` | 9 | India market trading |
 | `license_server.db` | 5 | License management |
+
+**Tables in bot_data.db not listed elsewhere (verify exist):**
+`notification_log`, `partial_exits`, `position_ledger`, `schwab_token_metadata`, `webhook_channels`, `webhook_closures`, `webhook_config`, `webhook_positions`, `broker_notifications`
 
 ```bash
 # Check all 4 databases
@@ -1640,8 +1644,9 @@ done
 ---
 
 **Last Updated**: 2026-04-26
-**Version**: 4.0.0
+**Version**: 4.1.0
 **Total Sections**: 35 main + 39 sub-sections
 **Total Test Cases**: 509 field-level checks
-**Total API Endpoint Checks**: 370
-**Total Database Tables**: 74 (across 4 databases)
+**Total API Endpoint Checks**: 367 (all verified against running app)
+**Total Database Tables**: 82+ (72 in bot_data.db, 6 agent, 9 india, 5 license)
+**Validation Script**: `scripts/validate_qa_playbook.py` — run to verify all routes
