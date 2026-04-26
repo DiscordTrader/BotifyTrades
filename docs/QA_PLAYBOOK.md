@@ -359,9 +359,62 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
+### 10. Verify Signals (`/verification`) [GATE]
+
+**Page:** `verification.html` | **Route:** `GET /verification`
+
+| # | Test | Status |
+|---|------|--------|
+| 10.1 | Page loads with broker selection | [ ] |
+| 10.2 | Channel verification (paper trading detection) | [ ] |
+| 10.3 | User verification (slippage detection) | [ ] |
+| 10.4 | Fill validation (signal vs broker fill) | [ ] |
+| 10.5 | Analysis period selection (7-60 days) | [ ] |
+| 10.6 | Verification report generation | [ ] |
+| 10.7 | Entity analysis drill-down | [ ] |
+| 10.8 | Verification stats (per channel, per user) | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/verification/broker-status` — broker verification status
+- [ ] `POST /api/verification/verify` — verify entity
+- [ ] `GET /api/verification/report/<entity_type>/<entity_id>` — report
+- [ ] `GET /api/verification/analyze/<entity_type>/<entity_id>` — analysis
+- [ ] `GET /api/verification/stats/<entity_type>/<entity_id>` — stats
+- [ ] `GET /api/verification/users` — users for verification
+- [ ] `GET /api/verification/channels` — channels for verification
+
+**Database Tables:** `signal_verifications`, `verification_stats`
+
+---
+
+### 11. Signal History (`/signals`, `/signals/us`, `/signals/canada`)
+
+**Page:** `signal_history.html` | **Routes:** `GET /signals`, `GET /signals/us`, `GET /signals/canada`
+
+| # | Test | Status |
+|---|------|--------|
+| 11.1 | All signals page loads | [ ] |
+| 11.2 | US signals filtered (USD market) | [ ] |
+| 11.3 | Canada signals filtered (CAD market) | [ ] |
+| 11.4 | Signal detail view | [ ] |
+| 11.5 | Signal statistics | [ ] |
+| 11.6 | Export signals | [ ] |
+| 11.7 | Filter by symbol, status, broker, date | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/signals` — all signals
+- [ ] `GET /api/signals/history` — signal history
+- [ ] `GET /api/signals/<id>` — signal detail
+- [ ] `GET /api/signals/statistics` — statistics
+- [ ] `GET /api/signals/export` — export
+
+**Database Tables:** `signals`, `signal_instances`, `signal_event_transitions`
+
+---
+
 ## ADMIN TAB
 
-### 10. System Health (`/health`) [GATE]
+### 12. System Health (`/health`) [GATE]
 
 **Page:** `health.html` | **Route:** `GET /health`
 
@@ -398,16 +451,20 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/qa/database-schema` — DB schema
 - [ ] `GET /api/qa/workflows` — QA workflows
 - [ ] `GET /api/qa/trading-pipeline` — trading pipeline
+- [ ] `POST /api/qa/pytest` — run pytest
+- [ ] `GET /api/qa/feature/<name>` — specific QA feature
+- [ ] `POST /api/qa/impact` — impact analysis
+- [ ] `POST /api/qa/tests/run` — run QA tests
 
 **Database Tables:** `error_logs`, `known_issues`, `debug_reports`, `service_registry`, `service_metrics`
 
 ---
 
-### 11. Settings (`/settings`) [GATE]
+### 13. Settings (`/settings`) [GATE]
 
 **Page:** `settings.html` | **Route:** `GET /settings`
 
-#### 11a. Trading Settings
+#### 13a. Trading Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -419,7 +476,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/settings/trading` — get trading settings
 - [ ] `POST /api/settings/trading` — save trading settings
 
-#### 11b. Global Risk Settings
+#### 13b. Global Risk Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -439,7 +496,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `POST /api/settings/global-risk` — save global risk
 - [ ] `PUT /api/settings/global-risk` — update global risk
 
-#### 11c. Conditional Order Settings
+#### 13c. Conditional Order Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -452,7 +509,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/settings/conditional_orders` — get settings
 - [ ] `POST /api/settings/conditional_orders` — save settings
 
-#### 11d. Slippage Settings
+#### 13d. Slippage Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -462,7 +519,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/settings/slippage` — get slippage
 - [ ] `POST /api/settings/slippage` — save slippage
 
-#### 11e. Discord Settings
+#### 13e. Discord Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -477,7 +534,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/settings/discord_notifications` — get notifications
 - [ ] `POST /api/settings/discord_notifications` — save notifications
 
-#### 11f. Telegram Settings
+#### 13f. Telegram Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -495,7 +552,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `POST /api/telegram/verify-2fa` — verify 2FA
 - [ ] Telegram channel CRUD (GET/POST/PUT/DELETE)
 
-#### 11g. Broker Credentials
+#### 13g. Broker Credentials
 
 | # | Test | Status |
 |---|------|--------|
@@ -514,13 +571,103 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `POST /api/brokers/connect/<id>` — connect
 - [ ] `POST /api/brokers/disconnect/<id>` — disconnect
 - [ ] `POST /api/brokers/reload` — reload
+- [ ] `GET /api/brokers/grouped` — brokers by country
+- [ ] `GET /api/brokers/<name>/profile` — broker profile
+- [ ] `POST /api/brokers/<name>/test` — test connection
+- [ ] `POST /api/brokers/<name>/reconnect` — reconnect
+- [ ] `GET /api/brokers/by-country/<code>` — brokers by country
+- [ ] `GET /api/brokers/extended-hours` — extended hours brokers
+- [ ] `GET /api/broker/available` — available brokers
 
-#### 11h. AI Analysis Settings
+**Schwab OAuth Flow (Blueprint):**
+
+| # | Test | Status |
+|---|------|--------|
+| 13.63 | Schwab auth URL generation | [ ] |
+| 13.64 | Schwab OAuth callback handling | [ ] |
+| 13.65 | Schwab OAuth status polling | [ ] |
+| 13.66 | Schwab token refresh | [ ] |
+| 13.67 | Schwab disconnect | [ ] |
+| 13.68 | Schwab manual code entry | [ ] |
+
+- [ ] `GET /schwab/auth-url` — get auth URL
+- [ ] `GET /schwab/callback` — OAuth callback
+- [ ] `GET /schwab/oauth-status` — poll completion
+- [ ] `POST /schwab/oauth-reset` — reset flow
+- [ ] `GET /schwab/status` — connection status
+- [ ] `POST /schwab/refresh` — token refresh
+- [ ] `POST /schwab/disconnect` — disconnect
+- [ ] `POST /schwab/manual-code` — manual code entry
+
+**Google OAuth Flow (Blueprint):**
+
+- [ ] `GET /google_login` — initiate Google OAuth
+- [ ] `GET /google_login/callback` — Google callback
+
+**Webull Multi-Step Auth:**
+
+| # | Test | Status |
+|---|------|--------|
+| 13.69 | Webull email/password login | [ ] |
+| 13.70 | Webull MFA request | [ ] |
+| 13.71 | Webull security question | [ ] |
+| 13.72 | Webull session login | [ ] |
+
+- [ ] `POST /api/webull/auth/login` — login
+- [ ] `POST /api/webull/auth/request-mfa` — MFA
+- [ ] `POST /api/webull/auth/security-question` — security question
+- [ ] `POST /api/webull/auth/session-login` — session login
+
+#### 13h. AI Analysis Settings
 
 - [ ] `GET /api/settings/ai_analysis` — get AI settings
 - [ ] `POST /api/settings/ai_analysis` — save AI settings
 
-#### 11i. Webhook Settings
+#### 13i. Signal Conversion Settings
+
+| # | Test | Status |
+|---|------|--------|
+| 13.54 | Signal conversion enable/disable | [ ] |
+| 13.55 | Conversion channel configuration | [ ] |
+
+- [ ] `GET /api/settings/signal_conversion` — get signal conversion
+- [ ] `POST /api/settings/signal_conversion` — save signal conversion
+
+#### 13j. Trade Monitor Settings
+
+| # | Test | Status |
+|---|------|--------|
+| 13.56 | Trade monitor enable/disable | [ ] |
+| 13.57 | Poll interval setting | [ ] |
+| 13.58 | Include stocks/options toggles | [ ] |
+| 13.59 | BTO/STC posting toggles | [ ] |
+
+- [ ] `GET /api/settings/trade_monitor` — get trade monitor
+- [ ] `POST /api/settings/trade_monitor` — save trade monitor
+
+#### 13k. Risk Management Settings
+
+- [ ] `GET /api/settings/risk_management` — get risk management
+- [ ] `POST /api/settings/risk_management` — save risk management
+
+#### 13l. Sizing Settings
+
+| # | Test | Status |
+|---|------|--------|
+| 13.60 | Position sizing mode configuration | [ ] |
+| 13.61 | User sizing overrides | [ ] |
+| 13.62 | Analyst portfolio assignment | [ ] |
+
+- [ ] `GET /api/sizing-settings` — get sizing
+- [ ] `POST /api/sizing-settings` — save sizing
+- [ ] `POST /api/analyst-portfolio` — set analyst portfolio
+
+#### 13m. Debug Settings
+
+- [ ] `GET /api/settings/debug` — get debug settings
+- [ ] `POST /api/settings/debug` — update debug settings
+
+#### 13n. Webhook Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -534,13 +681,15 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `POST /api/webhook/test`
 - [ ] Webhook channel CRUD (GET/POST/PUT/DELETE)
 - [ ] `POST /api/webhook/post_bto` / `POST /api/webhook/post_stc`
+- [ ] `GET /api/webhook/positions` — webhook positions
+- [ ] `POST /api/webhook/find_position` — find position
 
-#### 11j. Background Services
+#### 13o. Background Services
 
 - [ ] `GET /api/settings/background_services` — get services
 - [ ] `POST /api/settings/background_services` — save services
 
-#### 11k. Notification Settings
+#### 13p. Notification Settings
 
 | # | Test | Status |
 |---|------|--------|
@@ -553,11 +702,11 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/notifications/settings` + `POST`
 - [ ] `POST /api/notifications/test`
 
-**Database Tables:** `settings`, `trading_settings`, `slippage_settings`, `ai_settings`, `discord_settings`, `telegram_settings`, `global_risk_settings`, `trade_monitor_settings`, `email_config`, `webhook_config`, `webhook_channels`, `broker_credentials`, `service_registry`, `broker_limits`
+**Database Tables:** `settings`, `trading_settings`, `slippage_settings`, `ai_settings`, `discord_settings`, `telegram_settings`, `global_risk_settings`, `risk_management_settings`, `trade_monitor_settings`, `email_config`, `config` (encrypted credentials), `broker_credentials`, `broker_profiles`, `broker_sync_state`, `service_registry`, `broker_limits`, `user_sizing_settings`, `analyst_portfolios`
 
 ---
 
-### 12. License (`/license`) [GATE]
+### 14. License (`/license`) [GATE]
 
 **Page:** `license.html` | **Route:** `GET /license`
 
@@ -585,7 +734,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
-### 13. Docs (`/architecture`)
+### 15. Docs (`/architecture`)
 
 **Page:** `architecture.html` | **Route:** `GET /architecture`
 
@@ -596,7 +745,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
-### 14. Help Center (`/help`)
+### 16. Help Center (`/help`)
 
 **Page:** `help.html` | **Route:** `GET /help`
 
@@ -613,12 +762,14 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/chat/suggestions` — suggestions
 - [ ] `GET /api/chat/topics` — topics
 - [ ] `GET /api/chat/status` — status
+- [ ] `POST /api/chat/errors/seen` — mark errors seen
+- [ ] `GET /api/chat/logs` — chat logs
 
 ---
 
 ## CROSS-CUTTING FEATURES
 
-### 15. Signal Processing [GATE]
+### 17. Signal Processing [GATE]
 
 | # | Test | Status |
 |---|------|--------|
@@ -649,7 +800,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
-### 16. Multi-Broker Routing [GATE]
+### 18. Multi-Broker Routing [GATE]
 
 | # | Test | Status |
 |---|------|--------|
@@ -674,7 +825,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
-### 17. Risk Management [GATE]
+### 19. Risk Management [GATE]
 
 | # | Test | Status |
 |---|------|--------|
@@ -702,7 +853,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
-### 18. Conditional Orders [GATE]
+### 20. Conditional Orders [GATE]
 
 | # | Test | Status |
 |---|------|--------|
@@ -724,12 +875,13 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `POST /api/conditional_orders/purge` — purge
 - [ ] `GET /api/conditional_orders/status` — status
 - [ ] `GET /api/conditional_orders/live_prices` — live prices
+- [ ] `POST /api/conditional_orders/<id>/offset` — offset order price
 
 **Database Tables:** `conditional_orders`, `conditional_order_audit`
 
 ---
 
-### 19. Signal Routing (Admin) [GATE]
+### 21. Signal Routing (Admin) [GATE]
 
 **Page:** `signal_routing.html` | **Route:** `GET /admin/signal-routing`
 
@@ -755,7 +907,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
-### 20. Authentication & User Management
+### 22. Authentication & User Management
 
 | # | Test | Status |
 |---|------|--------|
@@ -776,7 +928,7 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ---
 
-### 21. Upgrade & Version Management
+### 23. Upgrade & Version Management
 
 | # | Test | Status |
 |---|------|--------|
@@ -797,10 +949,12 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `POST /api/upgrade/backup/restore` — restore
 - [ ] `POST /api/upgrade/run` — run upgrade
 - [ ] `GET /api/upgrade/history` — history
+- [ ] `POST /api/upgrade/skip` — skip upgrade
+- [ ] `POST /api/upgrade/remind-later` — remind later
 
 ---
 
-### 22. Error Tracking & Debug
+### 24. Error Tracking & Debug
 
 | # | Test | Status |
 |---|------|--------|
@@ -816,12 +970,13 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `GET /api/errors/frequent` — frequent errors
 - [ ] `POST /api/errors/<id>/resolve` — resolve
 - [ ] `GET /api/errors/known-issues` — known issues
+- [ ] `POST /api/errors/log` — log error
 - [ ] `POST /api/debug-report/submit` — submit report
 - [ ] `GET /api/debug-report/history` — report history
 
 ---
 
-### 23. Services & Rate Limiting
+### 25. Services & Rate Limiting
 
 | # | Test | Status |
 |---|------|--------|
@@ -836,24 +991,256 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 - [ ] `PUT /api/services/<id>` — update
 - [ ] `POST /api/services/<id>/toggle` — toggle
 - [ ] `GET /api/broker-limits` — rate limits
+- [ ] `GET /api/services/status` — services status
 - [ ] `GET /api/order-events` — order events
+- [ ] `POST /api/order-events/clear` — clear events
 - [ ] `GET /api/order-events/stats` — event stats
 
 **Database Tables:** `service_registry`, `service_metrics`, `broker_limits`, `order_events`
 
 ---
 
-### 24. India Market Features
+### 26. India Market Features
 
 | # | Test | Status |
 |---|------|--------|
-| 24.1 | Upstox broker connection | [ ] |
-| 24.2 | Upstox funds/positions/orders | [ ] |
-| 24.3 | Upstox AMO queue | [ ] |
-| 24.4 | NSE/BSE market channels | [ ] |
-| 24.5 | Lot size handling | [ ] |
+| 26.1 | Upstox broker connection | [ ] |
+| 26.2 | Upstox funds display | [ ] |
+| 26.3 | Upstox positions display | [ ] |
+| 26.4 | Upstox orders display | [ ] |
+| 26.5 | Upstox trades display | [ ] |
+| 26.6 | Upstox execution timing | [ ] |
+| 26.7 | Upstox holdings | [ ] |
+| 26.8 | Upstox account info | [ ] |
+| 26.9 | Upstox order cancellation | [ ] |
+| 26.10 | Upstox AMO queue enable/disable | [ ] |
+| 26.11 | Upstox pending orders CRUD | [ ] |
+| 26.12 | NSE/BSE market channels | [ ] |
+| 26.13 | Lot size handling for India F&O | [ ] |
+| 26.14 | India bot dashboard (`india_bot/`) | [ ] |
+| 26.15 | India bot channels page | [ ] |
+| 26.16 | India signals processing | [ ] |
+| 26.17 | India conditional orders | [ ] |
+| 26.18 | Zerodha broker integration | [ ] |
+| 26.19 | DhanQ broker integration | [ ] |
 
-**Database Tables:** `upstox_pending_orders`, `countries`, `broker_profiles`
+**API Endpoints (main app):**
+- [ ] `GET /api/brokers/upstox/funds` — Upstox funds
+- [ ] `GET /api/brokers/upstox/positions` — positions
+- [ ] `GET /api/brokers/upstox/orders` — orders
+- [ ] `GET /api/brokers/upstox/trades` — trades
+- [ ] `GET /api/brokers/upstox/execution-timing` — timing
+- [ ] `GET /api/brokers/upstox/holdings` — holdings
+- [ ] `GET /api/brokers/upstox/account` — account
+- [ ] `POST /api/brokers/upstox/cancel-order` — cancel
+- [ ] `GET /api/upstox/pending-orders` — pending orders
+- [ ] `DELETE /api/upstox/pending-orders/<id>` — delete pending
+- [ ] `GET /api/upstox/amo-queue-enabled` — AMO status
+- [ ] `POST /api/upstox/amo-queue-enabled` — set AMO
+
+**India Bot API Endpoints (`india_bot/gui_app/`):**
+- [ ] `GET /api/health` — India bot health
+- [ ] `GET /api/channels` — India channels
+- [ ] `GET /api/channels/<chat_id>` — channel settings
+- [ ] `GET /api/conditional-orders` — India conditional orders
+- [ ] `GET /api/broker/status` — India broker status
+- [ ] `GET /api/broker/<name>/credentials` — broker credentials
+- [ ] `POST /api/broker/<name>/credentials` — save credentials
+- [ ] `GET /api/upstox/orders` — Upstox orders
+- [ ] `GET /api/upstox/positions` — Upstox positions
+- [ ] `GET /api/signals` — India signals
+- [ ] `GET /api/pending-orders` — pending orders
+
+**Database Tables (bot_data.db):** `upstox_pending_orders`, `countries`, `broker_profiles`
+
+**Database Tables (india_bot.db — 9 tables):** `settings`, `broker_credentials`, `telegram_channels`, `india_signals`, `india_conditional_orders`, `india_positions`, `upstox_pending_orders`, `zerodha_pending_orders`, `dhanq_pending_orders`
+
+---
+
+### 27. Real-Time Streaming
+
+| # | Test | Status |
+|---|------|--------|
+| 27.1 | Live snapshot stream connects | [ ] |
+| 27.2 | Force snapshot refresh | [ ] |
+| 27.3 | Streaming stock quotes | [ ] |
+| 27.4 | Individual stock quote stream | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/snapshot/stream` — SSE live snapshots
+- [ ] `POST /api/snapshot/force-refresh` — force refresh
+- [ ] `GET /api/streaming/quotes` — streaming quotes
+- [ ] `GET /api/streaming/stock-quote` — individual stock quote
+
+---
+
+### 28. Discord Signal Sending
+
+| # | Test | Status |
+|---|------|--------|
+| 28.1 | Send signal to single Discord channel | [ ] |
+| 28.2 | Send signal to multiple channels | [ ] |
+| 28.3 | Get available send channels | [ ] |
+
+**API Endpoints:**
+- [ ] `POST /api/discord/send-signal` — send signal
+- [ ] `POST /api/discord/send-signal-multi` — send to multiple
+- [ ] `GET /api/discord/send-channels` — available channels
+
+---
+
+### 29. Channel Messages Management
+
+| # | Test | Status |
+|---|------|--------|
+| 29.1 | Message settings load/save | [ ] |
+| 29.2 | Message purge (retention cleanup) | [ ] |
+| 29.3 | Channel messages display | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/channel-messages/settings` — get settings
+- [ ] `POST /api/channel-messages/settings` — save settings
+- [ ] `POST /api/channel-messages/purge` — purge messages
+- [ ] `GET /api/channel-messages` — list messages
+
+**Database Tables:** `channel_messages`
+
+---
+
+### 30. Notifications (Runtime)
+
+| # | Test | Status |
+|---|------|--------|
+| 30.1 | Notifications display | [ ] |
+| 30.2 | Clear notifications | [ ] |
+| 30.3 | Broker notifications | [ ] |
+| 30.4 | Mark notifications as read | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/notifications` — list notifications
+- [ ] `POST /api/notifications/clear` — clear all
+- [ ] `GET /api/brokers/notifications` — broker notifications
+- [ ] `POST /api/brokers/notifications/mark-read` — mark read
+
+---
+
+### 31. Risk Status & Diagnostics
+
+| # | Test | Status |
+|---|------|--------|
+| 31.1 | Risk status overview | [ ] |
+| 31.2 | Unprotected trades detection | [ ] |
+| 31.3 | Risk debug keys | [ ] |
+| 31.4 | System diagnostics | [ ] |
+| 31.5 | Diagnostics by category | [ ] |
+| 31.6 | Daily P&L status | [ ] |
+| 31.7 | Daily P&L unlock | [ ] |
+| 31.8 | UPH status | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/risk-status` — risk status
+- [ ] `GET /api/unprotected-trades` — unprotected trades
+- [ ] `GET /api/debug-risk-keys` — debug risk keys
+- [ ] `GET /api/diagnostics` — diagnostics
+- [ ] `GET /api/diagnostics/category/<category>` — by category
+- [ ] `GET /api/daily-pnl-status` — daily P&L status
+- [ ] `POST /api/daily-pnl-unlock` — unlock daily P&L
+- [ ] `GET /api/uph/status` — UPH status
+
+**Database Tables:** `risk_events`, `daily_pnl_state`
+
+---
+
+### 32. System Utilities
+
+| # | Test | Status |
+|---|------|--------|
+| 32.1 | Backfill fill prices | [ ] |
+| 32.2 | Consistency check | [ ] |
+| 32.3 | Validate channel configuration | [ ] |
+| 32.4 | Position sync across brokers | [ ] |
+| 32.5 | Trade monitor synced orders | [ ] |
+| 32.6 | Wizard launch/status | [ ] |
+
+**API Endpoints:**
+- [ ] `POST /api/system/backfill-fill-prices` — backfill
+- [ ] `POST /api/system/consistency-check` — consistency
+- [ ] `GET /api/system/validate-channel/<id>` — validate channel
+- [ ] `POST /api/sync-positions` — sync positions
+- [ ] `GET /api/trade_monitor/synced_orders` — synced orders
+- [ ] `POST /api/wizard/launch` — launch wizard
+- [ ] `GET /api/wizard/status` — wizard status
+
+---
+
+### 33. Admin Panel (Separate Application)
+
+**App:** `admin_panel/app.py` | **Port:** separate from main app
+
+| # | Test | Status |
+|---|------|--------|
+| 33.1 | Admin login page loads | [ ] |
+| 33.2 | Admin authentication works | [ ] |
+| 33.3 | Admin dashboard loads | [ ] |
+| 33.4 | License management CRUD | [ ] |
+| 33.5 | Device activation tracking | [ ] |
+| 33.6 | Audit log display | [ ] |
+| 33.7 | Admin forgot/reset password | [ ] |
+| 33.8 | Admin settings | [ ] |
+
+**Routes:**
+- [ ] `GET /` — admin home
+- [ ] `GET, POST /login` — admin login
+- [ ] `GET /logout` — admin logout
+- [ ] `GET, POST /forgot-password` — forgot password
+- [ ] `GET, POST /reset-password/<token>` — reset password
+
+**Database Tables (license_server.db — 5 tables):** `licenses`, `device_activations`, `admin_users`, `password_reset_tokens`, `audit_log`
+
+---
+
+### 34. Broker Analytics & Positions
+
+| # | Test | Status |
+|---|------|--------|
+| 34.1 | Broker analytics page loads | [ ] |
+| 34.2 | Broker-specific position display | [ ] |
+| 34.3 | Position close per broker | [ ] |
+| 34.4 | Order cancellation per broker | [ ] |
+| 34.5 | Bot trades view | [ ] |
+| 34.6 | Broker accounts listing | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/broker/analytics/<broker_id>` — analytics
+- [ ] `GET /api/broker/positions/<broker_id>` — positions
+- [ ] `GET /api/broker/available` — available brokers
+- [ ] `GET /api/brokers/all_accounts` — all accounts
+- [ ] `GET /api/bot-trades` — bot trades
+- [ ] `POST /api/schwab/positions/<symbol>/close` — close Schwab position
+- [ ] `POST /api/robinhood/positions/<symbol>/close` — close Robinhood position
+- [ ] `POST /api/ibkr/positions/<symbol>/close` — close IBKR position
+- [ ] `POST /api/tastytrade/positions/<symbol>/close` — close Tastytrade position
+- [ ] `POST /api/alpaca/positions/<symbol>/close` — close Alpaca position
+- [ ] `POST /api/robinhood/orders/<id>/cancel` — cancel Robinhood order
+- [ ] `POST /api/alpaca/orders/<id>/cancel` — cancel Alpaca order
+- [ ] `POST /api/orders/<broker>/<id>/cancel` — generic cancel
+
+---
+
+### 35. Channel Mappings
+
+| # | Test | Status |
+|---|------|--------|
+| 35.1 | Channel mapping CRUD | [ ] |
+| 35.2 | Source to destination mapping | [ ] |
+
+**API Endpoints:**
+- [ ] `GET /api/channel_mappings` — list
+- [ ] `POST /api/channel_mappings` — create
+- [ ] `PUT /api/channel_mappings/<id>` — update
+- [ ] `DELETE /api/channel_mappings/<id>` — delete
+
+**Database Tables:** `channel_mappings`, `conversion_channels`
 
 ---
 
@@ -861,18 +1248,31 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 ### Table Count Check [GATE]
 
-**Expected: 68 tables** (as of v9.2.5)
+**Expected: 74 tables across 4 databases** (as of v9.2.5)
+
+| Database | Tables | Purpose |
+|----------|--------|---------|
+| `bot_data.db` | ~54 | Main trading database |
+| `agent_data.db` | 6 | Agent Studio orchestration |
+| `india_bot.db` | 9 | India market trading |
+| `license_server.db` | 5 | License management |
 
 ```bash
-python3 -c "
-import sqlite3
-conn = sqlite3.connect('bot_data.db')
+# Check all 4 databases
+for db in bot_data.db agent_data.db india_bot/gui_app/india_bot.db license_server.db; do
+  echo "=== $db ==="
+  python3 -c "
+import sqlite3, os
+if not os.path.exists('$db'):
+    print('  NOT FOUND'); exit()
+conn = sqlite3.connect('$db')
 tables = conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()
-print(f'Tables: {len(tables)}')
+print(f'  Tables: {len(tables)}')
 for t in sorted(tables):
-    print(f'  {t[0]}')
+    print(f'    {t[0]}')
 conn.close()
 "
+done
 ```
 
 ### Migration Integrity [GATE]
@@ -924,7 +1324,8 @@ conn.close()
 ---
 
 **Last Updated**: 2026-04-26
-**Version**: 2.0.0
-**Total Test Cases**: 200+
-**Total API Endpoints Covered**: 400+
-**Total Database Tables**: 68
+**Version**: 3.0.0
+**Total Sections**: 35
+**Total Test Cases**: 300+
+**Total API Endpoints Covered**: 447+
+**Total Database Tables**: 74 (across 4 databases)
