@@ -28,15 +28,21 @@ class VersionManager:
         except Exception as e:
             return {"success": False, "stdout": "", "stderr": str(e)}
 
+    BASELINE_VERSION = "9.2.5"
+
     # ── SemVer ──
 
     def get_latest_version(self) -> str:
+        baseline = self.parse_version(self.BASELINE_VERSION)
         result = self._run_git(["git", "tag", "--sort=-v:refname", "-l", "v*"])
         if result["success"] and result["stdout"]:
-            first_tag = result["stdout"].split("\n")[0].strip()
-            if re.match(r'^v?\d+\.\d+\.\d+', first_tag):
-                return first_tag.lstrip("v")
-        return "0.0.0"
+            for line in result["stdout"].split("\n"):
+                tag = line.strip().lstrip("v")
+                if re.match(r'^\d+\.\d+\.\d+$', tag):
+                    parsed = self.parse_version(tag)
+                    if parsed >= baseline:
+                        return tag
+        return self.BASELINE_VERSION
 
     def parse_version(self, version: str) -> Tuple[int, int, int]:
         match = re.match(r'(\d+)\.(\d+)\.(\d+)', version)
