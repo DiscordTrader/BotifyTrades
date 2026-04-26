@@ -6360,7 +6360,7 @@ def get_signal_execution_summary(channel_id: str = None, user: str = None, days:
             sl.expiry,
             sl.call_put,
             COALESCE(sl.original_qty, 0) as signal_qty,
-            sl.signal_price,
+            sl.open_price as signal_price,
             sl.author_name,
             sl.channel_id,
             c.name as channel_name,

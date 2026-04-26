@@ -2898,6 +2898,7 @@ class SchwabBroker(BrokerInterface):
             }
             instruction = instruction_map.get(side.lower(), 'SELL')
             session = self._get_session_type()
+            stop_session = "NORMAL" if session == "SEAMLESS" else session
 
             if asset_type.upper() == 'OPTION':
                 is_sell = instruction in ('SELL', 'SELL_TO_CLOSE')
@@ -2929,7 +2930,7 @@ class SchwabBroker(BrokerInterface):
                 stop_leg = {
                     "orderStrategyType": "SINGLE",
                     "orderType": "STOP_LIMIT",
-                    "session": session,
+                    "session": stop_session,
                     "duration": "GOOD_TILL_CANCEL",
                     "stopPrice": self._format_price(stop_loss_price),
                     "price": self._format_price(stop_limit_price),
@@ -2946,7 +2947,7 @@ class SchwabBroker(BrokerInterface):
                 stop_leg = {
                     "orderStrategyType": "SINGLE",
                     "orderType": "STOP",
-                    "session": session,
+                    "session": stop_session,
                     "duration": "GOOD_TILL_CANCEL",
                     "stopPrice": self._format_price(stop_loss_price),
                     "orderLegCollection": [{
