@@ -75,75 +75,119 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 **Page:** `channels.html` | **Route:** `GET /channels`
 
+#### Quick Add Form
+
 | # | Test | Status |
 |---|------|--------|
 | 2.1 | Page loads, all channels listed | [ ] |
-| 2.2 | Add new channel (Discord ID, name, category) | [ ] |
-| 2.3 | Edit channel settings | [ ] |
-| 2.4 | Delete channel | [ ] |
-| 2.5 | Reset channel | [ ] |
-| 2.6 | Toggle execute/track enabled | [ ] |
-| 2.7 | Paper trade toggle per channel | [ ] |
-| 2.8 | Broker override selection | [ ] |
-| 2.9 | Market filter (USA/Canada/India) | [ ] |
-| 2.10 | Category filter | [ ] |
-| 2.11 | Channel allowed users CRUD | [ ] |
-| 2.12 | Recent messages scan | [ ] |
-| 2.13 | Canada-specific channels (`/channels/canada`) | [ ] |
+| 2.2 | Add channel with Discord Channel ID | [ ] |
+| 2.3 | Channel name field | [ ] |
+| 2.4 | Market/Country dropdown (US / CA / IN) | [ ] |
+| 2.5 | Execute Trades toggle on create | [ ] |
+| 2.6 | Track Signals toggle on create | [ ] |
+| 2.7 | Edit channel settings | [ ] |
+| 2.8 | Delete channel | [ ] |
+| 2.9 | Reset channel | [ ] |
+| 2.10 | Market filter (USA/Canada/India) | [ ] |
+| 2.11 | Category filter | [ ] |
+| 2.12 | Channel allowed users CRUD | [ ] |
+| 2.13 | Recent messages scan | [ ] |
+| 2.14 | Canada-specific channels (`/channels/canada`) | [ ] |
+| 2.15 | Multi-broker selection (`enabled_brokers` JSON) | [ ] |
+| 2.16 | Platform type (discord/telegram) | [ ] |
 
-**Risk Settings per Channel (see RISK_SETTINGS_VALIDATION_REFERENCE.md for full 42-field wiring):**
+#### Tab 1: Sizing
 
 | # | Test | Status |
 |---|------|--------|
-| 2.14 | Risk management enable/disable | [ ] |
-| 2.15 | Stop loss % saves and loads | [ ] |
-| 2.16 | 4-tier profit targets (PT1-PT4 %) | [ ] |
-| 2.17 | Profit target quantities (qty 1-4) | [ ] |
-| 2.18 | Profit target trim percentages (trim 1-4) | [ ] |
-| 2.19 | Trailing stop % and activation % | [ ] |
-| 2.20 | Early trailing (enable, activation %, step %) | [ ] |
-| 2.21 | Leave runner (enable, %) | [ ] |
-| 2.22 | Exit strategy mode (signal/risk/hybrid) | [ ] |
-| 2.23 | Dynamic SL (enable, profile: conservative/standard/aggressive) | [ ] |
-| 2.24 | Giveback guard (enable, allowed %) | [ ] |
-| 2.25 | Escalation only mode | [ ] |
-| 2.26 | Trim order mode (market/limit) + offset | [ ] |
-| 2.27 | SL order mode (market/limit) + offset | [ ] |
-| 2.28 | Broker bracket mode (both/sl_only/pt_only/none) | [ ] |
-| 2.29 | EMA risk settings (all 9 fields) | [ ] |
-| 2.30 | Use global risk settings toggle | [ ] |
-| 2.31 | Signal update automation | [ ] |
-| 2.32 | Sizing mode (mirror/fixed_dollar/fixed_contracts) | [ ] |
-| 2.33 | Conditional order settings (enable, trigger offset, expiry, timeout) | [ ] |
-| 2.34 | Slippage protection (enable, max %) | [ ] |
-| 2.35 | Limit cap (enable, %) | [ ] |
-| 2.36 | NDX→QQQ conversion (enable, delta) | [ ] |
-| 2.37 | Ticker filter (mode, list) | [ ] |
-| 2.38 | Entry order mode | [ ] |
-| 2.39 | Order chase / entry chase enable | [ ] |
-| 2.40 | Trade summary enabled per channel | [ ] |
-| 2.41 | Channel daily loss limit, max positions | [ ] |
-| 2.42 | Cache invalidation fires on risk field save | [ ] |
+| 2.17 | Execute Trades toggle (`execute_enabled`) | [ ] |
+| 2.18 | Position Size % (`position_size_pct`, range 0.1-100) | [ ] |
+| 2.19 | Default Qty (`default_quantity`, range 1-1000) | [ ] |
+| 2.20 | Force My Size % toggle (`ignore_signal_position_size`) | [ ] |
+| 2.21 | Balance Mode dropdown (`sizing_mode`: live / pre_market / start_of_day) | [ ] |
+| 2.22 | Track Signals toggle (`track_enabled`) | [ ] |
+| 2.23 | Tracking Position Size % (`tracking_position_size_pct`) | [ ] |
+| 2.24 | Tracking Default Qty (`tracking_default_quantity`) | [ ] |
+| 2.25 | Max Position $ (`channel_max_position_size`, range 100-100000) | [ ] |
+
+#### Tab 2: Risk Controls
+
+| # | Test | Status |
+|---|------|--------|
+| 2.26 | Signal Update Automation toggle (`signal_update_automation`) | [ ] |
+| 2.27 | Slippage Protection enable (`slippage_protection_enabled`) | [ ] |
+| 2.28 | Slippage Max % (`slippage_max_pct`, range 1-500) | [ ] |
+| 2.29 | Slippage Wait minutes (`slippage_wait_minutes`, range 1-120) | [ ] |
+| 2.30 | Limit Cap enable (`limit_cap_enabled`) | [ ] |
+| 2.31 | Limit Cap % (`limit_cap_pct`, range 0.1-50, default 5) | [ ] |
+| 2.32 | NDX→QQQ Conversion enable (`ndx_to_qqq_enabled`) | [ ] |
+| 2.33 | NDX→QQQ Target Delta (`ndx_to_qqq_delta`, range 0.1-1.0, default 0.3) | [ ] |
+
+#### Tab 3: Order Types
+
+| # | Test | Status |
+|---|------|--------|
+| 2.34 | Entry Order Type dropdown (`entry_order_mode`: limit / market) | [ ] |
+| 2.35 | Trim Order Type dropdown (`trim_order_mode`: market / limit) | [ ] |
+| 2.36 | Stop Loss Order Type dropdown (`sl_order_mode`: limit / market) | [ ] |
+
+#### Tab 4: Conditional
+
+| # | Test | Status |
+|---|------|--------|
+| 2.37 | Conditional Orders enable (`conditional_order_enabled`) | [ ] |
+| 2.38 | Order Timeout - all orders (`order_timeout_minutes`, range 1-1440) | [ ] |
+| 2.39 | Conditional Timeout (`conditional_order_timeout_minutes`, range 1-1440) | [ ] |
+| 2.40 | Entry Confirmation Buffer % (`entry_confirmation_pct`, range 0-50) | [ ] |
+| 2.41 | Breakout Reset Guard toggle (`breakout_reset_enabled`, default 1) | [ ] |
+| 2.42 | Trigger Offset Mode dropdown (`trigger_offset_mode`: percent / dollar) | [ ] |
+| 2.43 | Trigger Offset Value (`trigger_offset_percent` / `trigger_offset_value`, range -100 to 100) | [ ] |
+
+#### Risk Settings per Channel (see RISK_SETTINGS_VALIDATION_REFERENCE.md for full 42-field wiring)
+
+These fields are set via the Risk Management panel on the Execution page (Section 3):
+
+| # | Test | Status |
+|---|------|--------|
+| 2.44 | Risk management enable/disable (`risk_management_enabled`) | [ ] |
+| 2.45 | Use global risk settings toggle (`use_global_risk_settings`) | [ ] |
+| 2.46 | Channel daily loss limit (`channel_daily_loss_limit`) | [ ] |
+| 2.47 | Channel max positions (`channel_max_positions`) | [ ] |
+| 2.48 | Circuit breaker per channel (`circuit_breaker_enabled`) | [ ] |
+| 2.49 | Cache invalidation fires on risk field save | [ ] |
 
 **API Endpoints:**
 - [ ] `GET /api/channels` — list (with market/category filters)
 - [ ] `POST /api/channels` — create
-- [ ] `PUT /api/channels/<id>` — update
+- [ ] `PUT /api/channels/<id>` — update (all tab fields)
 - [ ] `DELETE /api/channels/<id>` — delete
 - [ ] `POST /api/channels/<id>/reset` — reset
 - [ ] `GET /api/channels/<id>/allowed_users` — list users
 - [ ] `POST /api/channels/<id>/allowed_users` — add user
 - [ ] `DELETE /api/channels/<id>/allowed_users/<uid>` — remove user
+- [ ] `GET /api/channels/<id>/users` — get users in channel
 - [ ] `GET /api/channels/<id>/recent-messages` — scan messages
 - [ ] `POST /api/channels/<id>/scan` — scan for signals
 
-**Database Tables:** `channels` (60+ columns), `channel_allowed_users`, `channel_messages`
+**Database Tables:** `channels` (70+ columns), `channel_allowed_users`, `channel_messages`
+
+**Database Columns (channels table):**
+- Core: `id`, `discord_channel_id`, `name`, `market`, `platform`, `is_active`, `created_at`, `updated_at`
+- Sizing: `execute_enabled`, `track_enabled`, `position_size_pct`, `default_quantity`, `tracking_position_size_pct`, `tracking_default_quantity`, `channel_max_position_size`, `sizing_mode`, `ignore_signal_position_size`
+- Risk Controls: `signal_update_automation`, `slippage_protection_enabled`, `slippage_max_pct`, `slippage_wait_minutes`, `limit_cap_enabled`, `limit_cap_pct`, `ndx_to_qqq_enabled`, `ndx_to_qqq_delta`
+- Order Types: `entry_order_mode`, `trim_order_mode`, `sl_order_mode`, `sl_limit_offset`
+- Conditional: `conditional_order_enabled`, `order_timeout_minutes`, `conditional_order_timeout_minutes`, `entry_confirmation_pct`, `breakout_reset_enabled`, `trigger_offset_mode`, `trigger_offset_percent`, `trigger_offset_value`
+- Risk Management: `risk_management_enabled`, `stop_loss_pct`, `profit_target_1-4_pct`, `profit_target_qty_1-4`, `profit_target_trim_pct_1-4`, `trailing_stop_pct`, `trailing_activation_pct`, `enable_early_trailing`, `early_trailing_activation_pct`, `early_trailing_step_pct`, `leave_runner_enabled`, `leave_runner_pct`, `exit_strategy_mode`, `enable_dynamic_sl`, `dynamic_sl_profile`, `escalation_only_mode`, `enable_giveback_guard`, `giveback_allowed_pct`, `ema_risk_enabled`, `ema_period`, `ema_timeframe_minutes`, `ema_buffer_pct`, `ema_exit_enabled`, `ema_escalation_enabled`, `ema_no_trend_candles`, `ema_use_underlying`, `ema_extended_hours`, `trim_limit_offset`, `trim_limit_offset_mode`, `trim_limit_offset_pct`, `order_chase_enabled`, `entry_chase_enabled`, `broker_bracket_mode`, `trade_summary_enabled`
+- Multi-broker: `enabled_brokers`, `use_global_risk_settings`, `channel_daily_loss_limit`, `channel_max_positions`, `circuit_breaker_enabled`
+- Telegram: `telegram_chat_id`, `telegram_chat_type`, `telegram_username`
 
 ---
 
 ### 3. Execution (`/execution`) [GATE]
 
 **Page:** `execution.html` | **Route:** `GET /execution`
+
+#### Execution Data
 
 | # | Test | Status |
 |---|------|--------|
@@ -158,14 +202,89 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 | 3.9 | Signal summary view | [ ] |
 | 3.10 | Signal lot → execution lots drill-down | [ ] |
 
+#### Per-Channel Risk Management Panel (🛡️ button)
+
+The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets.
+
+**Quick Presets:**
+
+| # | Test | Status |
+|---|------|--------|
+| 3.11 | Default preset (PT1:10%, SL:10%, Trail:3%, TrailAct:11%) | [ ] |
+| 3.12 | Swing preset (PT1-4:15/30/50/75%, SL:25%, Trail:15%) | [ ] |
+| 3.13 | Momentum preset (PT1-4:20/40/60/100%, SL:20%, EarlyTrail:5%/3%) | [ ] |
+| 3.14 | Trend preset (PT1-4:25/50/100/150%, SL:30%, Trail:20%) | [ ] |
+| 3.15 | Risk status badge shows ENABLED/DISABLED | [ ] |
+| 3.16 | Risk summary rail shows active features as pills | [ ] |
+
+**Tab: Targets & SL**
+
+| # | Test | Status |
+|---|------|--------|
+| 3.17 | PT1 Target % (`profit_target_1_pct`, range 0-500) | [ ] |
+| 3.18 | PT2 Target % (`profit_target_2_pct`) | [ ] |
+| 3.19 | PT3 Target % (`profit_target_3_pct`) | [ ] |
+| 3.20 | PT4 Target % (`profit_target_4_pct`) | [ ] |
+| 3.21 | PT1 Trim Qty (`profit_target_qty_1`) | [ ] |
+| 3.22 | PT2 Trim Qty (`profit_target_qty_2`) | [ ] |
+| 3.23 | PT3 Trim Qty (`profit_target_qty_3`) | [ ] |
+| 3.24 | PT4 Trim Qty (`profit_target_qty_4`) | [ ] |
+| 3.25 | PT1 Trim % (`profit_target_trim_pct_1`, range 0-100) | [ ] |
+| 3.26 | PT2 Trim % (`profit_target_trim_pct_2`) | [ ] |
+| 3.27 | PT3 Trim % (`profit_target_trim_pct_3`) | [ ] |
+| 3.28 | PT4 Trim % (`profit_target_trim_pct_4`) | [ ] |
+| 3.29 | Stop Loss % (`stop_loss_pct`, range 0-100) | [ ] |
+| 3.30 | Trailing Stop % (`trailing_stop_pct`, range 0-100) | [ ] |
+| 3.31 | Trailing Activation % (`trailing_activation_pct`, range 0-500) | [ ] |
+| 3.32 | Early Trailing enable (`enable_early_trailing`) — mutually exclusive with trailing | [ ] |
+| 3.33 | Early Trailing Breakeven at % (`early_trailing_activation_pct`, default 5) | [ ] |
+| 3.34 | Early Trailing Lock profit every % (`early_trailing_step_pct`, default 3) | [ ] |
+| 3.35 | Exit Strategy Mode radio (`exit_strategy_mode`: signal/risk/hybrid) | [ ] |
+| 3.36 | Trim Order Mode radio (`trim_order_mode`: market/limit) | [ ] |
+| 3.37 | Trim Limit Offset Mode (`trim_limit_offset_mode`: dollar/percent) | [ ] |
+| 3.38 | Trim Limit Offset $ (`trim_limit_offset`, range 0-5) | [ ] |
+| 3.39 | Trim Limit Offset % (`trim_limit_offset_pct`, range 0-20) | [ ] |
+| 3.40 | SL Order Mode radio (`sl_order_mode`: limit/market) | [ ] |
+| 3.41 | SL Limit Offset % (`sl_limit_offset`, default 0.03, stored as decimal) | [ ] |
+| 3.42 | Broker Bracket Mode radio (`broker_bracket_mode`: both/sl_only/pt_only/none) | [ ] |
+| 3.43 | Order Chase mode dropdown (off/entry/exit/both → `order_chase_enabled` + `entry_chase_enabled`) | [ ] |
+| 3.44 | Leave Runner enable (`leave_runner_enabled`) | [ ] |
+| 3.45 | Leave Runner % (`leave_runner_pct`, default 25, range 1-100) | [ ] |
+
+**Tab: Advanced**
+
+| # | Test | Status |
+|---|------|--------|
+| 3.46 | Dynamic SL enable (`enable_dynamic_sl`) | [ ] |
+| 3.47 | Dynamic SL Profile (`dynamic_sl_profile`: conservative/standard/aggressive) | [ ] |
+| 3.48 | SL Escalation Only mode (`escalation_only_mode`) | [ ] |
+| 3.49 | Conservative profile: PT1→BE, PT2→+3%, PT3→+8%, PT4→+15% | [ ] |
+| 3.50 | Standard profile: PT1→BE, PT2→+5%, PT3→+10%, PT4→+17% | [ ] |
+| 3.51 | Aggressive profile: PT1→-2%, PT2→BE, PT3→+8%, PT4→+15% | [ ] |
+| 3.52 | Giveback Guard enable (`enable_giveback_guard`) | [ ] |
+| 3.53 | Max Giveback % (`giveback_allowed_pct`, default 30, range 5-80) | [ ] |
+| 3.54 | EMA Risk enable (`ema_risk_enabled`) | [ ] |
+| 3.55 | EMA Period dropdown (`ema_period`: 3/5/8/13/21, default 5) | [ ] |
+| 3.56 | EMA Candle Timeframe (`ema_timeframe_minutes`: 1/2/3/5, default 5) | [ ] |
+| 3.57 | EMA Buffer % (`ema_buffer_pct`, default 0.1, range 0-2) | [ ] |
+| 3.58 | EMA Exit on Cross (`ema_exit_enabled`, default 1) | [ ] |
+| 3.59 | EMA Stop Escalation (`ema_escalation_enabled`, default 1) | [ ] |
+| 3.60 | EMA No-Trend Candles (`ema_no_trend_candles`, default 3, range 1-20) | [ ] |
+| 3.61 | EMA Use Underlying Chart (`ema_use_underlying`, default 1) | [ ] |
+| 3.62 | EMA Extended Hours (`ema_extended_hours`, default 0) | [ ] |
+| 3.63 | Trade Summary enable per channel (`trade_summary_enabled`) | [ ] |
+
 **API Endpoints:**
 - [ ] `GET /api/execution-pnl` — execution P&L data
 - [ ] `GET /api/execution-pnl/filters` — filter options
 - [ ] `GET /api/execution-lots` — broker fill lots
 - [ ] `GET /api/signal-summary` — signal summary
 - [ ] `GET /api/signal-summary/<lot_id>/executions` — executions per lot
+- [ ] `PUT /api/channels/<id>` — saves all risk management fields
 
 **Database Tables:** `signal_lots`, `lot_closures`, `execution_lots`, `execution_closures`, `pending_order_metadata`, `filled_orders`
+
+**Risk fields stored in:** `channels` table (see Section 2 database columns)
 
 ---
 
@@ -464,245 +583,442 @@ python3 docs/scripts/validate_risk_fields.py  # or inline script from reference 
 
 **Page:** `settings.html` | **Route:** `GET /settings`
 
-#### 13a. Trading Settings
+The Settings page has **28 distinct sections** organized as collapsible cards.
+
+#### 13a. Setup Wizard
 
 | # | Test | Status |
 |---|------|--------|
-| 11.1 | Global default quantity saves/loads | [ ] |
-| 11.2 | Max position size saves/loads | [ ] |
-| 11.3 | Trade summary enabled toggle | [ ] |
-| 11.4 | Trade summary channel setting | [ ] |
+| 13.1 | Launch Setup Wizard button | [ ] |
+| 13.2 | Wizard status display | [ ] |
 
-- [ ] `GET /api/settings/trading` — get trading settings
-- [ ] `POST /api/settings/trading` — save trading settings
+- [ ] `POST /api/wizard/launch` — launch wizard
+- [ ] `GET /api/wizard/status` — wizard status
 
-#### 13b. Global Risk Settings
+#### 13b. Debug Report
 
 | # | Test | Status |
 |---|------|--------|
-| 11.5 | Signal update automation toggle | [ ] |
-| 11.6 | Exit strategy mode (signal/risk/hybrid) | [ ] |
-| 11.7 | Circuit breaker enable | [ ] |
-| 11.8 | Global daily loss limit | [ ] |
-| 11.9 | Global max positions | [ ] |
-| 11.10 | Order timeout minutes | [ ] |
-| 11.11 | Risk check interval seconds | [ ] |
-| 11.12 | Daily P&L limits (dollar, %, profit limit) | [ ] |
-| 11.13 | Daily P&L warning threshold | [ ] |
-| 11.14 | Daily P&L reset time | [ ] |
-| 11.15 | Max daily trades (default + overrides) | [ ] |
+| 13.3 | Open Debug Report Tool modal | [ ] |
+| 13.4 | Reference number generation | [ ] |
+| 13.5 | Email status display | [ ] |
 
-- [ ] `GET /api/settings/global-risk` — get global risk
-- [ ] `POST /api/settings/global-risk` — save global risk
-- [ ] `PUT /api/settings/global-risk` — update global risk
+- [ ] `POST /api/debug-report/submit` — submit report
+- [ ] `GET /api/debug-report/history` — report history
 
-#### 13c. Conditional Order Settings
+#### 13c. License Status (on Settings page)
 
 | # | Test | Status |
 |---|------|--------|
-| 11.16 | Conditional orders enable toggle | [ ] |
-| 11.17 | Trigger offset (%, mode, value) | [ ] |
-| 11.18 | Default expiry settings | [ ] |
-| 11.19 | Auto-execute toggle | [ ] |
-| 11.20 | Timeout minutes | [ ] |
+| 13.6 | License key display | [ ] |
+| 13.7 | Days remaining display | [ ] |
+| 13.8 | Status badge (Active/Expired) | [ ] |
 
-- [ ] `GET /api/settings/conditional_orders` — get settings
-- [ ] `POST /api/settings/conditional_orders` — save settings
-
-#### 13d. Slippage Settings
+#### 13d. Discord Credentials
 
 | # | Test | Status |
 |---|------|--------|
-| 11.21 | Slippage protection enable | [ ] |
-| 11.22 | Threshold percent | [ ] |
+| 13.9 | Discord token save/load (password field) | [ ] |
+| 13.10 | Discord connection status badge | [ ] |
+| 13.11 | Connect/test button | [ ] |
 
-- [ ] `GET /api/settings/slippage` — get slippage
-- [ ] `POST /api/settings/slippage` — save slippage
+- [ ] `GET /api/brokers/credentials/discord` — get
+- [ ] `POST /api/brokers/credentials/discord` — save
+- [ ] `POST /api/brokers/connect/discord` — test
 
-#### 13e. Discord Settings
-
-| # | Test | Status |
-|---|------|--------|
-| 11.23 | Allow self-messages toggle | [ ] |
-| 11.24 | Discovery mode toggle | [ ] |
-| 11.25 | Option/stock signal patterns | [ ] |
-| 11.26 | Allowed author IDs | [ ] |
-| 11.27 | Allowed guild IDs | [ ] |
-
-- [ ] `GET /api/settings/discord` — get Discord
-- [ ] `POST /api/settings/discord` — save Discord
-- [ ] `GET /api/settings/discord_notifications` — get notifications
-- [ ] `POST /api/settings/discord_notifications` — save notifications
-
-#### 13f. Telegram Settings
+#### 13e. Alpaca Paper Trading
 
 | # | Test | Status |
 |---|------|--------|
-| 11.28 | Telegram enable toggle | [ ] |
-| 11.29 | API ID and hash | [ ] |
-| 11.30 | Phone number | [ ] |
-| 11.31 | Test connection | [ ] |
-| 11.32 | Verify code / 2FA | [ ] |
-| 11.33 | Telegram channel CRUD | [ ] |
+| 13.12 | API Key (PKXXXXXXXX format) | [ ] |
+| 13.13 | Secret Key | [ ] |
+| 13.14 | Connection status badge | [ ] |
 
-- [ ] `GET /api/settings/telegram` — get Telegram
-- [ ] `POST /api/settings/telegram` — save Telegram
-- [ ] `POST /api/telegram/test-connection` — test
-- [ ] `POST /api/telegram/verify-code` — verify code
-- [ ] `POST /api/telegram/verify-2fa` — verify 2FA
-- [ ] Telegram channel CRUD (GET/POST/PUT/DELETE)
+- [ ] `GET /api/brokers/credentials/alpaca` (paper_mode: true)
+- [ ] `POST /api/brokers/credentials/alpaca` (paper_mode: true)
+- [ ] `POST /api/brokers/connect/alpaca_paper` — test
 
-#### 13g. Broker Credentials
+#### 13f. Alpaca Live Trading
 
 | # | Test | Status |
 |---|------|--------|
-| 11.34 | Schwab credentials save/load | [ ] |
-| 11.35 | Alpaca credentials (paper + live) | [ ] |
-| 11.36 | Webull credentials + token clear | [ ] |
-| 11.37 | Tastytrade credentials + clear | [ ] |
-| 11.38 | Trading212 credentials | [ ] |
-| 11.39 | IBKR credentials | [ ] |
-| 11.40 | Robinhood credentials | [ ] |
-| 11.41 | Extended hours toggle per broker | [ ] |
-| 11.42 | Broker connect/disconnect | [ ] |
-| 11.43 | Broker reload | [ ] |
+| 13.15 | Live API Key (AKXXXXXXXX format) | [ ] |
+| 13.16 | Live Secret Key | [ ] |
+| 13.17 | Connection status badge | [ ] |
 
-- [ ] Broker credential GET/POST for each broker
-- [ ] `POST /api/brokers/connect/<id>` — connect
-- [ ] `POST /api/brokers/disconnect/<id>` — disconnect
-- [ ] `POST /api/brokers/reload` — reload
-- [ ] `GET /api/brokers/grouped` — brokers by country
-- [ ] `GET /api/brokers/<name>/profile` — broker profile
-- [ ] `POST /api/brokers/<name>/test` — test connection
-- [ ] `POST /api/brokers/<name>/reconnect` — reconnect
-- [ ] `GET /api/brokers/by-country/<code>` — brokers by country
-- [ ] `GET /api/brokers/extended-hours` — extended hours brokers
-- [ ] `GET /api/broker/available` — available brokers
+- [ ] `POST /api/brokers/credentials/alpaca` (paper_mode: false)
+- [ ] `POST /api/brokers/connect/alpaca_live` — test
 
-**Schwab OAuth Flow (Blueprint):**
+#### 13g. TastyTrade Paper Trading
 
 | # | Test | Status |
 |---|------|--------|
-| 13.63 | Schwab auth URL generation | [ ] |
-| 13.64 | Schwab OAuth callback handling | [ ] |
-| 13.65 | Schwab OAuth status polling | [ ] |
-| 13.66 | Schwab token refresh | [ ] |
-| 13.67 | Schwab disconnect | [ ] |
-| 13.68 | Schwab manual code entry | [ ] |
+| 13.18 | OAuth2 Client Secret | [ ] |
+| 13.19 | OAuth2 Refresh Token | [ ] |
+| 13.20 | Username (legacy/deprecated) | [ ] |
+| 13.21 | Password (legacy/deprecated) | [ ] |
+| 13.22 | Account selector dropdown (auto/specific) | [ ] |
+| 13.23 | Connection status badge | [ ] |
 
-- [ ] `GET /schwab/auth-url` — get auth URL
+- [ ] `GET /api/brokers/credentials/tastytrade` — get
+- [ ] `POST /api/brokers/credentials/tastytrade` — save
+
+#### 13h. TastyTrade Live Trading
+
+| # | Test | Status |
+|---|------|--------|
+| 13.24 | OAuth2 Client Secret (live) | [ ] |
+| 13.25 | OAuth2 Refresh Token (live) | [ ] |
+| 13.26 | Account selector (live) | [ ] |
+| 13.27 | Connection status badge | [ ] |
+| 13.28 | Clear credentials button | [ ] |
+
+- [ ] `POST /api/brokers/credentials/tastytrade/clear` — clear
+
+#### 13i. Robinhood (Live Only)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.29 | Email/Username | [ ] |
+| 13.30 | Password | [ ] |
+| 13.31 | 2FA TOTP Secret (optional) | [ ] |
+| 13.32 | Connection status badge | [ ] |
+
+- [ ] `GET /api/settings/robinhood` — get
+- [ ] `POST /api/settings/robinhood` — save
+- [ ] `POST /api/brokers/connect/robinhood` — test
+
+#### 13j. Trading 212
+
+| # | Test | Status |
+|---|------|--------|
+| 13.33 | API Key | [ ] |
+| 13.34 | API Secret | [ ] |
+| 13.35 | Environment dropdown (demo / live) | [ ] |
+| 13.36 | Connection status badge | [ ] |
+
+- [ ] `GET /api/brokers/credentials/trading212` — get
+- [ ] `POST /api/brokers/credentials/trading212` — save
+- [ ] `POST /api/brokers/connect/trading212` — test
+
+#### 13k. Charles Schwab (OAuth)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.37 | Client ID (App Key) | [ ] |
+| 13.38 | Client Secret | [ ] |
+| 13.39 | Redirect URI | [ ] |
+| 13.40 | Dry Run Mode toggle (log without executing) | [ ] |
+| 13.41 | Connect with Schwab button → OAuth flow | [ ] |
+| 13.42 | OAuth status polling | [ ] |
+| 13.43 | Token expiry display | [ ] |
+| 13.44 | Refresh Token button | [ ] |
+| 13.45 | Disconnect button | [ ] |
+| 13.46 | Manual Code entry (local deployments) | [ ] |
+
+- [ ] `GET /api/brokers/SCHWAB/credentials` — get
+- [ ] `POST /api/brokers/SCHWAB/credentials` — save
+- [ ] `GET /schwab/auth-url` — OAuth URL
 - [ ] `GET /schwab/callback` — OAuth callback
+- [ ] `GET /api/schwab/callback` — OAuth callback (alt)
 - [ ] `GET /schwab/oauth-status` — poll completion
 - [ ] `POST /schwab/oauth-reset` — reset flow
 - [ ] `GET /schwab/status` — connection status
 - [ ] `POST /schwab/refresh` — token refresh
 - [ ] `POST /schwab/disconnect` — disconnect
-- [ ] `POST /schwab/manual-code` — manual code entry
+- [ ] `POST /schwab/manual-code` — manual code
 
-**Google OAuth Flow (Blueprint):**
-
-- [ ] `GET /google_login` — initiate Google OAuth
-- [ ] `GET /google_login/callback` — Google callback
-
-**Webull Multi-Step Auth:**
+#### 13l. Webull
 
 | # | Test | Status |
 |---|------|--------|
-| 13.69 | Webull email/password login | [ ] |
-| 13.70 | Webull MFA request | [ ] |
-| 13.71 | Webull security question | [ ] |
-| 13.72 | Webull session login | [ ] |
+| 13.47 | Token-Only Mode toggle (bypass captcha) | [ ] |
+| 13.48 | Email | [ ] |
+| 13.49 | Password | [ ] |
+| 13.50 | Trade PIN (6 digits, required) | [ ] |
+| 13.51 | Device ID (DID, optional) | [ ] |
+| 13.52 | Access Token (auto-saved) | [ ] |
+| 13.53 | Refresh Token (default: "dummy") | [ ] |
+| 13.54 | Account Type radio (Margin / Cash / IRA) | [ ] |
+| 13.55 | Clear Webull Tokens button | [ ] |
+| 13.56 | Connection status badge | [ ] |
 
+- [ ] `GET /api/brokers/credentials/webull` — get
+- [ ] `POST /api/brokers/credentials/webull` — save
+- [ ] `POST /api/brokers/credentials/webull/clear-tokens` — clear
+- [ ] `POST /api/brokers/connect/webull` — test
 - [ ] `POST /api/webull/auth/login` — login
 - [ ] `POST /api/webull/auth/request-mfa` — MFA
 - [ ] `POST /api/webull/auth/security-question` — security question
 - [ ] `POST /api/webull/auth/session-login` — session login
 
-#### 13h. AI Analysis Settings
-
-- [ ] `GET /api/settings/ai_analysis` — get AI settings
-- [ ] `POST /api/settings/ai_analysis` — save AI settings
-
-#### 13i. Signal Conversion Settings
+#### 13m. Interactive Brokers (IBKR)
 
 | # | Test | Status |
 |---|------|--------|
-| 13.54 | Signal conversion enable/disable | [ ] |
-| 13.55 | Conversion channel configuration | [ ] |
+| 13.57 | TWS/Gateway Host (default: 127.0.0.1) | [ ] |
+| 13.58 | Paper Port (default: 7497) | [ ] |
+| 13.59 | Live Port (default: 7496) | [ ] |
+| 13.60 | Client ID (default: 1) | [ ] |
+| 13.61 | Paper Trading Mode toggle | [ ] |
+| 13.62 | Connection status badge | [ ] |
 
-- [ ] `GET /api/settings/signal_conversion` — get signal conversion
-- [ ] `POST /api/settings/signal_conversion` — save signal conversion
+- [ ] `GET /api/brokers/credentials/ibkr` — get
+- [ ] `POST /api/brokers/credentials/ibkr` — save
+- [ ] `POST /api/brokers/connect/ibkr` — test
 
-#### 13j. Trade Monitor Settings
-
-| # | Test | Status |
-|---|------|--------|
-| 13.56 | Trade monitor enable/disable | [ ] |
-| 13.57 | Poll interval setting | [ ] |
-| 13.58 | Include stocks/options toggles | [ ] |
-| 13.59 | BTO/STC posting toggles | [ ] |
-
-- [ ] `GET /api/settings/trade_monitor` — get trade monitor
-- [ ] `POST /api/settings/trade_monitor` — save trade monitor
-
-#### 13k. Risk Management Settings
-
-- [ ] `GET /api/settings/risk_management` — get risk management
-- [ ] `POST /api/settings/risk_management` — save risk management
-
-#### 13l. Sizing Settings
+#### 13n. Clear Stale Trades
 
 | # | Test | Status |
 |---|------|--------|
-| 13.60 | Position sizing mode configuration | [ ] |
-| 13.61 | User sizing overrides | [ ] |
-| 13.62 | Analyst portfolio assignment | [ ] |
+| 13.63 | Per-broker clear buttons | [ ] |
+| 13.64 | Stale trade count display | [ ] |
 
-- [ ] `GET /api/sizing-settings` — get sizing
-- [ ] `POST /api/sizing-settings` — save sizing
-- [ ] `POST /api/analyst-portfolio` — set analyst portfolio
+- [ ] `POST /api/trades/clear-stale` — clear
+- [ ] `GET /api/trades/stale-count` — count
 
-#### 13m. Debug Settings
-
-- [ ] `GET /api/settings/debug` — get debug settings
-- [ ] `POST /api/settings/debug` — update debug settings
-
-#### 13n. Webhook Settings
+#### 13o. Trade Notifications (Discord Webhook)
 
 | # | Test | Status |
 |---|------|--------|
-| 11.44 | Webhook config save/load | [ ] |
-| 11.45 | Webhook test | [ ] |
-| 11.46 | Webhook channel CRUD | [ ] |
-| 11.47 | Webhook channel test | [ ] |
-| 11.48 | BTO/STC post via webhook | [ ] |
+| 13.65 | Enable notifications toggle | [ ] |
+| 13.66 | Discord Webhook URL | [ ] |
+| 13.67 | Discord Channel ID (optional) | [ ] |
+| 13.68 | Test Webhook button | [ ] |
+
+- [ ] `GET /api/settings/discord_notifications` — get
+- [ ] `POST /api/settings/discord_notifications` — save
+- [ ] `POST /api/settings/test_webhook` — test
+
+#### 13p. AI & Market Data APIs
+
+| # | Test | Status |
+|---|------|--------|
+| 13.69 | AI Provider dropdown (replit_ai / openai / disabled) | [ ] |
+| 13.70 | OpenAI API Key (shown when openai selected) | [ ] |
+| 13.71 | Alpha Vantage Key (option flow scanning) | [ ] |
+| 13.72 | Finnhub API Key (market news & data) | [ ] |
+
+- [ ] `GET /api/settings/api_keys` — get
+- [ ] `POST /api/settings/api_keys` — save
+
+#### 13q. Slippage Protection
+
+| # | Test | Status |
+|---|------|--------|
+| 13.73 | Enable Protection toggle | [ ] |
+| 13.74 | Maximum Threshold % (range 1-50, step 0.5, default 10) | [ ] |
+
+- [ ] `GET /api/settings/slippage` — get
+- [ ] `POST /api/settings/slippage` — save
+
+**Database:** `slippage_settings` (`enabled`, `threshold_percent`)
+
+#### 13r. Risk Management (Global Defaults)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.75 | Enable Monitoring toggle | [ ] |
+| 13.76 | Profit Target % (range 0-100, step 5, default 20) | [ ] |
+| 13.77 | Stop Loss % (range 0-100, step 5, default 10) | [ ] |
+| 13.78 | Trailing Stop % (range 0-50, step 1, default 5) | [ ] |
+
+- [ ] `GET /api/settings/risk_management` — get
+- [ ] `POST /api/settings/risk_management` — save
+
+**Database:** `risk_management_settings` (`enabled`, `profit_target_percent`, `stop_loss_percent`, `trailing_stop_percent`)
+
+#### 13s. AI Analysis
+
+| # | Test | Status |
+|---|------|--------|
+| 13.79 | Enable AI Analysis toggle | [ ] |
+| 13.80 | AI Model dropdown (gpt-4o-mini / gpt-4o) | [ ] |
+| 13.81 | Sentiment Analysis toggle | [ ] |
+
+- [ ] `GET /api/settings/ai_analysis` — get
+- [ ] `POST /api/settings/ai_analysis` — save
+
+**Database:** `ai_settings` (`enabled`, `model`, `sentiment_enabled`)
+
+#### 13t. Trading Limits (Position Sizing)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.82 | Enable Max Position Size toggle | [ ] |
+| 13.83 | Max Position Size $ (range 100-10000, step 100, default 600) | [ ] |
+| 13.84 | Global Default Quantity (when max-position disabled) | [ ] |
+| 13.85 | EMA Risk Global Enabled toggle | [ ] |
+
+- [ ] `GET /api/settings/trading` — get
+- [ ] `POST /api/settings/trading` — save
+
+**Database:** `trading_settings` (`max_position_size`, `max_position_size_enabled`, `global_default_quantity`, `ema_risk_global_enabled`)
+
+#### 13u. Advanced Settings (Debug)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.86 | Debug Mode toggle (ON/OFF) | [ ] |
+
+- [ ] `GET /api/settings/debug` — get
+- [ ] `POST /api/settings/debug` — save (`{ enabled: bool }`)
+
+#### 13v. Discord Bot Settings (Collapsible)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.87 | Allow Self Messages toggle | [ ] |
+| 13.88 | Discovery Mode toggle | [ ] |
+| 13.89 | Option Signal Pattern regex | [ ] |
+| 13.90 | Stock Signal Pattern regex | [ ] |
+| 13.91 | Allowed Author IDs (comma-separated) | [ ] |
+| 13.92 | Allowed Guild IDs (comma-separated) | [ ] |
+| 13.93 | Reset Patterns to Default button | [ ] |
+
+- [ ] `GET /api/settings/discord` — get
+- [ ] `POST /api/settings/discord` — save
+
+**Database:** `discord_settings` (`allow_self_messages`, `discovery_mode`, `option_pattern`, `stock_pattern`, `allowed_author_ids`, `allowed_guild_ids`)
+
+#### 13w. Trade Notifications (Channel Settings)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.94 | Enable Discord Notifications toggle | [ ] |
+| 13.95 | Notification Channel ID | [ ] |
+
+- [ ] `GET /api/notifications/settings` — get
+- [ ] `POST /api/notifications/settings` — save
+
+#### 13x. Background Services
+
+| # | Test | Status |
+|---|------|--------|
+| 13.96 | Broker Sync Service toggle | [ ] |
+| 13.97 | Risk Monitor Service toggle | [ ] |
+| 13.98 | Auto-Import External Positions toggle | [ ] |
+
+- [ ] `GET /api/settings/background_services` — get
+- [ ] `POST /api/settings/background_services` — save
+
+#### 13y. Trade Monitor (Broker Sync)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.99 | Enable Trade Monitor toggle | [ ] |
+| 13.100 | Target Webhook Channel dropdown | [ ] |
+| 13.101 | Poll Interval seconds (range 5-300, default 10) | [ ] |
+| 13.102 | Include Stock Trades toggle | [ ] |
+| 13.103 | Include Option Trades toggle | [ ] |
+| 13.104 | Post BTO Signals toggle | [ ] |
+| 13.105 | Post STC Signals toggle | [ ] |
+| 13.106 | Test Mode toggle (include pending orders) | [ ] |
+
+- [ ] `GET /api/settings/trade_monitor` — get
+- [ ] `POST /api/settings/trade_monitor` — save
+
+**Database:** `trade_monitor_settings` (`enabled`, `poll_interval_seconds`, `target_webhook_channel_id`, `include_stocks`, `include_options`, `post_bto_signals`, `post_stc_signals`)
+
+#### 13z. Conditional Orders (Global)
+
+| # | Test | Status |
+|---|------|--------|
+| 13.107 | Enable Conditional Order Service toggle | [ ] |
+| 13.108 | Default Order Expiry dropdown (end_of_day / 1_hour / 4_hours / 1_day) | [ ] |
+| 13.109 | Global Trigger Offset Mode (percent / dollar) | [ ] |
+| 13.110 | Trigger Offset Value (range -100 to 100) | [ ] |
+| 13.111 | Entry Price Offset % (range -10 to 10) | [ ] |
+| 13.112 | Auto-Execute When Triggered toggle | [ ] |
+
+- [ ] `GET /api/settings/conditional_orders` — get
+- [ ] `POST /api/settings/conditional_orders` — save
+
+#### 13aa. Global Risk Management
+
+| # | Test | Status |
+|---|------|--------|
+| 13.113 | Exit Strategy Mode dropdown (signal/risk/hybrid) | [ ] |
+| 13.114 | Auto SL/PT Updates toggle (`signal_update_automation`) | [ ] |
+| 13.115 | Risk Check Interval seconds (range 0.2-60, default 1) | [ ] |
+| 13.116 | Max Open Positions (0 = unlimited) | [ ] |
+| 13.117 | Daily Loss Limit $ (0 = no limit) | [ ] |
+| 13.118 | Circuit Breaker enable | [ ] |
+
+- [ ] `GET /api/settings/global-risk` — get
+- [ ] `POST /api/settings/global-risk` — save
+- [ ] `PUT /api/settings/global-risk` — update
+
+**Database:** `global_risk_settings` (`exit_strategy_mode`, `enable_signal_update_automation`, `risk_check_interval_seconds`, `global_max_positions`, `global_daily_loss_limit`, `enable_circuit_breaker`)
+
+#### 13ab. Daily P&L Limits
+
+| # | Test | Status |
+|---|------|--------|
+| 13.119 | Enable Daily P&L Limits toggle | [ ] |
+| 13.120 | Max Daily Loss $ (step 50) | [ ] |
+| 13.121 | Max Daily Loss % (range 0-100, step 0.5) | [ ] |
+| 13.122 | Max Daily Profit $ (step 50) | [ ] |
+| 13.123 | Max Daily Profit % (range 0-100, step 0.5) | [ ] |
+| 13.124 | Max Daily Trades Per Broker (0 = unlimited) | [ ] |
+| 13.125 | Warning Threshold % (range 0-100, step 5, default 80) | [ ] |
+| 13.126 | Daily Reset Time dropdown (09:30 / 00:00 / 04:00 ET) | [ ] |
+
+**Database:** `global_risk_settings` (`daily_pnl_limit_enabled`, `daily_loss_limit_dollar`, `daily_loss_limit_pct`, `daily_profit_limit`, `daily_profit_limit_pct`, `daily_pnl_warning_pct`, `daily_pnl_reset_time`), `daily_pnl_state` (per-broker state)
+
+#### 13ac. Telegram Settings
+
+| # | Test | Status |
+|---|------|--------|
+| 13.127 | Telegram enable toggle | [ ] |
+| 13.128 | API ID | [ ] |
+| 13.129 | API Hash | [ ] |
+| 13.130 | Phone number | [ ] |
+| 13.131 | Test connection | [ ] |
+| 13.132 | Verify code / 2FA | [ ] |
+| 13.133 | Telegram channel CRUD | [ ] |
+
+- [ ] `GET /api/settings/telegram` — get
+- [ ] `POST /api/settings/telegram` — save
+- [ ] `POST /api/telegram/test-connection` — test
+- [ ] `POST /api/telegram/verify-code` — verify
+- [ ] `POST /api/telegram/verify-2fa` — 2FA
+- [ ] Telegram channel CRUD (GET/POST/PUT/DELETE `/api/telegram/channels`)
+
+**Database:** `telegram_settings` (`api_id`, `api_hash`, `phone_number`, `session_string`, `session_status`)
+
+#### 13ad. Webhook Settings
+
+| # | Test | Status |
+|---|------|--------|
+| 13.134 | Webhook config save/load | [ ] |
+| 13.135 | Webhook test | [ ] |
+| 13.136 | Webhook channel CRUD | [ ] |
+| 13.137 | Webhook channel test | [ ] |
+| 13.138 | BTO/STC post via webhook | [ ] |
 
 - [ ] `GET /api/webhook/config` + `POST`
 - [ ] `POST /api/webhook/test`
-- [ ] Webhook channel CRUD (GET/POST/PUT/DELETE)
+- [ ] Webhook channel CRUD (GET/POST/PUT/DELETE `/api/webhook/channels`)
 - [ ] `POST /api/webhook/post_bto` / `POST /api/webhook/post_stc`
-- [ ] `GET /api/webhook/positions` — webhook positions
+- [ ] `GET /api/webhook/positions` — positions
 - [ ] `POST /api/webhook/find_position` — find position
 
-#### 13o. Background Services
+#### 13ae. Broker Common Operations
 
-- [ ] `GET /api/settings/background_services` — get services
-- [ ] `POST /api/settings/background_services` — save services
+- [ ] `POST /api/brokers/connect/<id>` — connect
+- [ ] `POST /api/brokers/disconnect/<id>` — disconnect
+- [ ] `POST /api/brokers/reload` — reload all
+- [ ] `GET /api/brokers/grouped` — by country
+- [ ] `GET /api/brokers/<name>/profile` — profile
+- [ ] `POST /api/brokers/<name>/test` — test
+- [ ] `POST /api/brokers/<name>/reconnect` — reconnect
+- [ ] `GET /api/brokers/extended-hours` — extended hours
+- [ ] `GET /api/broker/available` — available
+- [ ] `GET /google_login` — Google OAuth
+- [ ] `GET /google_login/callback` — Google callback
 
-#### 13p. Notification Settings
-
-| # | Test | Status |
-|---|------|--------|
-| 11.49 | Trade notifications toggle | [ ] |
-| 11.50 | Profit notifications toggle | [ ] |
-| 11.51 | Error notifications toggle | [ ] |
-| 11.52 | Discord/email/desktop toggles | [ ] |
-| 11.53 | Test notification | [ ] |
-
-- [ ] `GET /api/notifications/settings` + `POST`
-- [ ] `POST /api/notifications/test`
-
-**Database Tables:** `settings`, `trading_settings`, `slippage_settings`, `ai_settings`, `discord_settings`, `telegram_settings`, `global_risk_settings`, `risk_management_settings`, `trade_monitor_settings`, `email_config`, `config` (encrypted credentials), `broker_credentials`, `broker_profiles`, `broker_sync_state`, `service_registry`, `broker_limits`, `user_sizing_settings`, `analyst_portfolios`
+**All Settings Database Tables:** `settings`, `trading_settings`, `slippage_settings`, `risk_management_settings`, `ai_settings`, `discord_settings`, `telegram_settings`, `global_risk_settings`, `daily_pnl_state`, `trade_monitor_settings`, `conditional_orders`, `config` (encrypted), `broker_credentials`, `broker_profiles`, `broker_sync_state`, `service_registry`, `broker_limits`, `user_sizing_settings`, `analyst_portfolios`, `email_config`
 
 ---
 
@@ -1324,8 +1640,8 @@ done
 ---
 
 **Last Updated**: 2026-04-26
-**Version**: 3.0.0
-**Total Sections**: 35
-**Total Test Cases**: 300+
-**Total API Endpoints Covered**: 447+
+**Version**: 4.0.0
+**Total Sections**: 35 main + 39 sub-sections
+**Total Test Cases**: 509 field-level checks
+**Total API Endpoint Checks**: 370
 **Total Database Tables**: 74 (across 4 databases)
