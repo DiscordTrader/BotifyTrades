@@ -1840,8 +1840,17 @@ function buildOrderTypesTab(ch) {
     const t212OrderNote = hasT212Broker(ch)
         ? '<div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(0,163,255,0.08); border: 1px solid rgba(0,163,255,0.15); border-radius: 8px; font-size: 11px; color: #90CAF9;">📊 T212 uses value-based market orders — limit/market selection applies to other brokers on this channel.</div>'
         : '';
+    const bracketPtActive = ch.broker_bracket_mode === 'both' || ch.broker_bracket_mode === 'pt_only';
+    const bracketNote = bracketPtActive
+        ? '<div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(255,183,0,0.08); border: 1px solid rgba(255,183,0,0.15); border-radius: 8px; font-size: 11px; color: #ffb700;">Broker bracket PT orders are active — Trim Order Type is locked to Limit (required for Schwab OCO).</div>'
+        : '';
+    const trimIsLimit = bracketPtActive || ch.trim_order_mode === 'limit';
+    const trimOffsetMode = ch.trim_limit_offset_mode || 'dollar';
+    const slIsLimit = (ch.sl_order_mode || 'limit') === 'limit';
+    const slOffsetDisplay = (ch.sl_limit_offset != null ? ch.sl_limit_offset : 0.03) * 100;
     return `
         ${t212OrderNote}
+        ${bracketNote}
         <div class="settings-row three-col">
             <div class="settings-section green">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -1864,11 +1873,27 @@ function buildOrderTypesTab(ch) {
                 </div>
                 <div class="settings-field">
                     <label>Order Type</label>
-                    <select onchange="updateOrderType(${ch.id}, 'trim', this.value)">
-                        <option value="market" ${(ch.trim_order_mode || 'market') === 'market' ? 'selected' : ''}>Market</option>
-                        <option value="limit" ${ch.trim_order_mode === 'limit' ? 'selected' : ''}>Limit</option>
+                    <select id="ot-trim-mode-${ch.id}" onchange="updateTrimOrderType(${ch.id}, this.value)" ${bracketPtActive ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+                        <option value="market" ${!trimIsLimit ? 'selected' : ''} ${bracketPtActive ? 'disabled' : ''}>Market</option>
+                        <option value="limit" ${trimIsLimit ? 'selected' : ''}>Limit</option>
                     </select>
                     <div class="settings-helper">Profit target exits</div>
+                </div>
+                <div id="ot-trim-offset-container-${ch.id}" style="display: ${trimIsLimit ? 'block' : 'none'}; margin-top: 8px; padding: 8px; background: rgba(99,102,241,0.06); border-radius: 6px;">
+                    <label style="font-size:11px;color:#A5B4FC;display:block;margin-bottom:6px;">Limit Offset</label>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <select id="ot-trim-offset-mode-${ch.id}" style="padding:3px 6px;font-size:11px;border:1px solid #3A3A3C;border-radius:4px;background:#1C1C1E;color:white;" onchange="toggleOtTrimOffsetMode(${ch.id}, this.value); saveTrimOffsets(${ch.id})">
+                            <option value="dollar" ${trimOffsetMode === 'dollar' ? 'selected' : ''}>$</option>
+                            <option value="percent" ${trimOffsetMode === 'percent' ? 'selected' : ''}>%</option>
+                        </select>
+                        <div id="ot-trim-offset-dollar-div-${ch.id}" style="display:${trimOffsetMode === 'dollar' ? 'flex' : 'none'};align-items:center;gap:4px;">
+                            <input type="number" id="ot-trim-offset-dollar-${ch.id}" value="${ch.trim_limit_offset || 0.01}" step="0.01" min="0" max="5" style="width:60px;padding:3px 6px;font-size:11px;border:1px solid #3A3A3C;border-radius:4px;background:#1C1C1E;color:white;" onchange="saveTrimOffsets(${ch.id})">
+                        </div>
+                        <div id="ot-trim-offset-pct-div-${ch.id}" style="display:${trimOffsetMode === 'percent' ? 'flex' : 'none'};align-items:center;gap:4px;">
+                            <input type="number" id="ot-trim-offset-pct-${ch.id}" value="${ch.trim_limit_offset_pct || 2.0}" step="0.5" min="0" max="20" style="width:60px;padding:3px 6px;font-size:11px;border:1px solid #3A3A3C;border-radius:4px;background:#1C1C1E;color:white;" onchange="saveTrimOffsets(${ch.id})">
+                            <span style="font-size:10px;color:#8E8E93;">%</span>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="settings-section red">
@@ -1878,11 +1903,19 @@ function buildOrderTypesTab(ch) {
                 </div>
                 <div class="settings-field">
                     <label>Order Type</label>
-                    <select onchange="updateOrderType(${ch.id}, 'sl', this.value)">
-                        <option value="limit" ${(ch.sl_order_mode || 'limit') === 'limit' ? 'selected' : ''}>Limit</option>
+                    <select id="ot-sl-mode-${ch.id}" onchange="updateSlOrderType(${ch.id}, this.value)">
+                        <option value="limit" ${slIsLimit ? 'selected' : ''}>Limit</option>
                         <option value="market" ${ch.sl_order_mode === 'market' ? 'selected' : ''}>Market</option>
                     </select>
                     <div class="settings-helper">Stop loss exits</div>
+                </div>
+                <div id="ot-sl-offset-container-${ch.id}" style="display: ${slIsLimit ? 'block' : 'none'}; margin-top: 8px; padding: 8px; background: rgba(255,82,82,0.06); border-radius: 6px;">
+                    <label style="font-size:11px;color:#F87171;display:block;margin-bottom:6px;">Limit Offset %</label>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <input type="number" id="ot-sl-offset-${ch.id}" value="${slOffsetDisplay}" step="0.5" min="0" max="20" style="width:60px;padding:3px 6px;font-size:11px;border:1px solid #3A3A3C;border-radius:4px;background:#1C1C1E;color:white;" onchange="saveSlOffset(${ch.id})">
+                        <span style="font-size:10px;color:#8E8E93;">%</span>
+                    </div>
+                    <div class="settings-helper" style="margin-top:4px;">SL at -10%, offset 3% = limit sell at -13%</div>
                 </div>
             </div>
         </div>
@@ -2444,12 +2477,8 @@ async function updateOrderType(channelId, orderType, value) {
         const updates = {};
         if (orderType === 'entry') {
             updates.entry_order_mode = value;
-        } else if (orderType === 'trim') {
-            updates.trim_order_mode = value;
-        } else if (orderType === 'sl') {
-            updates.sl_order_mode = value;
         }
-        
+
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -2462,6 +2491,128 @@ async function updateOrderType(channelId, orderType, value) {
             showNotification(`${typeLabel} order type set to ${value}`);
         } else {
             showNotification('Error updating order type', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+function toggleOtTrimOffsetMode(channelId, mode) {
+    const dollarDiv = document.getElementById(`ot-trim-offset-dollar-div-${channelId}`);
+    const pctDiv = document.getElementById(`ot-trim-offset-pct-div-${channelId}`);
+    if (dollarDiv) dollarDiv.style.display = mode === 'dollar' ? 'flex' : 'none';
+    if (pctDiv) pctDiv.style.display = mode === 'percent' ? 'flex' : 'none';
+}
+
+async function updateTrimOrderType(channelId, value) {
+    try {
+        const offsetContainer = document.getElementById(`ot-trim-offset-container-${channelId}`);
+        if (offsetContainer) offsetContainer.style.display = value === 'limit' ? 'block' : 'none';
+
+        const offsetMode = document.getElementById(`ot-trim-offset-mode-${channelId}`)?.value || 'dollar';
+        const offsetDollar = document.getElementById(`ot-trim-offset-dollar-${channelId}`)?.value;
+        const offsetPct = document.getElementById(`ot-trim-offset-pct-${channelId}`)?.value;
+
+        const updates = {
+            trim_order_mode: value,
+            trim_limit_offset: offsetDollar ? parseFloat(offsetDollar) : 0.01,
+            trim_limit_offset_mode: offsetMode,
+            trim_limit_offset_pct: offsetPct ? parseFloat(offsetPct) : 2.0
+        };
+
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+
+        if (response.ok) {
+            updateLocalChannel(channelId, updates);
+            showNotification(`Trim order type set to ${value}`);
+        } else {
+            showNotification('Error updating trim order type', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function saveTrimOffsets(channelId) {
+    try {
+        const offsetMode = document.getElementById(`ot-trim-offset-mode-${channelId}`)?.value || 'dollar';
+        const offsetDollar = document.getElementById(`ot-trim-offset-dollar-${channelId}`)?.value;
+        const offsetPct = document.getElementById(`ot-trim-offset-pct-${channelId}`)?.value;
+
+        const updates = {
+            trim_limit_offset: offsetDollar ? parseFloat(offsetDollar) : 0.01,
+            trim_limit_offset_mode: offsetMode,
+            trim_limit_offset_pct: offsetPct ? parseFloat(offsetPct) : 2.0
+        };
+
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+
+        if (response.ok) {
+            updateLocalChannel(channelId, updates);
+            showNotification('Trim offset saved');
+        } else {
+            showNotification('Error saving trim offset', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function updateSlOrderType(channelId, value) {
+    try {
+        const offsetContainer = document.getElementById(`ot-sl-offset-container-${channelId}`);
+        if (offsetContainer) offsetContainer.style.display = value === 'limit' ? 'block' : 'none';
+
+        const slOffsetRaw = document.getElementById(`ot-sl-offset-${channelId}`)?.value;
+
+        const updates = {
+            sl_order_mode: value,
+            sl_limit_offset: slOffsetRaw != null && slOffsetRaw !== '' ? parseFloat(slOffsetRaw) / 100 : 0.03
+        };
+
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+
+        if (response.ok) {
+            updateLocalChannel(channelId, updates);
+            showNotification(`Stop Loss order type set to ${value}`);
+        } else {
+            showNotification('Error updating SL order type', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function saveSlOffset(channelId) {
+    try {
+        const slOffsetRaw = document.getElementById(`ot-sl-offset-${channelId}`)?.value;
+        const updates = {
+            sl_limit_offset: slOffsetRaw != null && slOffsetRaw !== '' ? parseFloat(slOffsetRaw) / 100 : 0.03
+        };
+
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+
+        if (response.ok) {
+            updateLocalChannel(channelId, updates);
+            showNotification('SL offset saved');
+        } else {
+            showNotification('Error saving SL offset', 'error');
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');

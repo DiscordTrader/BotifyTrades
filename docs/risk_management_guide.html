@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Botify Trades — Risk Management Guide</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232736;
+    --border: #2e3348;
+    --text: #e2e4eb;
+    --text-dim: #8b8fa3;
+    --accent: #6c5ce7;
+    --accent-glow: #7c6df730;
+    --green: #00b894;
+    --red: #ff6b6b;
+    --orange: #fdcb6e;
+    --blue: #74b9ff;
+    --cyan: #81ecec;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0 0 80px;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #1a1d2788, #6c5ce720);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 24px 36px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+  .hero p { color: var(--text-dim); font-size: 1rem; max-width: 600px; margin: 0 auto; }
+
+  /* ── Nav ── */
+  .nav-bar {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto; white-space: nowrap;
+    padding: 0 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-bar a {
+    display: inline-block; padding: 12px 16px;
+    color: var(--text-dim); text-decoration: none;
+    font-size: 0.82rem; font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: all .2s;
+  }
+  .nav-bar a:hover, .nav-bar a.active {
+    color: var(--accent); border-bottom-color: var(--accent);
+  }
+
+  /* ── Container ── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+  /* ── Section ── */
+  section {
+    margin-top: 48px;
+    scroll-margin-top: 56px;
+  }
+  section > h2 {
+    font-size: 1.35rem; font-weight: 700;
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  section > h2 .icon { font-size: 1.4rem; }
+  section > .subtitle {
+    color: var(--text-dim); font-size: 0.92rem; margin-bottom: 24px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card h3 {
+    font-size: 1.05rem; font-weight: 600; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card p, .card li { font-size: 0.92rem; color: var(--text); }
+  .card ul { padding-left: 20px; }
+  .card ul li { margin-bottom: 6px; }
+
+  /* ── Tables ── */
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 0.88rem; margin: 12px 0;
+  }
+  th {
+    background: var(--surface2);
+    text-align: left; padding: 10px 14px;
+    font-weight: 600; color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.84rem; color: var(--cyan); }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-block; padding: 2px 10px;
+    border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .badge-green { background: #00b89420; color: var(--green); border: 1px solid #00b89440; }
+  .badge-red { background: #ff6b6b20; color: var(--red); border: 1px solid #ff6b6b40; }
+  .badge-orange { background: #fdcb6e20; color: var(--orange); border: 1px solid #fdcb6e40; }
+  .badge-blue { background: #74b9ff20; color: var(--blue); border: 1px solid #74b9ff40; }
+  .badge-purple { background: #6c5ce720; color: var(--accent); border: 1px solid #6c5ce740; }
+
+  /* ── Flow diagrams ── */
+  .flow {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--text-dim);
+    margin: 16px 0;
+  }
+  .flow .hl { color: var(--green); font-weight: 600; }
+  .flow .warn { color: var(--orange); font-weight: 600; }
+  .flow .err { color: var(--red); font-weight: 600; }
+  .flow .info { color: var(--blue); }
+  .flow .accent { color: var(--accent); }
+
+  /* ── Timeline ── */
+  .timeline {
+    position: relative;
+    padding-left: 32px;
+    margin: 16px 0;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute; left: 12px; top: 0; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+  }
+  .timeline-item::before {
+    content: '';
+    position: absolute; left: -25px; top: 6px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+  }
+  .timeline-item.green::before { background: var(--green); }
+  .timeline-item.red::before { background: var(--red); }
+  .timeline-item.orange::before { background: var(--orange); }
+  .timeline-item .tl-label {
+    font-size: 0.82rem; font-weight: 600; color: var(--accent);
+    margin-bottom: 2px;
+  }
+  .timeline-item.green .tl-label { color: var(--green); }
+  .timeline-item.red .tl-label { color: var(--red); }
+  .timeline-item.orange .tl-label { color: var(--orange); }
+  .timeline-item .tl-text { font-size: 0.88rem; color: var(--text-dim); }
+
+  /* ── Alert boxes ── */
+  .alert {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 0.88rem;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .alert-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+  .alert-warn { background: #fdcb6e10; border: 1px solid #fdcb6e30; }
+  .alert-info { background: #74b9ff10; border: 1px solid #74b9ff30; }
+  .alert-danger { background: #ff6b6b10; border: 1px solid #ff6b6b30; }
+  .alert-success { background: #00b89410; border: 1px solid #00b89430; }
+
+  /* ── Grid ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ── Compat matrix ── */
+  .compat-yes { color: var(--green); font-weight: 600; }
+  .compat-no { color: var(--red); font-weight: 600; }
+  .compat-partial { color: var(--orange); font-weight: 600; }
+
+  /* ── Collapsible ── */
+  details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 12px;
+  }
+  details summary {
+    padding: 14px 18px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95rem;
+    list-style: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  details summary::before {
+    content: '\25B6'; font-size: 0.7rem; transition: transform .2s;
+    color: var(--text-dim);
+  }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .detail-body { padding: 0 18px 18px; }
+
+  /* ── Scenario bars ── */
+  .scenario-bar {
+    display: flex; height: 32px; border-radius: 6px; overflow: hidden; margin: 8px 0;
+  }
+  .scenario-bar > div {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 600; color: #fff;
+    min-width: 30px;
+  }
+
+  /* ── Misc ── */
+  .sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .tag { display: inline-block; font-size: 0.72rem; padding: 1px 8px; border-radius: 4px; background: var(--surface2); color: var(--text-dim); margin-right: 4px; }
+  strong { color: var(--text); }
+  .dim { color: var(--text-dim); }
+  .small { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<div class="hero">
+  <h1>Risk Management Guide</h1>
+  <p>How every risk setting works, what it controls, and how settings interact with each other.</p>
+</div>
+
+<!-- ═══════════════ NAV ═══════════════ -->
+<div class="nav-bar">
+  <a href="#priority">Exit Priority</a>
+  <a href="#profit-targets">Profit Targets</a>
+  <a href="#trim-mode">Trim Mode</a>
+  <a href="#brackets">Bracket Orders</a>
+  <a href="#stop-loss">Stop Loss</a>
+  <a href="#dynamic-sl">Dynamic SL</a>
+  <a href="#early-trailing">Early Trailing</a>
+  <a href="#trailing-stop">Trailing Stop</a>
+  <a href="#giveback">Giveback Guard</a>
+  <a href="#leave-runner">Leave Runner</a>
+  <a href="#exit-mode">Exit Mode</a>
+  <a href="#compat">Compatibility</a>
+  <a href="#scenarios">Scenarios</a>
+</div>
+
+<div class="container">
+
+<!-- ═══════════════ EXIT PRIORITY ═══════════════ -->
+<section id="priority">
+  <h2><span class="icon">&#9889;</span> Exit Evaluation Priority</h2>
+  <p class="subtitle">When the risk engine evaluates a position, it checks exit conditions in this exact order. The first condition that triggers wins.</p>
+
+  <div class="card">
+    <div class="timeline">
+      <div class="timeline-item red">
+        <div class="tl-label">1. Hard Stop Loss</div>
+        <div class="tl-text">Checks the fixed <code>stop_loss_price</code> on the cache. If price &le; stop price, exits immediately. This is the raw price-based stop.</div>
+      </div>
+      <div class="timeline-item red">
+        <div class="tl-label">2. Channel Stop Loss</div>
+        <div class="tl-text">Evaluates the per-channel SL using priority chain: Manual Override &rarr; Dynamic SL &rarr; Channel SL%. If the position is down more than the SL%, sells everything.</div>
+      </div>
+      <div class="timeline-item green">
+        <div class="tl-label">3. Tiered Profit Targets (T1/T2/T3/T4)</div>
+        <div class="tl-text">Checks each tier sequentially. If price is up &ge; tier%, sells that tier's quantity. Only one tier fires per evaluation cycle.<br>
+        <em>If <code>escalation_only_mode</code> is on: tiers are marked as hit but no sell is placed &mdash; SL escalation handles the exit.</em></div>
+      </div>
+      <div class="timeline-item orange">
+        <div class="tl-label">4. EMA Candlestick Exit</div>
+        <div class="tl-text">If EMA risk is enabled, checks for bearish EMA cross or consecutive no-trend candles. Can trigger a full exit.</div>
+      </div>
+      <div class="timeline-item orange">
+        <div class="tl-label">5. Enhanced Risk Engine</div>
+        <div class="tl-text">Evaluates (in this sub-order): Dynamic SL trigger &rarr; Giveback Guard &rarr; Early Trailing exit. First trigger wins.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-label">6. Trailing Stop</div>
+        <div class="tl-text">If trailing stop is enabled and activated (price reached activation %), checks if current price dropped below the trailing stop price.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-label">7. Global Risk (fallback)</div>
+        <div class="tl-text">Only evaluated if no channel settings are configured. Uses global risk settings as a safety net.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <span class="alert-icon">&#8505;</span>
+    <div><strong>Stale Price Protection:</strong> If the price hasn't changed for an extended period, the system blocks stop-loss exits (to avoid acting on stale data) but still allows profit-target exits (selling at a stale high is favorable).</div>
+  </div>
+</section>
+
+<!-- ═══════════════ PROFIT TARGETS ═══════════════ -->
+<section id="profit-targets">
+  <h2><span class="icon">&#127919;</span> Profit Targets (T1 / T2 / T3 / T4)</h2>
+  <p class="subtitle">Sell portions of your position as price rises through up to 4 profit levels.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">profit_target_1_pct</td><td>float</td><td>0.0</td><td>% gain to trigger Tier 1 sell</td></tr>
+      <tr><td class="mono">profit_target_2_pct</td><td>float</td><td>0.0</td><td>% gain to trigger Tier 2 sell</td></tr>
+      <tr><td class="mono">profit_target_3_pct</td><td>float</td><td>0.0</td><td>% gain to trigger Tier 3 sell</td></tr>
+      <tr><td class="mono">profit_target_4_pct</td><td>float</td><td>0.0</td><td>% gain to trigger Tier 4 sell</td></tr>
+    </table>
+    <p class="dim small" style="margin-top:8px">Set to 0 to disable a tier. Tiers must be in ascending order (T1 &lt; T2 &lt; T3 &lt; T4).</p>
+  </div>
+
+  <div class="card">
+    <h3>How Many Shares Sell at Each Tier?</h3>
+    <p style="margin-bottom:12px">Three methods are checked in this priority order. The first one that has a value wins:</p>
+    <table>
+      <tr><th>Priority</th><th>Method</th><th>Setting</th><th>How It Works</th></tr>
+      <tr>
+        <td><span class="badge badge-purple">1st</span></td>
+        <td>Fixed Quantity</td>
+        <td class="mono">profit_target_qty_1..4</td>
+        <td>Sell exactly this many shares. Capped to max sellable (after reserving runner shares).</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-blue">2nd</span></td>
+        <td>Trim Percentage</td>
+        <td class="mono">profit_target_trim_pct_1..4</td>
+        <td>Sell this % of the sellable shares. Uses <code>floor()</code> rounding. E.g., 30% of 75 sellable = 22 shares.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-green">3rd</span></td>
+        <td>Auto-Calculate</td>
+        <td><span class="dim">none (default)</span></td>
+        <td>Splits sellable shares equally across remaining active tiers.</td>
+      </tr>
+    </table>
+    <p class="dim small" style="margin-top:8px">Default for all qty/trim settings is <code>None</code> (not set), which means auto-calculate kicks in.</p>
+  </div>
+
+  <div class="card">
+    <h3>How Tiers Execute</h3>
+    <p>Tiers fire <strong>sequentially</strong>. T2 only evaluates after T1 has filled. T3 after T2, etc.</p>
+    <div class="flow"><span class="hl">T1 hit</span> &rarr; Sell T1 qty &rarr; Mark tier1_hit = true &rarr; Wait for fill
+               &darr;
+<span class="hl">T2 hit</span> &rarr; Sell T2 qty &rarr; Mark tier2_hit = true &rarr; Wait for fill
+               &darr;
+<span class="hl">T3 hit</span> &rarr; Sell T3 qty &rarr; Mark tier3_hit = true &rarr; Wait for fill
+               &darr;
+<span class="hl">T4 hit</span> &rarr; Sell T4 qty &rarr; Mark tier4_hit = true &rarr; Done</div>
+
+    <p style="margin-top:12px">A tier is <strong>skipped</strong> if:</p>
+    <ul>
+      <li>Its <code>tierN_hit</code> flag is already <code>true</code></li>
+      <li>There is a pending (unfilled) order for that tier</li>
+      <li>The tier % is set to 0 (disabled)</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Small Position Rules</h3>
+    <table>
+      <tr><th>Position Size</th><th>Active Tiers</th><th>Behavior</th></tr>
+      <tr><td>1 share</td><td>Any</td><td>Sells 1 at first PT hit (full close)</td></tr>
+      <tr><td>2 shares</td><td>2 or more</td><td>Sells 1 at T1, sells 1 at T2</td></tr>
+      <tr><td>2 shares</td><td>1 tier only</td><td>Sells all 2 at T1</td></tr>
+      <tr><td>2 shares</td><td>Any, with runner</td><td>Sells <code>qty - runner_qty</code> (partial)</td></tr>
+    </table>
+  </div>
+
+  <details>
+    <summary>Auto-Calculate Example</summary>
+    <div class="detail-body">
+      <p>40 shares, T1=5%, T2=10%, T3=20% (3 active tiers), no runner, no custom qty:</p>
+      <table>
+        <tr><th>Tier</th><th>Remaining Tiers</th><th>Qty</th><th>Calculation</th></tr>
+        <tr><td>T1</td><td>3 (T1, T2, T3)</td><td>13</td><td>floor(40 / 3) = 13</td></tr>
+        <tr><td>T2</td><td>2 (T2, T3)</td><td>13</td><td>floor(27 / 2) = 13</td></tr>
+        <tr><td>T3 (final)</td><td>1 (T3)</td><td>14</td><td>All remaining = 14</td></tr>
+      </table>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════════ TRIM ORDER MODE ═══════════════ -->
+<section id="trim-mode">
+  <h2><span class="icon">&#128176;</span> Trim Order Mode</h2>
+  <p class="subtitle">Controls HOW profit target sells are executed at the broker.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3><span class="badge badge-green">Market</span> Mode</h3>
+      <table>
+        <tr><td class="mono">trim_order_mode</td><td><code>'market'</code></td></tr>
+      </table>
+      <ul style="margin-top:12px">
+        <li>The <strong>software risk engine</strong> detects PT hit, sends a market sell</li>
+        <li>Fills immediately at the current bid price</li>
+        <li>No limit order pre-placed at broker</li>
+        <li><strong>No native OCO</strong> &mdash; only a standalone stop order is placed</li>
+      </ul>
+      <div class="alert alert-success" style="margin-top:12px">
+        <span class="alert-icon">&#10003;</span>
+        <div>Best for: volatile stocks, fast fills, guaranteed execution</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span class="badge badge-blue">Limit</span> Mode</h3>
+      <table>
+        <tr><td class="mono">trim_order_mode</td><td><code>'limit'</code></td></tr>
+      </table>
+      <ul style="margin-top:12px">
+        <li>A <strong>limit sell order</strong> is pre-placed at the broker at the PT price (minus an offset)</li>
+        <li>Can use <strong>native OCO</strong> brackets that link SL and PT</li>
+        <li>Broker fills automatically when price reaches the limit</li>
+        <li>May not fill in fast-moving markets</li>
+      </ul>
+      <div class="alert alert-info" style="margin-top:12px">
+        <span class="alert-icon">&#8505;</span>
+        <div>Best for: liquid stocks, better fill prices, broker-managed protection</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Limit Offset Settings</h3>
+    <p>When <code>trim_order_mode = 'limit'</code>, these control how far below the current price the limit sell is set:</p>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">trim_limit_offset_mode</td><td>string</td><td><code>'dollar'</code></td><td><code>'dollar'</code> or <code>'percent'</code></td></tr>
+      <tr><td class="mono">trim_limit_offset</td><td>float</td><td>0.01</td><td>Dollar amount below current price (used when mode = dollar)</td></tr>
+      <tr><td class="mono">trim_limit_offset_pct</td><td>float</td><td>2.0</td><td>Percent below current price (used when mode = percent)</td></tr>
+    </table>
+
+    <div style="margin-top:16px">
+      <p><strong>Dollar mode</strong> (stocks &ge; $1.00): Rounds to nearest nickel bracket</p>
+      <div class="flow">Current price: $50.00, offset: $0.05
+Base = $50.00 - $0.05 = $49.95
+Cents digit = 5 (&ge; 5), so limit = floor($49.9) + $0.09 = <span class="hl">$49.99</span></div>
+
+      <p style="margin-top:12px"><strong>Dollar mode</strong> (penny stocks &lt; $1.00): Uses 4 decimal precision</p>
+      <div class="flow">Current price: $0.4500, offset: $0.01
+Limit = $0.4500 - $0.01 = <span class="hl">$0.4400</span>
+If result &le; 0: fallback to current_price * 0.92 (8% haircut)</div>
+
+      <p style="margin-top:12px"><strong>Percent mode:</strong></p>
+      <div class="flow">Current price: $50.00, offset_pct: 2%
+Limit = $50.00 * (1 - 2/100) = <span class="hl">$49.00</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ BRACKET ORDERS ═══════════════ -->
+<section id="brackets">
+  <h2><span class="icon">&#128737;</span> Broker Bracket Orders &amp; Native OCO</h2>
+  <p class="subtitle">Protective orders placed directly at the broker. They execute even if the bot is offline.</p>
+
+  <div class="card">
+    <h3>Bracket Mode</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">broker_bracket_mode</td><td>string</td><td><code>'both'</code></td><td>Which bracket orders to place at the broker</td></tr>
+    </table>
+    <table style="margin-top:12px">
+      <tr><th>Value</th><th>Stop Loss at Broker</th><th>Profit Target at Broker</th></tr>
+      <tr><td class="mono">'both'</td><td class="compat-yes">Yes</td><td class="compat-yes">Yes</td></tr>
+      <tr><td class="mono">'sl_only'</td><td class="compat-yes">Yes</td><td class="compat-no">No &mdash; software handles PT</td></tr>
+      <tr><td class="mono">'pt_only'</td><td class="compat-no">No &mdash; software handles SL</td><td class="compat-yes">Yes</td></tr>
+      <tr><td class="mono">'none'</td><td class="compat-no">No</td><td class="compat-no">No &mdash; software handles everything</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>When Is Native OCO Used?</h3>
+    <p>Native OCO (Schwab <code>orderStrategyType: "OCO"</code>) links a stop-loss and a profit-target into one order. When one leg fills, the other auto-cancels.</p>
+    <p style="margin-top:8px"><strong>All of these must be true:</strong></p>
+    <table>
+      <tr><th>#</th><th>Condition</th><th>Why</th></tr>
+      <tr><td>1</td><td><code>trim_order_mode = 'limit'</code></td><td>Market mode has the risk engine handle PT sells directly</td></tr>
+      <tr><td>2</td><td>SL price &gt; 0</td><td>OCO needs a valid stop-loss leg</td></tr>
+      <tr><td>3</td><td>PT price &gt; 0</td><td>OCO needs a valid profit-target leg</td></tr>
+      <tr><td>4</td><td>PT quantity &gt; 0</td><td>Must have shares to sell at PT</td></tr>
+      <tr><td>5</td><td>Position is equity (not an option)</td><td>OCO is only supported for stocks</td></tr>
+      <tr><td>6</td><td><code>broker_bracket_mode</code> allows both SL and PT</td><td>Both legs must be permitted</td></tr>
+    </table>
+
+    <div class="alert alert-warn" style="margin-top:12px">
+      <span class="alert-icon">&#9888;</span>
+      <div>If any condition fails, the system falls back to <strong>separate stop and limit orders</strong>. If the OCO API call fails (e.g., 429 rate limit), it also falls back to separate orders.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>OCO + Standalone Stop Pattern</h3>
+    <p>When the position has more shares than the T1 trim quantity, the system places two orders:</p>
+    <div class="flow"><strong>Example: 100 shares, T1 sells 25, SL at $45, PT at $55</strong>
+
+<span class="accent">OCO Order (25 shares):</span>
+  Leg 1: <span class="err">STOP SELL 25 @ $45.00</span>  (SL for trim shares)
+  Leg 2: <span class="hl">LIMIT SELL 25 @ $55.00</span>  (PT for trim shares)
+  &rarr; If PT fills: SL auto-cancels for these 25 shares
+  &rarr; If SL triggers: PT auto-cancels for these 25 shares
+
+<span class="accent">Standalone STOP (75 shares):</span>
+  <span class="err">STOP SELL 75 @ $45.00</span>  (SL for remaining shares)
+  &rarr; Always active, independent of OCO
+
+<span class="warn">When SL triggers:</span> Both OCO-SL (25) + Standalone (75) fire = <span class="err">100 share exit</span>
+<span class="hl">When PT fills:</span>  OCO-SL auto-cancels. Standalone STOP (75) stays active.</div>
+  </div>
+
+  <div class="card">
+    <h3>Cascade After a Tier Fills</h3>
+    <p>When a tier's order fills, the system automatically sets up brackets for the next tier:</p>
+    <div class="timeline">
+      <div class="timeline-item green">
+        <div class="tl-label">Step 1: Cancel old brackets</div>
+        <div class="tl-text">Cancel the filled tier's OCO (or separate PT order). Cancel standalone stop.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-label">Step 2: Calculate next tier</div>
+        <div class="tl-text">Get the next tier's PT price and quantity. If <code>trim_order_mode = 'market'</code>, skip PT placement &mdash; risk engine will handle.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-label">Step 3: Escalate SL</div>
+        <div class="tl-text">If Dynamic SL is enabled, calculate the new (higher) SL price based on the profile.</div>
+      </div>
+      <div class="timeline-item green">
+        <div class="tl-label">Step 4: Place new brackets</div>
+        <div class="tl-text">Place new OCO (or separate orders) for next tier's qty + updated SL. Place new standalone stop for remaining shares.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>SL Order Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">sl_order_mode</td><td>string</td><td><code>'limit'</code></td><td><code>'market'</code> (guaranteed fill) or <code>'limit'</code> (better price, may not fill)</td></tr>
+      <tr><td class="mono">sl_limit_offset</td><td>float</td><td>0.03</td><td>Offset % below SL price for limit orders</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>OCO Duplicate Sell Prevention</h3>
+    <p>When OCO is managing a tier's PT at the broker, the software risk engine <strong>suppresses its own PT sell</strong> for that same tier. This prevents both the OCO limit and the risk engine from selling the same shares.</p>
+    <div class="flow"><span class="info">Check in _evaluate_exit_conditions:</span>
+
+If <span class="accent">broker_oco_order_id</span> exists
+AND the tier being hit == <span class="accent">broker_pt_tier</span> (the tier OCO is managing)
+&rarr; <span class="hl">Return no_exit()</span> &mdash; let the OCO handle it at the broker</div>
+  </div>
+</section>
+
+<!-- ═══════════════ STOP LOSS ═══════════════ -->
+<section id="stop-loss">
+  <h2><span class="icon">&#128721;</span> Stop Loss</h2>
+  <p class="subtitle">Protects the position from the moment of entry. Sells everything if price drops too far.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">stop_loss_pct</td><td>float</td><td>0.0</td><td>% below entry to trigger stop loss. 0 = disabled.</td></tr>
+    </table>
+    <div class="flow"><strong>Example:</strong> Entry = $50.00, SL = 10%
+SL price = $50.00 &times; (1 - 10/100) = <span class="err">$45.00</span>
+If current price &le; $45.00 &rarr; <span class="err">SELL ALL shares</span></div>
+  </div>
+
+  <div class="card">
+    <h3>SL Source Priority Chain</h3>
+    <p>Multiple systems can set the stop loss price. They are checked in this order &mdash; first match wins:</p>
+    <table>
+      <tr><th>Priority</th><th>Source</th><th>Setting</th><th>Condition</th></tr>
+      <tr>
+        <td><span class="badge badge-red">1st</span></td>
+        <td>Manual Override (price)</td>
+        <td class="mono">manual_sl_price</td>
+        <td><code>exit_strategy_mode != 'risk'</code> AND manual_sl_price is set</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-red">2nd</span></td>
+        <td>Manual Override (%)</td>
+        <td class="mono">manual_sl_pct</td>
+        <td><code>exit_strategy_mode != 'risk'</code> AND manual_sl_pct is set</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-orange">3rd</span></td>
+        <td>Dynamic SL</td>
+        <td class="mono">dynamic_sl_price</td>
+        <td><code>enable_dynamic_sl = true</code> AND dynamic_sl_price is set</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-blue">4th</span></td>
+        <td>Channel SL</td>
+        <td class="mono">stop_loss_pct</td>
+        <td>Always (default fallback)</td>
+      </tr>
+    </table>
+
+    <div class="alert alert-warn" style="margin-top:12px">
+      <span class="alert-icon">&#9888;</span>
+      <div><strong>Dynamic SL floor rule:</strong> When Dynamic SL is active, if the dynamic SL price is <em>looser</em> (lower) than the channel SL floor, the channel SL takes over. This prevents Dynamic SL from offering less protection than the base SL. Specifically: if <code>dynamic_sl_price &gt; channel_sl_floor</code>, channel SL is used instead.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ DYNAMIC SL ═══════════════ -->
+<section id="dynamic-sl">
+  <h2><span class="icon">&#128200;</span> Dynamic SL (SL Escalation)</h2>
+  <p class="subtitle">Automatically moves the stop loss upward as profit targets are hit. Locks in progressively more profit.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">enable_dynamic_sl</td><td>bool</td><td><code>false</code></td><td>Enable/disable Dynamic SL</td></tr>
+      <tr><td class="mono">dynamic_sl_profile</td><td>string</td><td><code>'standard'</code></td><td><code>'conservative'</code>, <code>'standard'</code>, or <code>'aggressive'</code></td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Profile Values</h3>
+    <p>Each profile defines where the SL moves (relative to entry price) after each tier is hit:</p>
+    <table>
+      <tr><th>After Tier Hit</th><th style="text-align:center">Conservative</th><th style="text-align:center">Standard</th><th style="text-align:center">Aggressive</th></tr>
+      <tr>
+        <td><span class="badge badge-green">T1</span></td>
+        <td style="text-align:center">Breakeven (0%)</td>
+        <td style="text-align:center">Breakeven (0%)</td>
+        <td style="text-align:center"><span style="color:var(--red)">-2%</span> (allow small loss)</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-green">T2</span></td>
+        <td style="text-align:center">+3%</td>
+        <td style="text-align:center">+5%</td>
+        <td style="text-align:center">Breakeven (0%)</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-green">T3</span></td>
+        <td style="text-align:center">+8%</td>
+        <td style="text-align:center">+10%</td>
+        <td style="text-align:center">+8%</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-green">T4</span></td>
+        <td style="text-align:center">+15%</td>
+        <td style="text-align:center">+17%</td>
+        <td style="text-align:center">+15%</td>
+      </tr>
+    </table>
+
+    <div class="alert alert-info" style="margin-top:12px">
+      <span class="alert-icon">&#8505;</span>
+      <div><strong>SL only ratchets up, never down.</strong> Once the SL moves to +5%, it stays there even if a new calculation gives a lower value.</div>
+    </div>
+  </div>
+
+  <details>
+    <summary>Example: Standard Profile Walkthrough</summary>
+    <div class="detail-body">
+      <div class="flow"><strong>Entry: $10.00 | Initial SL: $9.00 (-10%)</strong>
+
+Price hits T1 (7.8% = $10.78):
+  &rarr; Sell T1 shares
+  &rarr; Dynamic SL = $10.00 &times; (1 + 0/100) = <span class="hl">$10.00 (breakeven)</span>
+  &rarr; Broker stop updated: $9.00 &rarr; $10.00
+
+Price hits T2 (10% = $11.00):
+  &rarr; Sell T2 shares
+  &rarr; Dynamic SL = $10.00 &times; (1 + 5/100) = <span class="hl">$10.50 (+5%)</span>
+  &rarr; Broker stop updated: $10.00 &rarr; $10.50
+
+Price hits T3 (15% = $11.50):
+  &rarr; Sell T3 shares
+  &rarr; Dynamic SL = $10.00 &times; (1 + 10/100) = <span class="hl">$11.00 (+10%)</span>
+  &rarr; Broker stop updated: $10.50 &rarr; $11.00</div>
+    </div>
+  </details>
+
+  <div class="card">
+    <h3>Ratchet Beyond Last Tier</h3>
+    <p>After <strong>all configured tiers</strong> are hit and price keeps rising, the SL ratchets up to maintain the same "giveback distance" as the last tier:</p>
+    <div class="flow"><strong>Formula (after all tiers hit, price above highest tier):</strong>
+
+giveback_pct = highest_tier_pct - profile_sl_pct_for_that_tier
+  <span class="dim">(minimum 5% if calculated value &lt; 1%)</span>
+
+If current_pnl &gt; highest_tier_pct:
+  ratchet_sl_pct = current_pnl - giveback_pct
+  ratchet_sl_price = entry &times; (1 + ratchet_sl_pct / 100)
+
+<span class="info">Safety cap: SL is always at least 2% below current price</span>
+
+<strong>Example (Standard profile, T1=8%, T2=15%, T3=25%):</strong>
+  highest_tier = T3 at 25%, profile T3 SL = +10%
+  giveback = 25% - 10% = 15%
+
+  Price at +30%: SL = 30% - 15% = <span class="hl">+15%</span> above entry
+  Price at +40%: SL = 40% - 15% = <span class="hl">+25%</span> above entry
+  &rarr; SL trails 15% behind the current profit, ratcheting up</div>
+  </div>
+
+  <div class="card">
+    <h3>Safety Cap</h3>
+    <p>The Dynamic SL price is always capped at <strong>2% below the current price</strong>. If the calculated SL would be at or above the current price:</p>
+    <div class="flow">If sl_price &ge; current_price:
+  capped_sl = current_price &times; 0.98
+  If capped_sl &gt; entry_price: use capped_sl
+  Else: use entry_price (floor at breakeven)</div>
+  </div>
+
+  <div class="card">
+    <h3>Broker Sync</h3>
+    <p>When the Dynamic SL price changes, the broker stop order is updated:</p>
+    <ul>
+      <li><strong>If OCO is active:</strong> Cancel old OCO &rarr; Place new OCO with new SL + same PT price</li>
+      <li><strong>If standalone stop:</strong> Cancel old stop &rarr; Place new stop at the escalated SL price</li>
+      <li>The standalone stop quantity is <code>total_qty - oco_qty</code> (shares not covered by OCO)</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════ EARLY TRAILING ═══════════════ -->
+<section id="early-trailing">
+  <h2><span class="icon">&#128274;</span> Early Trailing</h2>
+  <p class="subtitle">Locks in breakeven early, then ratchets up in fixed profit steps. Each step is permanent.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">enable_early_trailing</td><td>bool</td><td><code>false</code></td><td>Enable/disable Early Trailing</td></tr>
+      <tr><td class="mono">early_trailing_activation_pct</td><td>float</td><td>5.0</td><td>% gain to activate and lock breakeven</td></tr>
+      <tr><td class="mono">early_trailing_step_pct</td><td>float</td><td>3.0</td><td>Each step locks this much additional profit</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>How It Works</h3>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="tl-label">Inactive (below activation %)</div>
+        <div class="tl-text">Channel SL protects position. No breakeven lock yet.<br>
+        <span class="dim">Condition: pct_change &lt; activation_pct</span></div>
+      </div>
+      <div class="timeline-item green">
+        <div class="tl-label">Activated: Breakeven Locked (Step 0)</div>
+        <div class="tl-text">
+          <code>early_stop_price = entry_price</code> (breakeven)<br>
+          <code>early_steps_locked = 0</code><br>
+          <span class="dim">Trigger: pct_change &ge; activation_pct</span>
+        </div>
+      </div>
+      <div class="timeline-item green">
+        <div class="tl-label">Step N Locked</div>
+        <div class="tl-text">
+          Formula: <code>expected_steps = floor((pct_change - activation_pct) / step_pct)</code><br>
+          If expected_steps &gt; early_steps_locked:<br>
+          &nbsp;&nbsp;<code>new_stop_pct = expected_steps &times; step_pct</code><br>
+          &nbsp;&nbsp;<code>early_stop_price = entry_price &times; (1 + new_stop_pct / 100)</code><br>
+          <span class="dim">Steps only increase, never decrease.</span>
+        </div>
+      </div>
+      <div class="timeline-item red">
+        <div class="tl-label">Exit Triggered</div>
+        <div class="tl-text">
+          <code>current_price &le; early_stop_price</code> &rarr; <strong>Sell all shares</strong><br>
+          <span class="dim">Locks in the profit from the last step.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <details>
+    <summary>Step-by-Step Example (activation=5%, step=3%)</summary>
+    <div class="detail-body">
+      <div class="flow"><strong>Entry: $10.00 | Channel SL: $9.00 (-10%)</strong>
+
++4.0% ($10.40): <span class="dim">Inactive. SL at $9.00.</span>
++5.0% ($10.50): <span class="hl">ACTIVATED</span> &rarr; stop = $10.00 (breakeven), steps = 0
++7.9% ($10.79): <span class="dim">No new step. Need +8% for step 1.</span> Stop at $10.00
++8.0% ($10.80): <span class="hl">STEP 1</span> &rarr; stop = $10.00 &times; 1.03 = <span class="hl">$10.30</span>, steps = 1
++10.9%($10.99): <span class="dim">No new step. Need +11% for step 2.</span> Stop at $10.30
++11.0%($11.10): <span class="hl">STEP 2</span> &rarr; stop = $10.00 &times; 1.06 = <span class="hl">$10.60</span>, steps = 2
++14.0%($11.40): <span class="hl">STEP 3</span> &rarr; stop = $10.00 &times; 1.09 = <span class="hl">$10.90</span>, steps = 3
+
+Price drops to $10.90: <span class="err">EXIT</span> &rarr; Sell all, locking +9% profit</div>
+    </div>
+  </details>
+
+  <div class="alert alert-danger">
+    <span class="alert-icon">&#9888;</span>
+    <div><strong>Cannot combine with Trailing Stop.</strong> Early Trailing and Trailing Stop are mutually exclusive. Enabling both will cause an error. Choose one.</div>
+  </div>
+
+  <div class="card">
+    <h3>Interaction with Dynamic SL</h3>
+    <p>Both Early Trailing and Dynamic SL can be active at the same time. The <strong>higher</strong> of the two stop prices is used as the effective SL. The broker stop is synced to whichever is higher.</p>
+    <div class="flow"><strong>Example after T1 hit:</strong>
+Dynamic SL says: $10.00 (breakeven via standard profile)
+Early Trailing says: $10.30 (step 1 locked at +3%)
+<span class="hl">&rarr; Effective SL: $10.30</span> (early trailing wins &mdash; it's higher)</div>
+  </div>
+</section>
+
+<!-- ═══════════════ TRAILING STOP ═══════════════ -->
+<section id="trailing-stop">
+  <h2><span class="icon">&#128205;</span> Trailing Stop</h2>
+  <p class="subtitle">A traditional trailing stop that activates at a profit threshold and trails a fixed % below the highest price.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">trailing_stop_pct</td><td>float</td><td>0.0</td><td>% distance below highest price. 0 = disabled.</td></tr>
+      <tr><td class="mono">trailing_activation_pct</td><td>float</td><td>15.0</td><td>% gain required before trailing activates</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>How It Works</h3>
+    <div class="grid-2">
+      <div>
+        <h3 style="font-size:0.9rem; color:var(--text-dim)">Phase 1: Before Activation</h3>
+        <ul>
+          <li>The system tracks <code>highest_price</code> (ratchets up, never down)</li>
+          <li>Channel SL protects the position</li>
+          <li>Trailing is dormant until price reaches <code>+activation_pct%</code></li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="font-size:0.9rem; color:var(--text-dim)">Phase 2: Activated</h3>
+        <ul>
+          <li>Trailing stop price = <code>highest_price &times; (1 - trailing_pct / 100)</code></li>
+          <li>Stop moves up as price rises, never moves down</li>
+          <li>If price drops to trailing stop &rarr; exit</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <details>
+    <summary>Example (trailing=5%, activation=15%)</summary>
+    <div class="detail-body">
+      <div class="flow"><strong>Entry: $10.00</strong>
+
+$11.00 (+10%): <span class="dim">Not activated yet (need +15%)</span>
+$11.50 (+15%): <span class="hl">ACTIVATED</span>
+  trailing = $11.50 &times; 0.95 = $10.925
+
+$12.00 (+20%): trailing = $12.00 &times; 0.95 = <span class="hl">$11.40</span> (ratcheted up)
+$13.00 (+30%): trailing = $13.00 &times; 0.95 = <span class="hl">$12.35</span> (ratcheted up)
+$12.50 (-3.8%): trailing stays at $12.35 <span class="dim">(never moves down)</span>
+$12.35:         <span class="err">EXIT</span> &rarr; Sells at trailing stop price</div>
+    </div>
+  </details>
+
+  <div class="card">
+    <h3>Leave Runner Interaction</h3>
+    <p>If Leave Runner is enabled, trailing stop sells everything <strong>except</strong> the runner shares:</p>
+    <div class="flow">100 shares, 25% runner
+Trailing triggers:
+  &rarr; Sell 75 shares (trailing exit)
+  &rarr; Keep 25 shares (runner)</div>
+  </div>
+</section>
+
+<!-- ═══════════════ GIVEBACK GUARD ═══════════════ -->
+<section id="giveback">
+  <h2><span class="icon">&#128170;</span> Giveback Guard</h2>
+  <p class="subtitle">Prevents giving back too much unrealized profit. Exits when drawdown from peak profit exceeds the allowed amount.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">enable_giveback_guard</td><td>bool</td><td><code>false</code></td><td>Enable/disable Giveback Guard</td></tr>
+      <tr><td class="mono">giveback_allowed_pct</td><td>float</td><td>30.0</td><td>Maximum % of peak profit that can be given back</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>When Does It Activate?</h3>
+    <p>Giveback Guard activates (starts monitoring) when <strong>either</strong> condition is true:</p>
+    <ul>
+      <li>Tier 2 has been hit (<code>tier2_hit = true</code>), OR</li>
+      <li><code>max_pnl_seen</code> reaches the activation threshold:
+        <ul>
+          <li>If trailing stop configured: uses <code>trailing_activation_pct</code></li>
+          <li>If early trailing configured: uses <code>early_trailing_activation_pct</code></li>
+          <li>Otherwise: defaults to <strong>30%</strong></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Exit Trigger Formula</h3>
+    <div class="flow"><strong>Formula:</strong>
+giveback_threshold = max_pnl_seen &times; (1 - giveback_allowed_pct / 100)
+If current_pnl &le; giveback_threshold &rarr; <span class="err">EXIT ALL</span>
+
+<strong>Example:</strong>
+max_pnl_seen = 20% (position peaked at +20%)
+giveback_allowed_pct = 30%
+giveback_threshold = 20 &times; (1 - 30/100) = 20 &times; 0.70 = <span class="warn">14%</span>
+
+If PnL drops to 14% or below &rarr; <span class="err">EXIT</span>
+(Gave back 6 percentage points of the 20% peak = 30%)</div>
+  </div>
+
+  <details>
+    <summary>More Examples</summary>
+    <div class="detail-body">
+      <table>
+        <tr><th>Peak PnL</th><th>Allowed Giveback</th><th>Exit Threshold</th><th>Meaning</th></tr>
+        <tr><td>+10%</td><td>30%</td><td>+7.0%</td><td>Exit if PnL drops below +7%</td></tr>
+        <tr><td>+20%</td><td>30%</td><td>+14.0%</td><td>Exit if PnL drops below +14%</td></tr>
+        <tr><td>+50%</td><td>30%</td><td>+35.0%</td><td>Exit if PnL drops below +35%</td></tr>
+        <tr><td>+20%</td><td>50%</td><td>+10.0%</td><td>More lenient: exit only below +10%</td></tr>
+        <tr><td>+20%</td><td>10%</td><td>+18.0%</td><td>Very tight: exit if drops below +18%</td></tr>
+      </table>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════════ LEAVE RUNNER ═══════════════ -->
+<section id="leave-runner">
+  <h2><span class="icon">&#127939;</span> Leave Runner</h2>
+  <p class="subtitle">Reserves a portion of the position that profit target sells will never touch. Lets the runner capture extended moves.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">leave_runner_enabled</td><td>bool</td><td><code>false</code></td><td>Enable/disable Leave Runner</td></tr>
+      <tr><td class="mono">leave_runner_pct</td><td>float</td><td>25.0</td><td>% of the position to keep as runner</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>How It Works</h3>
+    <div class="flow"><strong>Formula:</strong>
+runner_qty = max(1, floor(current_qty &times; leave_runner_pct / 100))
+max_sellable = current_qty - runner_qty
+
+<strong>Example: 100 shares, 25% runner</strong>
+runner_qty = max(1, floor(100 &times; 0.25)) = <span class="hl">25 shares reserved</span>
+max_sellable = 100 - 25 = <span class="hl">75 shares</span> available for PT sells
+
+All tier quantities are capped to max_sellable.
+After all tiers sell their shares, 25 runner shares remain.</div>
+  </div>
+
+  <div class="card">
+    <h3>Which Exits Respect the Runner?</h3>
+    <table>
+      <tr><th>Exit Type</th><th>Respects Runner?</th><th>Behavior</th></tr>
+      <tr><td>Profit Targets (T1-T4)</td><td class="compat-yes">Yes</td><td>Qty capped to max_sellable</td></tr>
+      <tr><td>Trailing Stop</td><td class="compat-yes">Yes</td><td>Sells qty - runner, keeps runner</td></tr>
+      <tr><td>Stop Loss</td><td class="compat-no">No</td><td>Sells everything including runners</td></tr>
+      <tr><td>Dynamic SL trigger</td><td class="compat-no">No</td><td>Sells everything</td></tr>
+      <tr><td>Giveback Guard</td><td class="compat-no">No</td><td>Sells everything</td></tr>
+      <tr><td>Early Trailing exit</td><td class="compat-no">No</td><td>Sells everything</td></tr>
+    </table>
+    <div class="alert alert-warn" style="margin-top:12px">
+      <span class="alert-icon">&#9888;</span>
+      <div>Emergency exits (stop loss, dynamic SL, giveback) always sell <strong>all shares</strong> including runners. Runners are only protected during normal profit-taking.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Small Position Behavior</h3>
+    <table>
+      <tr><th>Shares</th><th>Runner (25%)</th><th>Sellable</th><th>Notes</th></tr>
+      <tr><td>1</td><td>0</td><td>1</td><td>Runner requires qty &gt; 1</td></tr>
+      <tr><td>2</td><td>1</td><td>1</td><td>Minimum 1 runner</td></tr>
+      <tr><td>4</td><td>1</td><td>3</td><td>floor(4 &times; 0.25) = 1</td></tr>
+      <tr><td>10</td><td>2</td><td>8</td><td>floor(10 &times; 0.25) = 2</td></tr>
+      <tr><td>100</td><td>25</td><td>75</td><td>floor(100 &times; 0.25) = 25</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════ EXIT MODE ═══════════════ -->
+<section id="exit-mode">
+  <h2><span class="icon">&#128260;</span> Exit Strategy Mode</h2>
+  <p class="subtitle">Controls how the risk engine and signal channels interact for exit decisions.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th></tr>
+      <tr><td class="mono">exit_strategy_mode</td><td>string</td><td><code>'signal'</code></td></tr>
+    </table>
+  </div>
+
+  <div class="grid-2" style="margin-top:16px">
+    <div class="card">
+      <h3><span class="badge badge-blue">signal</span></h3>
+      <ul>
+        <li>Follow the Discord channel's exit calls</li>
+        <li>Risk engine provides backup SL only</li>
+        <li>Manual SL overrides respected</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="badge badge-purple">hybrid</span></h3>
+      <ul>
+        <li>Both signal channel and risk engine active</li>
+        <li>Risk engine exits are approved by the Exit Arbiter</li>
+        <li>Manual SL overrides respected</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card">
+    <h3><span class="badge badge-red">risk</span></h3>
+    <ul>
+      <li>Risk engine manages all exits autonomously</li>
+      <li><strong>Manual SL overrides are IGNORED</strong></li>
+      <li>Only channel settings and dynamic SL are used</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Manual Override Behavior by Mode</h3>
+    <table>
+      <tr><th>Mode</th><th>manual_sl_price</th><th>manual_sl_pct</th></tr>
+      <tr><td class="mono">signal</td><td class="compat-yes">Respected (highest priority)</td><td class="compat-yes">Respected</td></tr>
+      <tr><td class="mono">hybrid</td><td class="compat-yes">Respected (highest priority)</td><td class="compat-yes">Respected</td></tr>
+      <tr><td class="mono">risk</td><td class="compat-no">IGNORED</td><td class="compat-no">IGNORED</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════ ESCALATION ONLY ═══════════════ -->
+<section id="escalation-only">
+  <h2><span class="icon">&#128208;</span> Escalation-Only Mode</h2>
+  <p class="subtitle">Marks tier hits for SL escalation without placing any profit-target sells.</p>
+
+  <div class="card">
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td class="mono">escalation_only_mode</td><td>bool</td><td><code>false</code></td><td>When on, tiers are marked as hit but no partial sells fire</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>How It Works</h3>
+    <p>When <code>escalation_only_mode = true</code>:</p>
+    <ul>
+      <li>Price crossing a tier threshold marks <code>tierN_hit = true</code></li>
+      <li><strong>No sell order is placed</strong> for that tier</li>
+      <li>Dynamic SL escalates based on which tiers are hit (if enabled)</li>
+      <li>The SL ratchet protects profit &mdash; the exit comes from the SL, not from partial sells</li>
+      <li>Broker brackets: <strong>only SL is placed</strong> (no PT orders at broker, since pt1_qty = 0)</li>
+    </ul>
+    <div class="alert alert-warn" style="margin-top:12px">
+      <span class="alert-icon">&#9888;</span>
+      <div>Escalation-only mode <strong>requires</strong> either <code>enable_dynamic_sl</code> or <code>enable_early_trailing</code> to work. Without one of these, tiers are marked but the SL never escalates, providing no benefit.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ COMPATIBILITY MATRIX ═══════════════ -->
+<section id="compat">
+  <h2><span class="icon">&#128279;</span> Feature Compatibility Matrix</h2>
+  <p class="subtitle">Which features can be combined and which conflict.</p>
+
+  <div class="card">
+    <table>
+      <tr>
+        <th>Feature A</th>
+        <th>Feature B</th>
+        <th>Compatible?</th>
+        <th>Notes</th>
+      </tr>
+      <tr>
+        <td>Profit Targets</td><td>Stop Loss</td>
+        <td class="compat-yes">Yes</td>
+        <td>Both always recommended together</td>
+      </tr>
+      <tr>
+        <td>Profit Targets</td><td>Dynamic SL</td>
+        <td class="compat-yes">Yes</td>
+        <td>SL escalates after each PT hit</td>
+      </tr>
+      <tr>
+        <td>Profit Targets</td><td>Early Trailing</td>
+        <td class="compat-yes">Yes</td>
+        <td>Both protect &mdash; higher SL wins</td>
+      </tr>
+      <tr>
+        <td>Profit Targets</td><td>Trailing Stop</td>
+        <td class="compat-yes">Yes</td>
+        <td>Trailing typically activates at higher % than PTs</td>
+      </tr>
+      <tr>
+        <td>Profit Targets</td><td>Leave Runner</td>
+        <td class="compat-yes">Yes</td>
+        <td>Runner reserves shares from PT sells</td>
+      </tr>
+      <tr>
+        <td>Profit Targets</td><td>Giveback Guard</td>
+        <td class="compat-yes">Yes</td>
+        <td>Guard protects remaining shares after PT sells</td>
+      </tr>
+      <tr>
+        <td>Dynamic SL</td><td>Early Trailing</td>
+        <td class="compat-yes">Yes</td>
+        <td>Higher of the two SL prices is used</td>
+      </tr>
+      <tr>
+        <td>Dynamic SL</td><td>Trailing Stop</td>
+        <td class="compat-yes">Yes</td>
+        <td>Higher of the two SL prices is used</td>
+      </tr>
+      <tr style="background: #ff6b6b08">
+        <td>Early Trailing</td><td>Trailing Stop</td>
+        <td class="compat-no">No</td>
+        <td><strong>Mutually exclusive.</strong> Enabling both causes an error.</td>
+      </tr>
+      <tr>
+        <td>Leave Runner</td><td>Stop Loss / Dynamic SL</td>
+        <td class="compat-partial">Partial</td>
+        <td>SL exits sell ALL shares including runners</td>
+      </tr>
+      <tr>
+        <td>Leave Runner</td><td>Trailing Stop</td>
+        <td class="compat-yes">Yes</td>
+        <td>Trailing exit keeps runner shares</td>
+      </tr>
+      <tr>
+        <td>Giveback Guard</td><td>Dynamic SL</td>
+        <td class="compat-yes">Yes</td>
+        <td>Independent checks &mdash; first trigger wins</td>
+      </tr>
+      <tr style="background: #ff6b6b08">
+        <td>OCO Bracket</td><td>Market trim mode</td>
+        <td class="compat-no">No</td>
+        <td>OCO requires limit mode. Market mode uses standalone stop only.</td>
+      </tr>
+      <tr style="background: #ff6b6b08">
+        <td>OCO Bracket</td><td>Options</td>
+        <td class="compat-no">No</td>
+        <td>OCO is only supported for equity positions</td>
+      </tr>
+      <tr>
+        <td>Escalation Only</td><td>Profit Targets</td>
+        <td class="compat-partial">Partial</td>
+        <td>Tiers marked but no sells &mdash; requires Dynamic SL or Early Trailing</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════ SCENARIOS ═══════════════ -->
+<section id="scenarios">
+  <h2><span class="icon">&#128218;</span> Real-World Scenarios</h2>
+  <p class="subtitle">Step-by-step walkthroughs showing how settings interact in actual trades.</p>
+
+  <!-- Scenario A -->
+  <details open>
+    <summary>Scenario A: Market Trim + Dynamic SL (Standard Profile)</summary>
+    <div class="detail-body">
+      <div style="margin-bottom:12px">
+        <span class="tag">trim_order_mode: market</span>
+        <span class="tag">T1: 8%</span>
+        <span class="tag">T2: 15%</span>
+        <span class="tag">SL: 10%</span>
+        <span class="tag">dynamic_sl: standard</span>
+      </div>
+      <div class="flow"><strong>BUY 50 shares at $10.00</strong>
+
+Broker places: <span class="err">STOP SELL 50 @ $9.00</span> (10% SL, full qty, no OCO)
+
+Price rises to $10.80 (+8%) &rarr; <span class="hl">T1 HIT</span>
+  Risk engine: MARKET SELL 25 shares &rarr; Filled at $10.79
+  Dynamic SL: $10.00 &times; (1 + 0/100) = $10.00 (breakeven)
+  Broker: Cancel old stop &rarr; <span class="err">STOP SELL 25 @ $10.00</span>
+
+Price rises to $11.50 (+15%) &rarr; <span class="hl">T2 HIT</span>
+  Risk engine: MARKET SELL 25 shares &rarr; Filled at $11.49
+  Position closed. All broker orders cancelled.
+
+<span class="hl">Result:</span> 25 &times; $10.79 + 25 &times; $11.49 = $557.00 on $500 invested (<span class="hl">+11.4%</span>)</div>
+    </div>
+  </details>
+
+  <!-- Scenario B -->
+  <details>
+    <summary>Scenario B: Limit Trim + OCO Brackets</summary>
+    <div class="detail-body">
+      <div style="margin-bottom:12px">
+        <span class="tag">trim_order_mode: limit</span>
+        <span class="tag">T1: 10%</span>
+        <span class="tag">T2: 20%</span>
+        <span class="tag">SL: 8%</span>
+        <span class="tag">dynamic_sl: standard</span>
+      </div>
+      <div class="flow"><strong>BUY 40 shares at $25.00</strong>
+
+Broker places:
+  <span class="accent">OCO (20 shares):</span> SL=$23.00, PT=$27.45 (limit with offset)
+  <span class="err">STOP SELL 20 @ $23.00</span> (standalone for remaining)
+
+Price rises to $27.50 &rarr; <span class="hl">OCO PT limit fills at $27.45</span>
+  OCO SL auto-cancels (these 20 shares no longer need SL)
+  T1 marked as hit
+  Dynamic SL: $25.00 &times; (1 + 0/100) = $25.00 (breakeven)
+  New OCO (20 shares): SL=$26.25 (+5%), PT=$29.95
+
+Price drops to $26.25 &rarr; <span class="err">OCO SL triggers</span>
+  Sells remaining 20 shares at ~$26.25
+
+<span class="hl">Result:</span> 20 &times; $27.45 + 20 &times; $26.25 = $1,074 on $1,000 (<span class="hl">+7.4%</span>)</div>
+    </div>
+  </details>
+
+  <!-- Scenario C -->
+  <details>
+    <summary>Scenario C: Early Trailing Locks Profit on a Volatile Stock</summary>
+    <div class="detail-body">
+      <div style="margin-bottom:12px">
+        <span class="tag">T1: 5%</span>
+        <span class="tag">SL: 10%</span>
+        <span class="tag">early_trailing: on</span>
+        <span class="tag">activation: 5%</span>
+        <span class="tag">step: 2%</span>
+      </div>
+      <div class="flow"><strong>BUY 30 shares at $8.00</strong>
+
+Broker places: <span class="err">STOP SELL 30 @ $7.20</span> (10% SL)
+
+Price +5% ($8.40): <span class="hl">T1 HIT + EARLY TRAILING ACTIVATED</span>
+  Sell 15 shares at T1
+  Early stop locked at $8.00 (breakeven)
+  Broker: <span class="err">STOP SELL 15 @ $8.00</span>
+
+Price +7% ($8.56): <span class="hl">STEP 1 LOCKED</span>
+  steps = floor((7-5)/2) = 1
+  Early stop = $8.00 &times; 1.02 = $8.16
+  Broker: <span class="err">STOP SELL 15 @ $8.16</span>
+
+Price +9% ($8.72): <span class="hl">STEP 2 LOCKED</span>
+  Early stop = $8.00 &times; 1.04 = $8.32
+  Broker: <span class="err">STOP SELL 15 @ $8.32</span>
+
+Price crashes to $8.32: <span class="err">EARLY TRAILING EXIT</span>
+  Sells remaining 15 shares at $8.32
+  Locked +4% on remaining shares despite crash
+
+<span class="hl">Result:</span> 15 &times; $8.40 + 15 &times; $8.32 = $250.80 on $240 (<span class="hl">+4.5%</span>)</div>
+    </div>
+  </details>
+
+  <!-- Scenario D -->
+  <details>
+    <summary>Scenario D: Full 4-Tier with Leave Runner + Dynamic SL</summary>
+    <div class="detail-body">
+      <div style="margin-bottom:12px">
+        <span class="tag">T1: 5%</span>
+        <span class="tag">T2: 10%</span>
+        <span class="tag">T3: 20%</span>
+        <span class="tag">T4: 40%</span>
+        <span class="tag">SL: 8%</span>
+        <span class="tag">runner: 20%</span>
+        <span class="tag">dynamic_sl: aggressive</span>
+      </div>
+      <div class="flow"><strong>BUY 100 shares at $10.00</strong>
+Runner: max(1, floor(100 &times; 0.20)) = 20 shares
+Sellable: 80 shares
+
+Broker places: <span class="err">STOP SELL 100 @ $9.20</span> (8% SL)
+
+<span class="hl">T1 (+5%)</span>: Sell 20 of 80 sellable at $10.50
+  Dynamic SL (aggressive T1): $10.00 &times; (1 + (-2)/100) = <span class="err">$9.80</span>
+  Broker: <span class="err">STOP SELL 80 @ $9.80</span>
+
+<span class="hl">T2 (+10%)</span>: Sell 20 at $11.00
+  Dynamic SL (aggressive T2): $10.00 &times; (1 + 0/100) = <span class="hl">$10.00</span> (breakeven)
+  Broker: <span class="err">STOP SELL 60 @ $10.00</span>
+
+<span class="hl">T3 (+20%)</span>: Sell 20 at $12.00
+  Dynamic SL (aggressive T3): $10.00 &times; (1 + 8/100) = <span class="hl">$10.80</span>
+  Broker: <span class="err">STOP SELL 40 @ $10.80</span>
+
+<span class="hl">T4 (+40%)</span>: Sell 20 at $14.00
+  Dynamic SL (aggressive T4): $10.00 &times; (1 + 15/100) = <span class="hl">$11.50</span>
+  Broker: <span class="err">STOP SELL 20 @ $11.50</span> (runner only)
+
+<span class="info">20 runner shares remain with SL at $11.50 (+15%)</span>
+<span class="info">If price keeps rising: SL ratchets up (giveback = 40% - 15% = 25%)</span>
+<span class="info">At +50%: SL = 50% - 25% = +25% = $12.50</span>
+<span class="info">At +60%: SL = 60% - 25% = +35% = $13.50</span></div>
+    </div>
+  </details>
+
+  <!-- Scenario E -->
+  <details>
+    <summary>Scenario E: Giveback Guard Saves a Fading Position</summary>
+    <div class="detail-body">
+      <div style="margin-bottom:12px">
+        <span class="tag">T1: 8%</span>
+        <span class="tag">T2: 15%</span>
+        <span class="tag">SL: 10%</span>
+        <span class="tag">giveback_guard: on</span>
+        <span class="tag">giveback_allowed: 30%</span>
+      </div>
+      <div class="flow"><strong>BUY 40 shares at $20.00</strong>
+
+Price rises to $21.60 (+8%): <span class="hl">T1 HIT</span> &mdash; Sell 20 shares
+Price rises to $23.00 (+15%): <span class="hl">T2 HIT</span> &mdash; Sell 20 shares
+  <span class="info">Giveback Guard activates (T2 hit)</span>
+
+But what if T1 hit and price keeps rising without hitting T2:
+  max_pnl_seen tracks the peak: 8% &rarr; 12% &rarr; 18% &rarr; <span class="hl">22% (peak)</span>
+
+Price starts fading:
+  +22%: max_pnl = 22%, threshold = 22 &times; 0.70 = <span class="warn">15.4%</span>
+  +18%: OK (18% &gt; 15.4%)
+  +16%: OK (16% &gt; 15.4%)
+  +15%: <span class="err">EXIT</span> (15% &le; 15.4% threshold)
+
+Giveback guard sells remaining shares at +15% instead of
+letting the position fade back to SL at -10%.</div>
+    </div>
+  </details>
+
+  <!-- Scenario F -->
+  <details>
+    <summary>Scenario F: Escalation-Only Mode (No Partial Sells)</summary>
+    <div class="detail-body">
+      <div style="margin-bottom:12px">
+        <span class="tag">escalation_only: on</span>
+        <span class="tag">T1: 5%</span>
+        <span class="tag">T2: 10%</span>
+        <span class="tag">T3: 20%</span>
+        <span class="tag">SL: 8%</span>
+        <span class="tag">dynamic_sl: standard</span>
+      </div>
+      <div class="flow"><strong>BUY 50 shares at $10.00</strong>
+
+Broker places: <span class="err">STOP SELL 50 @ $9.20</span> (8% SL, NO PT orders)
+
+Price +5%: T1 <span class="warn">MARKED</span> (tier1_hit = true, <span class="info">no sell</span>)
+  Dynamic SL: $10.00 (breakeven)
+  Broker: <span class="err">STOP SELL 50 @ $10.00</span>
+
+Price +10%: T2 <span class="warn">MARKED</span> (tier2_hit = true, <span class="info">no sell</span>)
+  Dynamic SL: $10.50 (+5%)
+  Broker: <span class="err">STOP SELL 50 @ $10.50</span>
+
+Price +20%: T3 <span class="warn">MARKED</span> (tier3_hit = true, <span class="info">no sell</span>)
+  Dynamic SL: $11.00 (+10%)
+  Broker: <span class="err">STOP SELL 50 @ $11.00</span>
+
+Price reverses to $11.00: <span class="err">DYNAMIC SL TRIGGERED</span>
+  Sells ALL 50 shares at ~$11.00 (+10%)
+
+<span class="info">No partial sells at any tier. Full position held until SL triggers.</span>
+<span class="info">SL escalated from -8% to +10% as tiers were crossed.</span></div>
+    </div>
+  </details>
+</section>
+
+</div><!-- /container -->
+</body>
+</html>
