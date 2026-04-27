@@ -1386,6 +1386,27 @@ async function toggleChannelRisk(channelId, enabled) {
     }
 }
 
+function handleBracketModeChange(channelId, mode) {
+    const ptEnabled = (mode === 'both' || mode === 'pt_only');
+    const trimMarketLabel = document.getElementById(`trim-market-label-${channelId}`);
+    const trimMarketRadio = document.querySelector(`input[name="trim-order-mode-${channelId}"][value="market"]`);
+    const trimLimitRadio = document.querySelector(`input[name="trim-order-mode-${channelId}"][value="limit"]`);
+    const autoNote = document.getElementById(`bracket-trim-auto-note-${channelId}`);
+    const limitContainer = document.getElementById(`limit-offset-container-${channelId}`);
+
+    if (ptEnabled) {
+        if (trimMarketRadio) { trimMarketRadio.disabled = true; trimMarketRadio.checked = false; }
+        if (trimLimitRadio) trimLimitRadio.checked = true;
+        if (trimMarketLabel) { trimMarketLabel.style.opacity = '0.4'; trimMarketLabel.style.pointerEvents = 'none'; }
+        if (autoNote) autoNote.style.display = 'block';
+        if (limitContainer) limitContainer.style.display = 'flex';
+    } else {
+        if (trimMarketRadio) trimMarketRadio.disabled = false;
+        if (trimMarketLabel) { trimMarketLabel.style.opacity = '1'; trimMarketLabel.style.pointerEvents = 'auto'; }
+        if (autoNote) autoNote.style.display = 'none';
+    }
+}
+
 function toggleEarlyTrailingExclusion(channelId, enabled) {
     const trailingStopInput = document.getElementById(`risk-trailing-stop-${channelId}`);
     const trailingActivationInput = document.getElementById(`risk-trailing-activation-${channelId}`);

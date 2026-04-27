@@ -217,6 +217,7 @@ The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets
 | 3.14 | Trend preset (PT1-4:25/50/100/150%, SL:30%, Trail:20%) | [ ] |
 | 3.15 | Risk status badge shows ENABLED/DISABLED | [ ] |
 | 3.16 | Risk summary rail shows active features as pills | [ ] |
+| 3.16a | Preset applies order type settings via API (`PUT /api/channels/<id>`) not DOM | [ ] |
 
 **Tab: Targets & SL**
 
@@ -237,43 +238,41 @@ The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets
 | 3.29 | Stop Loss % (`stop_loss_pct`, range 0-100) | [ ] |
 | 3.30 | Trailing Stop % (`trailing_stop_pct`, range 0-100) | [ ] |
 | 3.31 | Trailing Activation % (`trailing_activation_pct`, range 0-500) | [ ] |
-| 3.32 | Early Trailing enable (`enable_early_trailing`) — mutually exclusive with trailing | [ ] |
-| 3.33 | Early Trailing Breakeven at % (`early_trailing_activation_pct`, default 5) | [ ] |
-| 3.34 | Early Trailing Lock profit every % (`early_trailing_step_pct`, default 3) | [ ] |
-| 3.35 | Exit Strategy Mode radio (`exit_strategy_mode`: signal/risk/hybrid) | [ ] |
-| 3.36 | Trim Order Mode radio (`trim_order_mode`: market/limit) | [ ] |
-| 3.37 | Trim Limit Offset Mode (`trim_limit_offset_mode`: dollar/percent) | [ ] |
-| 3.38 | Trim Limit Offset $ (`trim_limit_offset`, range 0-5) | [ ] |
-| 3.39 | Trim Limit Offset % (`trim_limit_offset_pct`, range 0-20) | [ ] |
-| 3.40 | SL Order Mode radio (`sl_order_mode`: limit/market) | [ ] |
-| 3.41 | SL Limit Offset % (`sl_limit_offset`, default 0.03, stored as decimal) | [ ] |
-| 3.42 | Broker Bracket Mode radio (`broker_bracket_mode`: both/sl_only/pt_only/none) | [ ] |
-| 3.43 | Order Chase mode dropdown (off/entry/exit/both → `order_chase_enabled` + `entry_chase_enabled`) | [ ] |
-| 3.44 | Leave Runner enable (`leave_runner_enabled`) | [ ] |
-| 3.45 | Leave Runner % (`leave_runner_pct`, default 25, range 1-100) | [ ] |
+| 3.32 | Exit Strategy Mode radio (`exit_strategy_mode`: signal/risk/hybrid) | [ ] |
+| 3.33 | Order Chase mode dropdown (off/entry/exit/both → `order_chase_enabled` + `entry_chase_enabled`) | [ ] |
+| 3.34 | Leave Runner enable (`leave_runner_enabled`) | [ ] |
+| 3.35 | Leave Runner % (`leave_runner_pct`, default 25, range 1-100) | [ ] |
+
+> **Note:** Trim Order Type and SL Order Type controls are in **Channels → Order Types** tab (Tab 3). Broker Bracket Orders and Early Trailing Stop are in the **Advanced** tab below.
 
 **Tab: Advanced**
 
 | # | Test | Status |
 |---|------|--------|
-| 3.46 | Dynamic SL enable (`enable_dynamic_sl`) | [ ] |
-| 3.47 | Dynamic SL Profile (`dynamic_sl_profile`: conservative/standard/aggressive) | [ ] |
-| 3.48 | SL Escalation Only mode (`escalation_only_mode`) | [ ] |
-| 3.49 | Conservative profile: PT1→BE, PT2→+3%, PT3→+8%, PT4→+15% | [ ] |
-| 3.50 | Standard profile: PT1→BE, PT2→+5%, PT3→+10%, PT4→+17% | [ ] |
-| 3.51 | Aggressive profile: PT1→-2%, PT2→BE, PT3→+8%, PT4→+15% | [ ] |
-| 3.52 | Giveback Guard enable (`enable_giveback_guard`) | [ ] |
-| 3.53 | Max Giveback % (`giveback_allowed_pct`, default 30, range 5-80) | [ ] |
-| 3.54 | EMA Risk enable (`ema_risk_enabled`) | [ ] |
-| 3.55 | EMA Period dropdown (`ema_period`: 3/5/8/13/21, default 5) | [ ] |
-| 3.56 | EMA Candle Timeframe (`ema_timeframe_minutes`: 1/2/3/5, default 5) | [ ] |
-| 3.57 | EMA Buffer % (`ema_buffer_pct`, default 0.1, range 0-2) | [ ] |
-| 3.58 | EMA Exit on Cross (`ema_exit_enabled`, default 1) | [ ] |
-| 3.59 | EMA Stop Escalation (`ema_escalation_enabled`, default 1) | [ ] |
-| 3.60 | EMA No-Trend Candles (`ema_no_trend_candles`, default 3, range 1-20) | [ ] |
-| 3.61 | EMA Use Underlying Chart (`ema_use_underlying`, default 1) | [ ] |
-| 3.62 | EMA Extended Hours (`ema_extended_hours`, default 0) | [ ] |
-| 3.63 | Trade Summary enable per channel (`trade_summary_enabled`) | [ ] |
+| 3.36 | Broker Bracket Mode radio (`broker_bracket_mode`: both/sl_only/pt_only/none) | [ ] |
+| 3.37 | `handleBracketModeChange()` auto-disables market trim when PT bracket active | [ ] |
+| 3.38 | "Order type settings" info note links to Order Types tab | [ ] |
+| 3.39 | Early Trailing enable (`enable_early_trailing`) — mutually exclusive with trailing | [ ] |
+| 3.40 | Early Trailing Breakeven at % (`early_trailing_activation_pct`, default 5) | [ ] |
+| 3.41 | Early Trailing Lock profit every % (`early_trailing_step_pct`, default 3) | [ ] |
+| 3.42 | Dynamic SL enable (`enable_dynamic_sl`) | [ ] |
+| 3.43 | Dynamic SL Profile (`dynamic_sl_profile`: conservative/standard/aggressive) | [ ] |
+| 3.44 | SL Escalation Only mode (`escalation_only_mode`) | [ ] |
+| 3.45 | Conservative profile: PT1→BE, PT2→+3%, PT3→+8%, PT4→+15% | [ ] |
+| 3.46 | Standard profile: PT1→BE, PT2→+5%, PT3→+10%, PT4→+17% | [ ] |
+| 3.47 | Aggressive profile: PT1→-2%, PT2→BE, PT3→+8%, PT4→+15% | [ ] |
+| 3.48 | Giveback Guard enable (`enable_giveback_guard`) | [ ] |
+| 3.49 | Max Giveback % (`giveback_allowed_pct`, default 30, range 5-80) | [ ] |
+| 3.50 | EMA Risk enable (`ema_risk_enabled`) | [ ] |
+| 3.51 | EMA Period dropdown (`ema_period`: 3/5/8/13/21, default 5) | [ ] |
+| 3.52 | EMA Candle Timeframe (`ema_timeframe_minutes`: 1/2/3/5, default 5) | [ ] |
+| 3.53 | EMA Buffer % (`ema_buffer_pct`, default 0.1, range 0-2) | [ ] |
+| 3.54 | EMA Exit on Cross (`ema_exit_enabled`, default 1) | [ ] |
+| 3.55 | EMA Stop Escalation (`ema_escalation_enabled`, default 1) | [ ] |
+| 3.56 | EMA No-Trend Candles (`ema_no_trend_candles`, default 3, range 1-20) | [ ] |
+| 3.57 | EMA Use Underlying Chart (`ema_use_underlying`, default 1) | [ ] |
+| 3.58 | EMA Extended Hours (`ema_extended_hours`, default 0) | [ ] |
+| 3.59 | Trade Summary enable per channel (`trade_summary_enabled`) | [ ] |
 
 **API Endpoints:**
 - [ ] `GET /api/execution-pnl` — execution P&L data
@@ -1157,12 +1156,103 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 | 17.9 | Giveback guard activation | [ ] |
 | 17.10 | Early trailing (activation + step) | [ ] |
 | 17.11 | EMA-based stop loss | [ ] |
-| 17.12 | Broker bracket orders (SL + PT) | [ ] |
+| 17.12 | Broker bracket orders — standalone SL + PT placement | [ ] |
 | 17.13 | Per-channel vs global risk settings | [ ] |
 | 17.14 | Risk cache invalidation on setting change | [ ] |
 | 17.15 | Circuit breaker (daily loss limit) | [ ] |
 | 17.16 | Daily P&L limit enforcement | [ ] |
 | 17.17 | Escalation only mode | [ ] |
+
+#### OCO Bracket Orders (Schwab) [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.18 | OCO initial bracket — tries native OCO for stocks with limit trim mode | [ ] |
+| 17.19 | OCO skipped when `trim_order_mode='market'` even with SL+PT configured | [ ] |
+| 17.20 | OCO fallback — falls back to separate SL+PT when OCO fails or non-stock | [ ] |
+| 17.21 | OCO suppression — software sell suppressed when OCO manages the active PT tier | [ ] |
+| 17.22 | OCO PT cascade — old OCO cancelled, new OCO placed with current SL + next PT | [ ] |
+| 17.23 | OCO stop sync — OCO cancelled and re-placed with updated SL price + same PT | [ ] |
+| 17.24 | OCO-aware cancel — OCO added to cancel list, no double-cancel when OCO=PT ID | [ ] |
+| 17.25 | OCO cache fields cleared together (`broker_oco_order_id`, `_sl_price`, `_pt_price`, `_qty`) | [ ] |
+| 17.26 | Stale `broker_stop_order_id` cleared when it matches old OCO ID (cascade + stop sync) | [ ] |
+| 17.27 | OCO initial placement aliases `broker_stop_order_id` = `broker_pt_order_id` = OCO ID | [ ] |
+| 17.28 | Standalone stop qty = total qty - OCO qty; skip if OCO covers all shares | [ ] |
+| 17.29 | Non-OCO fallback preserves `_skip_cancel_check=True` on all SL/PT placements | [ ] |
+| 17.30 | OCO fields reset on startup in position_cache.py `load()` (all 4 fields) | [ ] |
+| 17.31 | OCO fields serialized in `to_dict()` / deserialized in `from_dict()` | [ ] |
+| 17.32 | Bracket attempt limit — gives up after 3 retries (`_bracket_attempt_count`) | [ ] |
+
+#### Partial Exit & Deferred SL Re-place [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.33 | Partial exit cancels ALL brackets (SL + PT + OCO) | [ ] |
+| 17.34 | `_need_replace_stop` flag set on partial exit | [ ] |
+| 17.35 | Deferred SL re-place fires after 15s delay via `_pending_broker_sl_replace` | [ ] |
+| 17.36 | Field names match: writer `_pending_sl_replace_price` / `_sl_cancelled_at` ↔ consumer | [ ] |
+| 17.37 | PT fill sets `_pending_broker_sl_replace` for deferred SL re-place (Group 9) | [ ] |
+
+#### Wide Spread Guard [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.38 | SL/trailing/giveback exit: spread ≥50% → use last price instead of stale bid | [ ] |
+| 17.39 | SL exit: spread <50% → normal bid pricing | [ ] |
+| 17.40 | PT exit: spread ≥50% → use last price (existing logic) | [ ] |
+
+#### Position Monitor Diagnostics
+
+| # | Test | Status |
+|---|------|--------|
+| 17.41 | Stuck price threshold = 2 (not 3) | [ ] |
+| 17.42 | Tick eval logging every 100 ticks with max latency, slow tick >200ms logged | [ ] |
+| 17.43 | Cycle timing logged every 50 cycles; logged at >500ms, tagged SLOW at >1000ms | [ ] |
+| 17.44 | Heartbeat interval 150s with stream status, cycle/tick stats | [ ] |
+| 17.45 | Position status logging per risk eval cycle with P&L%, SL/PT prices, SL distance | [ ] |
+| 17.46 | Stale bracket reset: `broker_orders_placed=true` + no order IDs → reset | [ ] |
+| 17.47 | Scale-in detection: qty increase → cancel old brackets + clear OCO fields, re-place | [ ] |
+| 17.48 | Multi-broker streaming check: Schwab, IBKR, Tastytrade hub standby detection | [ ] |
+
+#### Position Cache Safety
+
+| # | Test | Status |
+|---|------|--------|
+| 17.49 | Entry-price corruption guard (`_guard_against_corrupt_risk_levels`) clears invalid SL/PT | [ ] |
+| 17.50 | Flip-flop entry-price detection locks price after oscillation detected | [ ] |
+
+#### Webull SL Retry
+
+| # | Test | Status |
+|---|------|--------|
+| 17.51 | Webull SL uses retry counter (`_webull_stp_fail_count`) not permanent flag | [ ] |
+| 17.52 | Webull SL retries on next cycle instead of permanently disabling | [ ] |
+
+#### HTTP Pool Recovery (Schwab Broker) [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.53 | `_create_http_client()` returns httpx.AsyncClient with limits 15/8 | [ ] |
+| 17.54 | `_reset_http_client()` closes old client, creates new, logs reason | [ ] |
+| 17.55 | `_make_request()` catches `PoolTimeout`/`ConnectTimeout`/`ReadTimeout`, resets and retries once | [ ] |
+| 17.56 | `TimeoutError` resets client but re-raises (no silent swallow) | [ ] |
+| 17.57 | Error logging uses `type(e).__name__: {e}` format in get_account_info, get_positions | [ ] |
+
+#### Lot Closure Fill Reconciliation [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.58 | `reconcile_trade_fill_price()` updates lot_closures with broker fill price | [ ] |
+| 17.59 | Lot closure PNL recalculated after fill reconciliation | [ ] |
+| 17.60 | Options use 100x multiplier in lot closure PNL calc | [ ] |
+| 17.61 | Lot closure reconcile error is non-blocking (caught, logged, doesn't abort) | [ ] |
+
+#### Position Cache Atomic Save [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.62 | Cache save uses `json.dump` → `.tmp` → `os.replace()` (no partial writes) | [ ] |
+| 17.63 | Thread-safe: `_cache_lock` scoped to data snapshot only, not I/O | [ ] |
 
 **Validation:** Run the full 10-step checklist from `RISK_SETTINGS_VALIDATION_REFERENCE.md`
 
@@ -1183,6 +1273,11 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 | 18.7 | Audit trail | [ ] |
 | 18.8 | Live price monitoring | [ ] |
 | 18.9 | Purge old orders | [ ] |
+| 18.10 | Default settings: `conditional_order_auto_execute=true` | [ ] |
+| 18.11 | Default settings: `conditional_order_trigger_offset_mode=percent` | [ ] |
+| 18.12 | Default settings: `conditional_order_trigger_offset_percent=0` | [ ] |
+| 18.13 | Default settings: `conditional_order_entry_price_offset_percent=0` | [ ] |
+| 18.14 | Default settings: `conditional_order_default_expiry=end_of_day` | [ ] |
 
 **API Endpoints:**
 - [ ] `GET /api/conditional_orders` — list
