@@ -1628,7 +1628,7 @@ class RiskManager:
         self._connected_broker_names_ts = 0
         
         self._stuck_price_tracker = {}
-        self._STUCK_PRICE_THRESHOLD = 3
+        self._STUCK_PRICE_THRESHOLD = 2
         self._rest_repaired_prices = {}
         self._rest_repair_cycle_keys = {}
         self._STALENESS_EXIT_BLOCK_THRESHOLD = 5
@@ -1857,8 +1857,7 @@ class RiskManager:
             import time as _t
             tick_ts = _t.monotonic()
             with self._dirty_lock:
-                if symbol not in self._dirty_symbols or tick_ts < self._dirty_symbols[symbol]:
-                    self._dirty_symbols[symbol] = tick_ts
+                self._dirty_symbols[symbol] = tick_ts
             tick_price = 0.0
             if q:
                 if hasattr(q, 'last') and q.last and q.last > 0:
@@ -2053,11 +2052,21 @@ class RiskManager:
 
             self._tick_eval_count += 1
             self._tick_eval_total_latency_ms += tick_to_eval_ms
+            if tick_to_eval_ms > getattr(self, '_tick_eval_max_latency_ms', 0):
+                self._tick_eval_max_latency_ms = tick_to_eval_ms
 
-            if self._tick_eval_count <= 3 or self._tick_eval_count % 500 == 0:
+            _should_log_tick = (
+                self._tick_eval_count <= 5
+                or self._tick_eval_count % 100 == 0
+                or tick_to_eval_ms > 200
+                or eval_elapsed_ms > 100
+            )
+            if _should_log_tick:
                 avg_latency = self._tick_eval_total_latency_ms / self._tick_eval_count
-                print(f"[RISK] ⚡ Tick eval #{self._tick_eval_count}: {evaluated} positions in {eval_elapsed_ms:.1f}ms | "
-                      f"tick→eval: {tick_to_eval_ms:.1f}ms | avg: {avg_latency:.1f}ms")
+                _max_lat = getattr(self, '_tick_eval_max_latency_ms', 0)
+                print(f"[RISK] ⚡ Tick eval #{self._tick_eval_count}: {evaluated} pos in {eval_elapsed_ms:.0f}ms | "
+                      f"tick→eval: {tick_to_eval_ms:.0f}ms | avg: {avg_latency:.0f}ms | max: {_max_lat:.0f}ms | "
+                      f"dirty: {', '.join(sorted(dirty_symbol_names)[:3])}")
 
     async def start_monitoring(self) -> None:
         """Start the position monitoring loop with enable gate and standby support."""
@@ -2106,14 +2115,20 @@ class RiskManager:
                     if not hasattr(self, '_cycle_timing_log_counter'):
                         self._cycle_timing_log_counter = 0
                     self._cycle_timing_log_counter += 1
+                    if not hasattr(self, '_cycle_max_ms'):
+                        self._cycle_max_ms = 0
+                    if _cycle_elapsed_ms > self._cycle_max_ms:
+                        self._cycle_max_ms = _cycle_elapsed_ms
                     _should_log_timing = (
                         self._cycle_timing_log_counter <= 5
-                        or self._cycle_timing_log_counter % 100 == 0
+                        or self._cycle_timing_log_counter % 50 == 0
                         or _cycle_elapsed_ms > 500
                     )
                     if _should_log_timing:
                         _detail = getattr(self, '_last_cycle_timing_detail', '')
-                        print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms{_detail}")
+                        _slow = " ⚠️ SLOW" if _cycle_elapsed_ms > 1000 else ""
+                        _ticks = getattr(self, '_tick_eval_count', 0)
+                        print(f"[RISK] ⏱ Cycle #{self._cycle_timing_log_counter}: {_cycle_elapsed_ms:.0f}ms{_detail} | ticks={_ticks} max_cycle={self._cycle_max_ms:.0f}ms{_slow}")
                     interval = self._get_adaptive_interval()
                     _sleep_start = _cycle_t.monotonic()
                     _order_event_woke = False
@@ -2172,10 +2187,25 @@ class RiskManager:
                     await asyncio.sleep(5)
                 
                 self._heartbeat_counter += 1
-                if self._heartbeat_counter >= 60:
+                if self._heartbeat_counter >= 150:
                     self._heartbeat_counter = 0
                     cache_count = len(self.cache.get_all_risk_states()) if self.cache else 0
-                    print(f"[RISK] ♥ Heartbeat: loop alive, {cache_count} risk states cached, standby={self._standby_mode}")
+                    _tc = getattr(self, '_tick_eval_count', 0)
+                    _cc = getattr(self, '_cycle_timing_log_counter', 0)
+                    _max_c = getattr(self, '_cycle_max_ms', 0)
+                    _max_t = getattr(self, '_tick_eval_max_latency_ms', 0)
+                    _avg_t = (self._tick_eval_total_latency_ms / _tc) if _tc > 0 else 0
+                    _stream_status = "live" if not self._standby_mode else "standby"
+                    try:
+                        from src.services.schwab_data_hub import get_schwab_data_hub
+                        _s_hub = get_schwab_data_hub()
+                        if _s_hub.is_streaming():
+                            _s_age = self._get_hub_quote_age(_s_hub, 'SPY')
+                            _stream_status = f"schwab-stream(age={_s_age:.0f}s)" if _s_age is not None else "schwab-stream(no-quote)"
+                    except Exception:
+                        pass
+                    print(f"[RISK] ♥ Heartbeat: cycles={_cc} ticks={_tc} | cycle_max={_max_c:.0f}ms tick_avg={_avg_t:.0f}ms tick_max={_max_t:.0f}ms | "
+                          f"cache={cache_count} stream={_stream_status}")
                     
             except asyncio.CancelledError:
                 print("[RISK] ⚠️ Monitoring task cancelled - exiting loop")
@@ -2372,6 +2402,24 @@ class RiskManager:
             _streaming_live = _check_hub().is_streaming()
         except Exception:
             pass
+        if not _streaming_live:
+            try:
+                from src.services.schwab_data_hub import get_schwab_data_hub as _check_schwab
+                _streaming_live = _check_schwab().is_streaming()
+            except Exception:
+                pass
+        if not _streaming_live:
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub as _check_ibkr
+                _streaming_live = _check_ibkr().is_streaming()
+            except Exception:
+                pass
+        if not _streaming_live:
+            try:
+                from src.services.tastytrade_data_hub import get_tastytrade_data_hub as _check_tt
+                _streaming_live = _check_tt().is_streaming()
+            except Exception:
+                pass
 
         _fill_watch_active = self._has_active_fill_watches()
         if _fill_watch_active:
@@ -2690,6 +2738,45 @@ class RiskManager:
         if (_now_save - self._last_cache_save_ts) >= 2.0:
             self.cache.save()
             self._last_cache_save_ts = _now_save
+
+        if not hasattr(self, '_risk_status_log_ts'):
+            self._risk_status_log_ts = 0
+        if not hasattr(self, '_risk_last_logged_prices'):
+            self._risk_last_logged_prices = {}
+        import time as _rsl_t
+        _rsl_now = _rsl_t.monotonic()
+        _status_interval_elapsed = (_rsl_now - self._risk_status_log_ts) >= 10
+        for pos in positions:
+            _rk = self._pos_tracking_key(pos)
+            _cache = self.cache.get(_rk) or self.cache.get(f"{pos.broker}_{pos.symbol}")
+            if not _cache or not _cache.entry_price or _cache.entry_price <= 0:
+                continue
+            _pnl_pct = ((pos.current_price - _cache.entry_price) / _cache.entry_price) * 100
+            _sl_val = getattr(_cache, 'dynamic_sl_price', None) or getattr(_cache, 'stop_loss_price', None)
+            _pt_val = getattr(_cache, 'profit_target_price', None)
+            _sl_str = f"SL=${_sl_val:.2f}" if _sl_val and _sl_val > 0 else "SL=—"
+            _pt_str = f"PT=${_pt_val:.2f}" if _pt_val and _pt_val > 0 else "PT=—"
+            _prev_price = self._risk_last_logged_prices.get(_rk, 0)
+            _price_changed = abs(pos.current_price - _prev_price) > 0.0001
+            _sl_dist = ""
+            if _sl_val and _sl_val > 0:
+                _sl_dist_pct = ((pos.current_price - _sl_val) / _sl_val) * 100
+                _sl_dist = f" | SL-dist={_sl_dist_pct:.1f}%"
+            _should_log = (
+                _status_interval_elapsed
+                or (_price_changed and abs(pos.current_price - _prev_price) / max(_prev_price, 0.01) > 0.003)
+            )
+            if _should_log:
+                _trailing_str = ""
+                _ts_price = getattr(_cache, 'trailing_stop_price', None)
+                if _ts_price and _ts_price > 0:
+                    _trailing_str = f" | TS=${_ts_price:.2f}"
+                _high = getattr(_cache, 'highest_price', 0)
+                _high_str = f" | high=${_high:.2f}" if _high and _high > 0 else ""
+                print(f"[RISK] 📡 {pos.symbol} ${pos.current_price:.2f} ({_pnl_pct:+.1f}%) | entry=${_cache.entry_price:.2f} | {_sl_str} {_pt_str}{_trailing_str}{_high_str}{_sl_dist} | {pos.broker}")
+                self._risk_last_logged_prices[_rk] = pos.current_price
+        if _status_interval_elapsed:
+            self._risk_status_log_ts = _rsl_now
 
         _mc_t4 = _mc_time.monotonic()
         _setup_ms = (_mc_t1 - _mc_t0) * 1000
@@ -4047,6 +4134,22 @@ class RiskManager:
             cache.broker_orders_placed = False
             cache._bracket_attempt_count = 0
 
+        _current_qty = int(position.quantity)
+        _bracket_qty = getattr(cache, '_bracket_placed_qty', 0)
+        if cache.broker_orders_placed and _bracket_qty > 0 and _current_qty > _bracket_qty and _bbm_check != 'none':
+            print(f"[RISK] 🔄 Scale-in detected for {position.symbol}: bracket qty={_bracket_qty} → position qty={_current_qty} — cancelling old brackets and re-placing")
+            try:
+                await self._cancel_broker_bracket_orders(position, cache, cancel_stop=True, cancel_pt=True)
+            except Exception as _cancel_err:
+                print(f"[RISK] ⚠️ Failed to cancel old brackets on scale-in: {_cancel_err}")
+            cache.broker_orders_placed = False
+            cache.broker_stop_order_id = None
+            cache.broker_pt_order_id = None
+            cache.broker_oco_order_id = None
+            cache.broker_oco_qty = 0
+            cache._bracket_attempt_count = 0
+            cache._bracket_placed_qty = 0
+
         if channel_settings and not cache.broker_orders_placed:
             _bracket_attempts = getattr(cache, '_bracket_attempt_count', 0)
             if _bracket_attempts >= 3:
@@ -4060,6 +4163,8 @@ class RiskManager:
                     try:
                         cache._bracket_attempt_count = _bracket_attempts + 1
                         await self._place_initial_broker_bracket(position, cache, channel_settings)
+                        if cache.broker_orders_placed:
+                            cache._bracket_placed_qty = int(position.quantity)
                     except Exception as e:
                         print(f"[RISK] ⚠️ Initial broker bracket failed attempt {_bracket_attempts + 1}/3 (non-blocking): {e}")
                 elif not _has_levels:
@@ -4905,6 +5010,12 @@ class RiskManager:
                         print(f"[RISK] ⚠️ Schwab not authenticated, skip initial bracket")
                         return
 
+                    if hasattr(self.schwab_broker, '_cancel_conflicting_sell_orders'):
+                        try:
+                            await self.schwab_broker._cancel_conflicting_sell_orders(symbol, 'OPTION' if is_option else 'EQUITY')
+                        except Exception as _cc_err:
+                            print(f"[RISK] ⚠️ Pre-bracket cancel for {symbol} failed: {_cc_err}")
+
                     _asset_type = 'OPTION' if is_option else 'EQUITY'
                     _schwab_stop_symbol = symbol
                     if is_option and hasattr(self.schwab_broker, '_build_option_symbol'):
@@ -5558,11 +5669,14 @@ class RiskManager:
 
                 if _use_oco:
                     if cache.broker_oco_order_id:
+                        _old_oco_id = cache.broker_oco_order_id
                         try:
                             await self.schwab_broker.cancel_order(cache.broker_oco_order_id)
                             print(f"[RISK] 🔄 Cancelled old OCO #{cache.broker_oco_order_id} for cascade")
                         except Exception:
                             pass
+                        if cache.broker_stop_order_id == _old_oco_id:
+                            cache.broker_stop_order_id = None
                         cache.broker_oco_order_id = None
                         cache.broker_oco_sl_price = None
                         cache.broker_oco_pt_price = None
@@ -5876,11 +5990,14 @@ class RiskManager:
                 if cache.broker_oco_order_id:
                     _oco_pt_price = cache.broker_oco_pt_price
                     _oco_qty = cache.broker_oco_qty
+                    _old_oco_id = cache.broker_oco_order_id
                     try:
                         await self.schwab_broker.cancel_order(cache.broker_oco_order_id)
                         print(f"[RISK] 🔄 Cancelled OCO #{cache.broker_oco_order_id} for SL update")
                     except Exception:
                         pass
+                    if cache.broker_stop_order_id == _old_oco_id:
+                        cache.broker_stop_order_id = None
                     cache.broker_oco_order_id = None
                     cache.broker_oco_sl_price = None
                     cache.broker_oco_pt_price = None
@@ -6304,7 +6421,8 @@ class RiskManager:
                     else:
                         await self._cancel_broker_bracket_orders(position, cache)
                 except Exception as e:
-                    print(f"[RISK] ⚠️ Bracket order cleanup failed (non-blocking): {e}")
+                    bracket_type = "OCO + bracket" if _had_oco else "bracket"
+                    print(f"[RISK] ⚠️ {bracket_type} order cleanup failed (non-blocking): {e}")
         
         trigger = decision.risk_trigger or ''
         is_dynamic_sl = trigger == 'dynamic_sl' or (trigger == 'stop_loss' and 'Dynamic SL' in decision.reason)
@@ -6565,11 +6683,18 @@ class RiskManager:
                         stc_signal['price'] = hub_mid
                         print(f"[RISK] 💰 Penny stock exit (mid-only): ${hub_mid:.4f} (last ${last_price:.4f}) via {hub_src}")
                 elif is_stop_exit or is_trailing_exit or is_giveback_exit:
-                    if hub_bid > 0:
+                    if hub_bid > 0 and spread_pct < 50:
                         stc_signal['price'] = hub_bid
                         print(f"[RISK] 💰 Exit price: bid ${hub_bid:.2f} "
                               f"(ask ${hub_ask:.2f}, mid ${hub_mid:.2f}, last ${last_price:.2f}, spread {spread_pct:.1f}%) "
                               f"via {hub_src}")
+                    elif hub_bid > 0 and spread_pct >= 50 and last_price > 0:
+                        stc_signal['price'] = last_price
+                        print(f"[RISK] ⚠️ Wide spread {spread_pct:.1f}% on SL exit (bid ${hub_bid:.2f}, ask ${hub_ask:.2f}) — "
+                              f"using last ${last_price:.2f} instead of stale bid")
+                    elif hub_bid > 0:
+                        stc_signal['price'] = hub_bid
+                        print(f"[RISK] 💰 SL exit: bid ${hub_bid:.2f} (wide spread but no last price) via {hub_src}")
                     else:
                         print(f"[RISK] Hub has ask-only (${hub_ask:.2f}), no bid — using last ${last_price:.2f} for SL exit")
                 elif is_profit_exit:
