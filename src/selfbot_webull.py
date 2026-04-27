@@ -14257,12 +14257,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     conn = db.get_connection()
                     cursor = conn.cursor()
                     if sl_symbol:
-                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, qty 
+                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, quantity 
                                          FROM trades WHERE channel_id = ? AND UPPER(symbol) = UPPER(?) 
                                          AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
                                          ORDER BY id DESC LIMIT 1''', (channel_id_str, sl_symbol))
                     else:
-                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, qty 
+                        cursor.execute('''SELECT id, symbol, executed_price, stop_loss_price, broker, quantity 
                                          FROM trades WHERE channel_id = ? 
                                          AND status IN ('OPEN','PARTIAL') AND direction = 'BTO' 
                                          ORDER BY id DESC LIMIT 1''', (channel_id_str,))
