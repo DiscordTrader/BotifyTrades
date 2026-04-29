@@ -31,7 +31,7 @@ def get_machine_id() -> str:
                 machine_uuid = platform.node()
         elif system == 'Linux':
             try:
-                with open('/etc/machine-id', 'r') as f:
+                with open('/etc/machine-id', 'r', encoding='utf-8') as f:
                     machine_uuid = f.read().strip()
             except:
                 machine_uuid = platform.node()
@@ -55,7 +55,7 @@ def get_machine_id() -> str:
         machine_uuid = platform.node()
     
     raw = f"{machine_uuid}_{platform.system()}_{platform.machine()}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]
 
 
 def get_machine_info() -> dict:

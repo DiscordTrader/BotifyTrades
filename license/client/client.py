@@ -188,7 +188,7 @@ class LicenseClient:
         """Get cached token if exists"""
         try:
             if self.cache_file.exists():
-                return json.loads(self.cache_file.read_text())
+                return json.loads(self.cache_file.read_text(encoding='utf-8'))
         except Exception:
             pass
         return None
@@ -200,6 +200,6 @@ class LicenseClient:
                 "token": token,
                 "cached_at": datetime.utcnow().isoformat()
             }
-            self.cache_file.write_text(json.dumps(cache_data))
+            self.cache_file.write_text(json.dumps(cache_data), encoding='utf-8')
         except Exception as e:
             print(f"[LICENSE] Failed to cache token: {e}")

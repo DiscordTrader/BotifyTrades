@@ -254,7 +254,7 @@ del "%~f0"
 '''
                     # Write batch file to user's temp directory (not PyInstaller's temp)
                     batch_path = os.path.join(tempfile.gettempdir(), f"botify_restart_{os.getpid()}.bat")
-                    with open(batch_path, 'w') as f:
+                    with open(batch_path, 'w', encoding='utf-8') as f:
                         f.write(batch_content)
                     
                     print(f"[LIFECYCLE] Created restart script: {batch_path}")

@@ -28,7 +28,7 @@
         
         <div class="nav-menu">
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/', '/channels', '/execution', '/pnl', '/trades'] %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/', '/channels', '/execution', '/trades'] %}active{% endif %}">
                     Trading
                     <span class="dropdown-arrow">▼</span>
                 </button>
@@ -53,11 +53,6 @@
                         <span class="dropdown-text">Canada Markets</span>
                         <span class="dropdown-desc">TSX/CSE</span>
                     </a>
-                    <a href="/pnl" class="dropdown-item {% if request.path == '/pnl' %}active{% endif %}">
-                        <span class="dropdown-icon">📊</span>
-                        <span class="dropdown-text">P&L Tracker</span>
-                        <span class="dropdown-desc">Signal & Execution</span>
-                    </a>
                     <a href="/trades" class="dropdown-item {% if request.path == '/trades' %}active{% endif %}">
                         <span class="dropdown-icon">📈</span>
                         <span class="dropdown-text">Trades</span>
@@ -67,11 +62,16 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/options', '/leaderboard', '/simulation', '/performance', '/verification'] %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/pnl', '/options', '/leaderboard', '/simulation', '/performance', '/verification'] %}active{% endif %}">
                     Analysis
                     <span class="dropdown-arrow">▼</span>
                 </button>
                 <div class="nav-dropdown-content">
+                    <a href="/pnl" class="dropdown-item {% if request.path == '/pnl' %}active{% endif %}">
+                        <span class="dropdown-icon">💰</span>
+                        <span class="dropdown-text">P&L Tracker</span>
+                        <span class="dropdown-desc">Profit & loss tracking</span>
+                    </a>
                     <a href="/options" class="dropdown-item {% if request.path == '/options' %}active{% endif %}">
                         <span class="dropdown-icon">🎯</span>
                         <span class="dropdown-text">Options</span>

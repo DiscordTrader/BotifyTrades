@@ -2607,7 +2607,7 @@ def create_local_recovery_code(username: str) -> Optional[Dict[str, str]]:
     
     recovery_file = recovery_dir / f'recovery_{secrets.token_hex(8)}.txt'
     
-    with open(recovery_file, 'w') as f:
+    with open(recovery_file, 'w', encoding='utf-8') as f:
         f.write("=" * 50 + "\n")
         f.write("  BOTIFYTRADES PASSWORD RECOVERY CODE\n")
         f.write("=" * 50 + "\n\n")

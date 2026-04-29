@@ -1170,6 +1170,142 @@ class SignalFormatRegistry:
             ]
         )
 
+        # =====================================================================
+        # TEMPLE OF BOOM FORMATS (priority 76-79)
+        # =====================================================================
+        from src.signals.temple_parser import (
+            parse_temple_zz_emoji_entry, parse_temple_zz_emoji_exit,
+            parse_temple_zz_emoji_target, parse_temple_zz_stock_entry,
+            parse_temple_zz_stock_exit, parse_temple_zz_trim,
+            parse_temple_rf_options, parse_temple_options_standard,
+            parse_temple_zz_options_a, parse_temple_zz_options_b,
+            parse_temple_ts_options, parse_temple_options_exit,
+        )
+
+        # --- Stock channel (⚡│zz) ---
+
+        self.register(
+            name="temple_zz_emoji_entry",
+            description="Temple stock entry with ▶ emoji: ▶ SYMBOL $PRICE",
+            priority=76,
+            pattern=r'▶\s*(?:In\s+)?\$?([A-Z]{1,5})\s+\$?(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_emoji_entry,
+            examples=["▶ PLTR $22.50", "▶ In SOFI $8.30 SL $7.90 PT $9.50"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_emoji_exit",
+            description="Temple stock exit with ⛔ emoji: ⛔ SYMBOL",
+            priority=76,
+            pattern=r'⛔\s*(?:Out\s+|SL\s+out\s+|Cut\s+)?\$?([A-Z]{1,5})',
+            parser=parse_temple_zz_emoji_exit,
+            examples=["⛔ PLTR", "⛔ Out SOFI", "⛔ SL out RIVN"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_emoji_target",
+            description="Temple stock target hit with 🎯 emoji (trim)",
+            priority=76,
+            pattern=r'🎯\s*\$?([A-Z]{1,5})',
+            parser=parse_temple_zz_emoji_target,
+            examples=["🎯 PLTR", "🎯 SOFI"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_stock_entry",
+            description="Temple stock entry: In SYMBOL $PRICE",
+            priority=77,
+            pattern=r'\b[Ii]n\s+\$?([A-Z]{1,5})\s+(?:\$|avg\s*\$?)(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_stock_entry,
+            examples=["In PLTR $22.50", "In SOFI avg $8.30"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_stock_exit",
+            description="Temple stock exit: Out/SL out/Cut SYMBOL",
+            priority=77,
+            pattern=r'\b(?:Out|SL\s+out|Cut)\s+\$?([A-Z]{1,5})\b',
+            parser=parse_temple_zz_stock_exit,
+            examples=["Out PLTR", "SL out SOFI", "Cut RIVN"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_trim_pct",
+            description="Temple stock trim: Trim 35% / Trim SYMBOL 50%",
+            priority=77,
+            pattern=r'\b[Tt]rim\s+(?:\$?([A-Z]{1,5})\s+)?(\d+(?:\.\d+)?)\s*%',
+            parser=parse_temple_zz_trim,
+            examples=["Trim 35%", "Trim PLTR 50%"],
+            flags=re.IGNORECASE
+        )
+
+        # --- Options channel (🚨│options-alerts💰) ---
+
+        self.register(
+            name="temple_rf_options",
+            description="Temple RF options: buy TICKER STRIKE+C at PRICE for EXPIRY",
+            priority=78,
+            pattern=r'\bbuy\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*\+\s*([CcPp])\s+at\s+\$?(\d+(?:\.\d+)?)\s+for\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
+            parser=parse_temple_rf_options,
+            examples=["buy QQQ 530+C at 2.50 for 5/16", "buy SPY 580+P at 1.20 for 5/9"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_ts_options",
+            description="Temple Toughshit options: TICKER STRIKE Puts-.75 C SL .65",
+            priority=78,
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s+(Puts?|Calls?)\s*[-–]?\s*(\.?\d+(?:\.\d+)?)\s+C\b',
+            parser=parse_temple_ts_options,
+            examples=["QQQ 579 Puts-.75 C SL .65", "SPY 580 Calls-1.20 C"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_options_a",
+            description="Temple zz options: TICKER C/P STRIKE daily/weekly",
+            priority=78,
+            pattern=r'\$?([A-Z]{1,5})\s+([CcPp])\s+(\d+(?:\.\d+)?)\s+(daily|weekly|\d{1,2}/\d{1,2}(?:/\d{2,4})?)',
+            parser=parse_temple_zz_options_a,
+            examples=["SPY P 653 daily", "QQQ C 480 5/16"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_options_b",
+            description="Temple zz options: TICKER STRIKEc PRICE",
+            priority=79,
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+(\d+(?:\.\d+)?)(?!\s*/)',
+            parser=parse_temple_zz_options_b,
+            examples=["SPY 580c 1.80", "NVDA 135c 2.50"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_options_standard",
+            description="Temple options standard: TICKER STRIKEc @.PRICE",
+            priority=79,
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+@\s*\$?(\.?\d+(?:\.\d+)?)',
+            parser=parse_temple_options_standard,
+            examples=["TSLA 350c @.85", "SPY 580 C @1.80", "NVDA 135c @1.20"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_options_exit",
+            description="Temple options exit: out/sold TICKER STRIKEc",
+            priority=76,
+            pattern=r'\b(?:out|sold|cut|SL\s+out)\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])',
+            parser=parse_temple_options_exit,
+            examples=["out TSLA 350c", "sold SPY 580c 2.50", "SL out QQQ 480p"],
+            flags=re.IGNORECASE
+        )
+
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()

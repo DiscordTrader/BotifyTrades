@@ -55,7 +55,7 @@ class SODBalanceCache:
         try:
             if not os.path.exists(_PERSIST_PATH):
                 return
-            with open(_PERSIST_PATH, 'r') as f:
+            with open(_PERSIST_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             try:
                 from zoneinfo import ZoneInfo
@@ -85,7 +85,7 @@ class SODBalanceCache:
                     entry['_date'] = date_str
                     persist_data[cache_key] = entry
             tmp_path = _PERSIST_PATH + '.tmp'
-            with open(tmp_path, 'w') as f:
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(persist_data, f, indent=2)
             os.replace(tmp_path, _PERSIST_PATH)
         except Exception as e:

@@ -164,7 +164,7 @@ class ConsistencyChecker:
         import re
         from collections import defaultdict
         
-        content = routes_file.read_text()
+        content = routes_file.read_text(encoding='utf-8')
         route_pattern = r"@(?:app|bp)\.route\(['\"]([^'\"]+)['\"](?:,\s*methods=\[([^\]]+)\])?\)"
         matches = re.findall(route_pattern, content)
         
@@ -296,14 +296,14 @@ class ConsistencyChecker:
         if not admin_server.exists():
             issues.append('admin_server.py not found')
         else:
-            content = admin_server.read_text()
+            content = admin_server.read_text(encoding='utf-8')
             if 'BUILD_TARGET' not in content or 'LICENSE_SERVER_MODE' not in content:
                 issues.append('admin_server.py missing required env vars')
         
         # Check selfbot_webull.py has entry point verification
         selfbot = Path('src/selfbot_webull.py')
         if selfbot.exists():
-            content = selfbot.read_text()
+            content = selfbot.read_text(encoding='utf-8')
             if '_is_admin_entrypoint' not in content:
                 issues.append('selfbot missing entry point verification')
         

@@ -35,6 +35,20 @@ from .spy_sniper_parser import (
     format_as_bto,
     format_as_stc,
 )
+from .temple_parser import (
+    parse_temple_zz_emoji_entry,
+    parse_temple_zz_emoji_exit,
+    parse_temple_zz_emoji_target,
+    parse_temple_zz_stock_entry,
+    parse_temple_zz_stock_exit,
+    parse_temple_zz_trim,
+    parse_temple_rf_options,
+    parse_temple_options_standard,
+    parse_temple_zz_options_a,
+    parse_temple_zz_options_b,
+    parse_temple_ts_options,
+    parse_temple_options_exit,
+)
 
 __all__ = [
     'parse_option_signal',
@@ -61,4 +75,16 @@ __all__ = [
     'get_position_tracker',
     'format_as_bto',
     'format_as_stc',
+    'parse_temple_zz_emoji_entry',
+    'parse_temple_zz_emoji_exit',
+    'parse_temple_zz_emoji_target',
+    'parse_temple_zz_stock_entry',
+    'parse_temple_zz_stock_exit',
+    'parse_temple_zz_trim',
+    'parse_temple_rf_options',
+    'parse_temple_options_standard',
+    'parse_temple_zz_options_a',
+    'parse_temple_zz_options_b',
+    'parse_temple_ts_options',
+    'parse_temple_options_exit',
 ]

@@ -677,7 +677,7 @@ if not LICENSE_VALID:
         cache_file = Path.home() / '.discord_trading_bot' / 'license_cache.json'
         if cache_file.exists():
             import json
-            with open(cache_file, 'r') as f:
+            with open(cache_file, 'r', encoding='utf-8') as f:
                 cache_data = json.load(f)
                 cache_license = cache_data.get('license_key', '').strip()
     except Exception:
@@ -5760,7 +5760,7 @@ class WebullBroker:
                 try:
                     import os as _os
                     _chain_dbg = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'chain_debug.log')
-                    with open(_chain_dbg, 'w') as _df:
+                    with open(_chain_dbg, 'w', encoding='utf-8') as _df:
                         _df.write(f"=== RAW CHAIN FROM WEBULL API: {symbol} {expiration_date} ===\n")
                         _df.write(f"chain_data rows: {len(chain_data)}\n")
                         _df.write(f"calls: {len(calls)}, puts: {len(puts)}\n\n")
@@ -8442,8 +8442,7 @@ class SelfClient(discord.Client):
                     mode = "PAPER" if schwab_creds.get('dry_run', False) else "LIVE"
                     _original_print(f"[SCHWAB] ✓ Connected successfully ({mode})", flush=True)
                     try:
-                        loop = asyncio.get_event_loop()
-                        self.schwab_broker.start_streaming(loop=loop)
+                        self.schwab_broker.start_streaming()
                     except Exception as stream_err:
                         _original_print(f"[SCHWAB] ⚠️ Streaming start skipped (REST fallback active): {stream_err}", flush=True)
                     try:

@@ -24,7 +24,7 @@ def get_machine_id() -> str:
     # FIRST: Check if we have a persisted machine ID file
     try:
         if MACHINE_ID_FILE.exists():
-            saved_id = MACHINE_ID_FILE.read_text().strip()
+            saved_id = MACHINE_ID_FILE.read_text(encoding='utf-8').strip()
             if saved_id and len(saved_id) >= 8:  # Allow various lengths
                 return saved_id
     except Exception:
@@ -35,14 +35,14 @@ def get_machine_id() -> str:
         cache_file = MACHINE_ID_FILE.parent / 'license_cache.json'
         if cache_file.exists():
             import json
-            with open(cache_file, 'r') as f:
+            with open(cache_file, 'r', encoding='utf-8') as f:
                 cache_data = json.load(f)
                 cached_machine_id = cache_data.get('machine_id', '').strip()
                 if cached_machine_id and len(cached_machine_id) >= 8:
                     # Migrate: save this as the persistent machine ID
                     try:
                         MACHINE_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
-                        MACHINE_ID_FILE.write_text(cached_machine_id)
+                        MACHINE_ID_FILE.write_text(cached_machine_id, encoding='utf-8')
                     except Exception:
                         pass
                     return cached_machine_id
@@ -72,7 +72,7 @@ def get_machine_id() -> str:
     # PERSIST the machine ID for future runs
     try:
         MACHINE_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
-        MACHINE_ID_FILE.write_text(machine_id)
+        MACHINE_ID_FILE.write_text(machine_id, encoding='utf-8')
     except Exception:
         pass  # Best effort
     
@@ -147,15 +147,15 @@ def _get_linux_identifiers() -> list:
     
     try:
         if os.path.exists('/etc/machine-id'):
-            with open('/etc/machine-id', 'r') as f:
+            with open('/etc/machine-id', 'r', encoding='utf-8') as f:
                 machine_id = f.read().strip()
                 identifiers.append(f"machine_id:{machine_id}")
     except Exception:
         pass
-    
+
     try:
         if os.path.exists('/var/lib/dbus/machine-id'):
-            with open('/var/lib/dbus/machine-id', 'r') as f:
+            with open('/var/lib/dbus/machine-id', 'r', encoding='utf-8') as f:
                 dbus_id = f.read().strip()
                 identifiers.append(f"dbus_id:{dbus_id}")
     except Exception:

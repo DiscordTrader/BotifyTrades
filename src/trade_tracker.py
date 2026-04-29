@@ -366,7 +366,7 @@ Keep it concise and actionable."""
         def save():
             try:
                 data = [t.to_dict() for t in self.trades]
-                with open(self.storage_file, 'w') as f:
+                with open(self.storage_file, 'w', encoding='utf-8') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
                 print(f"[TRACKER] Warning: Could not save trades: {e}")
@@ -377,7 +377,7 @@ Keep it concise and actionable."""
         """Load trades from disk"""
         try:
             if os.path.exists(self.storage_file):
-                with open(self.storage_file, 'r') as f:
+                with open(self.storage_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self.trades = [ExecutedTrade.from_dict(t) for t in data]
                 print(f"[TRACKER] Loaded {len(self.trades)} trades from storage")

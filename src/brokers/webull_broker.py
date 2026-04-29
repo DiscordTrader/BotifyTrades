@@ -1212,7 +1212,7 @@ class WebullBroker(BrokerInterface):
                         for key_variant in [f"{self.name}_{symbol}_stock", f"{self.name.upper()}_{symbol}_stock"]:
                             if key_variant not in existing:
                                 existing.append(key_variant)
-                        with open(_pf_file, 'w') as _f:
+                        with open(_pf_file, 'w', encoding='utf-8') as _f:
                             _json.dump(existing, _f, indent=2)
                         print(f"[{self.name}] 🛑 {symbol} added to permanent failure blocklist")
                     except Exception as bf_err:

@@ -77,28 +77,28 @@ class TestDynamicSLProfiles:
     """Tests for Dynamic SL Escalation feature."""
     
     def test_standard_profile_levels(self):
-        """Verify standard profile SL levels: BE, +5%, +15%, +25%."""
+        """Verify standard profile SL levels: BE, +5%, +10%, +17%."""
         profile = DYNAMIC_SL_PROFILES['standard']
         assert profile['pt1_sl_pct'] == 0    # Breakeven
         assert profile['pt2_sl_pct'] == 5    # +5%
-        assert profile['pt3_sl_pct'] == 15   # +15%
-        assert profile['pt4_sl_pct'] == 25   # +25%
-    
+        assert profile['pt3_sl_pct'] == 10   # +10%
+        assert profile['pt4_sl_pct'] == 17   # +17%
+
     def test_conservative_profile_levels(self):
-        """Verify conservative profile SL levels: BE, +3%, +10%, +20%."""
+        """Verify conservative profile SL levels: BE, +3%, +8%, +15%."""
         profile = DYNAMIC_SL_PROFILES['conservative']
         assert profile['pt1_sl_pct'] == 0    # Breakeven
         assert profile['pt2_sl_pct'] == 3    # +3%
-        assert profile['pt3_sl_pct'] == 10   # +10%
-        assert profile['pt4_sl_pct'] == 20   # +20%
-    
+        assert profile['pt3_sl_pct'] == 8    # +8%
+        assert profile['pt4_sl_pct'] == 15   # +15%
+
     def test_aggressive_profile_levels(self):
-        """Verify aggressive profile SL levels: -2%, BE, +10%, +20%."""
+        """Verify aggressive profile SL levels: -2%, BE, +8%, +15%."""
         profile = DYNAMIC_SL_PROFILES['aggressive']
         assert profile['pt1_sl_pct'] == -2   # -2% (still risk)
         assert profile['pt2_sl_pct'] == 0    # Breakeven
-        assert profile['pt3_sl_pct'] == 10   # +10%
-        assert profile['pt4_sl_pct'] == 20   # +20%
+        assert profile['pt3_sl_pct'] == 8    # +8%
+        assert profile['pt4_sl_pct'] == 15   # +15%
     
     def test_calculate_dynamic_sl_no_pts_hit(self):
         """No dynamic SL when no profit targets hit."""
@@ -119,16 +119,16 @@ class TestDynamicSLProfiles:
         assert sl_price == 1.05  # 5% above entry
     
     def test_calculate_dynamic_sl_pt3_hit_standard(self):
-        """Standard profile: PT3 hit → SL at +15% ($1.15)."""
+        """Standard profile: PT3 hit → SL at +10% ($1.10)."""
         pts_hit = {1: True, 2: True, 3: True, 4: False}
         sl_price = calculate_dynamic_sl(1.00, pts_hit, 'standard')
-        assert sl_price == 1.15  # 15% above entry
-    
+        assert sl_price == 1.10  # 10% above entry
+
     def test_calculate_dynamic_sl_pt4_hit_standard(self):
-        """Standard profile: PT4 hit → SL at +25% ($1.25)."""
+        """Standard profile: PT4 hit → SL at +17% ($1.17)."""
         pts_hit = {1: True, 2: True, 3: True, 4: True}
         sl_price = calculate_dynamic_sl(1.00, pts_hit, 'standard')
-        assert sl_price == 1.25  # 25% above entry
+        assert sl_price == 1.17  # 17% above entry
     
     def test_calculate_dynamic_sl_pt1_hit_aggressive(self):
         """Aggressive profile: PT1 hit → SL at -2% ($0.98)."""

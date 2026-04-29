@@ -439,7 +439,7 @@ class SystemDiagnostics:
             import re
             from collections import defaultdict
             
-            content = routes_file.read_text()
+            content = routes_file.read_text(encoding='utf-8')
             route_pattern = r"@(?:app|bp)\.route\(['\"]([^'\"]+)['\"](?:,\s*methods=\[([^\]]+)\])?\)"
             matches = re.findall(route_pattern, content)
             

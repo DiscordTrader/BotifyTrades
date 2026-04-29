@@ -311,7 +311,7 @@ class ExpiryResolver:
             if os.path.exists(cache_file) and not force_refresh:
                 file_time = os.path.getmtime(cache_file)
                 if time.time() - file_time < CACHE_TTL_SECONDS:
-                    with open(cache_file, 'r') as f:
+                    with open(cache_file, 'r', encoding='utf-8') as f:
                         instruments = json.load(f)
                         with self._cache_lock:
                             self._caches[cache_key] = InstrumentCache(
@@ -349,7 +349,7 @@ class ExpiryResolver:
                         'instrument_type': row.get('instrument_type', ''),
                     })
             
-            with open(cache_file, 'w') as f:
+            with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump(instruments, f)
             
             logger.info(f"[EXPIRY_RESOLVER] Zerodha: Fetched {len(instruments)} NFO instruments")

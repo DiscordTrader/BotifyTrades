@@ -2969,6 +2969,14 @@ class BrokerSyncService:
             return 'Alpaca'
         elif position_key.startswith('IBKR_'):
             return 'IBKR'
+        elif position_key.startswith('SCHWAB_'):
+            return 'Schwab'
+        elif position_key.startswith('Tastytrade_') or position_key.startswith('TASTYTRADE_'):
+            return 'Tastytrade'
+        elif position_key.startswith('Robinhood_') or position_key.startswith('ROBINHOOD_'):
+            return 'Robinhood'
+        elif position_key.startswith('Trading212_') or position_key.startswith('TRADING212_'):
+            return 'Trading212'
         return 'Unknown'
     
     async def _get_order_status(self, broker: str, order_id: str) -> Optional[Dict]:

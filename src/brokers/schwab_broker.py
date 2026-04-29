@@ -155,10 +155,50 @@ class SchwabBroker(BrokerInterface):
                 option_symbols.append(symbol)
             else:
                 equity_symbols.append(symbol)
-        if equity_symbols:
-            await self._streaming_client.subscribe_equities(equity_symbols)
-        if option_symbols:
-            await self._streaming_client.subscribe_options(option_symbols)
+
+        streaming_loop = getattr(self._streaming_client, '_loop', None)
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if streaming_loop and current_loop and streaming_loop is not current_loop:
+            if streaming_loop.is_closed():
+                return
+            async def _subscribe():
+                if equity_symbols:
+                    await self._streaming_client.subscribe_equities(equity_symbols)
+                if option_symbols:
+                    await self._streaming_client.subscribe_options(option_symbols)
+            try:
+                fut = asyncio.run_coroutine_threadsafe(_subscribe(), streaming_loop)
+                fut.add_done_callback(lambda f: print(f"[{self.name}] ⚠️ Cross-loop subscription error: {f.exception()}") if f.exception() else None)
+            except RuntimeError:
+                pass
+        else:
+            if equity_symbols:
+                await self._streaming_client.subscribe_equities(equity_symbols)
+            if option_symbols:
+                await self._streaming_client.subscribe_options(option_symbols)
+
+    async def _safe_stream_subscribe(self, symbols: list, asset_type: str = 'equity'):
+        if not self._streaming_client or not self._streaming_client.is_connected():
+            return
+        streaming_loop = getattr(self._streaming_client, '_loop', None)
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        sub_fn = self._streaming_client.subscribe_options if asset_type == 'option' else self._streaming_client.subscribe_equities
+        if streaming_loop and current_loop and streaming_loop is not current_loop:
+            if streaming_loop.is_closed():
+                return
+            try:
+                asyncio.run_coroutine_threadsafe(sub_fn(symbols), streaming_loop)
+            except RuntimeError:
+                pass
+        else:
+            await sub_fn(symbols)
 
     def get_hub_quote(self, symbol: str) -> Optional[float]:
         if self._data_hub:
@@ -217,7 +257,7 @@ class SchwabBroker(BrokerInterface):
             
             # Fallback: load directly from file
             if os.path.exists(self.token_file):
-                with open(self.token_file, 'r') as f:
+                with open(self.token_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self.access_token = data.get('access_token')
                     self.refresh_token = data.get('refresh_token')
@@ -235,7 +275,7 @@ class SchwabBroker(BrokerInterface):
                 'refresh_token': self.refresh_token,
                 'token_expiry': self.token_expiry
             }
-            with open(self.token_file, 'w') as f:
+            with open(self.token_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
             try:
                 from gui_app.schwab_auth import get_token_manager
@@ -1161,7 +1201,7 @@ class SchwabBroker(BrokerInterface):
                 instruction = "SELL" if "SELL" in action.upper() or "STC" in action.upper() else "BUY"
             
             session = self._get_session_type()
-            is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
+            is_exit = instruction in ("SELL", "BUY_TO_COVER")
             
             if not price and is_exit:
                 aggressive_price = await self._get_aggressive_exit_price(symbol, 'stock')
@@ -1189,34 +1229,7 @@ class SchwabBroker(BrokerInterface):
                 duration = "DAY"
             
             print(f"[{self.name}] 📋 Stock order: {instruction} {quantity} {symbol} | type={order_type} | session={session} | duration={duration}" + (f" | price=${price:.4f}" if price else ""))
-            
-            if is_exit and not _skip_cancel:
-                max_cancel_attempts = 2
-                for cancel_attempt in range(max_cancel_attempts):
-                    try:
-                        if cancel_attempt > 0:
-                            print(f"[{self.name}] 🔄 Retry cancel attempt {cancel_attempt + 1}/{max_cancel_attempts} for {symbol} (waiting 3s)...")
-                            await asyncio.sleep(3.0)
-                        all_sym_orders = await self._dump_all_orders_for_symbol(symbol)
-                        if all_sym_orders:
-                            active_statuses = {'WORKING', 'ACCEPTED', 'QUEUED', 'PENDING_ACTIVATION', 'AWAITING_PARENT_ORDER', 'AWAITING_CONDITION', 'AWAITING_STOP_CONDITION'}
-                            working_orders = [o for o in all_sym_orders if o.get('status') in active_statuses]
-                            if working_orders:
-                                print(f"[{self.name}] ⚠️ Found {len(working_orders)} ACTIVE order(s) for {symbol} (including OCO/bracket children): {working_orders}")
-                            print(f"[{self.name}] 📊 All {symbol} orders (last 24h, {len(all_sym_orders)} total, {len(working_orders)} active)")
-                        cancelled = await self._cancel_all_open_orders_for_symbol(symbol)
-                        if cancelled > 0:
-                            print(f"[{self.name}] 🧹 Cancelled {cancelled} conflicting order(s) for {symbol} before exit — waiting 2s")
-                            await asyncio.sleep(2.0)
-                        break
-                    except asyncio.TimeoutError:
-                        print(f"[{self.name}] ⚠️ Pre-exit cancel timed out for {symbol} (attempt {cancel_attempt + 1}/{max_cancel_attempts})")
-                        if cancel_attempt < max_cancel_attempts - 1:
-                            continue
-                    except Exception as cancel_err:
-                        print(f"[{self.name}] ⚠️ Pre-exit check failed: {type(cancel_err).__name__}: {cancel_err}")
-                        break
-            
+
             order_payload = {
                 "orderStrategyType": "SINGLE",
                 "orderType": order_type,
@@ -1251,8 +1264,7 @@ class SchwabBroker(BrokerInterface):
                 'Content-Type': 'application/json'
             }
             
-            is_exit = instruction in ("SELL", "SELL_SHORT", "BUY_TO_COVER")
-            is_entry = instruction in ("BUY", "BUY_TO_COVER") and not is_exit
+            is_entry = instruction in ("BUY", "SELL_SHORT")
             response = await self._make_request(
                 'POST',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
@@ -1273,7 +1285,7 @@ class SchwabBroker(BrokerInterface):
                 if is_exit and order_id:
                     try:
                         await asyncio.sleep(1.5)
-                        status_result = await self.get_order_status(order_id)
+                        status_result = await self.get_order_status(order_id, is_critical=True)
                         if status_result and isinstance(status_result, dict):
                             schwab_status = str(status_result.get('status', '')).upper()
                             if schwab_status == 'REJECTED':
@@ -1328,7 +1340,7 @@ class SchwabBroker(BrokerInterface):
                 
                 if action.upper() == "BTO" and self._streaming_client:
                     try:
-                        await self._streaming_client.subscribe_equities([symbol])
+                        await self._safe_stream_subscribe([symbol], 'equity')
                         print(f"[{self.name}] ✓ Immediate stream subscribe: {symbol}")
                     except Exception:
                         pass
@@ -1608,7 +1620,7 @@ class SchwabBroker(BrokerInterface):
                 if is_exit_opt and order_id:
                     try:
                         await asyncio.sleep(1.5)
-                        status_result = await self.get_order_status(order_id)
+                        status_result = await self.get_order_status(order_id, is_critical=True)
                         if status_result and isinstance(status_result, dict):
                             schwab_status = str(status_result.get('status', '')).upper()
                             if schwab_status == 'REJECTED':
@@ -1719,7 +1731,7 @@ class SchwabBroker(BrokerInterface):
 
                 if action.upper() == "BTO" and self._streaming_client:
                     try:
-                        await self._streaming_client.subscribe_options([option_symbol])
+                        await self._safe_stream_subscribe([option_symbol], 'option')
                         print(f"[{self.name}] ✓ Immediate stream subscribe: {option_symbol} (option)")
                     except Exception:
                         pass
@@ -1797,7 +1809,7 @@ class SchwabBroker(BrokerInterface):
                                 _verify_coro2.close()
                             if action.upper() == "BTO" and self._streaming_client:
                                 try:
-                                    await self._streaming_client.subscribe_options([alt_symbol])
+                                    await self._safe_stream_subscribe([alt_symbol], 'option')
                                     print(f"[{self.name}] ✓ Immediate stream subscribe: {alt_symbol} (option, alt strike)")
                                 except Exception:
                                     pass
@@ -2169,14 +2181,7 @@ class SchwabBroker(BrokerInterface):
         try:
             if not await self._ensure_valid_token():
                 return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Not authenticated'}
-            
-            import httpx
-            
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-            
+
             # Convert expiry format if needed (YYYY-MM-DD to YYYY-MM-DD)
             if "/" in expiry:
                 parts = expiry.split("/")
@@ -2200,23 +2205,15 @@ class SchwabBroker(BrokerInterface):
                 chain_symbol = f"${clean}"
                 quote_symbol = f"${clean}"
             
-            async def _async_quote_and_chain(h, q_sym, c_sym, exp):
-                async with httpx.AsyncClient(timeout=15.0) as c:
-                    qr = await c.get("https://api.schwabapi.com/marketdata/v1/quotes", headers=h, params={
-                        'symbols': q_sym, 'indicative': 'false',
-                        'needExtendedHoursData': 'true', 'needPreviousClose': 'true'})
-                    cr = await c.get("https://api.schwabapi.com/marketdata/v1/chains", headers=h, params={
-                        'symbol': c_sym, 'contractType': 'ALL', 'fromDate': exp, 'toDate': exp, 'includeUnderlyingQuote': 'true'
-                    })
-                    return qr, cr
-            
-            quote_response, response = await asyncio.wait_for(
-                _async_quote_and_chain(headers, quote_symbol, chain_symbol, expiry),
-                timeout=20.0
-            )
-            
+            quote_response = await self._make_request('GET', "https://api.schwabapi.com/marketdata/v1/quotes", params={
+                'symbols': quote_symbol, 'indicative': 'false',
+                'needExtendedHoursData': 'true', 'needPreviousClose': 'true'})
+            response = await self._make_request('GET', "https://api.schwabapi.com/marketdata/v1/chains", params={
+                'symbol': chain_symbol, 'contractType': 'ALL', 'fromDate': expiry, 'toDate': expiry, 'includeUnderlyingQuote': 'true'
+            })
+
             stock_price = None
-            if not isinstance(quote_response, Exception) and quote_response.status_code == 200:
+            if quote_response.status_code == 200:
                 try:
                     quote_data = quote_response.json()
                     for q_key in [quote_symbol, symbol, f"${symbol}"]:
@@ -2225,9 +2222,6 @@ class SchwabBroker(BrokerInterface):
                             break
                 except:
                     pass
-            
-            if isinstance(response, Exception):
-                raise response
             
             if response.status_code == 200:
                 data = response.json()
@@ -3508,29 +3502,16 @@ class SchwabBroker(BrokerInterface):
         except Exception as e:
             return {'success': False, 'order_id': None, 'message': f'Exception replacing order: {str(e)}'}
 
-    async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get_order_status(self, order_id: str, is_critical: bool = False) -> Optional[Dict[str, Any]]:
         """Get status of a specific order"""
         try:
             if not await self._ensure_valid_token():
                 return None
 
-            import httpx
-
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-
-            async def _async_order_status(url, h):
-                async with httpx.AsyncClient(timeout=8.0) as c:
-                    return await c.get(url, headers=h)
-            
-            response = await asyncio.wait_for(
-                _async_order_status(
-                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
-                    headers
-                ),
-                timeout=10.0
+            response = await self._make_request(
+                'GET',
+                f"{self.BASE_URL}/accounts/{self.account_hash}/orders/{order_id}",
+                is_exit_order=is_critical
             )
 
             if response.status_code == 200:

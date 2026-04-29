@@ -402,6 +402,11 @@ class StreamingPriceMonitor(PriceMonitor):
                 except Exception:
                     return None
             else:
+                hub = getattr(self.broker_instance, '_data_hub', None)
+                if hub and hasattr(hub, 'get_quote_price'):
+                    price = hub.get_quote_price(symbol)
+                    if price and price > 0:
+                        return {'last': price, 'price': price}
                 sys.stderr.write(f"[STREAM_MON] Skipping async get_quote for {symbol} — no running event loop for {self.broker_name}\n")
                 sys.stderr.flush()
                 return None
@@ -792,6 +797,11 @@ class BrokerPriceMonitor(PriceMonitor):
                 except Exception:
                     return None
             else:
+                hub = getattr(self.broker_instance, '_data_hub', None)
+                if hub and hasattr(hub, 'get_quote_price'):
+                    price = hub.get_quote_price(self.symbol)
+                    if price and price > 0:
+                        return {'last': price, 'price': price}
                 sys.stderr.write(f"[REST_MON] Skipping async get_quote for {self.symbol} — no running event loop for {self.broker_name}\n")
                 sys.stderr.flush()
                 return None
@@ -1832,6 +1842,24 @@ class BaseConditionalOrderService(ABC):
                         connected = getattr(binst, 'connected', None)
                         logged_in = getattr(binst, '_logged_in', None)
                         if connected is not None and not connected:
+                            if bname == 'schwab' and bot_loop and bot_loop.is_running():
+                                if not getattr(self, '_schwab_reconnect_scheduled', False):
+                                    self._schwab_reconnect_scheduled = True
+                                    async def _try_schwab_reconnect(_b=binst, _bl=bot_loop):
+                                        try:
+                                            result = await _b.connect()
+                                            if result:
+                                                if not hasattr(_b, '_event_loop'):
+                                                    _b._event_loop = _bl
+                                                self.broker_instances['schwab'] = _b
+                                                print(f"[CONDITIONAL] ✅ Schwab auto-reconnected — conditional orders will use live prices", flush=True)
+                                                await self._upgrade_fallback_monitors('schwab', _b)
+                                            else:
+                                                self._schwab_reconnect_scheduled = False
+                                        except Exception as e:
+                                            print(f"[CONDITIONAL] ⚠️ Schwab auto-reconnect failed: {e}", flush=True)
+                                            self._schwab_reconnect_scheduled = False
+                                    asyncio.run_coroutine_threadsafe(_try_schwab_reconnect(), bot_loop)
                             continue
                         if logged_in is not None and not logged_in:
                             continue

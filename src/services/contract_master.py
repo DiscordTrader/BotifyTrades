@@ -200,7 +200,7 @@ class ContractMaster:
             if os.path.exists(cache_file):
                 file_time = os.path.getmtime(cache_file)
                 if time.time() - file_time < CACHE_TTL_SECONDS:
-                    with open(cache_file, 'r') as f:
+                    with open(cache_file, 'r', encoding='utf-8') as f:
                         instruments = json.load(f)
                         for inst in instruments:
                             if inst.get('name', '').upper() == underlying:
@@ -229,7 +229,7 @@ class ContractMaster:
                             })
                             
                             os.makedirs('data/contract_master', exist_ok=True)
-                            with open(cache_file, 'w') as f:
+                            with open(cache_file, 'w', encoding='utf-8') as f:
                                 json.dump(instruments[:100], f)
                             
                             print(f"[CONTRACT_MASTER] Zerodha: {underlying} lot_size={lot_size}")
@@ -250,7 +250,7 @@ class ContractMaster:
             if os.path.exists(cache_file):
                 file_time = os.path.getmtime(cache_file)
                 if time.time() - file_time < CACHE_TTL_SECONDS:
-                    with open(cache_file, 'r') as f:
+                    with open(cache_file, 'r', encoding='utf-8') as f:
                         instruments = json.load(f)
                         for inst in instruments:
                             if inst.get('underlying', '').upper() == underlying:

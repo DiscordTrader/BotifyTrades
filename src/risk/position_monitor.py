@@ -1660,6 +1660,7 @@ class RiskManager:
 
         self._broker_ops_queues = {}
         self._broker_ops_workers = {}
+        self._broker_ops_pending = {}
 
         self._fill_watch_orders = {}
         self._fill_watch_lock = _threading.Lock()
@@ -1817,7 +1818,7 @@ class RiskManager:
         try:
             import json
             if self._PERMANENT_FAILURES_FILE.exists():
-                with open(self._PERMANENT_FAILURES_FILE, 'r') as f:
+                with open(self._PERMANENT_FAILURES_FILE, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 keys = set(data) if isinstance(data, list) else set()
                 if keys:
@@ -1830,7 +1831,7 @@ class RiskManager:
     def _save_permanent_failures(self) -> None:
         try:
             import json
-            with open(self._PERMANENT_FAILURES_FILE, 'w') as f:
+            with open(self._PERMANENT_FAILURES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(list(self._permanent_failure_keys), f, indent=2)
         except Exception as e:
             print(f"[RISK] ⚠️ Failed to save permanent failures file: {e}")
@@ -4641,7 +4642,7 @@ class RiskManager:
                     _sl_pnl = ((new_dynamic_sl / cache.entry_price) - 1) * 100
                     print(f"[RISK] Dynamic SL escalated to ${new_dynamic_sl:.2f} (+{_sl_pnl:.1f}%) after PT tier hit (escalation_only)")
                     self.cache.update_enhanced_risk_state(position.position_key, dynamic_sl_price=new_dynamic_sl)
-                    if cache.broker_orders_placed and cache.broker_stop_order_id:
+                    if cache.broker_orders_placed and (cache.broker_stop_order_id or cache.broker_oco_order_id):
                         pos_key = position.position_key
                         _esc_sp = new_dynamic_sl
                         _old_sl_str = f"${old_escalation_sl:.2f}" if old_escalation_sl else "none"
@@ -4714,12 +4715,12 @@ class RiskManager:
                 stop_display = f"${cache.early_stop_price:.2f}" if cache.early_stop_price else "entry"
                 print(f"[RISK] ✓ Early Trailing ACTIVATED - Breakeven locked at {stop_display}")
                 self.cache.persist_early_trailing_state(position.position_key)
-                if action.new_stop_price and cache.broker_orders_placed and cache.broker_stop_order_id:
+                if action.new_stop_price and cache.broker_orders_placed and (cache.broker_stop_order_id or cache.broker_oco_order_id):
                     _et_sp = action.new_stop_price
                     pos_key = position.position_key
                     self._enqueue_broker_op(pos_key, 'SYNC_STOP', 10,
                         lambda _p=position, _c=cache, _sp=_et_sp: self._sync_stop_to_broker(_p, _c, _sp))
-            
+
             elif action.action_type == ActionType.UPDATE_EARLY_STOP and action.new_stop_price is not None:
                 old_stop = cache.early_stop_price
                 cache.early_stop_price = action.new_stop_price
@@ -4730,7 +4731,7 @@ class RiskManager:
                 old_display = f"${old_stop:.2f}" if old_stop else "entry"
                 print(f"[RISK] 📈 Early Trail PROFIT LOCKED: {old_display} → ${action.new_stop_price:.2f} (step {cache.early_steps_locked})")
                 self.cache.persist_early_trailing_state(position.position_key)
-                if cache.broker_orders_placed and cache.broker_stop_order_id:
+                if cache.broker_orders_placed and (cache.broker_stop_order_id or cache.broker_oco_order_id):
                     _et_sp = action.new_stop_price
                     pos_key = position.position_key
                     self._enqueue_broker_op(pos_key, 'SYNC_STOP', 10,
@@ -4774,7 +4775,15 @@ class RiskManager:
         import asyncio
         if pos_key not in self._broker_ops_queues:
             self._broker_ops_queues[pos_key] = asyncio.PriorityQueue()
+        if pos_key not in self._broker_ops_pending:
+            self._broker_ops_pending[pos_key] = set()
 
+        _stop_ops = {'SYNC_STOP', 'RESIZE_STOP'}
+        _dedup_key = 'STOP_SYNC' if op_type in _stop_ops else op_type
+        if _dedup_key in self._broker_ops_pending[pos_key]:
+            return
+
+        self._broker_ops_pending[pos_key].add(_dedup_key)
         queue = self._broker_ops_queues[pos_key]
         queue.put_nowait((priority, id(coro_factory), op_type, coro_factory))
 
@@ -4797,6 +4806,12 @@ class RiskManager:
                 priority, _id, op_type, coro_factory = queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
+
+            _stop_ops = {'SYNC_STOP', 'RESIZE_STOP'}
+            _dedup_key = 'STOP_SYNC' if op_type in _stop_ops else op_type
+            pending = self._broker_ops_pending.get(pos_key)
+            if pending:
+                pending.discard(_dedup_key)
 
             try:
                 coro = coro_factory()
@@ -5566,12 +5581,17 @@ class RiskManager:
                 return
             await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier)
 
-        if cache.broker_stop_order_id and not cache.closing:
+        if (cache.broker_stop_order_id or cache.broker_oco_order_id) and not cache.closing:
             _current_sl = cache.dynamic_sl_price or cache.early_stop_price or cache.stop_loss_price
             if _current_sl and _current_sl > 0:
-                print(f"[RISK] 📋 PROGRESSIVE: Resizing broker stop after PT{completed_tier} fill — syncing to remaining qty at ${_current_sl:.2f}")
-                self._enqueue_broker_op(pos_key, 'RESIZE_STOP', 15,
-                    lambda _p=position, _c=cache, _sp=_current_sl: self._sync_stop_to_broker(_p, _c, _sp))
+                _oco_covers_all = (cache.broker_oco_sl_price and abs(cache.broker_oco_sl_price - _current_sl) < 0.005
+                                   and cache.broker_oco_qty >= int(position.quantity))
+                if _oco_covers_all:
+                    pass
+                else:
+                    print(f"[RISK] 📋 PROGRESSIVE: Resizing broker stop after PT{completed_tier} fill — syncing to remaining qty at ${_current_sl:.2f}")
+                    self._enqueue_broker_op(pos_key, 'RESIZE_STOP', 15,
+                        lambda _p=position, _c=cache, _sp=_current_sl: self._sync_stop_to_broker(_p, _c, _sp))
 
     async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int, _retry_count: int = 0):
         if not getattr(channel_settings, 'allows_broker_pt', True):
@@ -5654,11 +5674,24 @@ class RiskManager:
                 if _use_oco:
                     if cache.broker_oco_order_id:
                         _old_oco_id = cache.broker_oco_order_id
-                        try:
-                            await self.schwab_broker.cancel_order(cache.broker_oco_order_id)
+                        _cancel_res = await self.schwab_broker.cancel_order(cache.broker_oco_order_id)
+                        if _cancel_res.get('success'):
                             print(f"[RISK] 🔄 Cancelled old OCO #{cache.broker_oco_order_id} for cascade")
-                        except Exception:
-                            pass
+                            _oco_status = await self.schwab_broker.get_order_status(_old_oco_id)
+                            if _oco_status and _oco_status.get('status') == 'filled':
+                                print(f"[RISK] ⚠️ OCO #{_old_oco_id} was FILLED during cancel — skipping cascade to prevent double-sell")
+                                cache.broker_oco_order_id = None
+                                cache.broker_oco_sl_price = None
+                                cache.broker_oco_pt_price = None
+                                cache.broker_oco_qty = 0
+                                return
+                        else:
+                            _cmsg = _cancel_res.get('message', '')
+                            if '404' in _cmsg or '400' in _cmsg or '409' in _cmsg:
+                                print(f"[RISK] 🔄 Old OCO #{cache.broker_oco_order_id} already dead ({_cmsg}) — proceeding with cascade")
+                            else:
+                                print(f"[RISK] ⚠️ OCO cancel failed: {_cmsg} — aborting cascade to prevent double-sell")
+                                return
                         if cache.broker_stop_order_id == _old_oco_id:
                             cache.broker_stop_order_id = None
                         cache.broker_oco_order_id = None
@@ -5975,17 +6008,31 @@ class RiskManager:
                     _oco_pt_price = cache.broker_oco_pt_price
                     _oco_qty = cache.broker_oco_qty
                     _old_oco_id = cache.broker_oco_order_id
-                    try:
-                        await self.schwab_broker.cancel_order(cache.broker_oco_order_id)
+                    _cancel_res = await self.schwab_broker.cancel_order(cache.broker_oco_order_id)
+                    if _cancel_res.get('success'):
                         print(f"[RISK] 🔄 Cancelled OCO #{cache.broker_oco_order_id} for SL update")
-                    except Exception:
-                        pass
+                        _oco_status = await self.schwab_broker.get_order_status(_old_oco_id)
+                        if _oco_status and _oco_status.get('status') == 'filled':
+                            print(f"[RISK] ⚠️ OCO #{_old_oco_id} was FILLED during cancel — skipping SL sync to prevent double-sell")
+                            cache.broker_oco_order_id = None
+                            cache.broker_oco_sl_price = None
+                            cache.broker_oco_pt_price = None
+                            cache.broker_oco_qty = 0
+                            return
+                    else:
+                        _cmsg = _cancel_res.get('message', '')
+                        if '404' in _cmsg or '400' in _cmsg or '409' in _cmsg:
+                            print(f"[RISK] 🔄 OCO #{cache.broker_oco_order_id} already dead ({_cmsg}) — proceeding with SL sync")
+                        else:
+                            print(f"[RISK] ⚠️ OCO cancel failed: {_cmsg} — aborting SL sync to prevent duplicate orders")
+                            return
                     if cache.broker_stop_order_id == _old_oco_id:
                         cache.broker_stop_order_id = None
                     cache.broker_oco_order_id = None
                     cache.broker_oco_sl_price = None
                     cache.broker_oco_pt_price = None
                     cache.broker_oco_qty = 0
+                    cache.broker_pt_order_id = None
 
                     if _oco_pt_price and _oco_qty > 0:
                         oco_result = await self.schwab_broker.place_oco_order(
@@ -6005,7 +6052,31 @@ class RiskManager:
                             print(f"[RISK] ✅ OCO re-placed: #{oco_result.order_id} SL=${new_stop_price:.2f} PT=${_oco_pt_price:.2f} (qty={_oco_qty})")
                         else:
                             msg = getattr(oco_result, 'message', 'unknown') if oco_result else 'no result'
-                            print(f"[RISK] ⚠️ OCO re-place failed: {msg}")
+                            print(f"[RISK] ⚠️ OCO re-place failed: {msg} — falling back to standalone PT limit")
+                            _is_opt = asset_type.lower() in ('option', 'options')
+                            if _oco_pt_price and _oco_qty > 0:
+                                pt_result = await self.schwab_broker.place_option_order(
+                                    symbol=position.symbol,
+                                    strike=getattr(position, 'strike', 0),
+                                    expiry=getattr(position, 'expiry', ''),
+                                    option_type=getattr(position, 'direction', 'C') or 'C',
+                                    action='STC',
+                                    quantity=_oco_qty,
+                                    price=_oco_pt_price,
+                                    _skip_cancel_check=True
+                                ) if _is_opt else await self.schwab_broker.place_stock_order(
+                                    symbol=symbol,
+                                    action='STC',
+                                    quantity=_oco_qty,
+                                    price=_oco_pt_price,
+                                    _skip_cancel_check=True
+                                )
+                                if pt_result and pt_result.success and pt_result.order_id:
+                                    cache.broker_pt_order_id = str(pt_result.order_id)
+                                    print(f"[RISK] ✅ Standalone PT fallback: #{pt_result.order_id} at ${_oco_pt_price:.2f} (qty={_oco_qty})")
+                                else:
+                                    _pt_msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                                    print(f"[RISK] ⚠️ Standalone PT fallback also failed: {_pt_msg}")
 
                 if cache.broker_stop_order_id:
                     cancel_result = await self.schwab_broker.cancel_order(cache.broker_stop_order_id)
@@ -6013,8 +6084,16 @@ class RiskManager:
                         print(f"[RISK] 🔄 Cancelled old broker stop #{cache.broker_stop_order_id}")
                         cache.broker_stop_order_id = None
                     else:
-                        print(f"[RISK] ⚠️ Cancel old stop failed: {cancel_result.get('message', '')} — skipping new stop to avoid duplicates")
-                        return
+                        _cancel_msg = cancel_result.get('message', '')
+                        if '404' in _cancel_msg or '400' in _cancel_msg or '409' in _cancel_msg:
+                            print(f"[RISK] 🔄 Old stop #{cache.broker_stop_order_id} already dead ({_cancel_msg}) — proceeding")
+                            cache.broker_stop_order_id = None
+                        else:
+                            print(f"[RISK] ⚠️ Cancel old stop failed: {_cancel_msg} — retrying in 10s")
+                            _pk = getattr(position, 'position_key', '') or f"{position.broker}_{position.symbol}"
+                            self._enqueue_broker_op(_pk, 'SYNC_STOP', 10,
+                                lambda _p=position, _c=cache, _sp=new_stop_price: self._sync_stop_to_broker(_p, _c, _sp))
+                            return
 
                 _is_opt = asset_type.lower() in ('option', 'options')
                 _schwab_sync_symbol = symbol
@@ -6808,7 +6887,7 @@ class RiskManager:
 
             if _need_replace_stop and cache:
                 cache._pending_broker_sl_replace = True
-                cache._pending_sl_replace_price = cache.stop_loss_price or 0
+                cache._pending_sl_replace_price = (cache.dynamic_sl_price if cache.dynamic_sl_price is not None else cache.early_stop_price if cache.early_stop_price is not None else cache.stop_loss_price) or 0
                 cache._sl_cancelled_at = __import__('time').time()
                 print(f"[RISK] 🔄 Deferred SL re-place queued for {pos_key} at ${cache._pending_sl_replace_price:.4f} after partial fill")
             

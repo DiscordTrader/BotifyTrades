@@ -35,7 +35,7 @@ class LicenseCache:
                 'signed_token': result.get('signed_token')
             }
             
-            with open(self.cache_file, 'w') as f:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, indent=2)
             
         except Exception as e:
@@ -46,7 +46,7 @@ class LicenseCache:
         try:
             if not self.cache_file.exists():
                 return None
-            with open(self.cache_file, 'r') as f:
+            with open(self.cache_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception:
             return None

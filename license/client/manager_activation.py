@@ -94,7 +94,7 @@ def activate_license(license_key: str) -> Tuple[bool, dict]:
         activated_key = f"{activated_b64}:{activated_sig}"
         
         ACTIVATED_LICENSE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        ACTIVATED_LICENSE_FILE.write_text(activated_key)
+        ACTIVATED_LICENSE_FILE.write_text(activated_key, encoding='utf-8')
         
         try:
             os.chmod(ACTIVATED_LICENSE_FILE, 0o600)
@@ -129,7 +129,7 @@ def validate_activated_license() -> Tuple[bool, dict]:
         if not ACTIVATED_LICENSE_FILE.exists():
             return False, {"error": "No activated license found - please activate first"}
         
-        activated_key = ACTIVATED_LICENSE_FILE.read_text().strip()
+        activated_key = ACTIVATED_LICENSE_FILE.read_text(encoding='utf-8').strip()
         
         if ':' not in activated_key:
             return False, {"error": "Invalid activated license format"}

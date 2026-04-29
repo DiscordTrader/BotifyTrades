@@ -1769,11 +1769,38 @@ def register_routes(app):
             all_status = get_all_broker_status()
             
             # Build broker states from centralized status
+            # Only show brokers that are connected or have credentials configured
+            from .broker_credentials_service import (get_webull_credentials, get_alpaca_credentials,
+                get_ibkr_credentials, get_tastytrade_credentials, get_robinhood_credentials,
+                get_trading212_credentials)
+            from .schwab_auth import get_schwab_credentials as _get_schwab_creds
+            _configured_brokers = set()
+            _wb = get_webull_credentials()
+            if _wb and (_wb.get('email') or _wb.get('access_token')):
+                _configured_brokers.add('webull_live')
+            _alp = get_alpaca_credentials()
+            if _alp and _alp.get('api_key'):
+                _configured_brokers.update(['alpaca_paper', 'alpaca_live'])
+            _ibkr = get_ibkr_credentials()
+            if _ibkr and (_ibkr.get('host') or _ibkr.get('port')):
+                _configured_brokers.update(['ibkr_live', 'ibkr_paper'])
+            _sc = _get_schwab_creds()
+            if _sc and _sc.get('client_id'):
+                _configured_brokers.add('schwab')
+            _tt = get_tastytrade_credentials()
+            if _tt and (_tt.get('username') or _tt.get('client_secret')):
+                _configured_brokers.update(['tastytrade_live', 'tastytrade_paper'])
+            _rh = get_robinhood_credentials()
+            if _rh and _rh.get('username'):
+                _configured_brokers.add('robinhood')
+            _t212 = get_trading212_credentials()
+            if _t212 and _t212.get('api_key'):
+                _configured_brokers.add('trading212')
             for broker_id, config in broker_config.items():
                 status = all_status.get(broker_id, {})
                 is_connected = status.get('connected', False)
-                
-                if is_connected or status.get('status') not in ['disconnected', 'unknown'] or status.get('error'):
+
+                if is_connected or broker_id in _configured_brokers:
                     broker_states[config['region']].append({
                         'broker_name': config['display_name'],
                         'is_connected': is_connected,
@@ -10994,7 +11021,7 @@ def register_routes(app):
             
             import os
             _dbg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'chain_debug.log')
-            with open(_dbg_path, 'w') as _dbg:
+            with open(_dbg_path, 'w', encoding='utf-8') as _dbg:
                 _dbg.write(f"=== CHAIN DEBUG {symbol} {expiry} ===\n")
                 _dbg.write(f"Stock price: {stock_price}, ATM: {atm_strike}, Count: {count}\n")
                 _dbg.write(f"Total calls: {len(calls)}, Total puts: {len(puts)}\n")
@@ -16500,7 +16527,7 @@ def register_routes(app):
             try:
                 cache_file = Path.home() / '.discord_trading_bot' / 'license_cache.json'
                 if cache_file.exists():
-                    with open(cache_file, 'r') as f:
+                    with open(cache_file, 'r', encoding='utf-8') as f:
                         cache_data = json.load(f)
                         cache_license = cache_data.get('license_key', '').strip()
                         if cache_license:
@@ -20471,7 +20498,13 @@ def register_routes(app):
                             try:
                                 from gui_app.config_service import load_config as _load_creds_cfg
                                 creds_data = _load_creds_cfg(creds_key)
-                                if creds_data:
+                                _has_real_creds = False
+                                if isinstance(creds_data, dict):
+                                    _cred_vals = [v for k, v in creds_data.items() if k not in ('paper_mode', 'dry_run', 'account_type') and v]
+                                    _has_real_creds = len(_cred_vals) > 0
+                                elif creds_data:
+                                    _has_real_creds = True
+                                if _has_real_creds:
                                     fallback_paper = is_paper
                                     if isinstance(creds_data, dict):
                                         fallback_paper = creds_data.get('paper_mode', is_paper)

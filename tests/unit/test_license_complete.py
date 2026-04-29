@@ -376,10 +376,10 @@ class TestLicenseCachePersistence:
             'last_validated': '2025-12-05T10:00:00'
         }
         
-        with open(cache_file, 'w') as f:
+        with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f)
         
-        with open(cache_file, 'r') as f:
+        with open(cache_file, 'r', encoding='utf-8') as f:
             loaded = json.load(f)
         
         assert loaded['license_key'] == 'BT-TEST-1234'
@@ -391,7 +391,7 @@ class TestLicenseCachePersistence:
         import os
         cache_file = tmp_path / 'license_cache.json'
         
-        with open(cache_file, 'w') as f:
+        with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump({'test': True}, f)
         
         assert os.access(cache_file, os.R_OK), "Cache file should be readable"

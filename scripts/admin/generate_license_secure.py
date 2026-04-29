@@ -56,7 +56,7 @@ def save_license_record(customer_id: str, machine_id: str, license_key: str, exp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = licenses_dir / f"{customer_id}_{timestamp}.txt"
     
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         f.write("=" * 80 + "\n")
         f.write("MACHINE-BOUND LICENSE KEY\n")
         f.write("=" * 80 + "\n")
@@ -79,7 +79,7 @@ def save_license_record(customer_id: str, machine_id: str, license_key: str, exp
         f.write("=" * 80 + "\n")
     
     db_file = licenses_dir / "license_database.txt"
-    with open(db_file, 'a') as f:
+    with open(db_file, 'a', encoding='utf-8') as f:
         f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | ")
         f.write(f"{customer_id:20s} | {days:3d} days | ")
         f.write(f"Machine: {machine_id[:16]:16s} | ")

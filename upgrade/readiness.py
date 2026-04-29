@@ -94,7 +94,7 @@ class ReadinessChecker:
             backup_dir.mkdir(parents=True, exist_ok=True)
             
             test_file = backup_dir / '.write_test'
-            test_file.write_text('test')
+            test_file.write_text('test', encoding='utf-8')
             test_file.unlink()
             
             return ReadinessCheck(

@@ -26,7 +26,7 @@ class TestRouteAudit:
         if not routes_file.exists():
             return []
         
-        content = routes_file.read_text()
+        content = routes_file.read_text(encoding='utf-8')
         
         # Pattern to match @app.route or @bp.route decorators
         route_pattern = r"@(?:app|bp)\.route\(['\"]([^'\"]+)['\"](?:,\s*methods=\[([^\]]+)\])?\)"
@@ -135,7 +135,7 @@ class TestRouteCategories:
         if not routes_file.exists():
             return {}
         
-        content = routes_file.read_text()
+        content = routes_file.read_text(encoding='utf-8')
         route_pattern = r"@(?:app|bp)\.route\(['\"]([^'\"]+)['\"]"
         paths = re.findall(route_pattern, content)
         
@@ -218,7 +218,7 @@ class TestAPIEndpointRegistry:
         if not routes_file.exists():
             return {}
         
-        content = routes_file.read_text()
+        content = routes_file.read_text(encoding='utf-8')
         
         # Pattern with methods
         route_pattern = r"@(?:app|bp)\.route\(['\"]([^'\"]+)['\"](?:,\s*methods=\[([^\]]+)\])?\)"
@@ -303,7 +303,7 @@ class TestDuplicateEndpointPrevention:
         if not routes_file.exists():
             return
         
-        content = routes_file.read_text()
+        content = routes_file.read_text(encoding='utf-8')
         
         signal_routes = re.findall(r"@(?:app|bp)\.route\(['\"]([^'\"]*signal[^'\"]*)['\"]", content, re.IGNORECASE)
         
@@ -322,7 +322,7 @@ class TestRouteConflictMatrix:
         if not routes_file.exists():
             return
         
-        content = routes_file.read_text()
+        content = routes_file.read_text(encoding='utf-8')
         route_pattern = r"@(?:app|bp)\.route\(['\"]([^'\"]+)['\"](?:,\s*methods=\[([^\]]+)\])?\)"
         matches = re.findall(route_pattern, content)
         

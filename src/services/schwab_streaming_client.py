@@ -74,6 +74,7 @@ class SchwabStreamingClient:
         self._lock = threading.Lock()
         self._last_heartbeat = time.time()
         self._last_pending_drain = 0.0
+        self._last_qos_time = 0.0
 
         print(f"[SCHWAB_STREAM] Streaming client created for {broker_instance.name}")
 
@@ -83,21 +84,12 @@ class SchwabStreamingClient:
 
     async def _fetch_streamer_info(self) -> bool:
         try:
-            import httpx
-
             if not await self._broker._ensure_valid_token():
                 print("[SCHWAB_STREAM] ❌ Cannot get streamer info - not authenticated")
                 return False
 
-            import asyncio as _aio
-            def _sync_streamer_info(url, h):
-                with httpx.Client(timeout=15.0) as c:
-                    return c.get(url, headers=h)
-            
-            response = await _aio.to_thread(
-                _sync_streamer_info,
-                f"{self._broker.BASE_URL}/userPreference",
-                {'Authorization': f'Bearer {self._broker.access_token}', 'Accept': 'application/json'}
+            response = await self._broker._make_request(
+                'GET', f"{self._broker.BASE_URL}/userPreference"
             )
 
             if response.status_code != 200:
@@ -203,7 +195,7 @@ class SchwabStreamingClient:
                 if command == 'LOGIN':
                     if code == 0:
                         print("[SCHWAB_STREAM] ✓ Login successful")
-                        self._connected = True
+                        self._login_ok = True
                     else:
                         print(f"[SCHWAB_STREAM] ❌ Login failed (code={code}): {resp.get('content', {}).get('msg', '')}")
                 elif command == 'SUBS' or command == 'ADD':
@@ -349,9 +341,10 @@ class SchwabStreamingClient:
                     print("[SCHWAB_STREAM] Login request sent, waiting for response...")
 
                     login_response = await asyncio.wait_for(ws.recv(), timeout=10)
+                    self._login_ok = False
                     self._decode_message(login_response)
 
-                    if not self._connected:
+                    if not self._login_ok:
                         print("[SCHWAB_STREAM] ❌ Login failed, will retry...")
                         await asyncio.sleep(10)
                         continue
@@ -359,6 +352,7 @@ class SchwabStreamingClient:
                     self._hub.set_streaming_active(True)
                     self._last_heartbeat = time.time()
                     self._last_qos_time = time.time()
+                    self._connected = True
                     print("[SCHWAB_STREAM] ✓ Connected and streaming")
 
                     if self._subscribed_equities:
@@ -503,7 +497,14 @@ class SchwabStreamingClient:
         self._running = False
         self._connected = False
         self._hub.set_streaming_active(False)
-        print("[SCHWAB_STREAM] Stopping...")
+        if self._ws and self._loop and self._loop.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(self._ws.close(), self._loop)
+            except RuntimeError:
+                pass
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=10)
+        print("[SCHWAB_STREAM] Stopped")
 
     def is_connected(self) -> bool:
         return self._connected and self._ws is not None

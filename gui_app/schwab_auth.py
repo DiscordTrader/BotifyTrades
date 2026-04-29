@@ -59,7 +59,7 @@ class SchwabTokenManager:
         """Load tokens from file"""
         try:
             if os.path.exists(SCHWAB_TOKEN_FILE):
-                with open(SCHWAB_TOKEN_FILE, 'r') as f:
+                with open(SCHWAB_TOKEN_FILE, 'r', encoding='utf-8') as f:
                     self._token_data = json.load(f)
                 print(f"[SCHWAB TOKEN] Loaded tokens, expiry: {self._get_expiry_time_str()}")
                 return True
@@ -78,7 +78,7 @@ class SchwabTokenManager:
                 'refresh_token_created': datetime.now().timestamp(),
                 'last_refreshed': datetime.now().isoformat()
             }
-            with open(SCHWAB_TOKEN_FILE, 'w') as f:
+            with open(SCHWAB_TOKEN_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self._token_data, f, indent=2)
             print(f"[SCHWAB TOKEN] Saved tokens, expires in {expires_in}s")
             self._refresh_failures = 0
@@ -366,7 +366,7 @@ def is_schwab_authenticated():
     """Check if we have valid Schwab tokens"""
     try:
         if os.path.exists(SCHWAB_TOKEN_FILE):
-            with open(SCHWAB_TOKEN_FILE, 'r') as f:
+            with open(SCHWAB_TOKEN_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 return bool(data.get('access_token') and data.get('refresh_token'))
     except Exception:
@@ -898,28 +898,41 @@ def _hot_connect_schwab_broker(creds: dict):
         
         from src.brokers.schwab_broker import SchwabBroker
         import asyncio
-        
+
         schwab_broker = SchwabBroker({
             'client_id': creds.get('client_id'),
             'client_secret': creds.get('client_secret'),
             'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
             'dry_run': creds.get('dry_run', False)
         })
-        
-        loop = asyncio.new_event_loop()
-        try:
-            connected = loop.run_until_complete(asyncio.wait_for(schwab_broker.connect(), timeout=15.0))
-        except asyncio.TimeoutError:
-            print("[SCHWAB HOT-CONNECT] Connection timeout (15s)")
-            connected = False
-        finally:
-            loop.close()
-        
+
+        bot_loop = getattr(_bot_instance, 'loop', None)
+        connected = False
+
+        if bot_loop and bot_loop.is_running():
+            try:
+                future = asyncio.run_coroutine_threadsafe(schwab_broker.connect(), bot_loop)
+                connected = future.result(timeout=30)
+            except Exception as e:
+                print(f"[SCHWAB HOT-CONNECT] Bot-loop connect failed: {e}")
+                connected = False
+        else:
+            loop = asyncio.new_event_loop()
+            try:
+                connected = loop.run_until_complete(asyncio.wait_for(schwab_broker.connect(), timeout=30.0))
+            except asyncio.TimeoutError:
+                print("[SCHWAB HOT-CONNECT] Connection timeout (30s)")
+                connected = False
+            finally:
+                loop.close()
+
         if connected:
+            if bot_loop and not hasattr(schwab_broker, '_event_loop'):
+                schwab_broker._event_loop = bot_loop
             _bot_instance.schwab_broker = schwab_broker
             mode = "PAPER" if creds.get('dry_run', False) else "LIVE"
             print(f"[SCHWAB HOT-CONNECT] ✓ Broker connected ({mode}) - ready for trading")
-            
+
             if hasattr(_bot_instance, 'sync_service') and _bot_instance.sync_service:
                 bm = getattr(_bot_instance.sync_service, 'broker_manager', None)
                 if bm and hasattr(bm, 'schwab_broker'):
@@ -931,7 +944,7 @@ def _hot_connect_schwab_broker(creds: dict):
                 set_broker_status('schwab', True, 'connected')
             except Exception:
                 pass
-            
+
             try:
                 from src.services.broker_health_monitor import get_health_monitor
                 health_monitor = get_health_monitor()
@@ -939,7 +952,7 @@ def _hot_connect_schwab_broker(creds: dict):
                 print(f"[SCHWAB HOT-CONNECT] ✓ Health monitor updated - orders will route immediately")
             except Exception as he:
                 print(f"[SCHWAB HOT-CONNECT] Health monitor update skipped: {he}")
-            
+
             try:
                 from gui_app.discord_notifier import notify_broker_reconnected
                 notify_broker_reconnected(f'Schwab {mode}')
@@ -947,6 +960,28 @@ def _hot_connect_schwab_broker(creds: dict):
                 pass
         else:
             print("[SCHWAB HOT-CONNECT] ⚠️ Connection failed - tokens saved but broker not ready")
+            print("[SCHWAB HOT-CONNECT] Scheduling background retry in 10s...")
+            if bot_loop and bot_loop.is_running():
+                async def _deferred_schwab_connect():
+                    await asyncio.sleep(10)
+                    try:
+                        retry_connected = await schwab_broker.connect()
+                        if retry_connected:
+                            if not hasattr(schwab_broker, '_event_loop'):
+                                schwab_broker._event_loop = bot_loop
+                            _bot_instance.schwab_broker = schwab_broker
+                            schwab_broker.connected = True
+                            print(f"[SCHWAB HOT-CONNECT] ✅ Deferred retry succeeded — broker is now live")
+                            try:
+                                from gui_app.broker_credentials_service import set_broker_status
+                                set_broker_status('schwab', True, 'connected')
+                            except Exception:
+                                pass
+                        else:
+                            print("[SCHWAB HOT-CONNECT] ⚠️ Deferred retry also failed — restart bot to connect")
+                    except Exception as de:
+                        print(f"[SCHWAB HOT-CONNECT] ⚠️ Deferred retry error: {de}")
+                asyncio.run_coroutine_threadsafe(_deferred_schwab_connect(), bot_loop)
             
     except Exception as e:
         print(f"[SCHWAB HOT-CONNECT] Error: {e}")

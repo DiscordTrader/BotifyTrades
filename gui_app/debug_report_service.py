@@ -116,7 +116,7 @@ class DebugReportService:
             for log_file in log_files:
                 if os.path.exists(log_file):
                     try:
-                        with open(log_file, 'r', errors='ignore') as f:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
                             lines = f.readlines()[-200:]
                             for line in lines:
                                 line_lower = line.lower()

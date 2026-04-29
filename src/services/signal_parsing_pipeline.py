@@ -30,6 +30,7 @@ class SignalSource(Enum):
     REGISTRY_SLEM = "slem"
     REGISTRY_STACK = "stack"
     REGISTRY_FOXTRADES = "foxtrades"
+    REGISTRY_TEMPLE = "temple"
     REGISTRY_LEARNED = "learned_pattern"
     TRADER_BISHOP = "bishop"
     TRADER_EVAPANDA = "evapanda"
@@ -432,6 +433,7 @@ class SignalParsingPipeline:
             'slem': SignalSource.REGISTRY_SLEM,
             'stack': SignalSource.REGISTRY_STACK,
             'foxtrades': SignalSource.REGISTRY_FOXTRADES,
+            'temple': SignalSource.REGISTRY_TEMPLE,
             'learned': SignalSource.REGISTRY_LEARNED
         }
         for key, source in mapping.items():

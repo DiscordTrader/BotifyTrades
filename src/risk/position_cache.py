@@ -269,7 +269,7 @@ class PositionCache:
         """Load cache from file. Returns number of positions loaded."""
         try:
             if self.cache_file.exists():
-                with open(self.cache_file, 'r') as f:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 
                 closing_reset = 0
@@ -323,7 +323,7 @@ class PositionCache:
             with self._cache_lock:
                 data = {key: entry.to_dict() for key, entry in self._cache.items()}
             tmp_path = str(self.cache_file) + '.tmp'
-            with open(tmp_path, 'w') as f:
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
             os.replace(tmp_path, str(self.cache_file))
             return True
