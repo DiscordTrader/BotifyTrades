@@ -2903,7 +2903,7 @@ class BrokerSyncService:
                     
                     if order_status:
                         status = order_status.get('status', '').upper()
-                        filled_qty = order_status.get('filled_qty', 0)
+                        filled_qty = order_status.get('filled_qty', 0) or order_status.get('filled_quantity', 0)
                         
                         if status == 'FILLED':
                             # Confirmed fill - mark tier as hit
@@ -2965,6 +2965,8 @@ class BrokerSyncService:
         """Extract broker name from position key (format: Broker_SYMBOL_...)"""
         if position_key.startswith('Webull_'):
             return 'Webull'
+        elif position_key.startswith('SCHWAB_'):
+            return 'SCHWAB'
         elif position_key.startswith('ALPACA_'):
             return 'Alpaca'
         elif position_key.startswith('IBKR_'):
@@ -3013,7 +3015,7 @@ class BrokerSyncService:
             if broker_instance and hasattr(broker_instance, 'get_order_status'):
                 return await broker_instance.get_order_status(order_id)
         except Exception as e:
-            pass
+            print(f"[SYNC] ⚠️ get_order_status({broker}, {order_id}) failed: {e}")
         return None
     
     async def _record_execution_lot(self, broker: str, broker_order_id: str, symbol: str,

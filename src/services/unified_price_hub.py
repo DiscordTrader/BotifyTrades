@@ -1,3 +1,4 @@
+import copy
 import threading
 import time
 import importlib
@@ -26,6 +27,7 @@ class UnifiedQuote:
     timestamp: float = 0.0
     last_changed_ts: float = 0.0
     last_changed_price: float = 0.0
+    last_tick_ts: float = 0.0
     freshness: str = "unknown"
 
     @property
@@ -270,6 +272,8 @@ class UnifiedPriceHub:
                 return existing
 
             old_last = existing.last
+            old_bid = existing.bid
+            old_ask = existing.ask
             if 'bid' in data and data['bid']:
                 existing.bid = float(data['bid'])
             if 'ask' in data and data['ask']:
@@ -300,30 +304,42 @@ class UnifiedPriceHub:
                 existing.last_changed_ts = now
                 existing.last_changed_price = existing.last
 
+            any_change = (abs(existing.last - old_last) > 0.0001
+                          or abs(existing.bid - old_bid) > 0.0001
+                          or abs(existing.ask - old_ask) > 0.0001)
+            if any_change:
+                existing.last_tick_ts = now
+
             existing.freshness = self._classify_freshness(existing)
+
+            emit_data = {
+                'symbol': canonical,
+                'price': existing.last,
+                'bid': existing.bid,
+                'ask': existing.ask,
+                'source': source_hub,
+                'freshness': existing.freshness,
+            }
 
         with self._stats_lock:
             self._stats['total_updates'] += 1
 
-        self._emit('quote_updated', {
-            'symbol': canonical,
-            'price': existing.last,
-            'bid': existing.bid,
-            'ask': existing.ask,
-            'source': source_hub,
-            'freshness': existing.freshness,
-        })
+        self._emit('quote_updated', emit_data)
 
         return existing
 
     def get_quote(self, symbol: str) -> Optional[UnifiedQuote]:
         canonical = self._to_canonical(symbol)
+        result = None
         with self._cache_lock:
             quote = self._cache.get(canonical)
             if quote and (quote.last > 0 or quote.bid > 0 or quote.ask > 0):
-                with self._stats_lock:
-                    self._stats['hits'] += 1
-                return quote
+                quote.freshness = self._classify_freshness(quote)
+                result = copy.copy(quote)
+        if result:
+            with self._stats_lock:
+                self._stats['hits'] += 1
+            return result
 
         result = self._try_fill_from_hubs(symbol)
         if result:
@@ -368,7 +384,7 @@ class UnifiedPriceHub:
 
     def get_all_quotes(self) -> Dict[str, UnifiedQuote]:
         with self._cache_lock:
-            return dict(self._cache)
+            return {k: copy.copy(v) for k, v in self._cache.items()}
 
     def get_stale_symbols(self, threshold: float = FRESHNESS_STALE) -> List[str]:
         result = []
@@ -392,11 +408,13 @@ class UnifiedPriceHub:
                 if hasattr(hub, 'get_quote_detailed'):
                     data = hub.get_quote_detailed(lookup_sym)
                     if data and (data.get('bid', 0) > 0 or data.get('ask', 0) > 0 or data.get('last', 0) > 0):
-                        return self._update_cache(canonical, data, hub_key)
+                        cached = self._update_cache(canonical, data, hub_key)
+                        return copy.copy(cached) if cached else None
                 elif hasattr(hub, 'get_quote_price'):
                     price = hub.get_quote_price(lookup_sym)
                     if price and price > 0:
-                        return self._update_cache(canonical, {'last': price}, hub_key)
+                        cached = self._update_cache(canonical, {'last': price}, hub_key)
+                        return copy.copy(cached) if cached else None
             except Exception:
                 pass
         return None
@@ -578,7 +596,7 @@ class UnifiedPriceHub:
         with self._poll_state_lock:
             if self._poll_running:
                 return
-            self._poll_interval = max(interval, 2.0)
+            self._poll_interval = max(interval, 1.0)
             self._poll_running = True
             self._poll_thread = threading.Thread(target=self._poll_loop, daemon=True, name="UPH-Poller")
             self._poll_thread.start()
@@ -613,7 +631,6 @@ class UnifiedPriceHub:
                     hubs = self._get_hubs()
                     hub_info = {k: hasattr(v, 'is_streaming') and v.is_streaming() for k, v in hubs.items()}
                     with self._subscribe_lock:
-                        sub_count = len(self._subscribed_hubs)
                         sub_keys = list(self._subscribed_hubs.keys())
                     with self._stats_lock:
                         streaming_ticks = self._stats.get('streaming_ticks', 0)

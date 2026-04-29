@@ -5069,14 +5069,15 @@ class RiskManager:
                             _schwab_stop_symbol = None
 
                     _trim_mode = getattr(channel_settings, 'trim_order_mode', 'limit') or 'limit'
-                    _use_native_bracket = sl_price and sl_price > 0 and pt1_price and pt1_price > 0 and not is_option and _trim_mode != 'market'
+                    _use_oco = sl_price and sl_price > 0 and pt1_price and pt1_price > 0 and pt1_qty > 0 and not is_option and _trim_mode != 'market'
+                    _remainder_qty = qty - pt1_qty if pt1_qty > 0 else qty
                     if _trim_mode == 'market' and sl_price and sl_price > 0:
                         print(f"[RISK] 📋 trim_order_mode='market' — skipping OCO, risk engine will handle PT sells")
 
-                    if _use_native_bracket and _schwab_stop_symbol:
+                    if _use_oco and _schwab_stop_symbol:
                         oco_result = await self.schwab_broker.place_oco_order(
                             symbol=_schwab_stop_symbol,
-                            quantity=qty,
+                            quantity=pt1_qty,
                             stop_loss_price=sl_price,
                             profit_target_price=pt1_price,
                             side='sell',
@@ -5086,17 +5087,32 @@ class RiskManager:
                             cache.broker_oco_order_id = str(oco_result.order_id)
                             cache.broker_oco_sl_price = sl_price
                             cache.broker_oco_pt_price = pt1_price
-                            cache.broker_oco_qty = qty
-                            cache.broker_stop_order_id = str(oco_result.order_id)
+                            cache.broker_oco_qty = pt1_qty
                             cache.broker_pt_order_id = str(oco_result.order_id)
                             cache.broker_pt_tier = 1
-                            print(f"[RISK] ✅ Schwab NATIVE BRACKET OCO placed: #{oco_result.order_id} SL=${sl_price:.2f} PT=${pt1_price:.2f} (full qty={qty})")
+                            print(f"[RISK] ✅ Schwab OCO placed: #{oco_result.order_id} SL=${sl_price:.2f} PT=${pt1_price:.2f} (qty={pt1_qty})")
                         else:
                             msg = getattr(oco_result, 'message', 'unknown') if oco_result else 'no result'
-                            print(f"[RISK] ⚠️ Schwab native bracket OCO failed: {msg} — falling back to separate orders")
-                            _use_native_bracket = False
+                            print(f"[RISK] ⚠️ Schwab OCO order failed: {msg} — falling back to separate orders")
+                            _use_oco = False
 
-                    if not _use_native_bracket:
+                        if _use_oco and _remainder_qty > 0 and _schwab_stop_symbol:
+                            sl_result = await self.schwab_broker.place_stop_order(
+                                symbol=_schwab_stop_symbol,
+                                quantity=_remainder_qty,
+                                stop_price=sl_price,
+                                side='sell',
+                                asset_type=_asset_type,
+                                duration='GOOD_TILL_CANCEL'
+                            )
+                            if sl_result and sl_result.success and sl_result.order_id:
+                                cache.broker_stop_order_id = str(sl_result.order_id)
+                                print(f"[RISK] ✅ Schwab standalone SL placed: #{sl_result.order_id} at ${sl_price:.2f} (qty={_remainder_qty})")
+                            else:
+                                msg = getattr(sl_result, 'message', 'unknown') if sl_result else 'no result'
+                                print(f"[RISK] ⚠️ Schwab standalone SL failed: {msg}")
+
+                    if not _use_oco:
                         if sl_price and sl_price > 0 and _schwab_stop_symbol:
                             sl_result = await self.schwab_broker.place_stop_order(
                                 symbol=_schwab_stop_symbol,
@@ -6462,15 +6478,25 @@ class RiskManager:
         cache: Optional[PositionCacheEntry] = self.cache.get(pos_key) if hasattr(self.cache, 'get') else None
 
         _need_replace_stop = False
+        _old_stop_price = None
         _had_oco = False
         if cache and cache.broker_orders_placed:
             if cache.broker_stop_order_id or cache.broker_pt_order_id or cache.broker_oco_order_id:
-                _had_oco = bool(cache.broker_oco_order_id)
                 try:
+                    _had_oco = bool(cache.broker_oco_order_id)
                     if decision.is_partial:
-                        await self._cancel_broker_bracket_orders(position, cache)
-                        _need_replace_stop = True
-                        print(f"[RISK] Partial exit — cancelled all brackets, will re-place SL after fill")
+                        _old_stop_price = cache.dynamic_sl_price or getattr(cache, '_last_broker_stop_price', None)
+                        if not _old_stop_price and hasattr(cache, 'entry_price') and cache.entry_price > 0:
+                            _ch = getattr(cache, 'channel_settings', None)
+                            _sl_pct = getattr(_ch, 'stop_loss_pct', 0) if _ch else 0
+                            if _sl_pct > 0:
+                                _old_stop_price = round(cache.entry_price * (1 - _sl_pct / 100), 4)
+                        await self._cancel_broker_bracket_orders(position, cache, cancel_stop=True, cancel_pt=True)
+                        if not _had_oco:
+                            _need_replace_stop = True
+                            print(f"[RISK] 🔄 Cancelled broker SL before partial PT exit (will re-place after fill)")
+                        else:
+                            print(f"[RISK] 🔄 Cancelled OCO bracket for partial PT exit (cascade will re-place)")
                     else:
                         await self._cancel_broker_bracket_orders(position, cache)
                 except Exception as e:
@@ -6886,11 +6912,14 @@ class RiskManager:
             print(f"[RISK] STC order queued for {pos_key} via {position.broker} (queue_id={id(self.order_queue)}, qsize={self.order_queue.qsize()}): {stc_signal}")
 
             if _need_replace_stop and cache:
-                cache._pending_broker_sl_replace = True
-                cache._pending_sl_replace_price = (cache.dynamic_sl_price if cache.dynamic_sl_price is not None else cache.early_stop_price if cache.early_stop_price is not None else cache.stop_loss_price) or 0
-                cache._sl_cancelled_at = __import__('time').time()
-                print(f"[RISK] 🔄 Deferred SL re-place queued for {pos_key} at ${cache._pending_sl_replace_price:.4f} after partial fill")
-            
+                import time as _tmod
+                _replace_price = _old_stop_price if _old_stop_price and _old_stop_price > 0 else (cache.dynamic_sl_price if cache.dynamic_sl_price is not None else cache.early_stop_price if cache.early_stop_price is not None else cache.stop_loss_price) or 0
+                if _replace_price and _replace_price > 0:
+                    cache._pending_broker_sl_replace = True
+                    cache._pending_sl_replace_price = _replace_price
+                    cache._sl_cancelled_at = _tmod.time()
+                    print(f"[RISK] 🔄 Will re-place broker SL at ${_replace_price:.2f} after PT sell fills (deferred ~15s)")
+
             import threading
             def _thread_exit_executor():
                 import time as _t

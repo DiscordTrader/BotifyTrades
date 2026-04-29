@@ -492,6 +492,7 @@ class TestCompleteE2EFlow:
             enable_dynamic_sl=1,
             dynamic_sl_profile='standard',
             profit_target_1_pct=20.0,
+            profit_target_qty_1=5,
             stop_loss_pct=30.0,
             trailing_stop_pct=0.0
         )
