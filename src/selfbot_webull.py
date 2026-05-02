@@ -14366,12 +14366,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             _cache_entry.manual_pt_targets = [tgt_price]
                                             _cache_entry.profit_target_price = tgt_price
                                             print(f"[PHOENIX TGT] ✓ Risk cache updated for {cache_key}")
-                                            import asyncio
-                                            _loop = asyncio.get_event_loop()
-                                            if _loop.is_running():
-                                                asyncio.ensure_future(
-                                                    self.risk_monitor._replace_broker_pt(cache_key, tgt_price, trade_id)
-                                                )
+                                            self.risk_monitor._enqueue_broker_op(
+                                                cache_key, 'REPLACE_PT', 5,
+                                                lambda _k=cache_key, _p=tgt_price, _t=trade_id: self.risk_monitor._replace_broker_pt(_k, _p, _t)
+                                            )
                                             print(f"[PHOENIX TGT] 🔄 Broker PT replace queued for {cache_key} → ${tgt_price:.4f}")
                                         else:
                                             print(f"[PHOENIX TGT] ⚠️ No cache entry for {cache_key}")

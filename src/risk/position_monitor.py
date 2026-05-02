@@ -6509,6 +6509,8 @@ class RiskManager:
                             print(f"[RISK PT REPLACE] ⚠️ OCO cancel failed: {_cmsg} — aborting")
                             return False
 
+                    if cache.broker_stop_order_id == _old_oco_id:
+                        cache.broker_stop_order_id = None
                     cache.broker_oco_order_id = None
                     cache.broker_oco_sl_price = None
                     cache.broker_oco_pt_price = None
@@ -6534,7 +6536,17 @@ class RiskManager:
                             return True
                         else:
                             msg = getattr(oco_result, 'message', 'unknown') if oco_result else 'no result'
-                            print(f"[RISK PT REPLACE] ⚠️ OCO re-place failed: {msg}")
+                            print(f"[RISK PT REPLACE] ⚠️ OCO re-place failed: {msg} — placing standalone SL for protection")
+                            sl_fallback = await self.schwab_broker.place_stop_order(
+                                symbol=symbol, quantity=_oco_qty,
+                                stop_price=_oco_sl_price, side='sell',
+                                asset_type='EQUITY', duration='GOOD_TILL_CANCEL'
+                            )
+                            if sl_fallback and sl_fallback.success and sl_fallback.order_id:
+                                cache.broker_stop_order_id = str(sl_fallback.order_id)
+                                print(f"[RISK PT REPLACE] ✅ SL fallback placed: #{sl_fallback.order_id} at ${_oco_sl_price:.2f}")
+                            else:
+                                print(f"[RISK PT REPLACE] ⚠️ SL fallback also failed — position UNPROTECTED")
                             return False
                     else:
                         print(f"[RISK PT REPLACE] ⚠️ No SL price or qty for OCO — cannot re-place")
