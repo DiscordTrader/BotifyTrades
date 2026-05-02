@@ -14302,10 +14302,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[PHOENIX SL] ✓ Trade #{trade_id} {t_sym}: SL updated ${old_sl} → ${new_sl:.4f}")
                             try:
                                 if hasattr(self, 'risk_monitor') and self.risk_monitor:
-                                    cache_key = f"{t_sym}_{t_broker}"
-                                    if cache_key in self.risk_monitor._position_cache:
-                                        self.risk_monitor._position_cache[cache_key]['manual_sl_override'] = new_sl
+                                    _broker_upper = (t_broker or '').upper()
+                                    cache_key = f"{_broker_upper}_{t_sym}_stock"
+                                    _cache_entry = self.risk_monitor.cache.get(cache_key)
+                                    if _cache_entry:
+                                        _cache_entry.manual_sl_price = new_sl
+                                        _cache_entry.stop_loss_price = new_sl
                                         print(f"[PHOENIX SL] ✓ Risk cache updated for {cache_key}")
+                                    else:
+                                        print(f"[PHOENIX SL] ⚠️ No cache entry for {cache_key}")
                             except Exception as cache_err:
                                 print(f"[PHOENIX SL] Cache update warning: {cache_err}")
                         else:
@@ -14353,10 +14358,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 print(f"[PHOENIX TGT] ✓ Trade #{trade_id} {t_sym}: PT updated ${old_pt} → ${tgt_price:.4f} (tier {tgt_tier})")
                                 try:
                                     if hasattr(self, 'risk_monitor') and self.risk_monitor:
-                                        cache_key = f"{t_sym}_{t_broker}"
-                                        if cache_key in self.risk_monitor._position_cache:
-                                            self.risk_monitor._position_cache[cache_key]['manual_pt_override'] = tgt_price
+                                        _broker_upper = (t_broker or '').upper()
+                                        _asset_suffix = 'stock'
+                                        cache_key = f"{_broker_upper}_{t_sym}_{_asset_suffix}"
+                                        _cache_entry = self.risk_monitor.cache.get(cache_key)
+                                        if _cache_entry:
+                                            _cache_entry.manual_pt_targets = [tgt_price]
+                                            _cache_entry.profit_target_price = tgt_price
                                             print(f"[PHOENIX TGT] ✓ Risk cache updated for {cache_key}")
+                                            import asyncio
+                                            _loop = asyncio.get_event_loop()
+                                            if _loop.is_running():
+                                                asyncio.ensure_future(
+                                                    self.risk_monitor._replace_broker_pt(cache_key, tgt_price, trade_id)
+                                                )
+                                            print(f"[PHOENIX TGT] 🔄 Broker PT replace queued for {cache_key} → ${tgt_price:.4f}")
+                                        else:
+                                            print(f"[PHOENIX TGT] ⚠️ No cache entry for {cache_key}")
                                 except Exception as cache_err:
                                     print(f"[PHOENIX TGT] Cache update warning: {cache_err}")
                             else:

@@ -6452,6 +6452,174 @@ class RiskManager:
             except Exception as e:
                 print(f"[RISK] ⚠️ {broker_name} broker stop sync error: {e}")
 
+    async def _replace_broker_pt(self, position_key: str, new_pt_price: float, trade_id: int = None):
+        """Replace the live broker PT order with a new price (signal target update).
+        Called from PHOENIX TGT handler when a follow-up target message arrives."""
+        cache = self.cache.get(position_key)
+        if not cache:
+            print(f"[RISK PT REPLACE] ⚠️ No cache entry for {position_key}")
+            return False
+
+        if cache.closing:
+            print(f"[RISK PT REPLACE] ⏭️ Position {position_key} is closing — skip PT replace")
+            return False
+
+        if not cache.broker_orders_placed:
+            print(f"[RISK PT REPLACE] ⏭️ No broker orders placed yet for {position_key}")
+            return False
+
+        if cache.original_qty and hasattr(cache, '_current_qty'):
+            pass
+
+        broker_name = (cache.broker or '').upper()
+        symbol = cache.raw_symbol or position_key.split('_')[1] if '_' in position_key else position_key
+
+        if broker_name == 'SCHWAB' and self.schwab_broker:
+            try:
+                if not self.schwab_broker.is_authenticated():
+                    print(f"[RISK PT REPLACE] ⚠️ Schwab not authenticated")
+                    return False
+
+                if cache.broker_oco_order_id:
+                    _oco_sl_price = cache.broker_oco_sl_price
+                    _oco_qty = cache.broker_oco_qty
+                    _old_oco_id = cache.broker_oco_order_id
+                    _old_pt = cache.broker_oco_pt_price
+
+                    if _old_pt and abs(_old_pt - new_pt_price) < 0.001:
+                        print(f"[RISK PT REPLACE] ⏭️ PT already at ${new_pt_price:.4f} — no change needed")
+                        return True
+
+                    _cancel_res = await self.schwab_broker.cancel_order(_old_oco_id)
+                    if _cancel_res.get('success'):
+                        print(f"[RISK PT REPLACE] 🔄 Cancelled OCO #{_old_oco_id} for PT update")
+                        _oco_status = await self.schwab_broker.get_order_status(_old_oco_id)
+                        if _oco_status and _oco_status.get('status') == 'filled':
+                            print(f"[RISK PT REPLACE] ⚠️ OCO #{_old_oco_id} already FILLED — cannot update PT")
+                            cache.broker_oco_order_id = None
+                            cache.broker_oco_sl_price = None
+                            cache.broker_oco_pt_price = None
+                            cache.broker_oco_qty = 0
+                            return False
+                    else:
+                        _cmsg = _cancel_res.get('message', '')
+                        if '404' in _cmsg or '400' in _cmsg or '409' in _cmsg:
+                            print(f"[RISK PT REPLACE] 🔄 OCO #{_old_oco_id} already dead ({_cmsg}) — placing fresh bracket")
+                        else:
+                            print(f"[RISK PT REPLACE] ⚠️ OCO cancel failed: {_cmsg} — aborting")
+                            return False
+
+                    cache.broker_oco_order_id = None
+                    cache.broker_oco_sl_price = None
+                    cache.broker_oco_pt_price = None
+                    cache.broker_oco_qty = 0
+                    cache.broker_pt_order_id = None
+
+                    if _oco_sl_price and _oco_qty > 0:
+                        oco_result = await self.schwab_broker.place_oco_order(
+                            symbol=symbol,
+                            quantity=_oco_qty,
+                            stop_loss_price=_oco_sl_price,
+                            profit_target_price=new_pt_price,
+                            side='sell',
+                            asset_type='EQUITY'
+                        )
+                        if oco_result and oco_result.success and oco_result.order_id:
+                            cache.broker_oco_order_id = str(oco_result.order_id)
+                            cache.broker_oco_sl_price = _oco_sl_price
+                            cache.broker_oco_pt_price = new_pt_price
+                            cache.broker_oco_qty = _oco_qty
+                            cache.broker_pt_order_id = str(oco_result.order_id)
+                            print(f"[RISK PT REPLACE] ✅ OCO re-placed: #{oco_result.order_id} SL=${_oco_sl_price:.2f} PT=${new_pt_price:.2f} (was ${_old_pt:.2f})")
+                            return True
+                        else:
+                            msg = getattr(oco_result, 'message', 'unknown') if oco_result else 'no result'
+                            print(f"[RISK PT REPLACE] ⚠️ OCO re-place failed: {msg}")
+                            return False
+                    else:
+                        print(f"[RISK PT REPLACE] ⚠️ No SL price or qty for OCO — cannot re-place")
+                        return False
+
+                elif cache.broker_pt_order_id:
+                    _cancel_res = await self.schwab_broker.cancel_order(cache.broker_pt_order_id)
+                    if _cancel_res.get('success'):
+                        print(f"[RISK PT REPLACE] 🔄 Cancelled standalone PT #{cache.broker_pt_order_id}")
+                    else:
+                        _cmsg = _cancel_res.get('message', '')
+                        if '404' in _cmsg or '400' in _cmsg or '409' in _cmsg:
+                            print(f"[RISK PT REPLACE] 🔄 PT #{cache.broker_pt_order_id} already dead")
+                        else:
+                            print(f"[RISK PT REPLACE] ⚠️ PT cancel failed: {_cmsg}")
+                            return False
+
+                    _pt_qty = cache.broker_oco_qty or (cache.original_qty or 0)
+                    if _pt_qty <= 0:
+                        print(f"[RISK PT REPLACE] ⚠️ No qty for standalone PT")
+                        return False
+
+                    pt_result = await self.schwab_broker.place_stock_order(
+                        symbol=symbol,
+                        action='STC',
+                        quantity=_pt_qty,
+                        price=new_pt_price,
+                        _skip_cancel_check=True
+                    )
+                    if pt_result and pt_result.success and pt_result.order_id:
+                        cache.broker_pt_order_id = str(pt_result.order_id)
+                        print(f"[RISK PT REPLACE] ✅ Standalone PT replaced: #{pt_result.order_id} at ${new_pt_price:.2f}")
+                        return True
+                    else:
+                        msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
+                        print(f"[RISK PT REPLACE] ⚠️ Standalone PT failed: {msg}")
+                        return False
+                else:
+                    print(f"[RISK PT REPLACE] ⏭️ No OCO or PT order to replace for {position_key}")
+                    return False
+
+            except Exception as e:
+                print(f"[RISK PT REPLACE] ⚠️ Schwab error: {e}")
+                return False
+
+        elif 'IBKR' in broker_name and self.ibkr_broker:
+            try:
+                if not cache.broker_pt_order_id:
+                    print(f"[RISK PT REPLACE] ⏭️ No IBKR PT order to modify for {position_key}")
+                    return False
+
+                pt_order_id = int(cache.broker_pt_order_id)
+                from ib_insync import LimitOrder as _IBLimitPT, Stock as _IBStockPT, Option as _IBOptionPT
+                _is_opt = '_option' in position_key
+                if _is_opt:
+                    print(f"[RISK PT REPLACE] ⚠️ IBKR option PT modify not yet supported")
+                    return False
+                contract = _IBStockPT(symbol, 'SMART', 'USD')
+                await self.ibkr_broker.ib.qualifyContractsAsync(contract)
+
+                _existing_trade = None
+                for t in self.ibkr_broker.ib.openTrades():
+                    if t.order.orderId == pt_order_id:
+                        _existing_trade = t
+                        break
+
+                if not _existing_trade:
+                    print(f"[RISK PT REPLACE] ⚠️ IBKR PT order #{pt_order_id} not found in open trades (may be filled)")
+                    return False
+
+                _existing_trade.order.lmtPrice = new_pt_price
+                self.ibkr_broker.ib.placeOrder(contract, _existing_trade.order)
+                await asyncio.sleep(1)
+                print(f"[RISK PT REPLACE] ✅ IBKR PT #{pt_order_id} modified: new limit ${new_pt_price:.2f}")
+                cache.broker_oco_pt_price = new_pt_price
+                return True
+
+            except Exception as e:
+                print(f"[RISK PT REPLACE] ⚠️ IBKR error: {e}")
+                return False
+
+        else:
+            print(f"[RISK PT REPLACE] ⏭️ Broker {broker_name} not supported for PT replace")
+            return False
+
     async def _execute_exit(
         self,
         position: PositionSnapshot,
