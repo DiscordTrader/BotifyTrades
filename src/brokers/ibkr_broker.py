@@ -309,7 +309,7 @@ class IBKRBroker(BrokerInterface):
             return None
 
     async def get_positions_detailed(self) -> list:
-        """Get detailed positions for sync service compatibility."""
+        """Get detailed positions matching Schwab/live_snapshot field contract."""
         try:
             if not self.ib.isConnected():
                 return []
@@ -320,21 +320,46 @@ class IBKRBroker(BrokerInterface):
                 quantity = abs(int(pos.position))
                 if quantity == 0:
                     continue
-                avg_cost = float(pos.avgCost) if pos.avgCost else 0
+                avg_cost_raw = float(pos.avgCost) if pos.avgCost else 0
+                is_option = contract.secType == 'OPT'
+
+                current_price = 0.0
+                try:
+                    tickers = self.ib.tickers()
+                    for t in tickers:
+                        if t.contract and t.contract.conId == contract.conId:
+                            if t.last and t.last > 0:
+                                current_price = float(t.last)
+                            elif t.bid and t.ask and t.bid > 0 and t.ask > 0:
+                                current_price = (float(t.bid) + float(t.ask)) / 2
+                            break
+                except Exception:
+                    pass
+
+                if is_option:
+                    avg_cost = avg_cost_raw / 100 if avg_cost_raw > 0 else 0
+                else:
+                    avg_cost = avg_cost_raw
+
+                unrealized_pl = (current_price - avg_cost) * quantity if avg_cost > 0 and current_price > 0 else 0.0
+                if is_option:
+                    unrealized_pl *= 100
+
                 entry = {
                     'symbol': contract.symbol,
                     'quantity': quantity,
+                    'avg_cost': avg_cost,
+                    'current_price': current_price,
+                    'unrealized_pl': unrealized_pl,
+                    'asset': 'option' if is_option else 'stock',
                     'position_id': str(contract.conId),
-                    'asset_type': 'option' if contract.secType == 'OPT' else 'stock'
                 }
-                if contract.secType == 'OPT':
-                    entry['avg_price'] = avg_cost / 100 if avg_cost > 0 else 0
+                if is_option:
                     expiry_raw = contract.lastTradeDateOrContractMonth
                     entry['expiry'] = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}" if len(expiry_raw) == 8 else expiry_raw
                     entry['strike'] = contract.strike
-                    entry['call_put'] = contract.right
-                else:
-                    entry['avg_price'] = avg_cost
+                    entry['direction'] = contract.right
+                    entry['raw_symbol'] = f"{contract.symbol}_{expiry_raw}_{contract.strike}_{contract.right}"
                 positions.append(entry)
             return positions
         except Exception as e:

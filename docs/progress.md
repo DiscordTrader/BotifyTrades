@@ -150,3 +150,47 @@
 | `TestTempleRegistryIntegration` | 15 | End-to-end registry matching |
 | `TestTemplePipelineSource` | 2 | Enum/mapping validation |
 | `TestTempleBrokerExecution` | 55 | Broker execution field readiness |
+
+## Session: April 30, 2026 — IBKR Live Monitor + Risk Engine Fix
+
+### Problem
+- IBKR positions not showing in Trading → Dashboard → Live Monitor tab
+- Risk engine not monitoring IBKR positions
+
+### Root Causes
+1. **Field name mismatch in `ibkr_broker.py:get_positions_detailed()`**: Returned `avg_price`, `asset_type`, `call_put` — but `live_snapshot.py:_fetch_ibkr()` expected `avg_cost`, `asset`, `direction` (matching Schwab's contract). Also missing `current_price`, `unrealized_pl`, `raw_symbol` fields.
+2. **Missing IBKR handler in `broker_live_analytics.py:get_open_positions()`**: Had handlers for Webull, Alpaca, Schwab, Robinhood but no IBKR — caused `/api/broker/positions/ibkr_*` to return empty.
+
+### Files Fixed
+| File | Change |
+|------|--------|
+| `src/brokers/ibkr_broker.py:311-367` | Rewrote `get_positions_detailed()` — field names now match Schwab contract (`avg_cost`, `current_price`, `unrealized_pl`, `asset`, `direction`, `raw_symbol`). Added `ib.tickers()` cache lookup for live prices. |
+| `gui_app/broker_live_analytics.py:627` | Added `elif broker_type == 'ibkr':` handler in `get_open_positions()` — reads from `get_positions_detailed()` with correct field mapping. |
+
+---
+
+## April 30, 2026 — Session 2: Sync Timing, UTF-8, Alt Broker Fallback
+
+### Fixes Applied
+
+| # | Issue | Root Cause | Fix | File(s) |
+|---|-------|-----------|-----|---------|
+| 1 | **Bot crash: OSError [Errno 22] on stdout** | `_original_print` (raw `builtins.print`) wrote to invalid stdout handle (pipe/devnull) | Wrapped `_original_print` definition to catch OSError silently, protecting all 750+ call sites | `src/selfbot_webull.py:246-250` |
+| 2 | **Bot crash: UnicodeEncodeError on startup** | Windows cp1252 console encoding can't render `✓`/`✅` Unicode in database.py print statements | Added `sys.stdout.reconfigure(encoding='utf-8', errors='replace')` at entrypoint + catch UnicodeEncodeError in `_original_print` | `src/selfbot_webull.py:17-28, 249` |
+| 3 | **IBKR conditional order #37 no price updates** | IBKR paper account lacks NASDAQ Level 1 subscription (error 10168). P3 BrokerPriceMonitor missing `alt_broker_instances` parameter | Added `alt_broker_instances=self.broker_instances` to P3 path; added alt broker REST fallback in `_do_rest_quote()` and `_fetch_price()` backoff path | `us_service.py:119`, `base.py:958-970, 989-1003` |
+| 4 | **IBKR positions not syncing** | `asyncio.to_thread(ib.positions)` caused "no current event loop in thread" — ib_insync cache reads must run on IB's event loop | Changed to direct `ib.positions()` / `ib.openTrades()` calls; added `ib.portfolio()` fallback; dual field support for `avgCost`/`averageCost` | `broker_sync_service.py:657-715` |
+| 5 | **Live Monitor showing "No live trades"** | `unifiedLivePoll()` had early return when `currentTrades` was empty, preventing poller from ever discovering new positions | Removed the early return guard | `gui_app/templates/trades.html:1699-1703` |
+| 6 | **Position closure blocked 5+ minutes** | Broker-level empty guard required 10 consecutive cycles AND 300 seconds before any trade reconciliation | Reduced broker guard to 2 cycles + 0s time; added per-trade 3x consecutive confirmation (45s); risk cache auto-cleanup on closure | `broker_sync_service.py:1306-1307, 1843-1882` |
+
+### Timing Improvement (Fix #6)
+
+**Before:** Broker closes position → 300+ seconds (5 min) broker guard + 15 min trade guard → CLOSED
+**After:** Broker closes position → 2 cycles broker guard (21s) + 3 cycles per-trade confirmation (37s) → **58 seconds total** → CLOSED + risk cache cleaned
+
+Verified live with OSRH Trade #36 on IBKR_PAPER:
+```
+14:35:13 — Cycle 1: broker guard 1/2 (deferred)
+14:35:34 — Cycle 2: broker guard passed, per-trade 1/3
+14:35:52 — Cycle 3: per-trade 2/3
+14:36:11 — Cycle 4: per-trade 3/3 → OPEN → CLOSED (58s total)
+```

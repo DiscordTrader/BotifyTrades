@@ -5249,15 +5249,25 @@ class RiskManager:
                             _ibkr_pt1 = _round_to_cboe_increment(_ibkr_pt1, is_sell=True)
                             if _ibkr_pt1 != pt1_price:
                                 print(f"[RISK] 📐 IBKR option PT1 CBOE snap: ${pt1_price:.2f} → ${_ibkr_pt1:.2f}")
+
+                    _ibkr_oca_group = None
+                    _both_legs = (_ibkr_sl and _ibkr_sl > 0) and (_ibkr_pt1 and _ibkr_pt1 > 0 and pt1_qty > 0)
+                    if _both_legs:
+                        import time as _oca_time
+                        _ibkr_oca_group = f"BT_{symbol}_{int(_oca_time.time())}"
+
                     if _ibkr_sl and _ibkr_sl > 0:
                         sl_order = StopOrder('SELL', qty, _ibkr_sl)
                         sl_order.tif = 'GTC'
                         sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
+                        if _ibkr_oca_group:
+                            sl_order.ocaGroup = _ibkr_oca_group
+                            sl_order.ocaType = 2
                         sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
                         await asyncio.sleep(1)
                         if sl_trade and sl_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_stop_order_id = str(sl_trade.order.orderId)
-                            print(f"[RISK] ✅ Broker SL placed: IBKR stop #{sl_trade.order.orderId} at ${_ibkr_sl:.2f} (qty={qty}) [GTC]")
+                            print(f"[RISK] ✅ Broker SL placed: IBKR stop #{sl_trade.order.orderId} at ${_ibkr_sl:.2f} (qty={qty}) [GTC{', OCA=' + _ibkr_oca_group if _ibkr_oca_group else ''}]")
                         else:
                             print(f"[RISK] ⚠️ IBKR SL order failed: {sl_trade.orderStatus.status if sl_trade else 'no trade'}")
 
@@ -5265,12 +5275,16 @@ class RiskManager:
                         pt_order = IBLimitOrder('SELL', pt1_qty, _ibkr_pt1)
                         pt_order.tif = 'GTC'
                         pt_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
+                        if _ibkr_oca_group:
+                            pt_order.ocaGroup = _ibkr_oca_group
+                            pt_order.ocaType = 2
                         pt_trade = self.ibkr_broker.ib.placeOrder(contract, pt_order)
                         await asyncio.sleep(1)
                         if pt_trade and pt_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_pt_order_id = str(pt_trade.order.orderId)
                             cache.broker_pt_tier = 1
-                            print(f"[RISK] ✅ Broker PT1 placed: IBKR limit #{pt_trade.order.orderId} at ${pt1_price:.2f} (qty={pt1_qty}) [GTC]")
+                            cache.broker_oco_order_id = _ibkr_oca_group
+                            print(f"[RISK] ✅ Broker PT1 placed: IBKR limit #{pt_trade.order.orderId} at ${pt1_price:.2f} (qty={pt1_qty}) [GTC{', OCA=' + _ibkr_oca_group if _ibkr_oca_group else ''}]")
                             await self._register_pt_with_chaser(str(pt_trade.order.orderId), broker_name, position, cache, pt1_qty, pt1_price, is_option)
                         else:
                             print(f"[RISK] ⚠️ IBKR PT1 order failed: {pt_trade.orderStatus.status if pt_trade else 'no trade'}")
@@ -5814,6 +5828,62 @@ class RiskManager:
                     await asyncio.sleep(1)
                     return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
 
+        elif 'IBKR' in broker_name and self.ibkr_broker:
+            try:
+                if cache.broker_pt_order_id:
+                    try:
+                        _cancel_asset = 'option' if is_option else 'stock'
+                        await self._cancel_single_order(broker_name, cache.broker_pt_order_id, broker_instance, asset_type=_cancel_asset)
+                    except Exception:
+                        pass
+                    cache.broker_pt_order_id = None
+
+                from ib_insync import LimitOrder as _IBLimitPT, Stock as _IBStockPT, Option as _IBOptionPT
+                if is_option:
+                    expiry_fmt = self.ibkr_broker._normalize_expiry_yyyymmdd(position.expiry or '')
+                    right = 'C' if (position.direction or '').upper() in ('C', 'CALL') else 'P'
+                    _pt_contract = _IBOptionPT(position.symbol, expiry_fmt, position.strike, right, 'SMART')
+                else:
+                    _pt_contract = _IBStockPT(symbol, 'SMART', 'USD')
+                await self.ibkr_broker.ib.qualifyContractsAsync(_pt_contract)
+
+                _pt_price_ibkr = next_pt_price
+                if is_option:
+                    _pt_price_ibkr = _round_to_cboe_increment(next_pt_price, is_sell=True)
+
+                pt_order = _IBLimitPT('SELL', next_qty, _pt_price_ibkr)
+                pt_order.tif = 'GTC'
+                pt_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
+                _oca_group = cache.broker_oco_order_id
+                if _oca_group and cache.broker_stop_order_id:
+                    pt_order.ocaGroup = _oca_group
+                    pt_order.ocaType = 2
+                elif cache.broker_stop_order_id:
+                    import time as _oca_time
+                    _oca_group = f"BT_{symbol}_{int(_oca_time.time())}"
+                    pt_order.ocaGroup = _oca_group
+                    pt_order.ocaType = 2
+                    cache.broker_oco_order_id = _oca_group
+
+                pt_trade = self.ibkr_broker.ib.placeOrder(_pt_contract, pt_order)
+                await asyncio.sleep(1)
+                _ibkr_pt_ok = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
+                if pt_trade and pt_trade.orderStatus.status in _ibkr_pt_ok:
+                    cache.broker_pt_order_id = str(pt_trade.order.orderId)
+                    cache.broker_pt_tier = next_tier
+                    print(f"[RISK] ✅ Broker PT{next_tier} placed: IBKR limit #{pt_trade.order.orderId} at ${next_pt_price:.2f} (qty={next_qty}) [GTC, OCA={_oca_group or 'none'}]")
+                    await self._register_pt_with_chaser(str(pt_trade.order.orderId), broker_name, position, cache, next_qty, next_pt_price, is_option)
+                else:
+                    print(f"[RISK] ⚠️ IBKR PT{next_tier} order failed: {pt_trade.orderStatus.status if pt_trade else 'no trade'}")
+                    if _retry_count < 2:
+                        await asyncio.sleep(1)
+                        return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
+            except Exception as e:
+                print(f"[RISK] ⚠️ IBKR PT{next_tier} bracket error: {e}")
+                if _retry_count < 2:
+                    await asyncio.sleep(1)
+                    return await self._place_next_pt_bracket_inner(position, cache, channel_settings, completed_tier, _retry_count + 1)
+
         else:
             try:
                 if cache.broker_pt_order_id:
@@ -6254,12 +6324,22 @@ class RiskManager:
                     sl_order = IBStopOrder('SELL', qty, _ibkr_sync_stop)
                     sl_order.tif = 'GTC'
                     sl_order.outsideRth = self.ibkr_broker._get_extended_hours_enabled()
+                    _oca_group = cache.broker_oco_order_id
+                    if _oca_group and cache.broker_pt_order_id:
+                        sl_order.ocaGroup = _oca_group
+                        sl_order.ocaType = 2
+                    elif cache.broker_pt_order_id:
+                        import time as _oca_time
+                        _oca_group = f"BT_{symbol}_{int(_oca_time.time())}"
+                        sl_order.ocaGroup = _oca_group
+                        sl_order.ocaType = 2
+                        cache.broker_oco_order_id = _oca_group
                     sl_trade = self.ibkr_broker.ib.placeOrder(contract, sl_order)
                     await asyncio.sleep(1)
                     _ibkr_sync_ok = ('Submitted', 'PreSubmitted', 'PendingSubmit', 'Filled', 'ApiPending')
                     if sl_trade and sl_trade.orderStatus.status in _ibkr_sync_ok:
                         cache.broker_stop_order_id = str(sl_trade.order.orderId)
-                        print(f"[RISK] ✅ Broker stop synced: IBKR stop #{sl_trade.order.orderId} at ${new_stop_price:.2f} [GTC]")
+                        print(f"[RISK] ✅ Broker stop synced: IBKR stop #{sl_trade.order.orderId} at ${new_stop_price:.2f} [GTC{', OCA=' + _oca_group if _oca_group else ''}]")
                     else:
                         print(f"[RISK] ⚠️ IBKR stop sync failed: {sl_trade.orderStatus.status if sl_trade else 'no trade'}")
 

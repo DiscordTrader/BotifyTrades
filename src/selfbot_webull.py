@@ -14,11 +14,21 @@ import builtins
 _early_print = builtins.print  # Save original print before any override
 
 # Handle PyInstaller GUI mode where stdout/stderr may be None
-# Use UTF-8 encoding to support Unicode characters (checkmarks, etc.)
+# Force UTF-8 encoding to support Unicode characters (checkmarks, emoji, etc.)
 if sys.stdout is None:
     sys.stdout = open(os.devnull, 'w', encoding='utf-8', errors='replace')
+elif hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 if sys.stderr is None:
     sys.stderr = open(os.devnull, 'w', encoding='utf-8', errors='replace')
+elif hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 # Import version dynamically to show actual release version
 try:
@@ -231,7 +241,14 @@ def log_error_to_db(error_type: str, error_message: str, component: str = None,
 
 # Redirect print() to logging system for clean console + file logs
 import builtins
-_original_print = builtins.print
+_raw_print = builtins.print
+
+def _original_print(*args, **kwargs):
+    try:
+        _raw_print(*args, **kwargs)
+    except (OSError, UnicodeEncodeError):
+        pass
+
 # CRITICAL: Save original print on builtins so other modules (license_client.py) can access it
 builtins._original_print = _original_print
 

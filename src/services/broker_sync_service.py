@@ -659,13 +659,18 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
                     try:
                         ib = broker_instance.ib
-                        raw_positions = await asyncio.to_thread(ib.positions)
+                        raw_positions = ib.positions()
+                        if not raw_positions:
+                            raw_positions = ib.portfolio()
                         
                         for pos in raw_positions:
                             contract = pos.contract
                             symbol = contract.symbol
                             quantity = abs(int(pos.position))
-                            avg_cost = float(pos.avgCost) if pos.avgCost else 0
+                            if quantity == 0:
+                                continue
+                            avg_cost_raw = getattr(pos, 'avgCost', None) or getattr(pos, 'averageCost', None) or 0
+                            avg_cost = float(avg_cost_raw) if avg_cost_raw else 0
                             
                             if contract.secType == 'OPT':
                                 expiry_raw = contract.lastTradeDateOrContractMonth
@@ -697,7 +702,7 @@ class BrokerSyncService:
                                     'asset_type': 'stock'
                                 })
                         
-                        raw_trades = await asyncio.to_thread(ib.openTrades)
+                        raw_trades = ib.openTrades()
                         for trade in raw_trades:
                             order = trade.order
                             contract = trade.contract
@@ -1298,8 +1303,8 @@ class BrokerSyncService:
                     self._first_empty_times[broker_name] = _empty_time.time()
                 import time as _empty_time2
                 _empty_elapsed = _empty_time2.time() - self._first_empty_times.get(broker_name, _empty_time2.time())
-                required_consecutive = 10
-                required_time_seconds = 300
+                required_consecutive = 2
+                required_time_seconds = 0
                 if empty_count < required_consecutive or _empty_elapsed < required_time_seconds:
                     statuses_deferred = []
                     if has_pending_trades:
@@ -1478,6 +1483,9 @@ class BrokerSyncService:
                 
                 # Update OPEN trade with current position data (UPDATE CURRENT PRICE, QUANTITY, AND P&L!)
                 elif current_status == 'OPEN':
+                    if hasattr(self, '_consecutive_empty_counts'):
+                        _empty_key = f"{broker_name}_{trade_id}"
+                        self._consecutive_empty_counts.pop(_empty_key, None)
                     current_price = position.get('current_price')
                     broker_quantity = float(position.get('quantity', 0))
                     db_quantity = float(trade.get('quantity') or 0)
@@ -1841,12 +1849,21 @@ class BrokerSyncService:
                         if _exec_at:
                             _exec_dt = datetime.fromisoformat(_exec_at.replace('Z', '+00:00'))
                             _age_minutes = (datetime.now() - _exec_dt.replace(tzinfo=None)).total_seconds() / 60
-                            if _age_minutes < 15:
-                                print(f"[SYNC] ⚠️ RECENT TRADE GUARD: Trade #{trade_id} ({symbol}) opened {_age_minutes:.1f}min ago — skipping closure (protect <15min trades from transient API failures)")
+                            if _age_minutes < 2:
+                                print(f"[SYNC] ⚠️ RECENT TRADE GUARD: Trade #{trade_id} ({symbol}) opened {_age_minutes:.1f}min ago — skipping closure (protect <2min trades)")
                                 _trade_age_guard = True
                     except Exception as _age_err:
                         print(f"[SYNC] ⚠️ Trade age check error: {_age_err}")
                     if _trade_age_guard:
+                        continue
+
+                    if not hasattr(self, '_consecutive_empty_counts'):
+                        self._consecutive_empty_counts = {}
+                    _empty_key = f"{broker_name}_{trade_id}"
+                    self._consecutive_empty_counts[_empty_key] = self._consecutive_empty_counts.get(_empty_key, 0) + 1
+                    _REQUIRED_CONFIRMATIONS = 3
+                    if self._consecutive_empty_counts[_empty_key] < _REQUIRED_CONFIRMATIONS:
+                        print(f"[SYNC] ⏳ Trade #{trade_id} ({symbol}) not in {broker_name} positions ({self._consecutive_empty_counts[_empty_key]}/{_REQUIRED_CONFIRMATIONS} confirmations)")
                         continue
 
                     if hasattr(self, '_risk_manager') and self._risk_manager:
@@ -1854,13 +1871,17 @@ class BrokerSyncService:
                             _risk_found = self._find_risk_cache_entry(
                                 self._risk_manager.cache, broker_name, symbol, trade)
                             if _risk_found:
-                                print(f"[SYNC] ⚠️ RISK GUARD: OPEN Trade #{trade_id} ({symbol}) "
-                                      f"still in risk cache with price ${_risk_found:.2f} "
-                                      f"— skipping closure despite broker returning empty positions")
-                                continue
+                                pos_key = f"{broker_name}_{symbol}_{trade.get('asset_type', 'stock')}"
+                                try:
+                                    self._risk_manager.cache.remove(pos_key)
+                                    print(f"[SYNC] 🧹 Cleared stale risk cache for {pos_key} (broker confirmed closed after {_REQUIRED_CONFIRMATIONS} cycles)")
+                                except Exception:
+                                    pass
 
+                    if hasattr(self, '_consecutive_empty_counts'):
+                        self._consecutive_empty_counts.pop(f"{broker_name}_{trade_id}", None)
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in positions: OPEN → CLOSED (broker closed)")
-                    
+
                     entry_price = float(trade.get('executed_price') or 0)
                     quantity = float(trade.get('quantity') or 0)
                     asset_type = trade.get('asset_type', 'option')

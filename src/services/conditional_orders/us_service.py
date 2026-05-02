@@ -116,7 +116,7 @@ class USConditionalOrderService(BaseConditionalOrderService):
         elif broker_instance and broker_key != 'trading212':
             data_source = broker_name.lower()
             self._log(f"[P3] REST API for {symbol} via {broker_name}")
-            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)
+            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance, alt_broker_instances=self.broker_instances)
         
         elif hub and hasattr(hub, 'is_streaming'):
             data_source = f"{broker_key}_stream"

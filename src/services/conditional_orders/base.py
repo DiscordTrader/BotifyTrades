@@ -964,6 +964,9 @@ class BrokerPriceMonitor(PriceMonitor):
                         val = result.get(key)
                         if val and float(val) > 0:
                             return float(val)
+                alt_price = await loop.run_in_executor(None, self._try_alt_broker_rest_quote_sync, self.symbol)
+                if alt_price and alt_price > 0:
+                    return alt_price
         except Exception as e:
             sys.stderr.write(f"[{self.broker_name.upper()}] REST quote error for {self.symbol}: {e}\n")
             sys.stderr.flush()
@@ -988,9 +991,17 @@ class BrokerPriceMonitor(PriceMonitor):
 
         if self._rest_fail_count >= 10:
             if not self._rest_fail_logged:
-                sys.stderr.write(f"[{self.broker_name.upper()}] REST quote for {self.symbol} failed {self._rest_fail_count}x, backing off to 30s intervals\n")
+                sys.stderr.write(f"[{self.broker_name.upper()}] REST quote for {self.symbol} failed {self._rest_fail_count}x, trying alt brokers before backing off\n")
                 sys.stderr.flush()
                 self._rest_fail_logged = True
+            try:
+                loop = asyncio.get_event_loop()
+                alt_price = await loop.run_in_executor(None, self._try_alt_broker_rest_quote_sync, self.symbol)
+                if alt_price and alt_price > 0:
+                    self._hub_available = False
+                    return alt_price
+            except Exception:
+                pass
             await asyncio.sleep(27)
             self._rest_fail_count += 1
             return self.last_price
@@ -2582,7 +2593,7 @@ class BaseConditionalOrderService(ABC):
                 del self.monitor_tasks[order_id]
             
             broker_recovered = False
-            broker_key = broker_primary.lower().replace(' ', '_')
+            broker_key = broker_primary.lower().replace(' ', '_').replace('_paper', '').replace('_live', '')
             for _ in range(20):
                 if broker_key in self.broker_instances:
                     hub = self.data_hubs.get(broker_key)

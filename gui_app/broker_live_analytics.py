@@ -624,6 +624,38 @@ class BrokerLiveAnalytics:
                     
                     positions.append(position_data)
             
+            elif broker_type == 'ibkr':
+                raw_positions = await client.get_positions_detailed()
+                for pos in raw_positions:
+                    qty = float(pos.get('quantity', 0))
+                    if qty == 0:
+                        continue
+
+                    avg_cost = float(pos.get('avg_cost', 0))
+                    current_price = float(pos.get('current_price', 0))
+                    unrealized_pnl = float(pos.get('unrealized_pl', 0))
+                    pnl_percent = ((current_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0
+
+                    is_option = pos.get('asset') == 'option'
+
+                    position_data = {
+                        'symbol': pos.get('symbol', ''),
+                        'quantity': qty,
+                        'avg_cost': avg_cost,
+                        'current_price': current_price,
+                        'market_value': qty * current_price * (100 if is_option else 1),
+                        'unrealized_pnl': unrealized_pnl,
+                        'pnl_percent': pnl_percent,
+                        'asset_type': 'option' if is_option else 'stock'
+                    }
+
+                    if is_option:
+                        position_data['strike'] = pos.get('strike', 0)
+                        position_data['expiry'] = pos.get('expiry', '')
+                        position_data['option_type'] = 'CALL' if pos.get('direction', '') == 'C' else 'PUT'
+
+                    positions.append(position_data)
+
             elif broker_type == 'robinhood':
                 if hasattr(client, 'get_all_positions'):
                     raw_positions = client.get_all_positions()
@@ -631,12 +663,12 @@ class BrokerLiveAnalytics:
                         qty = float(pos.get('quantity', 0))
                         if qty == 0:
                             continue
-                        
+
                         avg_cost = float(pos.get('avg_price') or pos.get('average_buy_price') or 0)
                         current_price = float(pos.get('current_price', 0))
                         unrealized_pnl = float(pos.get('unrealized_pnl', 0))
                         pnl_percent = ((current_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0
-                        
+
                         positions.append({
                             'symbol': pos.get('symbol', ''),
                             'quantity': qty,

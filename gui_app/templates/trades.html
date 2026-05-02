@@ -1698,10 +1698,6 @@ function updateStalenessIndicator(snapshotAge) {
 
 async function unifiedLivePoll() {
     if (currentTab !== 'live' && currentTab !== 'pending') return;
-    if (currentTab === 'live') {
-        const openTrades = currentTrades.filter(t => t.status === 'OPEN');
-        if (openTrades.length === 0) return;
-    }
     
     try {
         const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
