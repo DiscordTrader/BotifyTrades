@@ -10009,6 +10009,8 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                             import time as _tmod
                             signal['_parsed_at'] = _tmod.monotonic()
                             signal['_queued_at'] = _tmod.monotonic()
+                            signal['detected_at'] = arrived_at.isoformat() if arrived_at else datetime.now().isoformat()
+                            signal['parsed_at'] = datetime.now().isoformat()
                             await self.order_queue.put(signal)
                             print(f"[ALERT PARSER] ✅ Added signal to execution queue: BTO 1 {structured['symbol']} @${structured['entry_price']}")
                             print(f"[ALERT PARSER]    → Channel: {target_channel_info['name']} | Paper: {bool(target_channel_info.get('paper_trade_enabled', 0))} | Signal ID: {signal_id}")
@@ -10857,6 +10859,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             sys.stderr.write(f"[CONDITIONAL EXEC] Signal carries explicit PT/SL — bracket eligible\n")
                             sys.stderr.flush()
                         
+                        # Latency tracking: triggered_at from conditional order monitor
+                        signal['detected_at'] = order.get('_triggered_at') or datetime.now().isoformat()
+                        signal['parsed_at'] = datetime.now().isoformat()
+
                         # Use sync signal queue (thread-safe, same as Telegram)
                         if _telegram_signal_queue is not None:
                             _telegram_signal_queue.put_nowait(signal)
@@ -15509,6 +15515,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     import time as _tmod
                     opt['_parsed_at'] = _tmod.monotonic()
                     opt['_queued_at'] = _tmod.monotonic()
+                    opt['detected_at'] = arrived_at.isoformat() if arrived_at else datetime.now().isoformat()
+                    opt['parsed_at'] = datetime.now().isoformat()
                     await self.order_queue.put(opt)
                     _original_print(f"[QUEUE] ✅ Signal queued: {opt.get('action')} {opt.get('symbol')}", flush=True)
                 except Exception as _q_err:
@@ -15795,6 +15803,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             import time as _tmod
                             opt['_parsed_at'] = _tmod.monotonic()
                             opt['_queued_at'] = _tmod.monotonic()
+                            opt['detected_at'] = arrived_at.isoformat() if arrived_at else datetime.now().isoformat()
+                            opt['parsed_at'] = datetime.now().isoformat()
                             await self.order_queue.put(opt)
                             print(f"[QUEUE] ✓ Signal queued for execution")
                         return
@@ -16130,6 +16140,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 import time as _tmod
                 stk['_parsed_at'] = _tmod.monotonic()
                 stk['_queued_at'] = _tmod.monotonic()
+                stk['detected_at'] = arrived_at.isoformat() if arrived_at else datetime.now().isoformat()
+                stk['parsed_at'] = datetime.now().isoformat()
                 await self.order_queue.put(stk)
                 print(f"[QUEUE] ✓ Signal queued for LIVE execution")
             
@@ -17165,6 +17177,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # ─────────────────────────────────────────────────────────────────────
 
                 _t_pre_order = _t.monotonic()
+                signal['_order_submitted_at'] = datetime.now().isoformat()
                 _original_print(f"[{broker_name}] [TIMING] Pre-order setup: {(_t_pre_order - _t_health)*1000:.0f}ms (total: {(_t_pre_order - _t0)*1000:.0f}ms)")
                 _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${order_price}")
                 
@@ -17476,8 +17489,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # ─────────────────────────────────────────────────────────────────────
 
                 _t_pre_stk_order = _t.monotonic()
+                signal['_order_submitted_at'] = datetime.now().isoformat()
                 _original_print(f"[{broker_name}] [TIMING] Stock pre-order: {(_t_pre_stk_order - _t_health)*1000:.0f}ms (total: {(_t_pre_stk_order - _t0)*1000:.0f}ms)")
-                
+
                 if uses_modern_signature:
                     _stk_kwargs = dict(
                         symbol=signal['symbol'],
@@ -17629,7 +17643,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             sizing_details=signal.get('sizing_details'),
                             signal_detected_at=signal.get('detected_at'),
                             signal_parsed_at=signal.get('parsed_at'),
-                            signal_lot_id=signal.get('lot_id')
+                            signal_lot_id=signal.get('lot_id'),
+                            order_submitted_at=signal.get('_order_submitted_at')
                         )
                     except Exception as meta_err:
                         _original_print(f"[EXEC] Warning: Could not save order metadata: {meta_err}")
@@ -17869,7 +17884,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     signal = _telegram_signal_queue.get(timeout=1.0)
                     
                     _original_print(f"[TELEGRAM BRIDGE] Received signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
-                    
+
+                    if not signal.get('detected_at'):
+                        signal['detected_at'] = datetime.now().isoformat()
+                    if not signal.get('parsed_at'):
+                        signal['parsed_at'] = datetime.now().isoformat()
+
                     if signal.get('action', '').upper() in ('BTO', 'BTC'):
                         try:
                             from gui_app.database import is_circuit_breaker_tripped

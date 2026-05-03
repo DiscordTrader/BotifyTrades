@@ -278,7 +278,7 @@
             ⏳ Pending Orders
         </button>
         <button id="tab-filled" class="tab" onclick="switchTab('filled')">
-            ✅ Filled Orders
+            ✅ Closed Trades
         </button>
         <button id="tab-signals" class="tab" onclick="switchTab('signals')">
             📡 Signals
@@ -429,20 +429,20 @@ async function switchTab(tab) {
 async function loadFilledOrders() {
     const container = document.getElementById('trades-table-container');
     container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading order history...</div></div>';
-    
+
     try {
-        const response = await fetch('/api/webull/order-history?count=50&status=Filled');
+        const response = await fetch('/api/execution-pnl?limit=50');
         const data = await response.json();
-        
+
         if (data.error) {
             container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error}</div>`;
             return;
         }
-        
-        const orders = data.orders || [];
-        currentTrades = orders;
-        displayFilledOrdersTable(orders);
-        
+
+        const trades = data.trades || [];
+        currentTrades = trades;
+        displayFilledOrdersTable(trades);
+
     } catch (error) {
         console.error('Failed to load filled orders:', error);
         container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load order history</div>';
@@ -801,39 +801,51 @@ function displayTradesTable(trades) {
     }
 }
 
-function displayFilledOrdersTable(orders) {
+function displayFilledOrdersTable(trades) {
     const container = document.getElementById('trades-table-container');
-    
-    if (orders.length === 0) {
+
+    if (trades.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 60px 20px;">
                 <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">📋</div>
-                <div style="color: var(--text-secondary); font-size: 1rem;">No filled orders found</div>
+                <div style="color: var(--text-secondary); font-size: 1rem;">No filled trades found</div>
             </div>
         `;
         return;
     }
-    
+
     let tableHTML = '<table class="data-table"><thead><tr>';
-    tableHTML += '<th>Symbol</th><th>Action</th><th>Qty</th><th>Filled Qty</th><th>Avg Price</th><th>Order Type</th><th>Status</th><th>Filled Time</th>';
+    tableHTML += '<th>Symbol</th><th>Broker</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&L</th><th>P&L%</th><th>Latency</th><th>Exit Reason</th><th>Filled</th>';
     tableHTML += '</tr></thead><tbody>';
-    
-    orders.forEach(order => {
-        const qty = parseInt(order.quantity) || 0;
-        const filledQty = parseInt(order.filled_quantity) || qty;
-        const avgPrice = parseFloat(order.avg_filled_price) || parseFloat(order.limit_price) || 0;
-        
-        let symbolDisplay = order.symbol;
-        if (order.asset_type === 'option' && order.strike) {
-            symbolDisplay += ` ${order.expiry || ''} $${order.strike} ${order.option_type || ''}`;
+
+    trades.forEach(trade => {
+        let symbolDisplay = trade.symbol || '';
+        if (trade.asset_type === 'option' && trade.strike) {
+            symbolDisplay += ` ${trade.expiry || ''} $${trade.strike}${trade.call_put || ''}`;
         }
-        
-        const actionClass = order.action === 'BUY' ? 'pnl-positive' : 'pnl-negative';
-        const actionBadge = order.action === 'BUY' ? 
-            '<span style="background: rgba(0,255,136,0.2); color: #0f8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BUY</span>' : 
-            '<span style="background: rgba(255,68,68,0.2); color: #f44; padding: 2px 8px; border-radius: 4px; font-weight: 600;">SELL</span>';
-        
-        // Parse timestamps as UTC before converting to EST
+
+        const entryPrice = trade.entry ? trade.entry.fill_price : 0;
+        const exitPrice = trade.exit ? trade.exit.fill_price : 0;
+        const pnl = trade.pnl || 0;
+        const pnlPct = trade.pnl_percent || 0;
+        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+
+        const latencyMs = trade.latency ? trade.latency.total_ms : null;
+        let latencyDisplay = '<span style="color: #555;">—</span>';
+        if (latencyMs && latencyMs > 0) {
+            let latencyColor = '#10B981';
+            if (latencyMs > 3000) latencyColor = '#EF4444';
+            else if (latencyMs > 1500) latencyColor = '#F59E0B';
+            const latencyVal = latencyMs >= 1000 ? (latencyMs / 1000).toFixed(1) + 's' : latencyMs + 'ms';
+            latencyDisplay = `<span style="background: ${latencyColor}20; color: ${latencyColor}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px;">${latencyVal}</span>`;
+        }
+
+        const exitSource = trade.exit_source || '';
+        const reasonColor = exitSource.includes('PT') ? '#30D158' :
+                           (exitSource.includes('STOP') ? '#FF453A' :
+                           (exitSource.includes('TRAIL') ? '#FF9F0A' :
+                           (exitSource === 'MANUAL' ? '#8E8E93' : '#00CED1')));
+
         const parseAsUTC = (ts) => {
             if (!ts) return null;
             if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
@@ -841,21 +853,23 @@ function displayFilledOrdersTable(orders) {
             }
             return new Date(ts);
         };
-        const filledDate = parseAsUTC(order.filled_time) || parseAsUTC(order.created_time);
-        const filledTime = filledDate ? filledDate.toLocaleString('en-US', { timeZone: 'America/New_York' }) : 'N/A';
-        
+        const filledDate = parseAsUTC(trade.exit ? trade.exit.filled_at : null);
+        const filledTime = filledDate ? filledDate.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'N/A';
+
         tableHTML += `<tr>
             <td><strong>${symbolDisplay}</strong></td>
-            <td>${actionBadge}</td>
-            <td>${qty}</td>
-            <td>${filledQty}</td>
-            <td>$${avgPrice.toFixed(2)}</td>
-            <td>${order.order_type || 'N/A'}</td>
-            <td><span class="badge" style="background: rgba(0,255,136,0.2); color: #0f8;">${order.status || 'Filled'}</span></td>
-            <td style="color: var(--text-secondary); font-size: 0.85rem;">${filledTime}</td>
+            <td><span style="font-size: 0.8rem; color: var(--text-secondary);">${trade.broker || ''}</span></td>
+            <td>${trade.closed_qty || 0}</td>
+            <td>$${(entryPrice || 0).toFixed(2)}</td>
+            <td>$${(exitPrice || 0).toFixed(2)}</td>
+            <td class="${pnlClass}"><strong>$${pnl.toFixed(2)}</strong></td>
+            <td class="${pnlClass}">${pnlPct.toFixed(1)}%</td>
+            <td>${latencyDisplay}</td>
+            <td><span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${exitSource || '—'}</span></td>
+            <td style="color: var(--text-secondary); font-size: 0.8rem;">${filledTime}</td>
         </tr>`;
     });
-    
+
     tableHTML += '</tbody></table>';
     container.innerHTML = tableHTML;
 }

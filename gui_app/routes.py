@@ -12221,8 +12221,13 @@ def register_routes(app):
                     
                     -- Channel info
                     c.name as channel_name,
-                    c.discord_channel_id
-                    
+                    c.discord_channel_id,
+
+                    -- Latency (from first execution_lot for this signal)
+                    (SELECT el2.latency_total_ms FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as latency_total_ms,
+                    (SELECT el2.latency_parse_ms FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as latency_parse_ms,
+                    (SELECT el2.latency_broker_ms FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as latency_broker_ms
+
                 FROM signal_lots sl
                 LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
                 LEFT JOIN channels c ON sl.channel_id = c.id
@@ -12297,6 +12302,9 @@ def register_routes(app):
                         'author': row['author_name'] or 'Unknown',
                         'status': row['status'],
                         'channel_name': row['channel_name'],
+                        'latency_ms': row['latency_total_ms'],
+                        'latency_parse_ms': row['latency_parse_ms'],
+                        'latency_broker_ms': row['latency_broker_ms'],
                         'closures': [],
                         'total_closed_qty': 0,
                         'remaining_qty': 0,
@@ -12776,6 +12784,8 @@ def register_routes(app):
                     'exit_source': row['exit_source'],
                     'latency': {
                         'signal_detected_at': row['signal_detected_at'],
+                        'parse_ms': row['latency_parse_ms'],
+                        'broker_ms': row['latency_broker_ms'],
                         'total_ms': latency
                     },
                     'sizing': {
@@ -12827,6 +12837,107 @@ def register_routes(app):
             print(f"[API] Error getting execution P&L filters: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/latency/stats', methods=['GET'])
+    def api_latency_stats():
+        """Get execution latency statistics for dashboard display"""
+        try:
+            from gui_app.database import get_connection as _get_conn
+            days = request.args.get('days', 30, type=int)
+            broker = request.args.get('broker', '').strip()
+
+            conn = _get_conn()
+            cursor = conn.cursor()
+
+            query = '''
+                SELECT
+                    el.broker,
+                    el.symbol,
+                    el.latency_parse_ms,
+                    el.latency_broker_ms,
+                    el.latency_total_ms,
+                    el.order_filled_at,
+                    el.signal_detected_at,
+                    c.name as channel_name
+                FROM execution_lots el
+                LEFT JOIN channels c ON el.channel_id = c.discord_channel_id
+                WHERE el.latency_total_ms IS NOT NULL
+                  AND el.latency_total_ms > 0
+                  AND el.order_filled_at >= datetime('now', ?)
+            '''
+            params = [f'-{days} days']
+
+            if broker:
+                query += ' AND UPPER(el.broker) LIKE UPPER(?)'
+                params.append(f'%{broker}%')
+
+            query += ' ORDER BY el.order_filled_at DESC LIMIT 500'
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+            if not rows:
+                return jsonify({
+                    'success': True,
+                    'summary': {'total_trades': 0, 'avg_total_ms': 0, 'avg_parse_ms': 0, 'avg_broker_ms': 0, 'p50_ms': 0, 'p95_ms': 0},
+                    'by_broker': [],
+                    'recent': []
+                })
+
+            totals = [r['latency_total_ms'] for r in rows]
+            parse_vals = [r['latency_parse_ms'] for r in rows if r['latency_parse_ms']]
+            broker_vals = [r['latency_broker_ms'] for r in rows if r['latency_broker_ms']]
+
+            totals_sorted = sorted(totals)
+            p50 = totals_sorted[len(totals_sorted) // 2]
+            p95 = totals_sorted[int(len(totals_sorted) * 0.95)]
+
+            by_broker = {}
+            for r in rows:
+                b = r['broker'] or 'UNKNOWN'
+                if b not in by_broker:
+                    by_broker[b] = {'broker': b, 'total_ms_list': [], 'count': 0}
+                by_broker[b]['total_ms_list'].append(r['latency_total_ms'])
+                by_broker[b]['count'] += 1
+
+            broker_stats = []
+            for b, data in by_broker.items():
+                broker_stats.append({
+                    'broker': b,
+                    'avg_total_ms': round(sum(data['total_ms_list']) / len(data['total_ms_list'])),
+                    'trade_count': data['count']
+                })
+
+            recent = []
+            for r in rows[:20]:
+                recent.append({
+                    'symbol': r['symbol'],
+                    'broker': r['broker'],
+                    'parse_ms': r['latency_parse_ms'],
+                    'broker_ms': r['latency_broker_ms'],
+                    'total_ms': r['latency_total_ms'],
+                    'filled_at': r['order_filled_at'],
+                    'channel': r['channel_name']
+                })
+
+            return jsonify({
+                'success': True,
+                'summary': {
+                    'total_trades': len(rows),
+                    'avg_total_ms': round(sum(totals) / len(totals)),
+                    'avg_parse_ms': round(sum(parse_vals) / len(parse_vals)) if parse_vals else 0,
+                    'avg_broker_ms': round(sum(broker_vals) / len(broker_vals)) if broker_vals else 0,
+                    'p50_ms': p50,
+                    'p95_ms': p95
+                },
+                'by_broker': broker_stats,
+                'recent': recent
+            })
+
+        except Exception as e:
+            print(f"[API] Latency stats error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/signal-summary', methods=['GET'])
     def api_get_signal_summary():
         """Get signal-level aggregation with per-broker breakdown - Two-Tier P&L Signal Layer"""

@@ -444,6 +444,9 @@ class TelegramListener:
                 _print_flush(f"[TELEGRAM] Parser {parser_name} error: {e}")
         
         if signal:
+            from datetime import datetime as _dt
+            signal['detected_at'] = _dt.now().isoformat()
+            signal['parsed_at'] = _dt.now().isoformat()
             signal['platform'] = 'telegram'
             signal['channel_id'] = str(msg.chat_id)
             signal['channel_name'] = msg.chat_name

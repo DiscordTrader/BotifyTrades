@@ -593,6 +593,15 @@ function renderPNLData(positions) {
                         <div class="value ${profitTextClass}">${pos.avg_pnl_percent.toFixed(1)}%</div>
                     </div>
                     <div class="col">
+                        <div class="label">Latency</div>
+                        <div class="value">${pos.latency_ms ? (() => {
+                            const ms = pos.latency_ms;
+                            const color = ms > 3000 ? '#FF453A' : (ms > 1500 ? '#FF9F0A' : '#30D158');
+                            const val = ms >= 1000 ? (ms/1000).toFixed(1) + 's' : ms + 'ms';
+                            return '<span style="background: ' + color + '20; color: ' + color + '; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">' + val + '</span>';
+                        })() : '<span style="color: #555; font-size: 11px;">—</span>'}</div>
+                    </div>
+                    <div class="col">
                         <span class="status-badge ${statusClass}">${pos.status}</span>
                         <span class="expand-icon" id="expand-${index}">▶</span>
                     </div>

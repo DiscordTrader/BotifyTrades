@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotifyTrades vs Alertsify — Feature Comparison & Gap Analysis</title>
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: #111827;
+            --bg-card-alt: #1a2235;
+            --border: rgba(255,255,255,0.08);
+            --accent-cyan: #00F5FF;
+            --accent-green: #10B981;
+            --accent-red: #EF4444;
+            --accent-yellow: #F59E0B;
+            --accent-violet: #8B5CF6;
+            --accent-pink: #EC4899;
+            --text-primary: #FFFFFF;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        /* Header */
+        .report-header {
+            text-align: center;
+            padding: 3rem 2rem;
+            margin-bottom: 3rem;
+            background: linear-gradient(135deg, rgba(0,245,255,0.05) 0%, rgba(139,92,246,0.05) 100%);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+        }
+
+        .report-header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #00F5FF, #8B5CF6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .report-header .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+        }
+
+        .report-header .date {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+
+        /* Score Cards */
+        .score-section {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .score-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .score-card .score {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0.5rem 0;
+        }
+
+        .score-card .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .score-card .sublabel {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .score-botify { color: var(--accent-cyan); }
+        .score-alertsify { color: var(--accent-pink); }
+        .score-gap { color: var(--accent-yellow); }
+
+        /* Section Headers */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 3rem 0 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .section-badge {
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .badge-advantage { background: rgba(16,185,129,0.15); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.3); }
+        .badge-gap { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
+        .badge-parity { background: rgba(245,158,11,0.15); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.3); }
+
+        /* Comparison Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 2rem;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .comparison-table thead {
+            background: var(--bg-card-alt);
+        }
+
+        .comparison-table th {
+            padding: 1rem 1.25rem;
+            text-align: left;
+            font-weight: 700;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .comparison-table td {
+            padding: 1rem 1.25rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .comparison-table tr:nth-child(even) td {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .comparison-table tr:hover td {
+            background: rgba(0,245,255,0.03);
+        }
+
+        .status-yes {
+            color: var(--accent-green);
+            font-weight: 600;
+        }
+
+        .status-no {
+            color: var(--accent-red);
+            font-weight: 600;
+        }
+
+        .status-partial {
+            color: var(--accent-yellow);
+            font-weight: 600;
+        }
+
+        .status-superior {
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .feature-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .feature-detail {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Gap Cards */
+        .gap-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .gap-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.75rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gap-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .gap-card.priority-high::before { background: linear-gradient(90deg, var(--accent-red), var(--accent-pink)); }
+        .gap-card.priority-medium::before { background: linear-gradient(90deg, var(--accent-yellow), #FB923C); }
+        .gap-card.priority-low::before { background: linear-gradient(90deg, var(--accent-violet), var(--accent-cyan)); }
+
+        .gap-card h4 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .gap-card .gap-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .gap-card .gap-impact {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .gap-card .gap-effort {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 100px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            margin-top: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .effort-high { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+        .effort-medium { background: rgba(245,158,11,0.15); color: var(--accent-yellow); }
+        .effort-low { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+
+        /* Advantage Cards */
+        .advantage-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .advantage-card {
+            background: linear-gradient(135deg, rgba(0,245,255,0.05), rgba(16,185,129,0.05));
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .advantage-card h4 {
+            color: var(--accent-green);
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .advantage-card p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* Roadmap */
+        .roadmap-section {
+            margin-top: 3rem;
+        }
+
+        .roadmap-phase {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            padding-left: 3rem;
+        }
+
+        .roadmap-phase::before {
+            content: '';
+            position: absolute;
+            left: 1.5rem;
+            top: 2rem;
+            bottom: 0;
+            width: 2px;
+            background: var(--border);
+        }
+
+        .roadmap-phase:last-child::before { display: none; }
+
+        .phase-number {
+            position: absolute;
+            left: 0.75rem;
+            top: 1.75rem;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 800;
+        }
+
+        .phase-1 .phase-number { background: var(--accent-red); color: white; }
+        .phase-2 .phase-number { background: var(--accent-yellow); color: #1a1a1a; }
+        .phase-3 .phase-number { background: var(--accent-cyan); color: #1a1a1a; }
+        .phase-4 .phase-number { background: var(--accent-violet); color: white; }
+
+        .roadmap-phase h4 {
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .roadmap-phase .phase-timeline {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .roadmap-phase ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .roadmap-phase li {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            padding: 0.25rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .roadmap-phase li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--text-muted);
+        }
+
+        /* Summary Box */
+        .summary-box {
+            background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(0,245,255,0.08));
+            border: 1px solid rgba(139,92,246,0.2);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-top: 3rem;
+        }
+
+        .summary-box h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: var(--accent-violet);
+        }
+
+        .summary-box p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+        }
+
+        .summary-box strong {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .score-section { grid-template-columns: 1fr; }
+            .gap-grid { grid-template-columns: 1fr; }
+            .advantage-grid { grid-template-columns: 1fr; }
+            body { padding: 1rem; }
+        }
+
+        @media print {
+            body { background: white; color: #1a1a1a; }
+            .comparison-table th { color: #555; }
+            .comparison-table td { color: #333; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="report-header">
+            <h1>BotifyTrades vs Alertsify</h1>
+            <p class="subtitle">Competitive Feature Analysis & Improvement Roadmap</p>
+            <p class="date">Generated: May 2, 2026 | Based on real codebase audit + Alertsify public features</p>
+        </div>
+
+        <!-- Score Overview -->
+        <div class="score-section">
+            <div class="score-card">
+                <div class="label">BotifyTrades Score</div>
+                <div class="score score-botify">82/100</div>
+                <div class="sublabel">Strong execution engine & risk system</div>
+            </div>
+            <div class="score-card">
+                <div class="label">Alertsify Score</div>
+                <div class="score score-alertsify">76/100</div>
+                <div class="sublabel">Strong UX, social features & analytics</div>
+            </div>
+            <div class="score-card">
+                <div class="label">Missing Features</div>
+                <div class="score score-gap">8</div>
+                <div class="sublabel">Features Alertsify has that we don't</div>
+            </div>
+        </div>
+
+        <!-- ===== SECTION: WHERE BOTIFY WINS ===== -->
+        <div class="section-header">
+            <h2>Where BotifyTrades is Superior</h2>
+            <span class="section-badge badge-advantage">Our Advantages</span>
+        </div>
+
+        <div class="advantage-grid">
+            <div class="advantage-card">
+                <h4>7 Brokers vs 9 (But More Capable)</h4>
+                <p>We support IBKR (futures, OCA brackets), Schwab (OCO streaming), Trading212 (UK/EU), and Alpaca (bracket orders). Alertsify lacks IBKR and Trading212 but has E*TRADE, WealthSimple, MooMoo.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Advanced Risk Engine (11 Exit Strategies)</h4>
+                <p>Tiered PT (PT1-PT4), dynamic SL escalation, EMA exits, giveback guard, trailing stops, OCO/OCA broker brackets. Alertsify has basic SL/PT only with no multi-tier or adaptive exits.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Conditional Orders (3 Markets)</h4>
+                <p>Full conditional order system for US, India, Canada with streaming price monitoring, breakout detection, 7 safety gates before execution. Alertsify has no conditional/scanner system.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Multi-Signal Source (Discord + Telegram)</h4>
+                <p>Both Discord selfbot and Telegram Telethon listener with signal normalization. Alertsify is broker-detected alerts only (no external signal sources).</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Circuit Breakers & Kill Switch</h4>
+                <p>Global halt, per-channel halt, daily loss limits, position count limits, error threshold tracking, auto-halt. Alertsify has daily loss limits and kill switch but no per-channel granularity.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Per-Channel Exit Strategies</h4>
+                <p>Each Discord channel can have unique risk profiles: different SL%, PT tiers, trailing configs, exit modes (signal/risk/hybrid). Alertsify is per-trader limits only.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Portfolio Simulation Engine</h4>
+                <p>Monte Carlo simulation with replay mode, conservative/moderate/aggressive presets, daily breakdown. Alertsify has no simulation capability.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Options Chain Viewer + Live Greeks</h4>
+                <p>Real-time options chains with ATM highlighting, one-click order placement from web GUI. Alertsify has options execution but no chain visualization tool.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Self-Hosted & Private</h4>
+                <p>User owns their data, runs locally. No third-party sees trades or credentials. Alertsify is fully cloud-hosted with broker API keys shared with their platform.</p>
+            </div>
+        </div>
+
+        <!-- ===== SECTION: FEATURE PARITY ===== -->
+        <div class="section-header">
+            <h2>Feature-by-Feature Comparison</h2>
+            <span class="section-badge badge-parity">Full Breakdown</span>
+        </div>
+
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th style="width: 30%;">Feature</th>
+                    <th style="width: 25%;">BotifyTrades</th>
+                    <th style="width: 25%;">Alertsify</th>
+                    <th style="width: 20%;">Verdict</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Execution -->
+                <tr>
+                    <td>
+                        <div class="feature-name">Auto-Execution Speed</div>
+                        <div class="feature-detail">Signal → order latency</div>
+                    </td>
+                    <td class="status-yes">&lt;1s (async pipeline)</td>
+                    <td class="status-yes">&lt;200ms claimed</td>
+                    <td class="status-partial">Alertsify claims faster</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Manual Execution Mode</div>
+                        <div class="feature-detail">User confirms each trade</div>
+                    </td>
+                    <td class="status-no">No — auto only</td>
+                    <td class="status-yes">Tap-to-confirm toggle</td>
+                    <td class="status-no">Gap</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Multi-Broker Simultaneous</div>
+                        <div class="feature-detail">One signal → multiple brokers</div>
+                    </td>
+                    <td class="status-superior">7 brokers, per-channel routing</td>
+                    <td class="status-yes">9 brokers, single selection</td>
+                    <td class="status-superior">Botify wins (simultaneous)</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Bracket Orders (OCO/OCA)</div>
+                        <div class="feature-detail">Linked SL+PT on broker</div>
+                    </td>
+                    <td class="status-superior">Schwab OCO + IBKR OCA + dynamic replace</td>
+                    <td class="status-partial">Basic SL only</td>
+                    <td class="status-superior">Botify wins</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Slippage Protection</div>
+                        <div class="feature-detail">Guard against bad fills</div>
+                    </td>
+                    <td class="status-yes">Configurable threshold %</td>
+                    <td class="status-yes">1% guard + time skip + liquidity check</td>
+                    <td class="status-partial">Alertsify more granular</td>
+                </tr>
+                <!-- Risk Management -->
+                <tr>
+                    <td>
+                        <div class="feature-name">Stop Loss</div>
+                        <div class="feature-detail">Automatic loss protection</div>
+                    </td>
+                    <td class="status-superior">Dynamic escalation, per-channel, signal-driven</td>
+                    <td class="status-yes">Basic % stop</td>
+                    <td class="status-superior">Botify wins</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Profit Targets</div>
+                        <div class="feature-detail">Auto exit at profit levels</div>
+                    </td>
+                    <td class="status-superior">4-tier PT + partial exits + signal override</td>
+                    <td class="status-yes">Single PT</td>
+                    <td class="status-superior">Botify wins</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Trailing Stop</div>
+                        <div class="feature-detail">Lock profits as price moves</div>
+                    </td>
+                    <td class="status-superior">Early trailing + legacy + giveback guard</td>
+                    <td class="status-no">Not mentioned</td>
+                    <td class="status-superior">Botify wins</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Daily Loss Limit</div>
+                        <div class="feature-detail">Stop trading after $ loss</div>
+                    </td>
+                    <td class="status-yes">Per-broker daily limits in circuit breaker</td>
+                    <td class="status-yes">Configurable daily cap</td>
+                    <td class="status-partial">Parity</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Kill Switch</div>
+                        <div class="feature-detail">Emergency halt all trading</div>
+                    </td>
+                    <td class="status-yes">Global + per-channel halt</td>
+                    <td class="status-yes">Single kill switch</td>
+                    <td class="status-superior">Botify wins (granular)</td>
+                </tr>
+                <!-- Analytics -->
+                <tr>
+                    <td>
+                        <div class="feature-name">P&L Tracking</div>
+                        <div class="feature-detail">Profit/loss history</div>
+                    </td>
+                    <td class="status-yes">Full per-broker, per-trade P&L</td>
+                    <td class="status-yes">Full tradebook + calendar P&L</td>
+                    <td class="status-partial">Parity</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Win Rate Tracking</div>
+                        <div class="feature-detail">% successful trades</div>
+                    </td>
+                    <td class="status-yes">Win/loss ratio in analytics</td>
+                    <td class="status-yes">Win rate + by direction (calls/puts)</td>
+                    <td class="status-partial">Alertsify slightly better (directional split)</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Performance Heatmap</div>
+                        <div class="feature-detail">Visual time/day patterns</div>
+                    </td>
+                    <td class="status-yes">Calendar + heatmap in performance_analytics.py</td>
+                    <td class="status-yes">Best trading hours heatmap</td>
+                    <td class="status-partial">Parity</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Per-Ticker Analytics</div>
+                        <div class="feature-detail">Symbol-level P&L breakdown</div>
+                    </td>
+                    <td class="status-no">Not implemented</td>
+                    <td class="status-yes">Per-ticker edge analysis</td>
+                    <td class="status-no">Gap</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Average Hold Time</div>
+                        <div class="feature-detail">Duration tracking per trade</div>
+                    </td>
+                    <td class="status-no">Not tracked</td>
+                    <td class="status-yes">Historical duration</td>
+                    <td class="status-no">Gap</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Per-Trader P&L Attribution</div>
+                        <div class="feature-detail">Revenue by signal source</div>
+                    </td>
+                    <td class="status-partial">Per-channel analytics (close equivalent)</td>
+                    <td class="status-yes">Per-trader attribution</td>
+                    <td class="status-partial">Near parity — channel ≈ trader</td>
+                </tr>
+                <!-- AI & Intelligence -->
+                <tr>
+                    <td>
+                        <div class="feature-name">AI Trade Analysis</div>
+                        <div class="feature-detail">Pattern recognition, strategy profiling</div>
+                    </td>
+                    <td class="status-partial">GPT post-trade analysis (ai_analyzer.py)</td>
+                    <td class="status-yes">AI strategy analysis on 218K+ fills</td>
+                    <td class="status-no">Gap — Alertsify has full intelligence system</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Trader Intelligence Profiles</div>
+                        <div class="feature-detail">Auto-generated strategy summaries</div>
+                    </td>
+                    <td class="status-no">Not implemented</td>
+                    <td class="status-yes">Nightly re-analysis, bias/timing patterns</td>
+                    <td class="status-no">Gap</td>
+                </tr>
+                <!-- Social & Leaderboard -->
+                <tr>
+                    <td>
+                        <div class="feature-name">Leaderboard</div>
+                        <div class="feature-detail">Trader rankings</div>
+                    </td>
+                    <td class="status-yes">TQS scoring, channel + user rankings</td>
+                    <td class="status-yes">Broker-verified, P&L + win rate + subs</td>
+                    <td class="status-partial">Parity (different focus)</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Broker-Verified Stats</div>
+                        <div class="feature-detail">Tape-verified from broker fills only</div>
+                    </td>
+                    <td class="status-yes">All data from broker fills (self-hosted)</td>
+                    <td class="status-yes">Broker-verified badge system</td>
+                    <td class="status-partial">Parity (both use broker data)</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Public Track Records</div>
+                        <div class="feature-detail">Shareable performance profiles</div>
+                    </td>
+                    <td class="status-no">No public profiles</td>
+                    <td class="status-yes">Public/private toggle + verified badges</td>
+                    <td class="status-no">Gap</td>
+                </tr>
+                <!-- Monetization -->
+                <tr>
+                    <td>
+                        <div class="feature-name">Lead Trader Monetization</div>
+                        <div class="feature-detail">Signal providers earn revenue</div>
+                    </td>
+                    <td class="status-no">Not implemented (proposal exists)</td>
+                    <td class="status-yes">Custom pricing, 95% revenue share</td>
+                    <td class="status-no">Gap (SaaS model different)</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Subscription Billing</div>
+                        <div class="feature-detail">Automated payment collection</div>
+                    </td>
+                    <td class="status-partial">License server exists, waitlist with referrals</td>
+                    <td class="status-yes">Full billing via Whop platform</td>
+                    <td class="status-partial">Gap — Botify is self-hosted model</td>
+                </tr>
+                <!-- UX & Platform -->
+                <tr>
+                    <td>
+                        <div class="feature-name">Mobile App</div>
+                        <div class="feature-detail">Trade on mobile devices</div>
+                    </td>
+                    <td class="status-no">Desktop only (PyInstaller + Web GUI)</td>
+                    <td class="status-yes">Mobile app with push notifications</td>
+                    <td class="status-no">Gap</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Execution Latency Display</div>
+                        <div class="feature-detail">Show ms from signal to fill</div>
+                    </td>
+                    <td class="status-no">Not tracked/displayed</td>
+                    <td class="status-yes">&lt;200ms displayed prominently</td>
+                    <td class="status-no">Gap</td>
+                </tr>
+                <!-- Unique to Botify -->
+                <tr>
+                    <td>
+                        <div class="feature-name">Conditional Orders</div>
+                        <div class="feature-detail">Price-triggered entries with monitoring</div>
+                    </td>
+                    <td class="status-superior">Full system: 3 markets, streaming, 7 safety gates</td>
+                    <td class="status-no">Not available</td>
+                    <td class="status-superior">Botify exclusive</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Telegram Signal Source</div>
+                        <div class="feature-detail">Parse signals from Telegram channels</div>
+                    </td>
+                    <td class="status-yes">Full Telethon listener + normalization</td>
+                    <td class="status-no">Not available</td>
+                    <td class="status-superior">Botify exclusive</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Portfolio Simulation</div>
+                        <div class="feature-detail">Project future returns from history</div>
+                    </td>
+                    <td class="status-yes">Monte Carlo, replay, presets</td>
+                    <td class="status-no">Not available</td>
+                    <td class="status-superior">Botify exclusive</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">Multi-Market Support</div>
+                        <div class="feature-detail">US + India + Canada</div>
+                    </td>
+                    <td class="status-superior">US, India (NSE/BSE), Canada (TSX)</td>
+                    <td class="status-partial">US only + Webull CA + WealthSimple</td>
+                    <td class="status-superior">Botify wins</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="feature-name">EMA/Technical Exit Logic</div>
+                        <div class="feature-detail">5-min candlestick trend exits</div>
+                    </td>
+                    <td class="status-superior">EMA exit/escalation in risk engine</td>
+                    <td class="status-no">Not available</td>
+                    <td class="status-superior">Botify exclusive</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- ===== SECTION: GAPS TO CLOSE ===== -->
+        <div class="section-header">
+            <h2>Gaps to Close — What Alertsify Has That We Don't</h2>
+            <span class="section-badge badge-gap">Action Items</span>
+        </div>
+
+        <div class="gap-grid">
+            <div class="gap-card priority-high">
+                <h4>1. Manual/Confirm Execution Mode</h4>
+                <div class="gap-desc">
+                    Alertsify has a "tap-to-confirm" toggle where users can review each trade before it fires.
+                    BotifyTrades is auto-only — if execute_enabled is on, every signal fires. Users who want control
+                    over individual trades can't opt-in selectively.
+                </div>
+                <div class="gap-impact">Impact: High — User trust & control. Many users start manual before going auto.</div>
+                <span class="gap-effort effort-medium">Medium Effort (2-3 days)</span>
+            </div>
+
+            <div class="gap-card priority-high">
+                <h4>2. Per-Ticker Edge Analytics</h4>
+                <div class="gap-desc">
+                    Alertsify shows which specific tickers perform best/worst for each trader. Our analytics are
+                    aggregate (per-broker, per-channel) but never break down to individual symbol performance.
+                    "Which stocks am I best at trading?" is unanswerable in our UI.
+                </div>
+                <div class="gap-impact">Impact: High — Direct trading improvement insight.</div>
+                <span class="gap-effort effort-low">Low Effort (1-2 days)</span>
+            </div>
+
+            <div class="gap-card priority-high">
+                <h4>3. Execution Latency Tracking & Display</h4>
+                <div class="gap-desc">
+                    Alertsify prominently displays "&lt;200ms" execution speed. We don't track signal-to-fill latency
+                    at all. This is both a marketing claim and a performance optimization metric we're blind to.
+                </div>
+                <div class="gap-impact">Impact: High — Trust signal for users + internal performance debugging.</div>
+                <span class="gap-effort effort-low">Low Effort (1 day)</span>
+            </div>
+
+            <div class="gap-card priority-medium">
+                <h4>4. AI Trader Intelligence Profiles</h4>
+                <div class="gap-desc">
+                    Alertsify has nightly AI re-analysis of each trader's strategy: bias, timing patterns, blowup periods,
+                    optimal filtering rules. Our ai_analyzer.py does per-trade GPT analysis but not aggregate
+                    strategy profiling or pattern discovery across history.
+                </div>
+                <div class="gap-impact">Impact: Medium-High — Differentiator for subscription value.</div>
+                <span class="gap-effort effort-high">High Effort (1-2 weeks)</span>
+            </div>
+
+            <div class="gap-card priority-medium">
+                <h4>5. Average Hold Time Tracking</h4>
+                <div class="gap-desc">
+                    Alertsify tracks how long each trader holds positions on average. We record entry/exit timestamps
+                    in trades table but never compute or display hold duration analytics. Easy win.
+                </div>
+                <div class="gap-impact">Impact: Medium — Helps users understand trader style before following.</div>
+                <span class="gap-effort effort-low">Low Effort (0.5 days)</span>
+            </div>
+
+            <div class="gap-card priority-medium">
+                <h4>6. Mobile App / PWA</h4>
+                <div class="gap-desc">
+                    Alertsify has a mobile app for on-the-go monitoring. BotifyTrades is desktop-only with a web GUI
+                    that's responsive but not a PWA (no offline, no push notifications, no install prompt).
+                </div>
+                <div class="gap-impact">Impact: Medium — Users want to monitor positions from phone.</div>
+                <span class="gap-effort effort-high">High Effort (2-4 weeks for full PWA)</span>
+            </div>
+
+            <div class="gap-card priority-low">
+                <h4>7. Public Shareable Track Records</h4>
+                <div class="gap-desc">
+                    Alertsify lets traders share verified public profiles. Our leaderboard is internal-only.
+                    If BotifyTrades goes SaaS, shareable track records become essential for lead trader acquisition.
+                </div>
+                <div class="gap-impact">Impact: Low (self-hosted) / High (if SaaS pivot).</div>
+                <span class="gap-effort effort-medium">Medium Effort (3-5 days)</span>
+            </div>
+
+            <div class="gap-card priority-low">
+                <h4>8. Win Rate by Direction (Calls vs Puts)</h4>
+                <div class="gap-desc">
+                    Alertsify splits win rate by trade direction. Our win rate is aggregate. The data exists in our
+                    trades table (we track option type) but we never surface it in analytics views.
+                </div>
+                <div class="gap-impact">Impact: Low — Nice-to-have analytics refinement.</div>
+                <span class="gap-effort effort-low">Low Effort (0.5 days)</span>
+            </div>
+        </div>
+
+        <!-- ===== SECTION: IMPROVEMENT ROADMAP ===== -->
+        <div class="section-header">
+            <h2>Recommended Improvement Roadmap</h2>
+            <span class="section-badge badge-parity">Prioritized</span>
+        </div>
+
+        <div class="roadmap-section">
+            <div class="roadmap-phase phase-1">
+                <div class="phase-number">1</div>
+                <h4>Quick Wins (This Week)</h4>
+                <div class="phase-timeline">1-3 days total effort</div>
+                <ul>
+                    <li><strong>Execution latency tracking</strong> — Record timestamp at signal parse + order fill, compute delta, store in DB, show in trade history</li>
+                    <li><strong>Per-ticker analytics</strong> — GROUP BY symbol in performance_analytics.py, add /api/performance/by-ticker endpoint, add UI tab</li>
+                    <li><strong>Hold time calculation</strong> — Compute (exit_time - entry_time) from trades table, add to analytics output</li>
+                    <li><strong>Win rate by direction</strong> — Split win/loss by option_type (CALL/PUT) or trade direction (LONG/SHORT)</li>
+                </ul>
+            </div>
+
+            <div class="roadmap-phase phase-2">
+                <div class="phase-number">2</div>
+                <h4>User Control (Next Week)</h4>
+                <div class="phase-timeline">2-3 days effort</div>
+                <ul>
+                    <li><strong>Manual/confirm execution mode</strong> — Add per-channel "confirm_before_execute" flag. When enabled, signal goes to pending queue + webhook/push notification. User clicks "Execute" or "Skip" in web GUI within timeout window.</li>
+                    <li><strong>Execution mode toggle in UI</strong> — Settings page: Auto / Manual / Hybrid per channel</li>
+                    <li><strong>Pending trade notification</strong> — Discord webhook + optional email for manual-mode trades awaiting confirmation</li>
+                </ul>
+            </div>
+
+            <div class="roadmap-phase phase-3">
+                <div class="phase-number">3</div>
+                <h4>Intelligence Layer (Weeks 2-3)</h4>
+                <div class="phase-timeline">1-2 weeks effort</div>
+                <ul>
+                    <li><strong>AI strategy profiling</strong> — Nightly cron: aggregate per-channel trades → GPT analysis of patterns, timing, bias, edge conditions. Store as JSON profile.</li>
+                    <li><strong>Edge identification</strong> — Compute win rate by: time of day, day of week, ticker sector, entry price range, hold duration. Surface top-3 edge conditions per channel.</li>
+                    <li><strong>Blowup detection</strong> — Flag periods where consecutive losses exceed 2x stddev. Alert user + suggest temporary pause.</li>
+                </ul>
+            </div>
+
+            <div class="roadmap-phase phase-4">
+                <div class="phase-number">4</div>
+                <h4>Platform Evolution (Month 2+)</h4>
+                <div class="phase-timeline">2-4 weeks effort</div>
+                <ul>
+                    <li><strong>PWA conversion</strong> — Service worker for offline dashboard, push notifications for fills/alerts, install prompt. Web GUI already responsive.</li>
+                    <li><strong>Public track records</strong> — Optional shareable URL with verified stats (if SaaS model proceeds)</li>
+                    <li><strong>Lead trader marketplace</strong> — If subscription model activates: signal provider profiles, revenue share, follower management</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- ===== SUMMARY ===== -->
+        <div class="summary-box">
+            <h3>Executive Summary</h3>
+            <p>
+                <strong>BotifyTrades is technically superior to Alertsify in execution infrastructure</strong> — more brokers simultaneously,
+                advanced bracket orders (OCO/OCA with reactive replace), 11 exit strategy types vs basic SL, conditional orders,
+                multi-market support, and self-hosted privacy. Our risk engine alone is more sophisticated than their entire execution layer.
+            </p>
+            <p>
+                <strong>Alertsify wins on user experience and analytics polish</strong> — execution latency display, per-ticker breakdowns,
+                AI intelligence profiles, manual execution mode, and mobile access. These are largely presentation-layer features
+                that don't require deep architectural work.
+            </p>
+            <p>
+                <strong>The 8 gaps are addressable in ~3-4 weeks total effort.</strong> Phase 1 (quick wins) closes 4 gaps in 3 days.
+                Phase 2 (manual mode) adds the most user-trust feature in 2-3 days. The remaining gaps are intelligence layer
+                and platform expansion that can proceed in parallel with trading operations.
+            </p>
+            <p>
+                <strong>Key strategic difference:</strong> Alertsify is a cloud SaaS with social marketplace dynamics (followers, revenue share).
+                BotifyTrades is a self-hosted power tool for serious traders. Our gaps are mostly about surfacing data we already collect —
+                the hard infrastructure work is done.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

@@ -5833,11 +5833,17 @@ def create_execution_lot(
     
     if detected_dt and parsed_dt:
         latency_parse_ms = int((parsed_dt - detected_dt).total_seconds() * 1000)
+        if latency_parse_ms < 0:
+            latency_parse_ms = None
     if submitted_dt and filled_dt:
         latency_broker_ms = int((filled_dt - submitted_dt).total_seconds() * 1000)
+        if latency_broker_ms < 0:
+            latency_broker_ms = None
     if detected_dt and filled_dt:
         latency_total_ms = int((filled_dt - detected_dt).total_seconds() * 1000)
-    
+        if latency_total_ms < 0:
+            latency_total_ms = None
+
     try:
         cursor.execute('''
             INSERT INTO execution_lots (
@@ -6205,6 +6211,7 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
             el.fill_price as entry_fill_price, el.signal_price as entry_signal_price,
             el.slippage_pct as entry_slippage_pct, el.order_filled_at as entry_filled_at,
             el.signal_detected_at, el.latency_total_ms,
+            el.latency_parse_ms, el.latency_broker_ms,
             el.analyst_entry_qty, el.sizing_mode,
             c.name as channel_name,
             COALESCE(
@@ -6484,25 +6491,26 @@ def save_pending_order_metadata(
     signal_lot_id: int = None, signal_price: float = None, analyst_qty: int = None,
     sizing_mode: str = None, sizing_details: str = None,
     signal_detected_at = None, signal_parsed_at = None,
-    exit_source: str = None
+    exit_source: str = None, order_submitted_at = None
 ):
     """Save signal context when order is placed for later hydration by BrokerSyncService"""
     conn = get_connection()
     cursor = conn.cursor()
-    
+
     try:
+        _submitted_at = order_submitted_at or datetime.now().isoformat()
         cursor.execute('''
             INSERT INTO pending_order_metadata (
                 broker, broker_order_id, client_order_id, channel_id, message_id,
                 signal_lot_id, symbol, asset_type, action, quantity, signal_price,
                 analyst_qty, sizing_mode, sizing_details,
                 signal_detected_at, signal_parsed_at, order_submitted_at, status, exit_source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'PENDING', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
         ''', (
             broker, broker_order_id, client_order_id, str(channel_id), message_id,
             signal_lot_id, symbol, asset_type, action, quantity, signal_price,
             analyst_qty, sizing_mode, sizing_details,
-            signal_detected_at, signal_parsed_at, exit_source
+            signal_detected_at, signal_parsed_at, _submitted_at, exit_source
         ))
         conn.commit()
         return cursor.lastrowid
