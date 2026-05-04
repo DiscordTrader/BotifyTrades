@@ -942,7 +942,7 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
         'WEEK', 'WEEKS', 'DAY', 'DAYS', 'MONTH', 'YEAR', 'TODAY', 'TONITE',
         'GAINS', 'GAIN', 'LOSS', 'LOSSES', 'PROFIT', 'PROFITS', 'WIN', 'WINS',
         'THIS', 'THAT', 'THESE', 'THOSE', 'WITH', 'FROM', 'INTO', 'OVER',
-        'UNDER', 'ABOVE', 'BELOW', 'JUST', 'ONLY', 'BUT', 'AND', 'NOT',
+        'UNDER', 'ABOVE', 'BELOW', 'JUST', 'ONLY', 'BUT', 'AND', 'NOT', 'FOR',
         'ALL', 'ANY', 'NEW', 'OLD', 'BIG', 'HUGE', 'TINY', 'NICE',
         'GOOD', 'BAD', 'BEST', 'HIGH', 'LOW', 'UP', 'DOWN', 'IN', 'OUT',
         'HERE', 'THERE', 'NOW', 'SOON', 'NEXT', 'LAST', 'FIRST', 'WAY',
