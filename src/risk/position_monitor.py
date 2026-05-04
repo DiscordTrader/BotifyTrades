@@ -7458,6 +7458,9 @@ class RiskManager:
 
     def _build_stc_signal(self, position: PositionSnapshot, decision: ExitDecision) -> Dict:
         """Build STC signal dict for order queue."""
+        if not position.current_price or position.current_price <= 0:
+            print(f"[RISK] ⚠️ Cannot build STC signal for {position.position_key} — current_price is ${position.current_price} (no valid price)")
+            return None
         stc_signal = {
             'asset': position.asset,
             'action': 'STC',

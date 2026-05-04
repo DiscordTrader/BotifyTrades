@@ -1,0 +1,1718 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BotifyTrades SaaS Architecture Review &mdash; Industry-Grade Assessment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#0f172a; --ink-2:#1e293b; --ink-3:#334155;
+  --muted:#64748b; --muted-2:#94a3b8; --muted-3:#cbd5e1;
+  --line:#e2e8f0; --line-2:#f1f5f9;
+  --bg:#fafbfd; --bg-soft:#f8fafc; --bg-card:#ffffff;
+  --brand:#1e40af; --brand-light:#dbeafe; --brand-dark:#1e3a8a;
+  --accent:#7c3aed; --accent-light:#ede9fe;
+  --teal:#0d9488; --teal-light:#ccfbf1;
+  --good:#15803d; --good-bg:#dcfce7; --good-border:#86efac;
+  --warn:#a16207; --warn-bg:#fef3c7; --warn-border:#fcd34d;
+  --bad:#b91c1c; --bad-bg:#fee2e2; --bad-border:#fca5a5;
+  --crit:#7f1d1d; --crit-bg:#fecaca; --crit-border:#f87171;
+  --info:#1d4ed8; --info-bg:#dbeafe; --info-border:#93c5fd;
+  --shadow-xs: 0 1px 2px rgba(15,23,42,.04);
+  --shadow-sm: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  --shadow-md: 0 4px 6px -1px rgba(15,23,42,.07), 0 2px 4px -2px rgba(15,23,42,.05);
+  --shadow-lg: 0 10px 25px -3px rgba(15,23,42,.08), 0 4px 6px -4px rgba(15,23,42,.04);
+  --shadow-xl: 0 20px 40px -5px rgba(15,23,42,.1), 0 8px 10px -6px rgba(15,23,42,.05);
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+.serif { font-family: 'Source Serif 4', Georgia, serif; }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
+
+/* === HEADER === */
+.hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #1e40af 100%);
+  color: #fff;
+  padding: 60px 0 50px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(99,102,241,.15) 0%, transparent 70%);
+  border-radius: 50%;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  bottom: -30%;
+  left: -10%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(14,165,233,.1) 0%, transparent 70%);
+  border-radius: 50%;
+}
+.hero-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+  position: relative;
+  z-index: 1;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+  margin-bottom: 14px;
+}
+.hero h1 span { color: #60a5fa; }
+.hero .subtitle {
+  font-size: 18px;
+  color: rgba(255,255,255,.7);
+  max-width: 700px;
+  line-height: 1.6;
+}
+.hero-meta {
+  margin-top: 28px;
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+.hero-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hero-meta-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: rgba(255,255,255,.45);
+  font-weight: 600;
+}
+.hero-meta-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255,255,255,.9);
+}
+
+/* === LAYOUT === */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+/* === NAV === */
+.nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  padding: 0;
+}
+.nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+}
+.nav-inner a {
+  padding: 14px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+}
+.nav-inner a:hover { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* === SECTIONS === */
+section { padding: 50px 0; }
+section + section { border-top: 1px solid var(--line-2); }
+.section-header {
+  margin-bottom: 36px;
+}
+.section-header h2 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -.015em;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.section-header p {
+  font-size: 16px;
+  color: var(--muted);
+  max-width: 700px;
+}
+
+/* === VERDICT BANNER === */
+.verdict-banner {
+  background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-lg);
+  padding: 32px 36px;
+  margin-bottom: 40px;
+}
+.verdict-banner h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--warn);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.verdict-banner p {
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* === SCORE CARDS === */
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-bottom: 40px;
+}
+.score-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s, box-shadow .15s;
+}
+.score-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.score-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.score-card-value {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.score-card-note {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.score-good .score-card-value { color: var(--good); }
+.score-warn .score-card-value { color: var(--warn); }
+.score-bad .score-card-value { color: var(--bad); }
+.score-info .score-card-value { color: var(--brand); }
+
+/* === GAP CARDS === */
+.gap-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+.gap-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  box-shadow: var(--shadow-xs);
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 20px;
+  align-items: start;
+  transition: box-shadow .15s;
+}
+.gap-card:hover { box-shadow: var(--shadow-md); }
+.gap-severity {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .3px;
+}
+.sev-critical .gap-severity { background: var(--crit-bg); color: var(--crit); }
+.sev-high .gap-severity { background: var(--bad-bg); color: var(--bad); }
+.sev-medium .gap-severity { background: var(--warn-bg); color: var(--warn); }
+.sev-low .gap-severity { background: var(--info-bg); color: var(--info); }
+.gap-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.gap-desc {
+  font-size: 14px;
+  color: var(--ink-3);
+  line-height: 1.65;
+  margin-bottom: 10px;
+}
+.gap-impact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin-right: 8px;
+}
+.impact-blocker { background: var(--crit-bg); color: var(--crit); }
+.impact-risk { background: var(--bad-bg); color: var(--bad); }
+.impact-debt { background: var(--warn-bg); color: var(--warn); }
+.impact-note { background: var(--info-bg); color: var(--info); }
+.gap-remedy {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--bg-soft);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-3);
+  line-height: 1.55;
+}
+.gap-remedy strong { color: var(--ink-2); font-weight: 600; }
+
+/* === ARCHITECTURE DIAGRAM === */
+.arch-diagram {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  padding: 40px;
+  box-shadow: var(--shadow-lg);
+  overflow-x: auto;
+}
+.arch-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 900px;
+}
+.arch-layer {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 0;
+}
+.arch-layer-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  text-align: right;
+  padding-right: 16px;
+  white-space: nowrap;
+}
+.arch-layer-content {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.arch-box {
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1.5px solid;
+  white-space: nowrap;
+  transition: transform .1s;
+}
+.arch-box:hover { transform: scale(1.03); }
+.layer-signal .arch-layer-label { color: #7c3aed; }
+.layer-signal .arch-box { background: #f5f3ff; border-color: #c4b5fd; color: #5b21b6; }
+.layer-parse .arch-layer-label { color: #6d28d9; }
+.layer-parse .arch-box { background: #ede9fe; border-color: #a78bfa; color: #4c1d95; }
+.layer-subscribe .arch-layer-label { color: #0369a1; }
+.layer-subscribe .arch-box { background: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e; }
+.layer-cond .arch-layer-label { color: #0d9488; }
+.layer-cond .arch-box { background: #ccfbf1; border-color: #5eead4; color: #134e4a; }
+.layer-market .arch-layer-label { color: #0f766e; }
+.layer-market .arch-box { background: #d1fae5; border-color: #6ee7b7; color: #064e3b; }
+.layer-exec .arch-layer-label { color: #b45309; }
+.layer-exec .arch-box { background: #fef3c7; border-color: #fcd34d; color: #78350f; }
+.layer-risk .arch-layer-label { color: #dc2626; }
+.layer-risk .arch-box { background: #fee2e2; border-color: #fca5a5; color: #7f1d1d; }
+.layer-platform .arch-layer-label { color: #4338ca; }
+.layer-platform .arch-box { background: #eef2ff; border-color: #a5b4fc; color: #312e81; }
+.arch-connector {
+  display: flex;
+  justify-content: center;
+  padding: 0 0 0 160px;
+}
+.arch-arrow {
+  width: 2px;
+  height: 20px;
+  background: var(--muted-3);
+  position: relative;
+}
+.arch-arrow::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted-3);
+}
+
+/* === TABLES === */
+.data-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  background: var(--bg-card);
+}
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+table.data-table th {
+  background: var(--bg-soft);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  padding: 14px 18px;
+  text-align: left;
+  border-bottom: 2px solid var(--line);
+  white-space: nowrap;
+}
+table.data-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--ink-2);
+  vertical-align: top;
+}
+table.data-table tr:last-child td { border-bottom: none; }
+table.data-table tr:hover td { background: var(--bg-soft); }
+.badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+.badge-green { background: var(--good-bg); color: var(--good); }
+.badge-yellow { background: var(--warn-bg); color: var(--warn); }
+.badge-red { background: var(--bad-bg); color: var(--bad); }
+.badge-blue { background: var(--info-bg); color: var(--info); }
+.badge-gray { background: #f1f5f9; color: var(--muted); }
+
+/* === CAPACITY BARS === */
+.capacity-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.capacity-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+}
+.capacity-card h4 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--ink);
+}
+.capacity-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.capacity-label {
+  width: 120px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.capacity-bar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--line-2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.capacity-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width .5s ease;
+}
+.fill-easy { background: linear-gradient(90deg, #22c55e, #16a34a); }
+.fill-moderate { background: linear-gradient(90deg, #eab308, #ca8a04); }
+.fill-hard { background: linear-gradient(90deg, #f97316, #ea580c); }
+.fill-extreme { background: linear-gradient(90deg, #ef4444, #dc2626); }
+.capacity-value {
+  width: 80px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+
+/* === TIMELINE === */
+.timeline {
+  position: relative;
+  padding-left: 40px;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+.timeline-item {
+  position: relative;
+  padding-bottom: 32px;
+}
+.timeline-item:last-child { padding-bottom: 0; }
+.timeline-dot {
+  position: absolute;
+  left: -33px;
+  top: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid var(--bg);
+}
+.dot-phase1 { background: #22c55e; }
+.dot-phase2 { background: #3b82f6; }
+.dot-phase3 { background: #8b5cf6; }
+.dot-phase4 { background: #f59e0b; }
+.dot-phase5 { background: #ef4444; }
+.timeline-phase {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  margin-bottom: 4px;
+}
+.timeline-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.timeline-meta {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.timeline-desc {
+  font-size: 14px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+.timeline-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.chip {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-soft);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+}
+
+/* === COST TABLE === */
+.cost-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.cost-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+.cost-card h4 {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.cost-amount {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--ink);
+  letter-spacing: -.02em;
+}
+.cost-period {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.cost-breakdown {
+  margin-top: 16px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink-3);
+  line-height: 1.8;
+}
+
+/* === TWO-COL COMPARE === */
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.compare-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+}
+.compare-card h4 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.compare-list {
+  list-style: none;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.compare-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-2);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.5;
+}
+.compare-list li:last-child { border-bottom: none; }
+.check { color: var(--good); font-weight: 700; flex-shrink: 0; }
+.cross { color: var(--bad); font-weight: 700; flex-shrink: 0; }
+.warn-icon { color: var(--warn); font-weight: 700; flex-shrink: 0; }
+
+/* === FOOTNOTES === */
+.footnotes {
+  padding: 40px 0;
+  border-top: 1px solid var(--line);
+}
+.footnotes p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 900px) {
+  .hero h1 { font-size: 30px; }
+  .container { padding: 0 20px; }
+  .score-grid { grid-template-columns: repeat(2, 1fr); }
+  .capacity-section { grid-template-columns: 1fr; }
+  .compare-grid { grid-template-columns: 1fr; }
+  .cost-grid { grid-template-columns: 1fr; }
+  .gap-card { grid-template-columns: 1fr; }
+  .arch-layer { grid-template-columns: 1fr; }
+  .arch-layer-label { text-align: left; padding-left: 0; }
+}
+@media (max-width: 600px) {
+  .hero { padding: 40px 0 30px; }
+  .score-grid { grid-template-columns: 1fr; }
+  .nav-inner a { padding: 12px 10px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ====== HERO ====== -->
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">Architecture Review &bull; Confidential</div>
+    <h1>BotifyTrades <span>SaaS Multi-Tenant</span><br>Architecture Assessment</h1>
+    <p class="subtitle">Industry-grade architect review of the proposed desktop-to-SaaS migration. Covers feasibility, gaps, capacity planning, cost estimates, and recommended execution path.</p>
+    <div class="hero-meta">
+      <div class="hero-meta-item">
+        <span class="hero-meta-label">Current Codebase</span>
+        <span class="hero-meta-value">~25,000 lines &bull; 12 brokers &bull; v9.3.2</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="hero-meta-label">Proposed Services</span>
+        <span class="hero-meta-value">20 microservices &bull; 40+ tables &bull; 50+ event topics</span>
+      </div>
+      <div class="hero-meta-item">
+        <span class="hero-meta-label">Review Date</span>
+        <span class="hero-meta-value">April 27, 2026</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ====== NAV ====== -->
+<nav class="nav-bar">
+  <div class="nav-inner">
+    <a href="#verdict">Verdict</a>
+    <a href="#scores">Scorecard</a>
+    <a href="#gaps">Gap Analysis</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#snaptrade">SnapTrade</a>
+    <a href="#capacity">Capacity</a>
+    <a href="#cost">Cost &amp; Timeline</a>
+    <a href="#strengths">Strengths</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#recommendation">Recommendation</a>
+  </div>
+</nav>
+
+<!-- ====== VERDICT ====== -->
+<section id="verdict">
+  <div class="container">
+    <div class="verdict-banner">
+      <h3>&#9888; Verdict: Ambitious but Feasible &mdash; with Critical Adjustments</h3>
+      <p>The architecture document is <strong>exceptionally comprehensive</strong> (50 sections, 1,500+ lines) and demonstrates deep understanding of the trading domain. However, it over-architects for Day 1. With 20 microservices, 40+ database tables, and 50+ event topics, it describes a <strong>Year 3 target state</strong> rather than an MVP. The biggest risks are <strong>SnapTrade capability gaps</strong> (OCO/bracket support, rate limits at scale), <strong>latency degradation</strong> from desktop <100ms to SaaS queue-based execution, and <strong>regulatory exposure</strong> from executing trades on behalf of users. The document is a strong north-star reference &mdash; the execution plan needs right-sizing.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ====== SCORECARD ====== -->
+<section id="scores">
+  <div class="container">
+    <div class="section-header">
+      <h2>Architecture Scorecard</h2>
+      <p>Evaluation across key architecture dimensions. Scale: 1 (poor) &ndash; 10 (excellent).</p>
+    </div>
+
+    <div class="score-grid">
+      <div class="score-card score-good">
+        <div class="score-card-label">Completeness</div>
+        <div class="score-card-value">9.5/10</div>
+        <div class="score-card-note">Covers signals, execution, risk, billing, compliance, deploy. Near-exhaustive.</div>
+      </div>
+      <div class="score-card score-good">
+        <div class="score-card-label">Domain Accuracy</div>
+        <div class="score-card-value">9/10</div>
+        <div class="score-card-note">Faithfully preserves desktop risk engine, OCO lifecycle, price priority chain.</div>
+      </div>
+      <div class="score-card score-good">
+        <div class="score-card-label">Security Design</div>
+        <div class="score-card-value">8.5/10</div>
+        <div class="score-card-note">Strong tenant isolation, KMS/Vault, RBAC. Missing mTLS between services.</div>
+      </div>
+      <div class="score-card score-warn">
+        <div class="score-card-label">Feasibility for MVP</div>
+        <div class="score-card-value">5/10</div>
+        <div class="score-card-note">20 microservices for MVP is 3x over-scoped. Needs modular monolith start.</div>
+      </div>
+      <div class="score-card score-warn">
+        <div class="score-card-label">SnapTrade Readiness</div>
+        <div class="score-card-value">5.5/10</div>
+        <div class="score-card-note">Critical unknown: OCO/bracket support, streaming, rate limits at scale.</div>
+      </div>
+      <div class="score-card score-warn">
+        <div class="score-card-label">Latency Architecture</div>
+        <div class="score-card-value">6/10</div>
+        <div class="score-card-note">No latency SLAs defined. Queue hops add 200-500ms per stage.</div>
+      </div>
+      <div class="score-card score-warn">
+        <div class="score-card-label">Regulatory Coverage</div>
+        <div class="score-card-value">4/10</div>
+        <div class="score-card-note">Disclaimer != compliance. May need RIA, broker-dealer, or RIA exemption analysis.</div>
+      </div>
+      <div class="score-card score-info">
+        <div class="score-card-label">Cost Realism</div>
+        <div class="score-card-value">6/10</div>
+        <div class="score-card-note">No cost estimates in doc. Market data licensing alone can be $5-20K/mo.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== GAP ANALYSIS ====== -->
+<section id="gaps">
+  <div class="container">
+    <div class="section-header">
+      <h2>Critical Gap Analysis</h2>
+      <p>14 gaps identified across 4 severity levels. Critical and High gaps must be resolved before development begins.</p>
+    </div>
+
+    <div class="gap-grid">
+
+      <!-- GAP 1: CRITICAL -->
+      <div class="gap-card sev-critical">
+        <div class="gap-severity">P0</div>
+        <div>
+          <div class="gap-title">1. SnapTrade Capability Assumptions Are Unvalidated</div>
+          <div class="gap-desc">The entire execution layer assumes SnapTrade supports: OCO/bracket orders, streaming price data, trailing stops, partial cancel/replace, and option-specific order types. None of these are confirmed. SnapTrade is primarily a <em>connection aggregator</em> &mdash; it proxies to broker APIs but does not guarantee feature parity with direct API access.</div>
+          <span class="gap-impact impact-blocker">Blocker</span>
+          <span class="gap-impact impact-risk">Execution Risk</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Before any development, conduct a SnapTrade API capability audit. Test OCO placement on Schwab via SnapTrade. Test option orders. Measure rate limits. Build a compatibility matrix. If SnapTrade can't do OCO &mdash; the entire bracket order architecture needs a software-only fallback from Day 1.</div>
+        </div>
+      </div>
+
+      <!-- GAP 2: CRITICAL -->
+      <div class="gap-card sev-critical">
+        <div class="gap-severity">P0</div>
+        <div>
+          <div class="gap-title">2. Regulatory/Legal Risk Is Under-Addressed</div>
+          <div class="gap-desc">Executing trades in user brokerage accounts based on third-party signals may constitute "investment advice" or "discretionary management" under SEC/FINRA rules. The architecture treats compliance as a disclaimer &mdash; it may actually require registration as an RIA (Registered Investment Adviser), broker-dealer exemption analysis, or falling under the "publisher's exclusion." This is not a technical problem but it can shut down the platform.</div>
+          <span class="gap-impact impact-blocker">Blocker</span>
+          <span class="gap-impact impact-risk">Legal Risk</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Engage a fintech compliance attorney before building. Specifically evaluate: (a) Does auto-executing third-party signals for users require RIA registration? (b) Does the "self-directed" framing hold if the platform auto-executes? (c) What jurisdiction-specific requirements apply? This determines whether the platform is legal to operate.</div>
+        </div>
+      </div>
+
+      <!-- GAP 3: CRITICAL -->
+      <div class="gap-card sev-critical">
+        <div class="gap-severity">P0</div>
+        <div>
+          <div class="gap-title">3. Latency Budget Not Defined &mdash; Desktop is 100x Faster</div>
+          <div class="gap-desc">Current desktop: signal &rarr; price check &rarr; execute in <strong>&lt;200ms</strong> via direct broker WebSocket + API. Proposed SaaS: signal &rarr; queue &rarr; parse &rarr; queue &rarr; subscribe resolve &rarr; queue &rarr; conditional monitor &rarr; queue &rarr; SnapTrade execute. Each queue hop adds 50-200ms. Total estimated latency: <strong>1-5 seconds</strong>. For options trading where prices move 10-50% in seconds, this can mean fills at materially worse prices.</div>
+          <span class="gap-impact impact-risk">Execution Quality</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Define latency SLAs per stage: signal parse &lt;50ms, trigger detection &lt;100ms, execution placement &lt;500ms end-to-end. Use in-process event bus (not external queue) for hot path. Reserve external queues for audit/notification/billing cold path. Consider co-locating execution workers with SnapTrade/broker endpoints.</div>
+        </div>
+      </div>
+
+      <!-- GAP 4: HIGH -->
+      <div class="gap-card sev-high">
+        <div class="gap-severity">P1</div>
+        <div>
+          <div class="gap-title">4. Market Data Redistribution Legality</div>
+          <div class="gap-desc">Using "admin broker connections" (Webull, Schwab, Tastytrade) to stream market data and redistribute to platform users likely violates broker terms of service and exchange data licensing agreements. NYSE/NASDAQ real-time data requires a market data vendor agreement ($5-20K/month+) for redistribution. Using a personal broker account to serve platform data is explicitly prohibited.</div>
+          <span class="gap-impact impact-blocker">Blocker</span>
+          <span class="gap-impact impact-risk">Legal Risk</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> For production: license market data from an authorized vendor (Polygon.io, Alpaca data API, IEX Cloud, or direct exchange feeds). For MVP: use delayed/free-tier data for dashboard display, use SnapTrade's own quote endpoints for execution-path pricing, or only trigger based on user's own broker data.</div>
+        </div>
+      </div>
+
+      <!-- GAP 5: HIGH -->
+      <div class="gap-card sev-high">
+        <div class="gap-severity">P1</div>
+        <div>
+          <div class="gap-title">5. Thundering Herd on Signal Broadcast</div>
+          <div class="gap-desc">When a popular signal fires (e.g., 1,000 users subscribed to a channel), the system must simultaneously: create 1,000 conditional orders, monitor all, and when triggered, place 1,000 orders through SnapTrade within seconds. SnapTrade rate limits, broker rate limits, and queue throughput will create a bottleneck. Users 1-50 get filled at the signal price; users 500-1,000 may get filled 5-15% worse (slippage).</div>
+          <span class="gap-impact impact-risk">Fairness Risk</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Design fair-execution policy: randomize execution order per batch, implement execution windows, document expected slippage at scale, cap channel subscriber limits. Consider "copy-trading fairness" regulations. At 1,000+ subscribers, this transitions from "automation tool" to "copy trading platform" with different regulatory requirements.</div>
+        </div>
+      </div>
+
+      <!-- GAP 6: HIGH -->
+      <div class="gap-card sev-high">
+        <div class="gap-severity">P1</div>
+        <div>
+          <div class="gap-title">6. 20 Microservices for MVP Is Operationally Untenable</div>
+          <div class="gap-desc">The document proposes 20 independent microservices. For a team of 3-8 engineers, this means: 20 deployment pipelines, 20 health monitors, 20 log streams, 20 sets of inter-service contracts, distributed tracing across 20 services, and cascading failure debugging. Industry consensus: microservices-first is an anti-pattern for teams under 50 engineers.</div>
+          <span class="gap-impact impact-debt">Architecture Debt</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Start with a <strong>modular monolith</strong> (3-4 deployable units) with clean internal module boundaries. Split into microservices when a specific service needs independent scaling. Suggested MVP units: (1) API + Auth + Tenants, (2) Signal Ingestion + Parsing + Conditional Orders, (3) Execution + Position Sync + Risk Engine, (4) Market Data Hub. Extract individual services only when load demands it.</div>
+        </div>
+      </div>
+
+      <!-- GAP 7: HIGH -->
+      <div class="gap-card sev-high">
+        <div class="gap-severity">P1</div>
+        <div>
+          <div class="gap-title">7. SnapTrade Rate Limits at Scale Not Quantified</div>
+          <div class="gap-desc">SnapTrade API rate limits are not addressed in the architecture. If SnapTrade allows 100 requests/minute per API key, serving 10,000 users with 5-second position polling would require 120,000 requests/minute &mdash; 1,200x over the limit. The architecture assumes unlimited SnapTrade throughput.</div>
+          <span class="gap-impact impact-risk">Scalability Ceiling</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Contact SnapTrade for enterprise rate limits and pricing. Design batch-polling endpoints if available. Implement per-user poll frequency tiers (active positions = 5s, idle = 60s). Use SnapTrade webhooks for push-based position updates instead of polling. Build a SnapTrade connection pool with intelligent request distribution.</div>
+        </div>
+      </div>
+
+      <!-- GAP 8: MEDIUM -->
+      <div class="gap-card sev-medium">
+        <div class="gap-severity">P2</div>
+        <div>
+          <div class="gap-title">8. No Disaster Recovery for Open Positions</div>
+          <div class="gap-desc">If the risk engine goes down while users have open positions with no broker-native stops, those positions are unprotected. The document doesn't define an RTO (Recovery Time Objective) for the risk engine or a failover strategy for position protection during outages.</div>
+          <span class="gap-impact impact-risk">Financial Risk</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Define RTO &lt;30 seconds for risk engine. Always place broker-native stop-loss orders as the primary protection layer &mdash; software risk engine is the enhancement layer, not the safety net. If the platform goes down, broker-native stops protect capital. Require broker bracket support as a condition for auto-trading.</div>
+        </div>
+      </div>
+
+      <!-- GAP 9: MEDIUM -->
+      <div class="gap-card sev-medium">
+        <div class="gap-severity">P2</div>
+        <div>
+          <div class="gap-title">9. No Testing or Paper Trading Strategy</div>
+          <div class="gap-desc">The architecture has no section on: paper trading simulation, backtesting, integration testing with brokers, or how to safely test execution logic without real money. In a trading platform, untested code paths can directly lose user money.</div>
+          <span class="gap-impact impact-risk">Safety Risk</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Add paper trading mode per user (not just per platform). Build a broker simulator service for integration tests. Require automated regression testing for risk engine logic. Signal replay testing: replay historical signals through the system and validate outcomes. All risk engine changes must pass against a test suite of 100+ historical position scenarios.</div>
+        </div>
+      </div>
+
+      <!-- GAP 10: MEDIUM -->
+      <div class="gap-card sev-medium">
+        <div class="gap-severity">P2</div>
+        <div>
+          <div class="gap-title">10. Options Symbol Normalization Complexity Underestimated</div>
+          <div class="gap-desc">Options symbols vary wildly across brokers: OCC format, broker-specific formats, index options (SPX/SPXW/XSP), weekly vs monthly expirations, adjusted strikes. The document mentions "symbol normalization" but doesn't address: expired options cleanup, strike/expiry matching across brokers, or the combinatorial explosion of options chains.</div>
+          <span class="gap-impact impact-debt">Implementation Complexity</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Build a dedicated SymbolCanonicalizer service. Use OCC standard as the canonical format. Build broker-specific adapters for translation. Your existing desktop code already handles SPX&harr;SPXW and NDX&harr;NDXP &mdash; port this logic to a shared library.</div>
+        </div>
+      </div>
+
+      <!-- GAP 11: MEDIUM -->
+      <div class="gap-card sev-medium">
+        <div class="gap-severity">P2</div>
+        <div>
+          <div class="gap-title">11. No Mobile Experience Planned</div>
+          <div class="gap-desc">Trading users expect mobile alerts and basic controls (pause trading, view positions, close positions). The architecture only describes a web dashboard. No mobile app, PWA, or responsive mobile design is mentioned.</div>
+          <span class="gap-impact impact-note">Market Fit</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Design the web dashboard as mobile-responsive from Day 1. Add push notifications (FCM/APNS) for critical events (fills, risk exits, circuit breakers). Consider a React Native or Flutter app in Phase 3. MVP: responsive web + Telegram/Discord notifications covers 80% of mobile needs.</div>
+        </div>
+      </div>
+
+      <!-- GAP 12: MEDIUM -->
+      <div class="gap-card sev-medium">
+        <div class="gap-severity">P2</div>
+        <div>
+          <div class="gap-title">12. Frontend WebSocket/SSE Architecture Missing</div>
+          <div class="gap-desc">Dashboard pages show "real-time updates needed" but the architecture has no WebSocket gateway, SSE endpoints, or real-time data push mechanism for the frontend. Without this, the dashboard will require polling, creating stale data and poor UX.</div>
+          <span class="gap-impact impact-debt">UX Debt</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Add a WebSocket gateway service that subscribes to internal event topics and pushes to authenticated user sessions. Use Socket.IO or native WebSocket with JWT auth. Fan-out: tenant_id + user_id scoped channels. Alternatively, start with SSE (Server-Sent Events) for simpler one-directional updates.</div>
+        </div>
+      </div>
+
+      <!-- GAP 13: LOW -->
+      <div class="gap-card sev-low">
+        <div class="gap-severity">P3</div>
+        <div>
+          <div class="gap-title">13. Signal Provider Performance Verification</div>
+          <div class="gap-desc">Signal providers can publish signals, but there's no mechanism to track and display signal provider performance (win rate, avg return, max drawdown). Without this, users can't evaluate which signal providers to subscribe to.</div>
+          <span class="gap-impact impact-note">Product Gap</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> Build a signal_performance table that tracks per-signal outcomes (entry price, exit price, PnL, hold time). Display aggregated metrics per signal provider on the subscription page. Note: displaying performance may have regulatory implications (past performance disclaimers).</div>
+        </div>
+      </div>
+
+      <!-- GAP 14: LOW -->
+      <div class="gap-card sev-low">
+        <div class="gap-severity">P3</div>
+        <div>
+          <div class="gap-title">14. Multi-Region Not Addressed</div>
+          <div class="gap-desc">The architecture mentions "India" and "Canada" markets but all deployment is single-region. For India/Canada users, latency to US-hosted services may be 200-400ms additional. No data residency or GDPR geographic requirements addressed.</div>
+          <span class="gap-impact impact-note">Future Scale</span>
+          <div class="gap-remedy"><strong>Remedy:</strong> For MVP, single US region is fine. Design database schema with region awareness. Plan for multi-region read replicas in Phase 4. India market may require local data hosting for SEBI compliance.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ====== ARCHITECTURE DIAGRAM ====== -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-header">
+      <h2>Proposed SaaS Architecture (Annotated)</h2>
+      <p>Visual representation of the 8-layer architecture with flow annotations and gap markers.</p>
+    </div>
+
+    <div class="arch-diagram">
+      <div class="arch-flow">
+
+        <div class="arch-layer layer-signal">
+          <div class="arch-layer-label">Signal Sources</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Discord Bot</div>
+            <div class="arch-box">Telegram Bot</div>
+            <div class="arch-box">Webhook API</div>
+            <div class="arch-box">Manual Entry</div>
+          </div>
+        </div>
+
+        <div class="arch-connector"><div class="arch-arrow"></div></div>
+
+        <div class="arch-layer layer-parse">
+          <div class="arch-layer-label">Signal Layer</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Ingestion Service</div>
+            <div class="arch-box">Signal Parser</div>
+            <div class="arch-box">Normalizer</div>
+            <div class="arch-box">Replay Guard</div>
+            <div class="arch-box">Signal Store</div>
+          </div>
+        </div>
+
+        <div class="arch-connector"><div class="arch-arrow"></div></div>
+
+        <div class="arch-layer layer-subscribe">
+          <div class="arch-layer-label">Subscription</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Tenant Resolver</div>
+            <div class="arch-box">Channel Subscriptions</div>
+            <div class="arch-box">Risk Profile Resolver</div>
+            <div class="arch-box">Broker Account Resolver</div>
+            <div class="arch-box">User Limits Check</div>
+          </div>
+        </div>
+
+        <div class="arch-connector"><div class="arch-arrow"></div></div>
+
+        <div class="arch-layer layer-cond">
+          <div class="arch-layer-label">Conditional Orders</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Order State Machine</div>
+            <div class="arch-box">Trigger Workers</div>
+            <div class="arch-box">Market Routing</div>
+            <div class="arch-box">Breakout Reset Guard</div>
+            <div class="arch-box">Price Freshness Gate</div>
+          </div>
+        </div>
+
+        <div class="arch-connector"><div class="arch-arrow"></div></div>
+
+        <div class="arch-layer layer-market">
+          <div class="arch-layer-label">Market Data</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Unified Price Hub</div>
+            <div class="arch-box">Quote Cache (Redis)</div>
+            <div class="arch-box">Symbol Canonicalizer</div>
+            <div class="arch-box">Freshness Tracker</div>
+            <div class="arch-box" style="border-style:dashed;opacity:.7">Licensed Data Vendor *</div>
+          </div>
+        </div>
+
+        <div class="arch-connector"><div class="arch-arrow"></div></div>
+
+        <div class="arch-layer layer-exec">
+          <div class="arch-layer-label">Execution</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Execution Queue</div>
+            <div class="arch-box">SnapTrade Adapter</div>
+            <div class="arch-box">Idempotency Guard</div>
+            <div class="arch-box">Order Status Tracker</div>
+            <div class="arch-box">Circuit Breakers</div>
+          </div>
+        </div>
+
+        <div class="arch-connector"><div class="arch-arrow"></div></div>
+
+        <div class="arch-layer layer-risk">
+          <div class="arch-layer-label">Risk Engine</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Position Sync (SnapTrade)</div>
+            <div class="arch-box">Risk Evaluation Workers</div>
+            <div class="arch-box">Exit Decision Engine</div>
+            <div class="arch-box">Bracket/OCO Manager</div>
+            <div class="arch-box">Exit Queue</div>
+          </div>
+        </div>
+
+        <div class="arch-connector"><div class="arch-arrow"></div></div>
+
+        <div class="arch-layer layer-platform">
+          <div class="arch-layer-label">Platform</div>
+          <div class="arch-layer-content">
+            <div class="arch-box">Auth (OIDC)</div>
+            <div class="arch-box">RBAC</div>
+            <div class="arch-box">Billing</div>
+            <div class="arch-box">Audit Logs</div>
+            <div class="arch-box">Notifications</div>
+            <div class="arch-box">Monitoring</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <p style="margin-top:16px;font-size:13px;color:var(--muted);">* Dashed box = gap identified. Admin broker connections cannot legally redistribute market data at scale. Licensed vendor required.</p>
+  </div>
+</section>
+
+<!-- ====== SNAPTRADE DEEP DIVE ====== -->
+<section id="snaptrade">
+  <div class="container">
+    <div class="section-header">
+      <h2>SnapTrade Capability Risk Matrix</h2>
+      <p>Feature-by-feature assessment of what the architecture requires vs. what SnapTrade likely supports.</p>
+    </div>
+
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Required Capability</th>
+            <th>Desktop (Direct API)</th>
+            <th>SnapTrade (Expected)</th>
+            <th>Risk Level</th>
+            <th>Fallback</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Place market/limit orders</strong></td>
+            <td><span class="badge badge-green">Full</span></td>
+            <td><span class="badge badge-green">Supported</span></td>
+            <td><span class="badge badge-green">Low</span></td>
+            <td>Core SnapTrade feature</td>
+          </tr>
+          <tr>
+            <td><strong>Cancel orders</strong></td>
+            <td><span class="badge badge-green">Full</span></td>
+            <td><span class="badge badge-green">Supported</span></td>
+            <td><span class="badge badge-green">Low</span></td>
+            <td>Core SnapTrade feature</td>
+          </tr>
+          <tr>
+            <td><strong>Get positions</strong></td>
+            <td><span class="badge badge-green">Full</span></td>
+            <td><span class="badge badge-green">Supported</span></td>
+            <td><span class="badge badge-green">Low</span></td>
+            <td>Core SnapTrade feature</td>
+          </tr>
+          <tr>
+            <td><strong>Get account balances</strong></td>
+            <td><span class="badge badge-green">Full</span></td>
+            <td><span class="badge badge-green">Supported</span></td>
+            <td><span class="badge badge-green">Low</span></td>
+            <td>Core SnapTrade feature</td>
+          </tr>
+          <tr>
+            <td><strong>Options order placement</strong></td>
+            <td><span class="badge badge-green">Full</span></td>
+            <td><span class="badge badge-yellow">Partial</span></td>
+            <td><span class="badge badge-yellow">Medium</span></td>
+            <td>May not support all option types or multi-leg</td>
+          </tr>
+          <tr>
+            <td><strong>OCO / bracket orders</strong></td>
+            <td><span class="badge badge-green">Native (Schwab)</span></td>
+            <td><span class="badge badge-red">Unknown</span></td>
+            <td><span class="badge badge-red">Critical</span></td>
+            <td>Software-managed SL/PT via separate orders</td>
+          </tr>
+          <tr>
+            <td><strong>Trailing stop orders</strong></td>
+            <td><span class="badge badge-green">Native</span></td>
+            <td><span class="badge badge-red">Unknown</span></td>
+            <td><span class="badge badge-red">High</span></td>
+            <td>Software trailing in risk engine</td>
+          </tr>
+          <tr>
+            <td><strong>Streaming price data</strong></td>
+            <td><span class="badge badge-green">WebSocket/MQTT</span></td>
+            <td><span class="badge badge-red">Not Available</span></td>
+            <td><span class="badge badge-red">Critical</span></td>
+            <td>Must use licensed market data vendor</td>
+          </tr>
+          <tr>
+            <td><strong>Order status webhooks</strong></td>
+            <td><span class="badge badge-green">Direct</span></td>
+            <td><span class="badge badge-yellow">Available</span></td>
+            <td><span class="badge badge-yellow">Medium</span></td>
+            <td>SnapTrade webhooks exist but reliability TBD</td>
+          </tr>
+          <tr>
+            <td><strong>Rate limits at 10K users</strong></td>
+            <td><span class="badge badge-green">N/A (local)</span></td>
+            <td><span class="badge badge-red">Unknown</span></td>
+            <td><span class="badge badge-red">Critical</span></td>
+            <td>Enterprise agreement required, batch APIs</td>
+          </tr>
+          <tr>
+            <td><strong>Order replace/modify</strong></td>
+            <td><span class="badge badge-green">Full</span></td>
+            <td><span class="badge badge-yellow">Partial</span></td>
+            <td><span class="badge badge-yellow">Medium</span></td>
+            <td>Cancel + re-place pattern</td>
+          </tr>
+          <tr>
+            <td><strong>Broker coverage (7+ brokers)</strong></td>
+            <td><span class="badge badge-green">12 brokers</span></td>
+            <td><span class="badge badge-yellow">~15 brokers</span></td>
+            <td><span class="badge badge-yellow">Medium</span></td>
+            <td>Webull and Robinhood may not be on SnapTrade</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:24px;padding:20px 24px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:var(--radius);">
+      <strong style="color:var(--warn);">Key Risk:</strong>
+      <span style="color:var(--ink-2);font-size:14px;"> 4 of 12 required capabilities are rated Critical or Unknown. The architecture's broker bracket order system (OCO cascade, deferred SL re-place, tier management) is the most sophisticated part of the desktop bot &mdash; and the most likely to degrade when proxied through SnapTrade. Plan for a software-only risk engine as the primary exit mechanism, with broker-native orders as an optimization.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ====== CAPACITY ====== -->
+<section id="capacity">
+  <div class="container">
+    <div class="section-header">
+      <h2>Capacity &amp; Scalability Analysis</h2>
+      <p>How many users the architecture can support at each tier, and where bottlenecks emerge.</p>
+    </div>
+
+    <div class="capacity-section">
+      <div class="capacity-card">
+        <h4>100 Users</h4>
+        <div class="capacity-row">
+          <span class="capacity-label">Signal Parse</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:8%"></div></div>
+          <span class="capacity-value">Trivial</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Execution</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:12%"></div></div>
+          <span class="capacity-value">Easy</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Risk Engine</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:10%"></div></div>
+          <span class="capacity-value">Easy</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">SnapTrade API</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:15%"></div></div>
+          <span class="capacity-value">Easy</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Database</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:5%"></div></div>
+          <span class="capacity-value">Trivial</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Market Data</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:8%"></div></div>
+          <span class="capacity-value">Trivial</span>
+        </div>
+        <p style="font-size:13px;color:var(--good);margin-top:12px;font-weight:600;">Single server handles everything. Modular monolith is ideal.</p>
+      </div>
+
+      <div class="capacity-card">
+        <h4>1,000 Users</h4>
+        <div class="capacity-row">
+          <span class="capacity-label">Signal Parse</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:20%"></div></div>
+          <span class="capacity-value">Easy</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Execution</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-moderate" style="width:45%"></div></div>
+          <span class="capacity-value">Moderate</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Risk Engine</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-moderate" style="width:40%"></div></div>
+          <span class="capacity-value">Moderate</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">SnapTrade API</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-hard" style="width:60%"></div></div>
+          <span class="capacity-value">Concerning</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Database</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-easy" style="width:20%"></div></div>
+          <span class="capacity-value">Easy</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Market Data</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-moderate" style="width:35%"></div></div>
+          <span class="capacity-value">Moderate</span>
+        </div>
+        <p style="font-size:13px;color:var(--warn);margin-top:12px;font-weight:600;">SnapTrade rate limits become the bottleneck. Need enterprise agreement.</p>
+      </div>
+
+      <div class="capacity-card">
+        <h4>10,000 Users</h4>
+        <div class="capacity-row">
+          <span class="capacity-label">Signal Parse</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-moderate" style="width:35%"></div></div>
+          <span class="capacity-value">Moderate</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Execution</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-hard" style="width:70%"></div></div>
+          <span class="capacity-value">Hard</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Risk Engine</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-hard" style="width:65%"></div></div>
+          <span class="capacity-value">Hard</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">SnapTrade API</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-extreme" style="width:90%"></div></div>
+          <span class="capacity-value">Critical</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Database</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-moderate" style="width:45%"></div></div>
+          <span class="capacity-value">Moderate</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Market Data</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-hard" style="width:55%"></div></div>
+          <span class="capacity-value">Expensive</span>
+        </div>
+        <p style="font-size:13px;color:var(--bad);margin-top:12px;font-weight:600;">Need dedicated SnapTrade enterprise plan, multiple worker pools, read replicas. Market data licensing $10K+/mo.</p>
+      </div>
+
+      <div class="capacity-card">
+        <h4>100,000 Users</h4>
+        <div class="capacity-row">
+          <span class="capacity-label">Signal Parse</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-moderate" style="width:50%"></div></div>
+          <span class="capacity-value">Moderate</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Execution</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-extreme" style="width:95%"></div></div>
+          <span class="capacity-value">Extreme</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Risk Engine</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-extreme" style="width:85%"></div></div>
+          <span class="capacity-value">Extreme</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">SnapTrade API</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-extreme" style="width:100%"></div></div>
+          <span class="capacity-value">Impossible</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Database</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-hard" style="width:65%"></div></div>
+          <span class="capacity-value">Hard</span>
+        </div>
+        <div class="capacity-row">
+          <span class="capacity-label">Market Data</span>
+          <div class="capacity-bar-track"><div class="capacity-bar-fill fill-hard" style="width:70%"></div></div>
+          <span class="capacity-value">Very Expensive</span>
+        </div>
+        <p style="font-size:13px;color:var(--bad);margin-top:12px;font-weight:600;">SnapTrade alone can't handle this. Need direct broker API integrations alongside SnapTrade. Kubernetes, Kafka, sharded DB required. Market data $50K+/mo.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:30px;padding:24px;background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);">
+      <h4 style="font-size:16px;font-weight:700;margin-bottom:12px;">Practical Capacity Ceiling</h4>
+      <p style="font-size:14px;color:var(--ink-3);line-height:1.7;">
+        <strong>With SnapTrade only:</strong> ~5,000 active users before rate limits become problematic.<br>
+        <strong>With SnapTrade + direct broker APIs (hybrid):</strong> ~50,000 active users with proper sharding.<br>
+        <strong>Revenue break-even estimate:</strong> At $30/month/user, 500 paying users = $15K MRR, which covers infrastructure + 2 engineers. 2,000 users = $60K MRR, which supports a small team and market data licensing.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ====== COST & TIMELINE ====== -->
+<section id="cost">
+  <div class="container">
+    <div class="section-header">
+      <h2>Cost &amp; Timeline Estimates</h2>
+      <p>Build cost, operational cost, and timeline by phase. Based on a team of 4-6 engineers.</p>
+    </div>
+
+    <div class="cost-grid">
+      <div class="cost-card">
+        <h4>MVP Build Cost</h4>
+        <div class="cost-amount">$250&ndash;400K</div>
+        <div class="cost-period">6&ndash;9 months &bull; 4&ndash;6 engineers</div>
+        <div class="cost-breakdown">
+          Auth + Tenants + RBAC: 3 weeks<br>
+          SnapTrade Integration: 4 weeks<br>
+          Signal Ingestion + Parser: 3 weeks<br>
+          Conditional Orders: 4 weeks<br>
+          Execution Queue: 3 weeks<br>
+          Risk Engine Port: 6 weeks<br>
+          Dashboard (basic): 4 weeks<br>
+          Testing + Hardening: 4 weeks<br>
+          Market Data License: 2 weeks<br>
+        </div>
+      </div>
+      <div class="cost-card">
+        <h4>Monthly Infra (MVP)</h4>
+        <div class="cost-amount">$2&ndash;5K</div>
+        <div class="cost-period">per month &bull; 100 users</div>
+        <div class="cost-breakdown">
+          Cloud compute (ECS/Cloud Run): $500-800<br>
+          PostgreSQL (managed): $200-400<br>
+          Redis: $100-200<br>
+          Market data vendor: $500-2,000<br>
+          SnapTrade fees: $200-500<br>
+          Monitoring/logging: $100-200<br>
+          Auth provider: $0-100<br>
+          DNS/CDN/SSL: $50<br>
+        </div>
+      </div>
+      <div class="cost-card">
+        <h4>Monthly Infra (Scale)</h4>
+        <div class="cost-amount">$15&ndash;40K</div>
+        <div class="cost-period">per month &bull; 10,000 users</div>
+        <div class="cost-breakdown">
+          Kubernetes cluster: $3,000-5,000<br>
+          PostgreSQL + replicas: $1,500-3,000<br>
+          Redis cluster: $500-1,000<br>
+          Kafka/SQS: $500-1,000<br>
+          Market data licensing: $5,000-15,000<br>
+          SnapTrade enterprise: $2,000-5,000<br>
+          Monitoring stack: $500-1,000<br>
+          CDN/WAF: $200-500<br>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:30px;">
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Phase</th>
+              <th>Duration</th>
+              <th>Team Size</th>
+              <th>Milestone</th>
+              <th>Users Supported</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-green">Phase 1</span></td>
+              <td>8&ndash;10 weeks</td>
+              <td>3&ndash;4 eng</td>
+              <td>Auth, tenants, SnapTrade connect, basic dashboard</td>
+              <td>0 (internal only)</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-blue">Phase 2</span></td>
+              <td>6&ndash;8 weeks</td>
+              <td>4&ndash;5 eng</td>
+              <td>Signal ingestion, parser, conditional orders, market data</td>
+              <td>10&ndash;50 beta</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-blue">Phase 3</span></td>
+              <td>8&ndash;10 weeks</td>
+              <td>5&ndash;6 eng</td>
+              <td>Execution queue, risk engine, position sync, exits</td>
+              <td>50&ndash;200 beta</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-yellow">Phase 4</span></td>
+              <td>6&ndash;8 weeks</td>
+              <td>5&ndash;6 eng</td>
+              <td>Billing, audit, monitoring, circuit breakers, hardening</td>
+              <td>200&ndash;1,000 GA</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-red">Phase 5</span></td>
+              <td>Ongoing</td>
+              <td>6&ndash;8 eng</td>
+              <td>Scale: Kafka, K8s, read replicas, mobile, multi-region</td>
+              <td>1,000&ndash;10,000+</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== STRENGTHS ====== -->
+<section id="strengths">
+  <div class="container">
+    <div class="section-header">
+      <h2>Architecture Strengths</h2>
+      <p>What the document gets right &mdash; and what should be preserved.</p>
+    </div>
+
+    <div class="compare-grid">
+      <div class="compare-card">
+        <h4><span style="color:var(--good);">&#10003;</span> Domain Expertise</h4>
+        <ul class="compare-list">
+          <li><span class="check">+</span> Risk engine evaluation priority is correctly preserved from desktop (Hard SL &rarr; Dynamic SL &rarr; EMA &rarr; Giveback &rarr; Trailing &rarr; PTs)</li>
+          <li><span class="check">+</span> Breakout reset guard is a rare but critical feature most platforms miss</li>
+          <li><span class="check">+</span> Deferred SL re-placement after partial exits handles a real-world edge case</li>
+          <li><span class="check">+</span> Wide spread guard prevents catastrophic SL fills in illiquid options</li>
+          <li><span class="check">+</span> Signal replay protection prevents duplicate trades from edited Discord messages</li>
+        </ul>
+      </div>
+
+      <div class="compare-card">
+        <h4><span style="color:var(--good);">&#10003;</span> Security &amp; Isolation</h4>
+        <ul class="compare-list">
+          <li><span class="check">+</span> Admin vs user broker connection separation is the correct design</li>
+          <li><span class="check">+</span> Tenant isolation via tenant_id on every query is industry standard</li>
+          <li><span class="check">+</span> SnapTrade secret encryption via KMS/Vault is the right approach</li>
+          <li><span class="check">+</span> RBAC with 8 roles covers all stakeholder types</li>
+          <li><span class="check">+</span> Idempotency design with composite keys prevents duplicate orders</li>
+        </ul>
+      </div>
+
+      <div class="compare-card">
+        <h4><span style="color:var(--good);">&#10003;</span> Operational Readiness</h4>
+        <ul class="compare-list">
+          <li><span class="check">+</span> Circuit breakers at 7 levels (platform &rarr; tenant &rarr; user &rarr; channel &rarr; broker &rarr; symbol &rarr; market data)</li>
+          <li><span class="check">+</span> Comprehensive audit logging design covers all sensitive actions</li>
+          <li><span class="check">+</span> Event-driven architecture enables loose coupling and async processing</li>
+          <li><span class="check">+</span> Position risk state design faithfully preserves PositionCacheEntry from desktop</li>
+          <li><span class="check">+</span> Manual trade protection (bot_managed flag) prevents accidental risk management of user's manual positions</li>
+        </ul>
+      </div>
+
+      <div class="compare-card">
+        <h4><span style="color:var(--good);">&#10003;</span> Product Completeness</h4>
+        <ul class="compare-list">
+          <li><span class="check">+</span> Conditional order state machine (13 states) handles all real-world scenarios</li>
+          <li><span class="check">+</span> Multi-tier profit targets with custom trim quantities is a differentiator</li>
+          <li><span class="check">+</span> Hybrid risk monitoring (poll + streaming) is the correct architecture</li>
+          <li><span class="check">+</span> Notification design covers 19 event types across 6 channels</li>
+          <li><span class="check">+</span> Phased migration plan (5 phases) is realistic and well-sequenced</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== RECOMMENDED ROADMAP ====== -->
+<section id="roadmap">
+  <div class="container">
+    <div class="section-header">
+      <h2>Recommended Execution Roadmap</h2>
+      <p>Adjusted from the document's 5-phase plan to address identified gaps. Modular monolith first, microservices later.</p>
+    </div>
+
+    <div class="timeline">
+
+      <div class="timeline-item">
+        <div class="timeline-dot dot-phase1"></div>
+        <div class="timeline-phase" style="color:#15803d;">Phase 0 &mdash; Validation (Before Writing Code)</div>
+        <div class="timeline-title">SnapTrade Audit + Legal Review</div>
+        <div class="timeline-meta">2&ndash;4 weeks &bull; 1 engineer + 1 lawyer</div>
+        <div class="timeline-desc">
+          Validate every assumption before building. Test SnapTrade OCO, options orders, and rate limits with a sandbox account. Engage fintech compliance attorney for RIA/broker-dealer analysis. Research market data licensing costs. <strong>Go/no-go decision at end of Phase 0.</strong>
+        </div>
+        <div class="timeline-chips">
+          <span class="chip">SnapTrade sandbox testing</span>
+          <span class="chip">Legal opinion</span>
+          <span class="chip">Market data vendor eval</span>
+          <span class="chip">Rate limit benchmarks</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot dot-phase1"></div>
+        <div class="timeline-phase" style="color:#15803d;">Phase 1 &mdash; Foundation</div>
+        <div class="timeline-title">Auth + Tenants + SnapTrade Connect + Dashboard Shell</div>
+        <div class="timeline-meta">8&ndash;10 weeks &bull; 3&ndash;4 engineers</div>
+        <div class="timeline-desc">
+          Build as a <strong>modular monolith</strong> (single deployable, clean internal modules). Auth via OIDC provider. Tenant + user management. SnapTrade user creation and broker connection flow. Basic Next.js dashboard showing connected accounts and positions.
+        </div>
+        <div class="timeline-chips">
+          <span class="chip">FastAPI monolith</span>
+          <span class="chip">PostgreSQL</span>
+          <span class="chip">Redis</span>
+          <span class="chip">Next.js dashboard</span>
+          <span class="chip">SnapTrade SDK</span>
+          <span class="chip">Auth0/Clerk</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot dot-phase2"></div>
+        <div class="timeline-phase" style="color:#3b82f6;">Phase 2 &mdash; Signal Pipeline</div>
+        <div class="timeline-title">Discord/Telegram Ingestion + Parser + Conditional Orders</div>
+        <div class="timeline-meta">6&ndash;8 weeks &bull; 4&ndash;5 engineers</div>
+        <div class="timeline-desc">
+          Port signal parser from desktop. Build Discord/Telegram bot integration. Subscription resolver. Conditional order engine using central market data (licensed vendor, not admin broker). In-process event bus for hot path, Redis queue for cold path.
+        </div>
+        <div class="timeline-chips">
+          <span class="chip">Signal parser (port from desktop)</span>
+          <span class="chip">Discord.py</span>
+          <span class="chip">Polygon.io / Alpaca data</span>
+          <span class="chip">Conditional engine</span>
+          <span class="chip">10&ndash;50 beta users</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot dot-phase3"></div>
+        <div class="timeline-phase" style="color:#8b5cf6;">Phase 3 &mdash; Execution + Risk</div>
+        <div class="timeline-title">Execution Queue + Risk Engine Port + Position Sync</div>
+        <div class="timeline-meta">8&ndash;10 weeks &bull; 5&ndash;6 engineers</div>
+        <div class="timeline-desc">
+          Port the 9,000-line risk engine. This is the hardest phase. Execution queue with idempotency. Position sync via SnapTrade. Software-managed brackets (don't depend on SnapTrade OCO). Paper trading mode for validation. 100+ historical scenario regression tests.
+        </div>
+        <div class="timeline-chips">
+          <span class="chip">Risk engine port (~9K lines)</span>
+          <span class="chip">Celery workers</span>
+          <span class="chip">Paper trading mode</span>
+          <span class="chip">Position sync</span>
+          <span class="chip">50&ndash;200 beta users</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot dot-phase4"></div>
+        <div class="timeline-phase" style="color:#f59e0b;">Phase 4 &mdash; Production Hardening</div>
+        <div class="timeline-title">Billing + Audit + Monitoring + Circuit Breakers</div>
+        <div class="timeline-meta">6&ndash;8 weeks &bull; 5&ndash;6 engineers</div>
+        <div class="timeline-desc">
+          Stripe billing integration. Full audit log pipeline. OpenTelemetry instrumentation. Circuit breakers at all 7 levels. Load testing with simulated 1,000 users. Security audit. GA launch.
+        </div>
+        <div class="timeline-chips">
+          <span class="chip">Stripe</span>
+          <span class="chip">OpenTelemetry</span>
+          <span class="chip">Grafana</span>
+          <span class="chip">Load testing</span>
+          <span class="chip">Security audit</span>
+          <span class="chip">200&ndash;1,000 GA users</span>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot dot-phase5"></div>
+        <div class="timeline-phase" style="color:#ef4444;">Phase 5 &mdash; Scale</div>
+        <div class="timeline-title">Extract Microservices + Kafka + K8s + Mobile</div>
+        <div class="timeline-meta">Ongoing &bull; 6&ndash;8 engineers</div>
+        <div class="timeline-desc">
+          Only now extract microservices based on actual bottlenecks. Replace Redis queues with Kafka for throughput. Kubernetes for auto-scaling. Read replicas. Mobile-responsive dashboard or native app. Direct broker API integrations alongside SnapTrade for high-volume users.
+        </div>
+        <div class="timeline-chips">
+          <span class="chip">K8s / EKS</span>
+          <span class="chip">Kafka</span>
+          <span class="chip">Read replicas</span>
+          <span class="chip">Mobile app</span>
+          <span class="chip">Direct broker APIs</span>
+          <span class="chip">1,000&ndash;10,000+ users</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ====== FINAL RECOMMENDATION ====== -->
+<section id="recommendation" style="background:linear-gradient(180deg, var(--bg) 0%, #f1f5f9 100%);">
+  <div class="container">
+    <div class="section-header">
+      <h2>Final Recommendation</h2>
+      <p>Executive summary of the architect review.</p>
+    </div>
+
+    <div class="compare-grid">
+      <div class="compare-card" style="border-left:4px solid var(--good);">
+        <h4 style="color:var(--good);">Do This</h4>
+        <ul class="compare-list">
+          <li><span class="check">&#10003;</span> <strong>Phase 0 first:</strong> Validate SnapTrade + legal before writing a line of code</li>
+          <li><span class="check">&#10003;</span> <strong>Modular monolith:</strong> Start with 3&ndash;4 deployable units, not 20 microservices</li>
+          <li><span class="check">&#10003;</span> <strong>Software-first risk:</strong> Don't depend on SnapTrade for OCO &mdash; build software brackets</li>
+          <li><span class="check">&#10003;</span> <strong>Licensed market data:</strong> Use Polygon.io or Alpaca Data API, not admin broker streams</li>
+          <li><span class="check">&#10003;</span> <strong>In-process hot path:</strong> Signal &rarr; trigger &rarr; execute in-process, not through 4 queues</li>
+          <li><span class="check">&#10003;</span> <strong>Port the risk engine intact:</strong> Your 9K-line risk engine is battle-tested &mdash; port, don't rewrite</li>
+          <li><span class="check">&#10003;</span> <strong>Paper trading mode:</strong> Every user starts in paper mode, graduates to live</li>
+          <li><span class="check">&#10003;</span> <strong>Broker-native SL as safety net:</strong> Always place broker stop-loss orders; software risk is the enhancement</li>
+        </ul>
+      </div>
+
+      <div class="compare-card" style="border-left:4px solid var(--bad);">
+        <h4 style="color:var(--bad);">Don't Do This</h4>
+        <ul class="compare-list">
+          <li><span class="cross">&#10007;</span> <strong>Don't start with 20 microservices</strong> &mdash; you'll spend more time on infra than product</li>
+          <li><span class="cross">&#10007;</span> <strong>Don't assume SnapTrade can do OCO</strong> &mdash; validate first, then decide architecture</li>
+          <li><span class="cross">&#10007;</span> <strong>Don't use admin broker accounts for market data</strong> &mdash; violates ToS, won't scale</li>
+          <li><span class="cross">&#10007;</span> <strong>Don't skip the legal review</strong> &mdash; this could be an RIA/broker-dealer issue</li>
+          <li><span class="cross">&#10007;</span> <strong>Don't build all 40+ tables on Day 1</strong> &mdash; start with ~15 core tables, add as needed</li>
+          <li><span class="cross">&#10007;</span> <strong>Don't route the hot path through external queues</strong> &mdash; latency kills options trading</li>
+          <li><span class="cross">&#10007;</span> <strong>Don't rewrite the risk engine from scratch</strong> &mdash; the desktop version handles edge cases a rewrite will miss</li>
+          <li><span class="cross">&#10007;</span> <strong>Don't target 100K users in v1</strong> &mdash; design for 1K, architect for 10K, dream about 100K</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:36px;padding:32px 36px;background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);">
+      <h3 style="font-size:20px;font-weight:800;margin-bottom:14px;">Bottom Line</h3>
+      <p style="font-size:16px;color:var(--ink-2);line-height:1.75;">
+        This architecture document is an <strong>excellent north-star reference</strong> &mdash; it's one of the most thorough SaaS trading platform designs I've reviewed. The domain knowledge (risk engine, OCO lifecycle, conditional orders, multi-broker execution) is genuinely strong and represents real production learning.
+      </p>
+      <p style="font-size:16px;color:var(--ink-2);line-height:1.75;margin-top:12px;">
+        The gap is between <strong>design completeness</strong> and <strong>execution realism</strong>. Right-size the MVP to a modular monolith, validate SnapTrade before committing, get legal clearance, and license market data properly. With these adjustments, you can ship a working SaaS to 100 beta users in <strong>6&ndash;9 months</strong> and scale to 5,000+ users within 18 months.
+      </p>
+      <p style="font-size:16px;color:var(--ink-2);line-height:1.75;margin-top:12px;">
+        <strong>Estimated total investment to GA:</strong> $250&ndash;400K over 8&ndash;12 months with a team of 4&ndash;6 engineers. <strong>Break-even:</strong> ~500 paying users at $30/month ($15K MRR). <strong>Feasible?</strong> Yes, with Phase 0 validation and right-sized scope.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ====== FOOTER ====== -->
+<div class="footnotes">
+  <div class="container">
+    <p><strong>BotifyTrades SaaS Architecture Review</strong> &bull; Confidential &bull; April 27, 2026 &bull; v9.3.2 baseline</p>
+    <p style="margin-top:8px;">This review evaluates architectural feasibility and identifies risks. It is not legal, financial, or regulatory advice. Engage qualified professionals for compliance, securities law, and market data licensing decisions.</p>
+  </div>
+</div>
+
+</body>
+</html>

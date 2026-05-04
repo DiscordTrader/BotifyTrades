@@ -4939,8 +4939,8 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
             conn.rollback()
             return None
         
-        if close_price is None:
-            print(f"[LOT_MATCHER] ⚠️ close_price is None for lot {lot_id} — skipping P&L calculation")
+        if close_price is None or close_price <= 0:
+            print(f"[LOT_MATCHER] ⚠️ close_price is {close_price} for lot {lot_id} — skipping (no valid exit price)")
             conn.rollback()
             return None
         
@@ -7024,67 +7024,65 @@ def get_channel_leaderboard(time_period='all', start_date=None, end_date=None, m
         date_filter = "AND lc.closed_at >= ? AND lc.closed_at <= ?"
         params.extend([date_start, date_end])
     
-    # Market filter using bound parameters (safe from SQL injection)
-    # Filter via signals table which has the market column
+    # Market filter using channels.market column directly
     market_filter = ""
     if market and market in ('US', 'INDIA'):
-        market_filter = "AND COALESCE(s.market, 'US') = ?"
+        market_filter = "AND COALESCE(c.market, 'US') = ?"
         params.append(market)
-    
+
     query = f'''
-        SELECT 
+        SELECT
             c.id as channel_id,
             c.name as channel_name,
             c.discord_channel_id,
-            
-            -- Total signals (BTO + STC)
-            COUNT(DISTINCT s.id) as total_signals,
-            
+
+            -- Total signals (count of signal_lots for this channel)
+            COUNT(DISTINCT sl.id) as total_signals,
+
             -- Total closed positions (from lot_closures)
             COUNT(DISTINCT lc.id) as total_closed,
-            
+
             -- Win/Loss counts (based on PNL)
             SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as win_count,
             SUM(CASE WHEN lc.pnl <= 0 THEN 1 ELSE 0 END) as loss_count,
-            
+
             -- Win rate (%)
-            CASE 
-                WHEN COUNT(DISTINCT lc.id) > 0 
+            CASE
+                WHEN COUNT(DISTINCT lc.id) > 0
                 THEN ROUND(SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(DISTINCT lc.id), 2)
-                ELSE 0 
+                ELSE 0
             END as win_rate,
-            
+
             -- PNL metrics
             COALESCE(SUM(lc.pnl), 0) as total_pnl,
-            CASE 
-                WHEN COUNT(DISTINCT lc.id) > 0 
+            CASE
+                WHEN COUNT(DISTINCT lc.id) > 0
                 THEN ROUND(SUM(lc.pnl) / COUNT(DISTINCT lc.id), 2)
-                ELSE 0 
+                ELSE 0
             END as avg_pnl,
-            
+
             -- Cost basis: US options multiply by 100, India F&O uses 1× (lot sizing in qty)
-            COALESCE(SUM(sl.open_price * lc.closed_qty * 
-                CASE 
-                    WHEN sl.asset_type = 'option' AND COALESCE(s.market, 'US') = 'US' THEN 100 
-                    ELSE 1 
+            COALESCE(SUM(sl.open_price * lc.closed_qty *
+                CASE
+                    WHEN sl.asset_type = 'option' AND COALESCE(c.market, 'US') = 'US' THEN 100
+                    ELSE 1
                 END
             ), 0) as total_cost_basis,
-            
+
             -- Gross profit/loss for TQS calculation
             COALESCE(SUM(CASE WHEN lc.pnl > 0 THEN lc.pnl ELSE 0 END), 0) as gross_profit,
             COALESCE(SUM(CASE WHEN lc.pnl < 0 THEN lc.pnl ELSE 0 END), 0) as gross_loss,
-            
+
             -- Best and worst trades
             MAX(lc.pnl) as best_trade,
             MIN(lc.pnl) as worst_trade,
-            
+
             -- Average holding days
-            ROUND(AVG(lc.holding_days), 1) as avg_holding_days
-            
+            ROUND(AVG(lc.holding_days), 4) as avg_holding_days
+
         FROM channels c
-        LEFT JOIN signals s ON s.channel_id = c.id
-        LEFT JOIN signal_lots sl ON sl.signal_id = s.id
-        LEFT JOIN lot_closures lc ON lc.lot_id = sl.id
+        JOIN signal_lots sl ON CAST(sl.channel_id AS INTEGER) = c.id
+        JOIN lot_closures lc ON lc.lot_id = sl.id
         WHERE c.is_active = 1 {date_filter} {market_filter}
         GROUP BY c.id, c.name, c.discord_channel_id
         HAVING COUNT(DISTINCT lc.id) > 0
@@ -7148,9 +7146,45 @@ def get_channel_leaderboard(time_period='all', start_date=None, end_date=None, m
         }
         ch['score'] = calculate_trader_quality_score(tqs_stats, max_total_pnl, min_total_pnl)
     
+    # Direction breakdown per channel (Stocks / Calls / Puts)
+    dir_query = f'''
+        SELECT
+            c.id as channel_id,
+            CASE
+                WHEN sl.asset_type = 'option' AND sl.call_put = 'C' THEN 'calls'
+                WHEN sl.asset_type = 'option' AND sl.call_put = 'P' THEN 'puts'
+                ELSE 'stocks'
+            END as direction,
+            COUNT(lc.id) as trades,
+            SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
+            COALESCE(SUM(lc.pnl), 0) as pnl
+        FROM channels c
+        JOIN signal_lots sl ON CAST(sl.channel_id AS INTEGER) = c.id
+        JOIN lot_closures lc ON lc.lot_id = sl.id
+        WHERE c.is_active = 1 {date_filter} {market_filter}
+        GROUP BY c.id, direction
+    '''
+    cursor.execute(dir_query, params)
+    dir_map = {}
+    for dr in cursor.fetchall():
+        cid = dr['channel_id']
+        if cid not in dir_map:
+            dir_map[cid] = {}
+        t = dr['trades'] or 0
+        w = dr['wins'] or 0
+        dir_map[cid][dr['direction']] = {
+            'trades': t,
+            'wins': w,
+            'losses': t - w,
+            'win_rate': round((w / t * 100) if t > 0 else 0, 1),
+            'pnl': round(float(dr['pnl'] or 0), 2)
+        }
+    for ch in channels:
+        ch['direction_breakdown'] = dir_map.get(ch['channel_id'], {})
+
     # Sort by TQS score (primary), then total_pnl (secondary)
     channels.sort(key=lambda c: (-c['score'], -c['total_pnl']))
-    
+
     return channels
 
 def get_channel_user_performance(channel_id, time_period='all'):
@@ -7456,7 +7490,7 @@ def get_user_performance(user_id: int, period: str = 'all', broker_filter: str =
         'avg_pnl_percent': round(float(row['avg_pnl_percent'] or 0), 1),
         'best_trade': round(float(row['best_trade'] or 0), 2),
         'worst_trade': round(float(row['worst_trade'] or 0), 2),
-        'avg_hold_days': round(float(row['avg_hold_days'] or 0), 1),
+        'avg_hold_days': round(float(row['avg_hold_days'] or 0), 4),
         'profit_factor': 0.0
     }
     
@@ -7465,7 +7499,40 @@ def get_user_performance(user_id: int, period: str = 'all', broker_filter: str =
         result['profit_factor'] = round(abs(result['gross_profit'] / result['gross_loss']), 2)
     elif result['gross_profit'] > 0:
         result['profit_factor'] = 10.0  # Cap at 10 if no losses
-    
+
+    # Direction breakdown (Stocks / Calls / Puts)
+    dir_query = f'''
+        SELECT
+            CASE
+                WHEN sl.asset_type = 'option' AND sl.call_put = 'C' THEN 'calls'
+                WHEN sl.asset_type = 'option' AND sl.call_put = 'P' THEN 'puts'
+                ELSE 'stocks'
+            END as direction,
+            COUNT(lc.id) as trades,
+            SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN lc.pnl <= 0 THEN 1 ELSE 0 END) as losses,
+            COALESCE(SUM(lc.pnl), 0) as pnl
+        FROM lot_closures lc
+        JOIN signal_lots sl ON lc.lot_id = sl.id
+        LEFT JOIN trades t ON sl.signal_id = t.id
+        WHERE {user_filter} {date_filter} {broker_clause}
+        GROUP BY direction
+    '''
+    cursor.execute(dir_query, tuple(params))
+    direction_breakdown = {}
+    for dr in cursor.fetchall():
+        d = dr['direction']
+        t = dr['trades'] or 0
+        w = dr['wins'] or 0
+        direction_breakdown[d] = {
+            'trades': t,
+            'wins': w,
+            'losses': dr['losses'] or 0,
+            'win_rate': round((w / t * 100) if t > 0 else 0, 1),
+            'pnl': round(float(dr['pnl'] or 0), 2)
+        }
+    result['direction_breakdown'] = direction_breakdown
+
     return result
 
 

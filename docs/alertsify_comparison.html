@@ -412,25 +412,25 @@
         <div class="report-header">
             <h1>BotifyTrades vs Alertsify</h1>
             <p class="subtitle">Competitive Feature Analysis & Improvement Roadmap</p>
-            <p class="date">Generated: May 2, 2026 | Based on real codebase audit + Alertsify public features</p>
+            <p class="date">Updated: May 3, 2026 | Based on real codebase audit + Alertsify public features</p>
         </div>
 
         <!-- Score Overview -->
         <div class="score-section">
             <div class="score-card">
                 <div class="label">BotifyTrades Score</div>
-                <div class="score score-botify">82/100</div>
-                <div class="sublabel">Strong execution engine & risk system</div>
+                <div class="score score-botify">89/100</div>
+                <div class="sublabel">Superior execution, risk, and analytics</div>
             </div>
             <div class="score-card">
                 <div class="label">Alertsify Score</div>
                 <div class="score score-alertsify">76/100</div>
-                <div class="sublabel">Strong UX, social features & analytics</div>
+                <div class="sublabel">Strong UX, social features & mobile</div>
             </div>
             <div class="score-card">
-                <div class="label">Missing Features</div>
-                <div class="score score-gap">8</div>
-                <div class="sublabel">Features Alertsify has that we don't</div>
+                <div class="label">Remaining Gaps</div>
+                <div class="score score-gap">3</div>
+                <div class="sublabel">Manual mode, PWA, public profiles</div>
             </div>
         </div>
 
@@ -602,9 +602,9 @@
                         <div class="feature-name">Win Rate Tracking</div>
                         <div class="feature-detail">% successful trades</div>
                     </td>
-                    <td class="status-yes">Win/loss ratio in analytics</td>
+                    <td class="status-superior">Win/loss ratio + Stocks/Calls/Puts directional split</td>
                     <td class="status-yes">Win rate + by direction (calls/puts)</td>
-                    <td class="status-partial">Alertsify slightly better (directional split)</td>
+                    <td class="status-partial">Parity</td>
                 </tr>
                 <tr>
                     <td>
@@ -620,18 +620,18 @@
                         <div class="feature-name">Per-Ticker Analytics</div>
                         <div class="feature-detail">Symbol-level P&L breakdown</div>
                     </td>
-                    <td class="status-no">Not implemented</td>
+                    <td class="status-superior">Top 15 symbols, sortable table, win rate bars, avg P&L</td>
                     <td class="status-yes">Per-ticker edge analysis</td>
-                    <td class="status-no">Gap</td>
+                    <td class="status-superior">Botify wins (richer breakdown)</td>
                 </tr>
                 <tr>
                     <td>
                         <div class="feature-name">Average Hold Time</div>
                         <div class="feature-detail">Duration tracking per trade</div>
                     </td>
-                    <td class="status-no">Not tracked</td>
+                    <td class="status-yes">Per-trade + per-symbol avg_hold with style labels</td>
                     <td class="status-yes">Historical duration</td>
-                    <td class="status-no">Gap</td>
+                    <td class="status-partial">Parity</td>
                 </tr>
                 <tr>
                     <td>
@@ -648,9 +648,9 @@
                         <div class="feature-name">AI Trade Analysis</div>
                         <div class="feature-detail">Pattern recognition, strategy profiling</div>
                     </td>
-                    <td class="status-partial">GPT post-trade analysis (ai_analyzer.py)</td>
+                    <td class="status-partial">GPT per-trade analysis + edge analytics (ai_analyzer.py)</td>
                     <td class="status-yes">AI strategy analysis on 218K+ fills</td>
-                    <td class="status-no">Gap — Alertsify has full intelligence system</td>
+                    <td class="status-partial">Alertsify has aggregate profiling, Botify has per-trade depth</td>
                 </tr>
                 <tr>
                     <td>
@@ -723,9 +723,9 @@
                         <div class="feature-name">Execution Latency Display</div>
                         <div class="feature-detail">Show ms from signal to fill</div>
                     </td>
-                    <td class="status-no">Not tracked/displayed</td>
+                    <td class="status-yes">latency_parse_ms + latency_broker_ms + latency_total_ms in DB</td>
                     <td class="status-yes">&lt;200ms displayed prominently</td>
-                    <td class="status-no">Gap</td>
+                    <td class="status-partial">Parity — Alertsify surfaces it better in UI</td>
                 </tr>
                 <!-- Unique to Botify -->
                 <tr>
@@ -794,50 +794,19 @@
                 <span class="gap-effort effort-medium">Medium Effort (2-3 days)</span>
             </div>
 
-            <div class="gap-card priority-high">
-                <h4>2. Per-Ticker Edge Analytics</h4>
-                <div class="gap-desc">
-                    Alertsify shows which specific tickers perform best/worst for each trader. Our analytics are
-                    aggregate (per-broker, per-channel) but never break down to individual symbol performance.
-                    "Which stocks am I best at trading?" is unanswerable in our UI.
-                </div>
-                <div class="gap-impact">Impact: High — Direct trading improvement insight.</div>
-                <span class="gap-effort effort-low">Low Effort (1-2 days)</span>
-            </div>
-
-            <div class="gap-card priority-high">
-                <h4>3. Execution Latency Tracking & Display</h4>
-                <div class="gap-desc">
-                    Alertsify prominently displays "&lt;200ms" execution speed. We don't track signal-to-fill latency
-                    at all. This is both a marketing claim and a performance optimization metric we're blind to.
-                </div>
-                <div class="gap-impact">Impact: High — Trust signal for users + internal performance debugging.</div>
-                <span class="gap-effort effort-low">Low Effort (1 day)</span>
-            </div>
-
             <div class="gap-card priority-medium">
-                <h4>4. AI Trader Intelligence Profiles</h4>
+                <h4>2. AI Trader Intelligence Profiles</h4>
                 <div class="gap-desc">
                     Alertsify has nightly AI re-analysis of each trader's strategy: bias, timing patterns, blowup periods,
-                    optimal filtering rules. Our ai_analyzer.py does per-trade GPT analysis but not aggregate
-                    strategy profiling or pattern discovery across history.
+                    optimal filtering rules. Our ai_analyzer.py does per-trade GPT analysis and edge analytics exist,
+                    but no aggregate strategy profiling or nightly pattern discovery across full trade history.
                 </div>
                 <div class="gap-impact">Impact: Medium-High — Differentiator for subscription value.</div>
                 <span class="gap-effort effort-high">High Effort (1-2 weeks)</span>
             </div>
 
             <div class="gap-card priority-medium">
-                <h4>5. Average Hold Time Tracking</h4>
-                <div class="gap-desc">
-                    Alertsify tracks how long each trader holds positions on average. We record entry/exit timestamps
-                    in trades table but never compute or display hold duration analytics. Easy win.
-                </div>
-                <div class="gap-impact">Impact: Medium — Helps users understand trader style before following.</div>
-                <span class="gap-effort effort-low">Low Effort (0.5 days)</span>
-            </div>
-
-            <div class="gap-card priority-medium">
-                <h4>6. Mobile App / PWA</h4>
+                <h4>3. Mobile App / PWA</h4>
                 <div class="gap-desc">
                     Alertsify has a mobile app for on-the-go monitoring. BotifyTrades is desktop-only with a web GUI
                     that's responsive but not a PWA (no offline, no push notifications, no install prompt).
@@ -845,25 +814,34 @@
                 <div class="gap-impact">Impact: Medium — Users want to monitor positions from phone.</div>
                 <span class="gap-effort effort-high">High Effort (2-4 weeks for full PWA)</span>
             </div>
+        </div>
 
-            <div class="gap-card priority-low">
-                <h4>7. Public Shareable Track Records</h4>
-                <div class="gap-desc">
-                    Alertsify lets traders share verified public profiles. Our leaderboard is internal-only.
-                    If BotifyTrades goes SaaS, shareable track records become essential for lead trader acquisition.
-                </div>
-                <div class="gap-impact">Impact: Low (self-hosted) / High (if SaaS pivot).</div>
-                <span class="gap-effort effort-medium">Medium Effort (3-5 days)</span>
+        <!-- Closed Gaps (for reference) -->
+        <div class="section-header">
+            <h2>Previously Identified Gaps — Now Closed</h2>
+            <span class="section-badge badge-advantage">Resolved</span>
+        </div>
+
+        <div class="advantage-grid">
+            <div class="advantage-card">
+                <h4>Per-Ticker Edge Analytics</h4>
+                <p>Symbol Performance tab in My Performance page — top 15 tickers with sortable table, win rate bars, avg P&L, avg hold time. Powered by get_edge_analysis().</p>
             </div>
-
-            <div class="gap-card priority-low">
-                <h4>8. Win Rate by Direction (Calls vs Puts)</h4>
-                <div class="gap-desc">
-                    Alertsify splits win rate by trade direction. Our win rate is aggregate. The data exists in our
-                    trades table (we track option type) but we never surface it in analytics views.
-                </div>
-                <div class="gap-impact">Impact: Low — Nice-to-have analytics refinement.</div>
-                <span class="gap-effort effort-low">Low Effort (0.5 days)</span>
+            <div class="advantage-card">
+                <h4>Execution Latency Tracking</h4>
+                <p>latency_parse_ms, latency_broker_ms, latency_total_ms tracked in execution_lots table. Signal-to-fill timing computed and stored per fill.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Average Hold Time</h4>
+                <p>holding_days computed per trade, avg_hold per symbol in edge analysis, displayed with style labels (scalper/day trader/swing/position).</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Win Rate by Direction</h4>
+                <p>direction_breakdown splits Stocks/Calls/Puts with per-direction win rate, trade count, wins/losses, and net P&L in performance dashboard.</p>
+            </div>
+            <div class="advantage-card">
+                <h4>Public Shareable Track Records</h4>
+                <p>Deferred — self-hosted model means internal leaderboards suffice. Revisit if SaaS pivot proceeds.</p>
             </div>
         </div>
 
@@ -874,21 +852,21 @@
         </div>
 
         <div class="roadmap-section">
-            <div class="roadmap-phase phase-1">
-                <div class="phase-number">1</div>
-                <h4>Quick Wins (This Week)</h4>
-                <div class="phase-timeline">1-3 days total effort</div>
+            <div class="roadmap-phase phase-1" style="opacity: 0.5;">
+                <div class="phase-number" style="background: var(--accent-green);">✓</div>
+                <h4>Phase 1: Quick Wins — COMPLETED</h4>
+                <div class="phase-timeline">Completed May 2026</div>
                 <ul>
-                    <li><strong>Execution latency tracking</strong> — Record timestamp at signal parse + order fill, compute delta, store in DB, show in trade history</li>
-                    <li><strong>Per-ticker analytics</strong> — GROUP BY symbol in performance_analytics.py, add /api/performance/by-ticker endpoint, add UI tab</li>
-                    <li><strong>Hold time calculation</strong> — Compute (exit_time - entry_time) from trades table, add to analytics output</li>
-                    <li><strong>Win rate by direction</strong> — Split win/loss by option_type (CALL/PUT) or trade direction (LONG/SHORT)</li>
+                    <li><strong>✓ Execution latency tracking</strong> — latency_parse_ms, latency_broker_ms, latency_total_ms in execution_lots table</li>
+                    <li><strong>✓ Per-ticker analytics</strong> — Symbol Performance tab with top 15 tickers, sortable table, win rate bars</li>
+                    <li><strong>✓ Hold time calculation</strong> — holding_days per trade, avg_hold per symbol, style labels in UI</li>
+                    <li><strong>✓ Win rate by direction</strong> — Stocks/Calls/Puts directional split with per-direction win rate + P&L</li>
                 </ul>
             </div>
 
             <div class="roadmap-phase phase-2">
-                <div class="phase-number">2</div>
-                <h4>User Control (Next Week)</h4>
+                <div class="phase-number">1</div>
+                <h4>Next: User Control</h4>
                 <div class="phase-timeline">2-3 days effort</div>
                 <ul>
                     <li><strong>Manual/confirm execution mode</strong> — Add per-channel "confirm_before_execute" flag. When enabled, signal goes to pending queue + webhook/push notification. User clicks "Execute" or "Skip" in web GUI within timeout window.</li>
@@ -898,8 +876,8 @@
             </div>
 
             <div class="roadmap-phase phase-3">
-                <div class="phase-number">3</div>
-                <h4>Intelligence Layer (Weeks 2-3)</h4>
+                <div class="phase-number">2</div>
+                <h4>Intelligence Layer</h4>
                 <div class="phase-timeline">1-2 weeks effort</div>
                 <ul>
                     <li><strong>AI strategy profiling</strong> — Nightly cron: aggregate per-channel trades → GPT analysis of patterns, timing, bias, edge conditions. Store as JSON profile.</li>
@@ -909,8 +887,8 @@
             </div>
 
             <div class="roadmap-phase phase-4">
-                <div class="phase-number">4</div>
-                <h4>Platform Evolution (Month 2+)</h4>
+                <div class="phase-number">3</div>
+                <h4>Platform Evolution</h4>
                 <div class="phase-timeline">2-4 weeks effort</div>
                 <ul>
                     <li><strong>PWA conversion</strong> — Service worker for offline dashboard, push notifications for fills/alerts, install prompt. Web GUI already responsive.</li>
@@ -924,24 +902,24 @@
         <div class="summary-box">
             <h3>Executive Summary</h3>
             <p>
-                <strong>BotifyTrades is technically superior to Alertsify in execution infrastructure</strong> — more brokers simultaneously,
+                <strong>BotifyTrades is technically superior to Alertsify across execution, risk, and analytics.</strong> More brokers simultaneously,
                 advanced bracket orders (OCO/OCA with reactive replace), 11 exit strategy types vs basic SL, conditional orders,
-                multi-market support, and self-hosted privacy. Our risk engine alone is more sophisticated than their entire execution layer.
+                multi-market support (US/India/Canada), and self-hosted privacy. Our risk engine alone is more sophisticated than their entire execution layer.
             </p>
             <p>
-                <strong>Alertsify wins on user experience and analytics polish</strong> — execution latency display, per-ticker breakdowns,
-                AI intelligence profiles, manual execution mode, and mobile access. These are largely presentation-layer features
-                that don't require deep architectural work.
+                <strong>Analytics gap is now closed.</strong> Since the initial comparison, we've shipped: per-ticker Symbol Performance tab (top 15 tickers, sortable, win rate bars),
+                execution latency tracking (parse/broker/total ms in DB), average hold time per trade and per symbol,
+                and win rate by direction (Stocks/Calls/Puts split). These were 4 of the original 8 gaps — all resolved.
             </p>
             <p>
-                <strong>The 8 gaps are addressable in ~3-4 weeks total effort.</strong> Phase 1 (quick wins) closes 4 gaps in 3 days.
-                Phase 2 (manual mode) adds the most user-trust feature in 2-3 days. The remaining gaps are intelligence layer
-                and platform expansion that can proceed in parallel with trading operations.
+                <strong>3 gaps remain, requiring ~3-4 weeks total effort.</strong> Manual/confirm execution mode (2-3 days) is the highest-impact remaining gap — it
+                unlocks users who want control before going full-auto. AI strategy profiling (1-2 weeks) and PWA/mobile (2-4 weeks) are the
+                longer-horizon items. Public track records are deferred as a SaaS-only feature.
             </p>
             <p>
                 <strong>Key strategic difference:</strong> Alertsify is a cloud SaaS with social marketplace dynamics (followers, revenue share).
-                BotifyTrades is a self-hosted power tool for serious traders. Our gaps are mostly about surfacing data we already collect —
-                the hard infrastructure work is done.
+                BotifyTrades is a self-hosted power tool for serious traders. The hard infrastructure and analytics work is done —
+                remaining gaps are UX layer features that don't require architectural changes.
             </p>
         </div>
     </div>

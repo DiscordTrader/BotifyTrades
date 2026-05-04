@@ -4,7 +4,7 @@
 
 This document defines the complete quality assurance checklist for BotifyTrades. Every page, API endpoint, database table, and setting must be validated before releasing a new version. The checklist is organized by the application's tab structure.
 
-**Current Version Baseline:** 9.2.5
+**Current Version Baseline:** 9.3.4+
 **Validation Reference:** `docs/RISK_SETTINGS_VALIDATION_REFERENCE.md` (42-field risk settings wiring)
 
 ---
@@ -274,12 +274,32 @@ The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets
 | 3.58 | EMA Extended Hours (`ema_extended_hours`, default 0) | [ ] |
 | 3.59 | Trade Summary enable per channel (`trade_summary_enabled`) | [ ] |
 
+#### Execution Latency Tracking [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 3.60 | `detected_at` timestamp set at all 6 signal entry points (Discord options, stocks, alert parser, conditional trigger, Telegram bridge) | [ ] |
+| 3.61 | `parsed_at` timestamp set immediately after signal parsing | [ ] |
+| 3.62 | `_order_submitted_at` captured BEFORE broker API call (not after fill) | [ ] |
+| 3.63 | Conditional order `_triggered_at` flows as `detected_at` for triggered signals | [ ] |
+| 3.64 | Telegram `detected_at` set in `listener.py` at parse time (not after queue wait) | [ ] |
+| 3.65 | `save_pending_order_metadata()` accepts explicit `order_submitted_at` parameter | [ ] |
+| 3.66 | Negative latency guard: `latency_parse_ms < 0` → set to NULL | [ ] |
+| 3.67 | Negative latency guard: `latency_broker_ms < 0` → set to NULL | [ ] |
+| 3.68 | Negative latency guard: `latency_total_ms < 0` → set to NULL | [ ] |
+| 3.69 | `/api/latency/stats` returns summary (avg, p50, p95), by-broker breakdown, recent trades | [ ] |
+| 3.70 | Latency badges color-coded: green (<1.5s), yellow (1.5-3s), red (>3s) | [ ] |
+| 3.71 | Closed Trades tab shows latency column with color badges | [ ] |
+| 3.72 | P&L Tracker position cards show latency column | [ ] |
+
 **API Endpoints:**
-- [ ] `GET /api/execution-pnl` — execution P&L data
+- [ ] `GET /api/execution-pnl` — execution P&L data (includes `latency.parse_ms`, `latency.broker_ms`, `latency.total_ms`)
 - [ ] `GET /api/execution-pnl/filters` — filter options
 - [ ] `GET /api/execution-lots` — broker fill lots
 - [ ] `GET /api/signal-summary` — signal summary
 - [ ] `GET /api/signal-summary/<lot_id>/executions` — executions per lot
+- [ ] `GET /api/latency/stats` — latency statistics (avg/p50/p95, by-broker, recent)
+- [ ] `GET /api/pnl/detailed` — includes `latency_ms`, `latency_parse_ms`, `latency_broker_ms` per position
 - [ ] `PUT /api/channels/<id>` — saves all risk management fields
 
 **Database Tables:** `signal_lots`, `lot_closures`, `execution_lots`, `execution_closures`, `pending_order_metadata`, `filled_orders`
@@ -304,9 +324,24 @@ The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets
 | 4.8 | Open position P&L calculation | [ ] |
 | 4.9 | Closed position P&L calculation | [ ] |
 | 4.10 | Signal vs execution P&L comparison | [ ] |
+| 4.11 | Latency column in position cards (between Avg Return and Status) | [ ] |
+| 4.12 | Latency badge colors match thresholds (green/yellow/red) | [ ] |
+| 4.13 | Position card grid layout — all columns in single row (8-column grid) | [ ] |
+| 4.14 | Aggregate footer row aligns with 8-column header grid | [ ] |
+| 4.15 | Hold Time column shows formatted duration per position (`formatHoldTime()` in pnl_tracker.html) | [ ] |
+| 4.16 | Hold Time color coding: purple < 1h, cyan < 1d, orange < 7d, green >= 7d | [ ] |
+| 4.17 | Direction breakdown bar renders below summary stats (`#directionBreakdown` div) | [ ] |
+| 4.18 | Direction breakdown computes from `pos.asset_type` + `pos.call_put` client-side in `updateSummaryStats()` | [ ] |
+| 4.19 | Stocks direction: `asset_type='stock'` → 📈 Stocks with WR%, W/L, PnL | [ ] |
+| 4.20 | Calls direction: `asset_type='option' && call_put='C'` → 🟢 Calls with WR%, W/L, PnL | [ ] |
+| 4.21 | Puts direction: `asset_type='option' && call_put='P'` → 🔴 Puts with WR%, W/L, PnL | [ ] |
+| 4.22 | Direction bar hidden when no closed positions exist | [ ] |
+| 4.23 | Only categories with trades are shown (no empty "Calls: —" pills) | [ ] |
+| 4.24 | `close_lot()` rejects `close_price <= 0` — guard at `database.py:4942` prevents $0 exit creating -100% PnL | [ ] |
+| 4.25 | `_build_stc_signal()` returns None when `position.current_price <= 0` — guard at `position_monitor.py:~7459` | [ ] |
 
 **API Endpoints:**
-- [ ] `GET /api/pnl/detailed` — detailed P&L
+- [ ] `GET /api/pnl/detailed` — detailed P&L (includes `asset_type`, `call_put`, latency fields)
 - [ ] `GET /api/pnl/users` — P&L by users
 - [ ] `POST /api/reset/pnl` — reset P&L
 - [ ] `POST /api/pnl/purge/by-date` — purge by date
@@ -338,6 +373,10 @@ The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets
 | 5.12 | Trade status badges (OPEN/CLOSED/PENDING/FAILED) | [ ] |
 | 5.13 | Trailing stop indicators | [ ] |
 | 5.14 | Profit target hit indicators (PT1-PT4) | [ ] |
+| 5.15 | "Closed Trades" tab loads from `/api/execution-pnl` (not order history) | [ ] |
+| 5.16 | Closed Trades table columns: Symbol, Broker, Qty, Entry, Exit, P&L, P&L%, Latency, Exit Reason, Filled | [ ] |
+| 5.17 | Closed Trades latency badges color-coded (green/yellow/red) | [ ] |
+| 5.18 | Closed Trades exit reason badges color-coded (PT=green, STOP=red, TRAIL=yellow, MANUAL=grey) | [ ] |
 
 **API Endpoints:**
 - [ ] `GET /api/trades` — all trades
@@ -404,10 +443,23 @@ The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets
 | 7.7 | Brokers section (per-broker performance) | [ ] |
 | 7.8 | Date range filtering | [ ] |
 | 7.9 | User P&L data | [ ] |
+| 7.10 | Avg Hold Time stat card shows correct duration (6th card, id `statHoldTime`) | [ ] |
+| 7.11 | Hold time precision — `avg_hold_days` rounded to 4 decimals (not 1) for accurate h:m display | [ ] |
+| 7.12 | Trader style label: Scalper (< 1h), Day Trader (< 1d), Swing (< 14d), Position (>= 14d) | [ ] |
+| 7.13 | 6-column stat grid layout (`repeat(6, 1fr)`) accommodates Hold Time card | [ ] |
+| 7.14 | Direction breakdown cards row renders below stats (`#directionBreakdownRow` div) | [ ] |
+| 7.15 | Direction breakdown sourced from `performance_analytics.get_performance_v2()` → `direction_breakdown` dict | [ ] |
+| 7.16 | Each direction card shows: icon, label, trade count, WR% in accent color, PnL, win/loss bar | [ ] |
+| 7.17 | Stocks card: 📈 cyan `#00d4ff` with progress bar at WR% width | [ ] |
+| 7.18 | Calls card: 🟢 green `#30D158` with progress bar at WR% width | [ ] |
+| 7.19 | Puts card: 🔴 red `#FF453A` with progress bar at WR% width | [ ] |
+| 7.20 | Direction breakdown hidden when no closed positions exist | [ ] |
+| 7.21 | Direction derived from `sl.asset_type` + `sl.call_put` in SQL query (`performance_analytics.py:172`) | [ ] |
+| 7.22 | Direction aggregation per `trade_agg` entry — handles multi-closure lots correctly | [ ] |
 
 **API Endpoints:**
-- [ ] `GET /api/performance-v2` — enhanced analytics (sections param)
-- [ ] `GET /api/performance` — legacy performance
+- [ ] `GET /api/performance-v2` — enhanced analytics (sections param, includes `direction_breakdown`)
+- [ ] `GET /api/performance` — legacy performance (includes `direction_breakdown`)
 - [ ] `GET /api/performance/summary` — summary
 - [ ] `POST /api/performance/pnl` — P&L data
 - [ ] `POST /api/performance/pnl/users` — user P&L
@@ -429,11 +481,33 @@ The risk panel has **2 tabs**: "Targets & SL" and "Advanced", plus Quick Presets
 | 8.4 | Enhanced leaderboard metrics | [ ] |
 | 8.5 | Execution leaderboard (fill quality) | [ ] |
 | 8.6 | Sorting by different metrics | [ ] |
+| 8.7 | Channel tab loads data — query joins `channels → signal_lots (via channel_id) → lot_closures` (not through signals) | [ ] |
+| 8.8 | User tab loads data — query joins `signal_lots → lot_closures → channels` (via channel_id, not signal_id) | [ ] |
+| 8.9 | Channel `signal_lots.channel_id` is TEXT — join uses `CAST(sl.channel_id AS INTEGER) = c.id` | [ ] |
+| 8.10 | Market filter uses `c.market` (channels table) not `s.market` (signals table) — signals join removed | [ ] |
+| 8.11 | Avg Hold column in channel table — sortable header `avg_holding_days`, uses `formatHoldTime()` | [ ] |
+| 8.12 | Avg Hold column in user table — sortable header, sort case in user switch at line ~443 | [ ] |
+| 8.13 | Hold time precision — `ROUND(AVG(lc.holding_days), 4)` in channel query, `round(..., 4)` in Python | [ ] |
+| 8.14 | `formatHoldTime()` defined in leaderboard.html — same function as pnl_tracker.html | [ ] |
+| 8.15 | Win% by Type column in channel table — shows `formatDirectionBreakdown(channel.direction_breakdown)` | [ ] |
+| 8.16 | Win% by Type column in user table — shows `formatDirectionBreakdown(user.direction_breakdown)` | [ ] |
+| 8.17 | Direction breakdown pills: 📈 Stocks cyan, 🟢 Calls green, 🔴 Puts red with WR% | [ ] |
+| 8.18 | Direction pill tooltips show full detail: "stocks: 7W/3L $15.04" | [ ] |
+| 8.19 | Only categories with trades render (no empty pills for missing directions) | [ ] |
+| 8.20 | Direction breakdown query grouped by `channel_id, direction` — single query for all channels | [ ] |
+| 8.21 | User direction breakdown query grouped by `author_name, direction` — single query for all users | [ ] |
+| 8.22 | Time period filter (`all`, `year`, `month`, `week`, `today`, `custom`) works on channel tab | [ ] |
+| 8.23 | Time period filter works on user tab | [ ] |
+| 8.24 | Custom date range picker filters by `lc.closed_at` between start/end dates | [ ] |
+| 8.25 | Top Performer banner shows correct #1 channel/user based on TQS sort | [ ] |
+| 8.26 | Top/Bottom 3 performers cards update when switching channel ↔ user view | [ ] |
+| 8.27 | `formatHoldTime()` renders: `< 1m` purple, `Nm` purple, `Nh Nm` cyan, `Nd Nh` orange, `Nd` green | [ ] |
+| 8.28 | Enhanced leaderboard join fixed — uses `channels → signal_lots (via channel_id)` not through signals | [ ] |
 
 **API Endpoints:**
-- [ ] `GET /api/leaderboard` — leaderboard data
-- [ ] `GET /api/leaderboard/users` — user rankings
-- [ ] `GET /api/leaderboard/enhanced` — enhanced metrics
+- [ ] `GET /api/leaderboard` — channel leaderboard (includes `direction_breakdown` per channel)
+- [ ] `GET /api/leaderboard/users` — user rankings (includes `direction_breakdown` per user)
+- [ ] `GET /api/leaderboard/enhanced` — enhanced metrics (join fixed to use channel_id)
 - [ ] `GET /api/leaderboard/execution` — execution quality
 
 ---
@@ -1247,6 +1321,36 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 | 17.60 | Options use 100x multiplier in lot closure PNL calc | [ ] |
 | 17.61 | Lot closure reconcile error is non-blocking (caught, logged, doesn't abort) | [ ] |
 
+#### Broker Fill Sync — All Brokers [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.63a | Webull fills synced via `get_order_history()` | [ ] |
+| 17.63b | Alpaca fills synced via `get_filled_orders()` or `get_orders(status='closed')` | [ ] |
+| 17.63c | Schwab fills synced via `get_order_history()` | [ ] |
+| 17.63d | Trading212 fills synced via `get_order_history()` (status=FILLED filter) | [ ] |
+| 17.63e | Tastytrade fills synced via `get_filled_orders()` | [ ] |
+| 17.63f | IBKR fills synced via `ib.trades()` — iterates filled trades with orderStatus.status='Filled' | [ ] |
+| 17.63g | IBKR fill extracts: orderId, symbol, filled qty, avgFillPrice, fills[-1].time | [ ] |
+| 17.63h | IBKR options extract expiry (YYYYMMDD→YYYY-MM-DD), strike, right | [ ] |
+| 17.63i | IBKR fill skipped when `filled_qty <= 0` or `avg_price <= 0` | [ ] |
+| 17.63j | STC fills update `pending_order_metadata` status to FILLED | [ ] |
+| 17.63k | STC fills hydrate `exit_fill_price` on lot_closures via `_record_execution_closure()` | [ ] |
+| 17.63l | BTO fills create `execution_lots` via `_record_execution_lot()` | [ ] |
+| 17.63m | Fill deduplication via `filled_orders` table UNIQUE constraint | [ ] |
+| 17.63n | Fill sync runs every 1 cycle (pending trades) or every 5 cycles (no pending) | [ ] |
+
+#### Exit Price Safety Guards [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.63o | `close_lot()` rejects `close_price <= 0` (returns None, does not create closure) | [ ] |
+| 17.63p | `close_lot()` rejects `close_price = None` (returns None) | [ ] |
+| 17.63q | `_build_stc_signal()` returns None when `position.current_price <= 0` | [ ] |
+| 17.63r | `_execute_exit()` handles `_build_stc_signal()` returning None (resets closing state) | [ ] |
+| 17.63s | Risk engine retries on next cycle when price unavailable (no permanent abort) | [ ] |
+| 17.63t | Lot P&L never shows -100% from $0 exit price (guard prevents it) | [ ] |
+
 #### Position Cache Atomic Save [GATE]
 
 | # | Test | Status |
@@ -1738,10 +1842,10 @@ done
 
 ---
 
-**Last Updated**: 2026-04-26
-**Version**: 4.1.0
-**Total Sections**: 35 main + 39 sub-sections
-**Total Test Cases**: 509 field-level checks
-**Total API Endpoint Checks**: 367 (all verified against running app)
+**Last Updated**: 2026-05-03
+**Version**: 4.3.0
+**Total Sections**: 35 main + 42 sub-sections
+**Total Test Cases**: 589 field-level checks
+**Total API Endpoint Checks**: 374 (all verified against running app)
 **Total Database Tables**: 82+ (72 in bot_data.db, 6 agent, 9 india, 5 license)
 **Validation Script**: `scripts/validate_qa_playbook.py` — run to verify all routes

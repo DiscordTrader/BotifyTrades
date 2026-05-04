@@ -2722,7 +2722,50 @@ class BrokerSyncService:
             elif broker_name.startswith('TASTYTRADE'):
                 if hasattr(broker_instance, 'get_filled_orders'):
                     filled_orders = await asyncio.to_thread(broker_instance.get_filled_orders, 50)
-            
+            elif broker_name.startswith('IBKR'):
+                if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
+                    try:
+                        ib = broker_instance.ib
+                        for trade in ib.trades():
+                            if not trade.orderStatus or trade.orderStatus.status != 'Filled':
+                                continue
+                            order = trade.order
+                            contract = trade.contract
+                            if not contract:
+                                continue
+                            filled_qty = int(trade.orderStatus.filled) if trade.orderStatus.filled else 0
+                            avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus.avgFillPrice else 0
+                            if filled_qty <= 0 or avg_price <= 0:
+                                continue
+                            action = order.action if hasattr(order, 'action') else ''
+                            side = 'BTO' if action == 'BUY' else 'STC'
+                            asset_type = 'option' if contract.secType == 'OPT' else 'stock'
+                            filled_time = None
+                            if trade.fills:
+                                filled_time = trade.fills[-1].time.isoformat() if trade.fills[-1].time else None
+                            if not filled_time:
+                                filled_time = datetime.now().isoformat()
+                            order_entry = {
+                                'order_id': str(order.orderId),
+                                'symbol': contract.symbol,
+                                'quantity': filled_qty,
+                                'filled_price': avg_price,
+                                'action': side,
+                                'filled_time': filled_time,
+                                'asset_type': asset_type,
+                            }
+                            if asset_type == 'option':
+                                expiry_raw = contract.lastTradeDateOrContractMonth or ''
+                                if len(expiry_raw) == 8:
+                                    order_entry['expiry'] = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
+                                else:
+                                    order_entry['expiry'] = expiry_raw
+                                order_entry['strike'] = contract.strike
+                                order_entry['direction'] = contract.right
+                            filled_orders.append(order_entry)
+                    except Exception as e:
+                        print(f"[SYNC] IBKR filled orders error: {e}")
+
             if not filled_orders:
                 print(f"[SYNC] No filled orders from {broker_name}")
                 return

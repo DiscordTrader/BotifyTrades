@@ -33,7 +33,7 @@
 
 .dash-content { max-width: 1440px; margin: 0 auto; padding: 20px 24px; }
 
-.stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+.stats-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px; }
 .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 20px; overflow: hidden; min-width: 0; }
 .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
 .stat-primary { font-size: 1.8rem; font-weight: 700; color: var(--accent-blue); line-height: 1.2; }
@@ -135,6 +135,84 @@
 @media (max-width: 480px) {
     .stats-row { grid-template-columns: 1fr; }
 }
+
+/* ── Symbol Performance Tab ── */
+.sym-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+}
+.sym-sort-pills { display: flex; gap: 4px; }
+.sym-sort-btn {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.sym-sort-btn:hover { color: var(--text-primary); border-color: var(--accent-blue); }
+.sym-sort-btn.active { background: rgba(0,212,255,0.1); color: var(--accent-blue); border-color: rgba(0,212,255,0.25); }
+.sym-count { font-size: 0.72rem; color: var(--text-muted); }
+.sym-table { width: 100%; border-collapse: collapse; }
+.sym-table th {
+    padding: 10px 16px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    text-align: left;
+    font-weight: 500;
+    background: var(--bg-elevated);
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+    white-space: nowrap;
+}
+.sym-table th:hover { color: var(--text-primary); }
+.sym-table th.sorted { color: var(--accent-blue); }
+.sym-table td {
+    padding: 11px 16px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+.sym-table tr:hover td { background: var(--bg-elevated); }
+.sym-table .sym-name { font-weight: 700; letter-spacing: -0.2px; }
+.sym-table .sym-badge {
+    display: inline-block;
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.sym-badge-best { background: rgba(0,200,83,0.12); color: var(--accent-green); }
+.sym-badge-worst { background: rgba(255,82,82,0.12); color: var(--accent-red); }
+.sym-wr-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+}
+.sym-wr-track {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+}
+.sym-wr-fill { height: 100%; border-radius: 2px; }
+.sym-wr-pct { font-size: 0.78rem; font-weight: 700; min-width: 38px; text-align: right; }
 </style>
 
 <div class="dash-container">
@@ -201,6 +279,16 @@
                         <div id="winDonutLegend" class="stat-donut-legend"></div>
                     </div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Hold Time</div>
+                    <div id="statHoldTime" class="stat-primary">—</div>
+                    <div id="statHoldSub" class="stat-sub">avg per trade</div>
+                </div>
+            </div>
+
+            <!-- Direction Breakdown (Stocks / Calls / Puts) -->
+            <div id="directionBreakdownRow" style="display:none; margin-bottom:24px;">
+                <div style="display:flex; gap:12px; flex-wrap:wrap;" id="directionCards"></div>
             </div>
 
             <div class="main-grid">
@@ -234,6 +322,7 @@
                 <div class="bottom-tabs">
                     <div class="bottom-tab active" data-tab="recent">Recent trades</div>
                     <div class="bottom-tab" data-tab="open">Open positions</div>
+                    <div class="bottom-tab" data-tab="symbols">Symbol performance</div>
                 </div>
                 <div id="tradesContent">
                     <table class="trades-table">
@@ -256,6 +345,7 @@
                     </table>
                     <div class="trades-pagination" id="tradesPagination"></div>
                 </div>
+                <div id="symbolsContent" style="display:none;"></div>
             </div>
         </div>
     </div>
@@ -311,7 +401,15 @@ document.addEventListener('DOMContentLoaded', function() {
             this.classList.add('active');
             currentTab = this.dataset.tab;
             journalPage = 1;
-            loadJournal();
+            if (currentTab === 'symbols') {
+                document.getElementById('tradesContent').style.display = 'none';
+                document.getElementById('symbolsContent').style.display = 'block';
+                renderSymbolTable();
+            } else {
+                document.getElementById('tradesContent').style.display = 'block';
+                document.getElementById('symbolsContent').style.display = 'none';
+                loadJournal();
+            }
         });
     });
 });
@@ -340,6 +438,7 @@ async function loadDashboard() {
         if(!data.success) throw new Error(data.error||'Unknown');
         cachedPerf = data;
         renderStats(data.performance);
+        renderSymbolPerformance(data.edge);
         renderCalendar(data.calendar);
         renderWeeks(data.calendar);
         renderCumChart(data.calendar);
@@ -410,6 +509,132 @@ function renderStats(p) {
     wrEl.textContent = wr.toFixed(2) + '%';
     wrEl.className = 'stat-primary ' + (wr>=50?'green':'red');
     renderWinDonut(p.wins||0, p.losses||0, p.breakeven||0);
+
+    let holdDays = parseFloat(p.avg_hold_days)||0;
+    let holdEl = document.getElementById('statHoldTime');
+    if (holdDays <= 0) { holdEl.textContent = '—'; }
+    else if (holdDays < 0.042) { holdEl.textContent = Math.round(holdDays * 1440) + 'm'; holdEl.className = 'stat-primary'; holdEl.style.color = '#E040FB'; }
+    else if (holdDays < 1) { let hh = Math.floor(holdDays*24), mm = Math.round((holdDays*24-hh)*60); holdEl.textContent = hh + 'h' + (mm>0?' '+mm+'m':''); holdEl.className = 'stat-primary'; holdEl.style.color = '#00d4ff'; }
+    else if (holdDays < 7) { let dd = Math.floor(holdDays), hh = Math.round((holdDays-dd)*24); holdEl.textContent = dd + 'd' + (hh>0?' '+hh+'h':''); holdEl.className = 'stat-primary'; holdEl.style.color = '#FF9F0A'; }
+    else { holdEl.textContent = Math.round(holdDays) + 'd'; holdEl.className = 'stat-primary'; holdEl.style.color = '#30D158'; }
+    let styleLabel = holdDays < 0.042 ? 'Scalper' : (holdDays < 1 ? 'Day Trader' : (holdDays < 14 ? 'Swing' : 'Position'));
+    document.getElementById('statHoldSub').textContent = styleLabel + ' style';
+
+    // Direction breakdown (Stocks / Calls / Puts)
+    const db = p.direction_breakdown;
+    const dirRow = document.getElementById('directionBreakdownRow');
+    const dirCards = document.getElementById('directionCards');
+    if (db && Object.keys(db).length > 0) {
+        dirRow.style.display = 'block';
+        const order = ['stocks', 'calls', 'puts'];
+        const labels = { stocks: 'Stocks', calls: 'Calls', puts: 'Puts' };
+        const icons = { stocks: '📈', calls: '🟢', puts: '🔴' };
+        const colors = { stocks: '#00d4ff', calls: '#30D158', puts: '#FF453A' };
+        let html = '';
+        for (const dir of order) {
+            const d = db[dir];
+            if (!d || !d.trades) continue;
+            const c = colors[dir];
+            const pnlCls = d.pnl >= 0 ? '#30D158' : '#FF453A';
+            html += `<div style="flex:1;min-width:160px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:10px;padding:14px 18px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <span style="font-size:1.1rem;">${icons[dir]}</span>
+                    <span style="font-weight:700;font-size:0.875rem;color:var(--text-primary);">${labels[dir]}</span>
+                    <span style="margin-left:auto;font-size:0.75rem;color:var(--text-muted);">${d.trades} trades</span>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:12px;">
+                    <span style="font-size:1.25rem;font-weight:700;color:${c};">${d.win_rate}%</span>
+                    <span style="font-size:0.75rem;color:var(--text-muted);">WR</span>
+                    <span style="margin-left:auto;font-size:0.8125rem;font-weight:600;color:${pnlCls};">$${d.pnl.toFixed(2)}</span>
+                </div>
+                <div style="margin-top:6px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;">
+                    <div style="height:100%;width:${d.win_rate}%;background:${c};border-radius:2px;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.6875rem;color:var(--text-muted);">
+                    <span>${d.wins}W / ${d.losses}L</span>
+                </div>
+            </div>`;
+        }
+        dirCards.innerHTML = html;
+    } else {
+        dirRow.style.display = 'none';
+    }
+}
+
+let _symbolData = [];
+let _symbolSort = 'trades';
+let _symbolSortDir = 'desc';
+
+function renderSymbolPerformance(edge) {
+    if (edge && edge.by_symbol) _symbolData = edge.by_symbol;
+}
+
+function sortSymbolsBy(field) {
+    if (_symbolSort === field) _symbolSortDir = _symbolSortDir === 'desc' ? 'asc' : 'desc';
+    else { _symbolSort = field; _symbolSortDir = 'desc'; }
+    renderSymbolTable();
+}
+
+function _fmtHold(d) {
+    if (!d || d <= 0) return '—';
+    if (d < 0.042) return Math.round(d * 1440) + 'm';
+    if (d < 1) { let h = Math.floor(d*24), m = Math.round((d*24-h)*60); return h+'h'+(m>0?' '+m+'m':''); }
+    if (d < 7) { let dd = Math.floor(d), h = Math.round((d-dd)*24); return dd+'d'+(h>0?' '+h+'h':''); }
+    return Math.round(d) + 'd';
+}
+
+function renderSymbolTable() {
+    const container = document.getElementById('symbolsContent');
+    if (!_symbolData.length) {
+        container.innerHTML = '<div class="empty-state">No symbol data available</div>';
+        return;
+    }
+
+    let sorted = [..._symbolData];
+    const dir = _symbolSortDir === 'desc' ? -1 : 1;
+    if (_symbolSort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name) * dir);
+    else sorted.sort((a, b) => (a[_symbolSort] - b[_symbolSort]) * dir);
+
+    let bestPnl = -Infinity, worstPnl = Infinity, bestSym = '', worstSym = '';
+    sorted.forEach(s => {
+        if (s.pnl > bestPnl) { bestPnl = s.pnl; bestSym = s.name; }
+        if (s.pnl < worstPnl) { worstPnl = s.pnl; worstSym = s.name; }
+    });
+
+    const thCls = (f) => _symbolSort === f ? ' class="sorted"' : '';
+    const arrow = (f) => _symbolSort === f ? (_symbolSortDir === 'desc' ? ' ▾' : ' ▴') : '';
+
+    let html = `<table class="sym-table">
+        <thead><tr>
+            <th${thCls('name')} onclick="sortSymbolsBy('name')">Symbol${arrow('name')}</th>
+            <th${thCls('trades')} onclick="sortSymbolsBy('trades')">Trades${arrow('trades')}</th>
+            <th${thCls('win_rate')} onclick="sortSymbolsBy('win_rate')" style="min-width:160px">Win Rate${arrow('win_rate')}</th>
+            <th${thCls('pnl')} onclick="sortSymbolsBy('pnl')">Net P&L${arrow('pnl')}</th>
+            <th${thCls('avg_pnl')} onclick="sortSymbolsBy('avg_pnl')">Avg P&L${arrow('avg_pnl')}</th>
+            <th${thCls('avg_hold')} onclick="sortSymbolsBy('avg_hold')">Avg Hold${arrow('avg_hold')}</th>
+        </tr></thead><tbody>`;
+
+    sorted.forEach(s => {
+        const pnlCl = s.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+        const avgCl = s.avg_pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+        const wrColor = s.win_rate >= 60 ? 'var(--accent-green)' : (s.win_rate >= 40 ? 'var(--accent-gold)' : 'var(--accent-red)');
+        let badge = '';
+        if (s.name === bestSym && bestPnl > 0) badge = '<span class="sym-badge sym-badge-best">BEST</span>';
+        else if (s.name === worstSym && worstPnl < 0) badge = '<span class="sym-badge sym-badge-worst">WORST</span>';
+
+        html += `<tr>
+            <td><span class="sym-name">${s.name}</span>${badge}</td>
+            <td>${s.trades}</td>
+            <td><div class="sym-wr-bar"><div class="sym-wr-track"><div class="sym-wr-fill" style="width:${Math.min(s.win_rate,100)}%;background:${wrColor}"></div></div><span class="sym-wr-pct" style="color:${wrColor}">${s.win_rate}%</span></div></td>
+            <td class="${pnlCl}">${fmt$(s.pnl)}</td>
+            <td class="${avgCl}">${fmt$(s.avg_pnl)}</td>
+            <td style="color:var(--text-secondary)">${_fmtHold(s.avg_hold)}</td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    html += `<div style="padding:10px 16px;font-size:0.72rem;color:var(--text-muted);border-top:1px solid var(--border-color);">${sorted.length} symbol${sorted.length !== 1 ? 's' : ''} traded</div>`;
+    container.innerHTML = html;
 }
 
 function renderPFDonut(gp, gl) {

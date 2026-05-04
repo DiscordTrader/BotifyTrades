@@ -171,7 +171,8 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
 
     closed_sql = f"""
         SELECT lc.pnl, lc.pnl_percent, lc.holding_days, lc.closed_at,
-               sl.symbol, lc.lot_id, lc.closed_qty
+               sl.symbol, lc.lot_id, lc.closed_qty,
+               sl.asset_type, sl.call_put
         FROM lot_closures lc
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         WHERE {' AND '.join(where_closed)}
@@ -191,10 +192,20 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
         closed_at = _utc_to_est(r['closed_at']) or ''
         lot_id = r['lot_id'] or id(r)
 
+        asset_type = r['asset_type'] or 'stock'
+        call_put = r['call_put'] or ''
+        if asset_type == 'option' and call_put == 'C':
+            direction = 'calls'
+        elif asset_type == 'option' and call_put == 'P':
+            direction = 'puts'
+        else:
+            direction = 'stocks'
+
         if lot_id not in trade_agg:
             trade_agg[lot_id] = {'pnl': 0.0, 'pnl_pct_weighted': 0.0,
                                  'qty_sum': 0, 'hold_days': 0.0,
-                                 'symbol': sym, 'last_closed': closed_at}
+                                 'symbol': sym, 'last_closed': closed_at,
+                                 'direction': direction}
 
         t = trade_agg[lot_id]
         t['pnl'] += pnl
@@ -267,7 +278,7 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
     lr_frac = losses / total_closed if total_closed > 0 else 0
     expectancy = _safe_round(avg_win * wr_frac - abs(avg_loss) * lr_frac)
 
-    avg_hold_days = _safe_round(sum(hold_days_list) / len(hold_days_list)) if hold_days_list else 0.0
+    avg_hold_days = _safe_round(sum(hold_days_list) / len(hold_days_list), 4) if hold_days_list else 0.0
     median_pnl = _safe_round(statistics.median(pnl_list)) if pnl_list else 0.0
 
     cumulative = 0.0
@@ -332,6 +343,22 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
 
     total_trades = total_closed + total_open
 
+    # Direction breakdown (Stocks / Calls / Puts)
+    direction_breakdown = {}
+    for t in trade_agg.values():
+        d = t.get('direction', 'stocks')
+        if d not in direction_breakdown:
+            direction_breakdown[d] = {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0.0}
+        direction_breakdown[d]['trades'] += 1
+        direction_breakdown[d]['pnl'] += t['pnl']
+        if t['pnl'] > 0:
+            direction_breakdown[d]['wins'] += 1
+        else:
+            direction_breakdown[d]['losses'] += 1
+    for d in direction_breakdown.values():
+        d['win_rate'] = _safe_round((d['wins'] / d['trades'] * 100) if d['trades'] > 0 else 0, 1)
+        d['pnl'] = _safe_round(d['pnl'])
+
     return {
         'total_trades': total_trades,
         'total_closed': total_closed,
@@ -364,6 +391,7 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
         'sharpe_ratio': sharpe_ratio,
         'risk_reward_ratio': risk_reward_ratio,
         'total_fees': 0.0,
+        'direction_breakdown': direction_breakdown,
     }
 
 

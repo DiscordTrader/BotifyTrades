@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BotifyTrades — Bracket Orders Guide</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --card-hover: #222531;
+    --border: #2a2d3a;
+    --text: #e1e4ed;
+    --text-muted: #8b8fa3;
+    --accent: #6c5ce7;
+    --accent-glow: rgba(108,92,231,.15);
+    --green: #00b894;
+    --green-bg: rgba(0,184,148,.08);
+    --red: #ff6b6b;
+    --red-bg: rgba(255,107,107,.08);
+    --yellow: #feca57;
+    --yellow-bg: rgba(254,202,87,.08);
+    --blue: #54a0ff;
+    --blue-bg: rgba(84,160,255,.08);
+    --orange: #ff9f43;
+    --schwab: #00a0df;
+    --webull: #ff5722;
+    --ibkr: #d32f2f;
+    --tasty: #e91e63;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,.4);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    padding: 0;
+  }
+
+  /* ── Header ── */
+  .hero {
+    background: linear-gradient(135deg, #1a1d27 0%, #0f1117 50%, #1a1025 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 32px 40px;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .hero .subtitle {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .version-badge {
+    display: inline-block;
+    background: var(--accent-glow);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: .8rem;
+    font-weight: 600;
+    margin-top: 12px;
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+  /* ── Section Headers ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 48px 0 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-header:first-child { margin-top: 0; }
+  .section-num {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: .9rem;
+    flex-shrink: 0;
+  }
+  .section-header h2 { font-size: 1.5rem; font-weight: 600; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: #3a3d4a; }
+  .card h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card p { color: var(--text-muted); margin-bottom: 8px; }
+
+  /* ── Mode Cards ── */
+  .mode-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .mode-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    transition: all .2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .mode-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .mode-card.mode-both::before { background: var(--green); }
+  .mode-card.mode-sl::before { background: var(--red); }
+  .mode-card.mode-pt::before { background: var(--blue); }
+  .mode-card.mode-none::before { background: var(--yellow); }
+  .mode-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .mode-card .mode-icon { font-size: 2rem; margin-bottom: 8px; }
+  .mode-card .mode-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+  }
+  .mode-card .mode-value {
+    font-family: 'Consolas', monospace;
+    font-size: .85rem;
+    color: var(--accent);
+    background: var(--accent-glow);
+    padding: 2px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 8px;
+  }
+  .mode-card .mode-desc {
+    font-size: .88rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* ── Broker Tabs ── */
+  .broker-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0;
+    border-bottom: 2px solid var(--border);
+  }
+  .broker-tab {
+    padding: 12px 24px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: .95rem;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    color: var(--text-muted);
+    transition: all .2s;
+    user-select: none;
+  }
+  .broker-tab:hover { color: var(--text); background: rgba(255,255,255,.03); }
+  .broker-tab.active { border-bottom-color: var(--accent); color: var(--text); }
+  .broker-tab[data-broker="schwab"].active { border-bottom-color: var(--schwab); }
+  .broker-tab[data-broker="webull"].active { border-bottom-color: var(--webull); }
+  .broker-tab[data-broker="ibkr"].active { border-bottom-color: var(--ibkr); }
+  .broker-tab[data-broker="tasty"].active { border-bottom-color: var(--tasty); }
+  .broker-panel { display: none; padding: 24px 0; }
+  .broker-panel.active { display: block; }
+
+  /* ── Broker Badges ── */
+  .broker-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px;
+    border-radius: 6px;
+    font-size: .8rem;
+    font-weight: 600;
+  }
+  .broker-badge.schwab { background: rgba(0,160,223,.12); color: var(--schwab); border: 1px solid rgba(0,160,223,.3); }
+  .broker-badge.webull { background: rgba(255,87,34,.12); color: var(--webull); border: 1px solid rgba(255,87,34,.3); }
+  .broker-badge.ibkr { background: rgba(211,47,47,.12); color: var(--ibkr); border: 1px solid rgba(211,47,47,.3); }
+  .broker-badge.tasty { background: rgba(233,30,99,.12); color: var(--tasty); border: 1px solid rgba(233,30,99,.3); }
+
+  /* ── Support badges ── */
+  .support-native {
+    background: var(--green-bg); color: var(--green);
+    border: 1px solid rgba(0,184,148,.3);
+    padding: 2px 10px; border-radius: 4px;
+    font-size: .8rem; font-weight: 600;
+  }
+  .support-simulated {
+    background: var(--yellow-bg); color: var(--yellow);
+    border: 1px solid rgba(254,202,87,.3);
+    padding: 2px 10px; border-radius: 4px;
+    font-size: .8rem; font-weight: 600;
+  }
+  .support-none {
+    background: var(--red-bg); color: var(--red);
+    border: 1px solid rgba(255,107,107,.3);
+    padding: 2px 10px; border-radius: 4px;
+    font-size: .8rem; font-weight: 600;
+  }
+  .support-engine {
+    background: var(--blue-bg); color: var(--blue);
+    border: 1px solid rgba(84,160,255,.3);
+    padding: 2px 10px; border-radius: 4px;
+    font-size: .8rem; font-weight: 600;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: .92rem;
+  }
+  th {
+    text-align: left;
+    padding: 12px 16px;
+    background: rgba(108,92,231,.06);
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* ── Flow Diagrams ── */
+  .flow {
+    background: #13151d;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: .85rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    margin: 16px 0;
+    white-space: pre;
+  }
+  .flow .hl-green { color: var(--green); }
+  .flow .hl-red { color: var(--red); }
+  .flow .hl-blue { color: var(--blue); }
+  .flow .hl-yellow { color: var(--yellow); }
+  .flow .hl-accent { color: var(--accent); }
+  .flow .hl-muted { color: var(--text-muted); }
+  .flow .hl-schwab { color: var(--schwab); }
+
+  /* ── Code ── */
+  code {
+    font-family: 'Consolas', 'Fira Code', monospace;
+    background: rgba(108,92,231,.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: .88rem;
+    color: var(--accent);
+  }
+  .file-ref {
+    font-family: 'Consolas', monospace;
+    font-size: .82rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .file-ref::before { content: '📄'; }
+
+  /* ── Info boxes ── */
+  .info-box {
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin: 16px 0;
+    display: flex;
+    gap: 12px;
+    font-size: .92rem;
+  }
+  .info-box.warning {
+    background: var(--yellow-bg);
+    border: 1px solid rgba(254,202,87,.2);
+  }
+  .info-box.danger {
+    background: var(--red-bg);
+    border: 1px solid rgba(255,107,107,.2);
+  }
+  .info-box.success {
+    background: var(--green-bg);
+    border: 1px solid rgba(0,184,148,.2);
+  }
+  .info-box.info {
+    background: var(--blue-bg);
+    border: 1px solid rgba(84,160,255,.2);
+  }
+  .info-box .icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── Capability matrix ── */
+  .matrix-row {
+    display: grid;
+    grid-template-columns: 160px repeat(4, 1fr);
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .matrix-row.header {
+    font-weight: 700;
+    background: rgba(108,92,231,.06);
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 0;
+  }
+  .matrix-cell {
+    padding: 12px 14px;
+    font-size: .88rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+  .matrix-cell:first-child {
+    justify-content: flex-start;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .matrix-cell:last-child { border-right: none; }
+  .matrix-wrapper {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: 16px 0;
+  }
+  .check { color: var(--green); font-weight: 700; }
+  .cross { color: var(--red); font-weight: 700; }
+  .partial { color: var(--yellow); font-weight: 700; }
+
+  /* ── Tier diagram ── */
+  .tier-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tier-num {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: .85rem;
+    flex-shrink: 0;
+  }
+  .tier-num.sl { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,107,107,.3); }
+  .tier-num.pt1 { background: var(--green-bg); color: var(--green); border: 1px solid rgba(0,184,148,.3); }
+  .tier-num.pt2 { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(84,160,255,.3); }
+  .tier-num.pt3 { background: rgba(255,159,67,.08); color: var(--orange); border: 1px solid rgba(255,159,67,.3); }
+  .tier-arrow { color: var(--text-muted); font-size: 1.2rem; }
+
+  /* ── Nav ── */
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+  .toc h3 { margin-bottom: 12px; font-size: 1rem; }
+  .toc a {
+    color: var(--blue);
+    text-decoration: none;
+    display: block;
+    padding: 4px 0;
+    font-size: .92rem;
+  }
+  .toc a:hover { color: var(--accent); text-decoration: underline; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 1.6rem; }
+    .mode-grid { grid-template-columns: 1fr 1fr; }
+    .broker-tab { padding: 10px 14px; font-size: .85rem; }
+    .matrix-row { grid-template-columns: 120px repeat(4, 1fr); }
+    .matrix-cell { padding: 8px 6px; font-size: .78rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ HERO ═══════════════════ -->
+<div class="hero">
+  <h1>Bracket Orders Guide</h1>
+  <p class="subtitle">How BotifyTrades places Stop Loss and Profit Target orders across Schwab, Webull, IBKR, and Tastytrade</p>
+  <span class="version-badge">v9.3.1</span>
+</div>
+
+<div class="container">
+
+<!-- ═══════════════════ TOC ═══════════════════ -->
+<div class="toc">
+  <h3>Contents</h3>
+  <a href="#overview">1. What Are Bracket Orders?</a>
+  <a href="#modes">2. The 4 Bracket Modes</a>
+  <a href="#ui">3. UI Configuration</a>
+  <a href="#matrix">4. Broker Capability Matrix</a>
+  <a href="#brokers">5. Per-Broker Deep Dive</a>
+  <a href="#engine">6. Risk Engine Flow</a>
+  <a href="#cascade">7. Progressive PT Tier Cascade</a>
+  <a href="#sessions">8. Session &amp; Extended Hours</a>
+</div>
+
+<!-- ═══════════════════ 1. OVERVIEW ═══════════════════ -->
+<div class="section-header" id="overview">
+  <div class="section-num">1</div>
+  <h2>What Are Bracket Orders?</h2>
+</div>
+
+<div class="card">
+  <p>A <strong style="color:var(--text)">bracket order</strong> is a pair of exit orders placed on the broker <em>immediately after</em> your entry fills:</p>
+  <br>
+  <table>
+    <tr>
+      <td style="color:var(--red);font-weight:600">Stop Loss (SL)</td>
+      <td>A STOP order at a price <strong>below</strong> entry. If the stock drops to this price, broker auto-sells to limit your loss.</td>
+    </tr>
+    <tr>
+      <td style="color:var(--green);font-weight:600">Profit Target (PT)</td>
+      <td>A LIMIT order at a price <strong>above</strong> entry. If the stock rises to this price, broker auto-sells to lock in profit.</td>
+    </tr>
+  </table>
+  <br>
+  <div class="info-box info">
+    <span class="icon">&#128161;</span>
+    <div>
+      <strong>Why does this matter?</strong> Broker-side orders execute even if BotifyTrades is offline or your internet drops.
+      Without bracket orders, the risk engine manages exits in software — which requires the bot to be running.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 2. MODES ═══════════════════ -->
+<div class="section-header" id="modes">
+  <div class="section-num">2</div>
+  <h2>The 4 Bracket Modes</h2>
+</div>
+
+<p style="color:var(--text-muted);margin-bottom:16px">
+  Each channel can independently choose how bracket orders are handled via
+  <code>broker_bracket_mode</code> in the channel's risk settings.
+</p>
+
+<div class="mode-grid">
+  <div class="mode-card mode-both">
+    <div class="mode-icon">&#128737;</div>
+    <div class="mode-name">Both</div>
+    <div class="mode-value">both</div>
+    <div class="mode-desc">
+      SL <strong>and</strong> PT placed on broker.<br>
+      Maximum protection — broker handles both exits even if bot goes offline.
+    </div>
+  </div>
+  <div class="mode-card mode-sl">
+    <div class="mode-icon">&#128721;</div>
+    <div class="mode-name">SL Only</div>
+    <div class="mode-value">sl_only</div>
+    <div class="mode-desc">
+      Only Stop Loss on broker.<br>
+      PT managed by risk engine in software. Useful for Webull options that reject simultaneous orders.
+    </div>
+  </div>
+  <div class="mode-card mode-pt">
+    <div class="mode-icon">&#127919;</div>
+    <div class="mode-name">PT Only</div>
+    <div class="mode-value">pt_only</div>
+    <div class="mode-desc">
+      Only Profit Target on broker.<br>
+      SL managed by risk engine. Useful when you want dynamic trailing stops without broker interference.
+    </div>
+  </div>
+  <div class="mode-card mode-none">
+    <div class="mode-icon">&#9898;</div>
+    <div class="mode-name">Disabled</div>
+    <div class="mode-value">none</div>
+    <div class="mode-desc">
+      No broker orders for SL/PT.<br>
+      Risk engine manages all exits internally. Bot <strong>must</strong> be running to exit positions.
+    </div>
+  </div>
+</div>
+
+<div class="info-box warning">
+  <span class="icon">&#9888;&#65039;</span>
+  <div>
+    <strong>Default is <code>both</code></strong> — this is the safest option.
+    Only change to <code>sl_only</code>, <code>pt_only</code>, or <code>none</code> if you understand the trade-offs.
+    With <code>none</code>, the bot must be online to manage exits.
+  </div>
+</div>
+
+<!-- ═══════════════════ 3. UI ═══════════════════ -->
+<div class="section-header" id="ui">
+  <div class="section-num">3</div>
+  <h2>UI Configuration</h2>
+</div>
+
+<div class="card">
+  <h3>&#9881;&#65039; Where to Find It</h3>
+  <p style="color:var(--text)">
+    <strong>Trading</strong> &rarr; <strong>Channels</strong> &rarr; select a channel &rarr;
+    <strong>Execution</strong> tab &rarr; <strong>Risk Management</strong> section &rarr;
+    <strong>Advanced</strong> &rarr; <strong>Broker Bracket Orders</strong>
+  </p>
+  <br>
+  <p>You'll see 4 radio buttons:</p>
+  <table>
+    <tr><td><code>Both SL and PT</code></td><td>Places stop loss + profit target on broker</td></tr>
+    <tr><td><code>Stop Loss Only</code></td><td>Only SL on broker; PT managed by risk engine</td></tr>
+    <tr><td><code>Profit Target Only</code></td><td>Only PT on broker; SL managed by risk engine</td></tr>
+    <tr><td><code>Disabled</code></td><td>No bracket orders; risk engine handles everything</td></tr>
+  </table>
+  <div class="file-ref">gui_app/static/js/channels.js : lines 416–438 (radio buttons), line 1506 (form capture)</div>
+</div>
+
+<div class="card">
+  <h3>&#128269; How Settings Flow Through Code</h3>
+<div class="flow"><span class="hl-muted">UI Radio Button</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-blue">PUT /api/channels/&lt;id&gt;</span>  <span class="hl-muted">← saves to database</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-green">channels.broker_bracket_mode</span> column in SQLite  <span class="hl-muted">(default: 'both')</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-yellow">ChannelRiskSettings</span> dataclass loads from DB
+    <span class="hl-accent">├──</span> <span class="hl-red">allows_broker_sl</span> → True if mode in ('both', 'sl_only')
+    <span class="hl-accent">└──</span> <span class="hl-green">allows_broker_pt</span> → True if mode in ('both', 'pt_only')
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-accent">position_monitor._place_initial_broker_bracket()</span>
+    <span class="hl-muted">Reads allows_broker_sl / allows_broker_pt</span>
+    <span class="hl-muted">Decides which orders to place on broker</span></div>
+  <div class="file-ref">src/risk/risk_types.py : lines 115–124 (properties)</div>
+  <div class="file-ref">gui_app/database.py : lines 508–513 (migration)</div>
+  <div class="file-ref">gui_app/routes.py : line 2018 (PUT endpoint)</div>
+</div>
+
+<!-- ═══════════════════ 4. MATRIX ═══════════════════ -->
+<div class="section-header" id="matrix">
+  <div class="section-num">4</div>
+  <h2>Broker Capability Matrix</h2>
+</div>
+
+<div class="matrix-wrapper">
+  <div class="matrix-row header">
+    <div class="matrix-cell">Capability</div>
+    <div class="matrix-cell" style="color:var(--schwab)">Schwab</div>
+    <div class="matrix-cell" style="color:var(--webull)">Webull</div>
+    <div class="matrix-cell" style="color:var(--ibkr)">IBKR</div>
+    <div class="matrix-cell" style="color:var(--tasty)">Tastytrade</div>
+  </div>
+  <div class="matrix-row">
+    <div class="matrix-cell">Stock Orders</div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+  </div>
+  <div class="matrix-row">
+    <div class="matrix-cell">Option Orders</div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+    <div class="matrix-cell"><span class="check">&#10003;</span></div>
+  </div>
+  <div class="matrix-row">
+    <div class="matrix-cell">Stop Orders</div>
+    <div class="matrix-cell"><span class="check">&#10003; Native</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+  </div>
+  <div class="matrix-row">
+    <div class="matrix-cell">OCO Orders</div>
+    <div class="matrix-cell"><span class="check">&#10003; Native</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+  </div>
+  <div class="matrix-row">
+    <div class="matrix-cell">Bracket Orders</div>
+    <div class="matrix-cell"><span class="check">&#10003; TRIGGER+OCO</span></div>
+    <div class="matrix-cell"><span class="partial">&#9888; Simulated</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+    <div class="matrix-cell"><span class="cross">&#10007;</span></div>
+  </div>
+  <div class="matrix-row">
+    <div class="matrix-cell">Bracket Strategy</div>
+    <div class="matrix-cell"><span class="support-native">Native OCO</span></div>
+    <div class="matrix-cell"><span class="support-simulated">3 Separate</span></div>
+    <div class="matrix-cell"><span class="support-engine">Risk Engine</span></div>
+    <div class="matrix-cell"><span class="support-engine">Risk Engine</span></div>
+  </div>
+  <div class="matrix-row">
+    <div class="matrix-cell">Extended Hours</div>
+    <div class="matrix-cell"><span class="check">SEAMLESS</span></div>
+    <div class="matrix-cell"><span class="check">outsideRTH</span></div>
+    <div class="matrix-cell"><span class="check">outsideRth</span></div>
+    <div class="matrix-cell"><span class="cross">DAY only</span></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 5. BROKERS ═══════════════════ -->
+<div class="section-header" id="brokers">
+  <div class="section-num">5</div>
+  <h2>Per-Broker Deep Dive</h2>
+</div>
+
+<!-- ── Broker Tabs ── -->
+<div class="broker-tabs">
+  <div class="broker-tab active" data-broker="schwab" onclick="showBroker('schwab')">Schwab</div>
+  <div class="broker-tab" data-broker="webull" onclick="showBroker('webull')">Webull</div>
+  <div class="broker-tab" data-broker="ibkr" onclick="showBroker('ibkr')">IBKR</div>
+  <div class="broker-tab" data-broker="tasty" onclick="showBroker('tasty')">Tastytrade</div>
+</div>
+
+<!-- ══ SCHWAB ══ -->
+<div class="broker-panel active" id="panel-schwab">
+  <div class="card">
+    <h3><span class="broker-badge schwab">SCHWAB</span> <span class="support-native">Native OCO + TRIGGER</span></h3>
+    <p style="color:var(--text)">Schwab is the only broker with full native bracket support. It uses a <strong>TRIGGER</strong> parent order wrapping an <strong>OCO</strong> (One-Cancels-Other) child group.</p>
+  </div>
+
+  <div class="card">
+    <h3>&#128994; Bracket ENABLED (mode: <code>both</code>)</h3>
+    <p>After entry fills, the risk engine places <strong>two independent orders</strong> on Schwab:</p>
+<div class="flow"><span class="hl-muted">Entry fills at $100.00 (100 shares)</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├──</span> <span class="hl-red">STOP ORDER</span> (SL)
+    <span class="hl-accent">│</span>   <span class="hl-muted">├─</span> <span class="hl-schwab">schwab.place_stop_order()</span>
+    <span class="hl-accent">│</span>   <span class="hl-muted">├─</span> symbol: AAPL, qty: <span class="hl-yellow">100</span> (full position)
+    <span class="hl-accent">│</span>   <span class="hl-muted">├─</span> stop_price: <span class="hl-red">$95.00</span> (5% below entry)
+    <span class="hl-accent">│</span>   <span class="hl-muted">├─</span> session: <span class="hl-yellow">NORMAL</span> (forced — SEAMLESS rejects STOP)
+    <span class="hl-accent">│</span>   <span class="hl-muted">└─</span> duration: GOOD_TILL_CANCEL
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">└──</span> <span class="hl-green">LIMIT ORDER</span> (PT1)
+        <span class="hl-muted">├─</span> <span class="hl-schwab">schwab.place_stock_order(action='STC', price=$110)</span>
+        <span class="hl-muted">├─</span> qty: <span class="hl-yellow">40</span> (PT1 trim — e.g. 40% of position)
+        <span class="hl-muted">├─</span> price: <span class="hl-green">$110.00</span> (10% above entry)
+        <span class="hl-muted">└��</span> <span class="hl-accent">_skip_cancel_check=True</span> ← prevents SL from being cancelled!</div>
+    <div class="info-box danger">
+      <span class="icon">&#9888;&#65039;</span>
+      <div>
+        <strong>Critical: <code>_skip_cancel_check=True</code></strong><br>
+        Without this flag, Schwab's <code>_cancel_conflicting_sell_orders()</code> would detect the SL stop as a
+        "conflicting sell order" and cancel it when placing the PT limit. This was the root cause of
+        the SL cancellation bug fixed in v9.3.0.
+      </div>
+    </div>
+    <div class="file-ref">src/brokers/schwab_broker.py : line 2574 (place_stop_order), line 1094 (place_stock_order)</div>
+    <div class="file-ref">src/risk/position_monitor.py : lines 4879–4950 (Schwab bracket placement)</div>
+  </div>
+
+  <div class="card">
+    <h3>&#128308; Bracket DISABLED (mode: <code>none</code>)</h3>
+<div class="flow"><span class="hl-muted">Entry fills at $100.00</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-yellow">broker_bracket_mode == 'none'</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-muted">Skip broker orders entirely</span>
+<span class="hl-accent">cache.broker_orders_placed = True</span>  <span class="hl-muted">← marks as "done" so it doesn't retry</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-blue">Risk Engine monitors internally:</span>
+    <span class="hl-muted">├─</span> Polls price every monitoring cycle
+    <span class="hl-muted">├─</span> If price ≤ SL → <span class="hl-schwab">schwab.place_stock_order('STC', market)</span>
+    <span class="hl-muted">└─</span> If price ≥ PT → <span class="hl-schwab">schwab.place_stock_order('STC', limit)</span>
+    <span class="hl-red">⚠ Bot MUST be running — no broker protection if offline</span></div>
+  </div>
+
+  <div class="card">
+    <h3>&#128296; Schwab Methods Summary</h3>
+    <table>
+      <tr><th>Method</th><th>Line</th><th>Purpose</th></tr>
+      <tr><td><code>place_stock_order()</code></td><td>1094</td><td>Market or limit equity order</td></tr>
+      <tr><td><code>place_option_order()</code></td><td>1346</td><td>Limit option order with CBOE rounding</td></tr>
+      <tr><td><code>place_stop_order()</code></td><td>2574</td><td>STOP order — always NORMAL session</td></tr>
+      <tr><td><code>place_oco_order()</code></td><td>2865</td><td>Native OCO: SL + PT as linked pair</td></tr>
+      <tr><td><code>place_bracket_order()</code></td><td>3000</td><td>Full bracket: TRIGGER + nested OCO</td></tr>
+      <tr><td><code>_cancel_conflicting_sell_orders()</code></td><td>1006</td><td>Walks nested orders, cancels sell legs</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ══ WEBULL ══ -->
+<div class="broker-panel" id="panel-webull">
+  <div class="card">
+    <h3><span class="broker-badge webull">WEBULL</span> <span class="support-simulated">Simulated Brackets</span></h3>
+    <p style="color:var(--text)">Webull does <strong>NOT</strong> support native OCO or bracket orders. BotifyTrades simulates brackets by placing <strong>3 separate, unlinked orders</strong>.</p>
+  </div>
+
+  <div class="card">
+    <h3>&#128994; Bracket ENABLED (mode: <code>both</code>)</h3>
+<div class="flow"><span class="hl-muted">Entry fills at $100.00</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├──</span> <span class="hl-yellow">Order 1: ENTRY</span>
+    <span class="hl-accent">│</span>   <span class="hl-muted">└─</span> <span class="hl-accent">webull.place_stock_order('BTO')</span> — MKT or LMT, GTC
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├──</span> <span class="hl-red">Order 2: STOP LOSS</span> (independent — NOT linked to entry)
+    <span class="hl-accent">│</span>   <span class="hl-muted">└─</span> <span class="hl-accent">webull.place_stock_order('STC')</span> — STP type
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">└──</span> <span class="hl-green">Order 3: PROFIT TARGET</span> (independent — NOT linked)
+        <span class="hl-muted">└─</span> <span class="hl-accent">webull.place_stock_order('STC')</span> — LMT type
+
+<span class="hl-red">⚠ WARNING: These are 3 SEPARATE orders!</span>
+<span class="hl-red">  If PT fills, the SL is NOT auto-cancelled.</span>
+<span class="hl-red">  Risk engine must manually cancel the remaining order.</span></div>
+    <div class="info-box warning">
+      <span class="icon">&#9888;&#65039;</span>
+      <div>
+        <strong>Webull Limitation:</strong> Since orders aren't linked, if PT fills, the risk engine must detect the fill
+        and cancel the SL order. If the bot is offline when PT fills, the SL remains active and could trigger an
+        unwanted sell on a subsequent dip. The <code>sl_only</code> mode is recommended for Webull options.
+      </div>
+    </div>
+    <div class="file-ref">src/brokers/webull_broker.py : line 1037 (place_stock_order), line 1236 (place_bracket_order)</div>
+  </div>
+
+  <div class="card">
+    <h3>&#128308; Bracket DISABLED (mode: <code>none</code>)</h3>
+    <p>Same as Schwab disabled — risk engine monitors price internally and places market/limit STC orders when SL/PT levels are hit. Bot must be running.</p>
+  </div>
+
+  <div class="card">
+    <h3>&#128296; Webull Methods Summary</h3>
+    <table>
+      <tr><th>Method</th><th>Line</th><th>Purpose</th></tr>
+      <tr><td><code>place_stock_order()</code></td><td>1037</td><td>Market or limit equity. Auto-converts to limit in extended hours (&#177;3%)</td></tr>
+      <tr><td><code>place_option_order()</code></td><td>1404</td><td>Option order with risk pricing for STC</td></tr>
+      <tr><td><code>place_bracket_order()</code></td><td>1236</td><td>Simulated: 3 independent orders (entry + SL + PT)</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ══ IBKR ══ -->
+<div class="broker-panel" id="panel-ibkr">
+  <div class="card">
+    <h3><span class="broker-badge ibkr">IBKR</span> <span class="support-engine">Risk Engine Only</span></h3>
+    <p style="color:var(--text)">Interactive Brokers wrapper has <strong>no bracket, OCO, or stop order methods implemented</strong>. All exit management is handled entirely by the risk engine.</p>
+  </div>
+
+  <div class="card">
+    <h3>&#128308; All Modes — Same Behavior</h3>
+<div class="flow"><span class="hl-muted">Regardless of bracket mode setting, IBKR always works the same:</span>
+
+<span class="hl-muted">Entry fills at $100.00</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-blue">Risk Engine monitors internally</span>
+    <span class="hl-muted">├─</span> Price polled every cycle
+    <span class="hl-muted">├─</span> If price ≤ SL → <span class="hl-accent">ibkr.place_stock_order('STC', market)</span>
+    <span class="hl-muted">├─</span> If price ≥ PT → <span class="hl-accent">ibkr.place_stock_order('STC', limit)</span>
+    <span class="hl-muted">└─</span> Trailing stops calculated in software
+
+<span class="hl-yellow">Note: IBKR supports OCA (One-Cancels-All) groups natively via ib_insync,</span>
+<span class="hl-yellow">but BotifyTrades has not wired them into the broker wrapper yet.</span></div>
+    <div class="info-box info">
+      <span class="icon">&#128161;</span>
+      <div>
+        <strong>Future Enhancement:</strong> IBKR's ib_insync library supports OCA groups natively.
+        Wiring <code>place_stop_order()</code> and <code>place_oco_order()</code> would enable true broker-side bracket protection.
+      </div>
+    </div>
+    <div class="file-ref">src/brokers/ibkr_broker.py : line 344 (place_stock_order), line 420 (place_option_order)</div>
+  </div>
+
+  <div class="card">
+    <h3>&#128296; IBKR Methods Summary</h3>
+    <table>
+      <tr><th>Method</th><th>Line</th><th>Purpose</th></tr>
+      <tr><td><code>place_stock_order()</code></td><td>344</td><td>Market or limit equity via ib_insync</td></tr>
+      <tr><td><code>place_option_order()</code></td><td>420</td><td>Option order with expiry normalization</td></tr>
+      <tr><td style="color:var(--text-muted)"><code>place_bracket_order()</code></td><td>—</td><td style="color:var(--red)">Not implemented</td></tr>
+      <tr><td style="color:var(--text-muted)"><code>place_stop_order()</code></td><td>—</td><td style="color:var(--red)">Not implemented</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ══ TASTYTRADE ══ -->
+<div class="broker-panel" id="panel-tasty">
+  <div class="card">
+    <h3><span class="broker-badge tasty">TASTYTRADE</span> <span class="support-engine">Risk Engine Only</span></h3>
+    <p style="color:var(--text)">Tastytrade wrapper has <strong>no bracket, OCO, or stop order methods</strong>. Like IBKR, all exit management is handled by the risk engine.</p>
+  </div>
+
+  <div class="card">
+    <h3>&#128308; All Modes — Same Behavior</h3>
+<div class="flow"><span class="hl-muted">Regardless of bracket mode setting, Tastytrade always works the same:</span>
+
+<span class="hl-muted">Entry fills at $100.00</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-blue">Risk Engine monitors internally</span>
+    <span class="hl-muted">├─</span> Price polled every cycle
+    <span class="hl-muted">├─</span> If price ≤ SL → <span class="hl-accent">tasty.place_stock_order('STC', market)</span>
+    <span class="hl-muted">├─</span> If price ≥ PT → <span class="hl-accent">tasty.place_stock_order('STC', limit)</span>
+    <span class="hl-muted">└─</span> Time-in-force: always DAY (no GTC)
+
+<span class="hl-yellow">Note: Tastytrade SDK supports multi-leg orders,</span>
+<span class="hl-yellow">but bracket/OCO wiring is not exposed in this wrapper.</span></div>
+    <div class="file-ref">src/brokers/tastytrade_broker.py : line 637 (place_stock_order), line 738 (place_option_order)</div>
+  </div>
+
+  <div class="card">
+    <h3>&#128296; Tastytrade Methods Summary</h3>
+    <table>
+      <tr><th>Method</th><th>Line</th><th>Purpose</th></tr>
+      <tr><td><code>place_stock_order()</code></td><td>637</td><td>Market or limit equity, always DAY duration</td></tr>
+      <tr><td><code>place_option_order()</code></td><td>738</td><td>Option order with chain lookup + strike snap</td></tr>
+      <tr><td style="color:var(--text-muted)"><code>place_bracket_order()</code></td><td>—</td><td style="color:var(--red)">Not implemented</td></tr>
+      <tr><td style="color:var(--text-muted)"><code>place_stop_order()</code></td><td>—</td><td style="color:var(--red)">Not implemented</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════ 6. ENGINE ═══════════════════ -->
+<div class="section-header" id="engine">
+  <div class="section-num">6</div>
+  <h2>Risk Engine Flow</h2>
+</div>
+
+<div class="card">
+  <h3>&#9881;&#65039; Decision Tree After Entry Fill</h3>
+<div class="flow"><span class="hl-accent">Position entry fills</span>  <span class="hl-muted">(detected by monitoring loop at line 4053)</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">▼</span>
+<span class="hl-yellow">Read broker_bracket_mode from channel settings</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├── mode == 'none'</span>
+    <span class="hl-accent">│</span>       <span class="hl-accent">└──</span> <span class="hl-yellow">Skip all broker orders</span>
+    <span class="hl-accent">│</span>           Set cache.broker_orders_placed = True
+    <span class="hl-accent">│</span>           <span class="hl-blue">Risk engine manages SL + PT in software</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├── mode == 'sl_only'</span>
+    <span class="hl-accent">│</span>       <span class="hl-accent">├──</span> <span class="hl-red">Place STOP order on broker</span> (full qty)
+    <span class="hl-accent">│</span>       <span class="hl-accent">└──</span> <span class="hl-blue">PT managed by risk engine</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├── mode == 'pt_only'</span>
+    <span class="hl-accent">│</span>       <span class="hl-accent">├──</span> <span class="hl-green">Place LIMIT order on broker</span> (PT1 qty)
+    <span class="hl-accent">│</span>       <span class="hl-accent">└──</span> <span class="hl-blue">SL managed by risk engine</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">└── mode == 'both'</span> (default)
+            <span class="hl-accent">├──</span> <span class="hl-red">Place STOP order on broker</span> (full qty)
+            <span class="hl-accent">└──</span> <span class="hl-green">Place LIMIT order on broker</span> (PT1 qty, _skip_cancel_check=True)</div>
+  <div class="file-ref">src/risk/position_monitor.py : lines 4797–4837 (bracket mode decision)</div>
+</div>
+
+<div class="card">
+  <h3>&#128260; Broker-Specific Routing</h3>
+<div class="flow"><span class="hl-accent">_place_initial_broker_bracket(position, cache, channel_settings)</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├── if</span> schwab_broker.is_authenticated():
+    <span class="hl-accent">│</span>       <span class="hl-schwab">SL → schwab.place_stop_order()</span>      <span class="hl-muted">session forced NORMAL</span>
+    <span class="hl-accent">│</span>       <span class="hl-schwab">PT → schwab.place_stock_order()</span>     <span class="hl-muted">with _skip_cancel_check</span>
+    <span class="hl-accent">│</span>       <span class="hl-schwab">   or schwab.place_option_order()</span>   <span class="hl-muted">with CBOE rounding</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├── elif</span> webull connected:
+    <span class="hl-accent">│</span>       <span class="hl-muted">SL → webull.place_stock_order(STP type)</span>
+    <span class="hl-accent">│</span>       <span class="hl-muted">PT → webull.place_stock_order(LMT type)</span>
+    <span class="hl-accent">│</span>       <span class="hl-red">⚠ NOT linked — risk engine must manage cancellation</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├── elif</span> ibkr connected:
+    <span class="hl-accent">│</span>       <span class="hl-muted">No bracket methods → risk engine only</span>
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">└── elif</span> tastytrade connected:
+            <span class="hl-muted">No bracket methods → risk engine only</span></div>
+</div>
+
+<!-- ═══════════════════ 7. CASCADE ═══════════════════ -->
+<div class="section-header" id="cascade">
+  <div class="section-num">7</div>
+  <h2>Progressive PT Tier Cascade</h2>
+</div>
+
+<div class="card">
+  <h3>&#128200; Multi-Tier Profit Taking</h3>
+  <p style="color:var(--text);margin-bottom:16px">
+    BotifyTrades supports up to <strong>4 profit target tiers</strong>. When each tier fills,
+    the next one is automatically placed on the broker (if bracket mode allows PT).
+  </p>
+
+  <div style="border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin:16px 0">
+    <div class="tier-row" style="background:rgba(108,92,231,.04)">
+      <div class="tier-num sl">SL</div>
+      <div>
+        <strong style="color:var(--red)">Stop Loss</strong> — Full position qty (e.g., 100 shares at $95)
+        <br><span style="color:var(--text-muted);font-size:.85rem">Placed immediately after entry fill. Stays active until position closes.</span>
+      </div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-num pt1">1</div>
+      <div>
+        <strong style="color:var(--green)">PT1</strong> — Trim qty (e.g., 40 shares at $110)
+        <br><span style="color:var(--text-muted);font-size:.85rem">Placed with entry. When filled → cancel PT1 → place PT2 → resize SL qty.</span>
+      </div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-num pt2">2</div>
+      <div>
+        <strong style="color:var(--blue)">PT2</strong> — Second trim (e.g., 30 shares at $115)
+        <br><span style="color:var(--text-muted);font-size:.85rem">Auto-placed when PT1 fills. When filled → cancel PT2 → place PT3 → resize SL qty.</span>
+      </div>
+    </div>
+    <div class="tier-row" style="border-bottom:none">
+      <div class="tier-num pt3">3</div>
+      <div>
+        <strong style="color:var(--orange)">PT3 / Runner</strong> — Remaining qty (e.g., 30 shares at $120)
+        <br><span style="color:var(--text-muted);font-size:.85rem">Final tier. Can be a "runner" left for maximum gains with trailing stop.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>&#128260; Cascade Flow (Schwab Example)</h3>
+<div class="flow"><span class="hl-green">PT1 fills</span> (40 shares sold at $110)
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├──</span> <span class="hl-red">Cancel old SL order</span> (was 100 shares)
+    <span class="hl-accent">├──</span> <span class="hl-red">Place new SL order</span> (now 60 shares — remaining qty)
+    <span class="hl-accent">└──</span> <span class="hl-green">Place PT2 LIMIT order</span>
+          <span class="hl-muted">├─</span> qty: 30, price: $115
+          <span class="hl-muted">└─</span> <span class="hl-accent">_skip_cancel_check=True</span>
+
+<span class="hl-green">PT2 fills</span> (30 shares sold at $115)
+    <span class="hl-accent">│</span>
+    <span class="hl-accent">├──</span> <span class="hl-red">Cancel old SL order</span> (was 60 shares)
+    <span class="hl-accent">├──</span> <span class="hl-red">Place new SL order</span> (now 30 shares)
+    <span class="hl-accent">└──</span> <span class="hl-green">Place PT3 LIMIT order</span>
+          <span class="hl-muted">├─</span> qty: 30, price: $120
+          <span class="hl-muted">└─</span> <span class="hl-accent">_skip_cancel_check=True</span>
+
+<span class="hl-muted">Each tier: cancel prev PT → cancel old SL → place new SL (resized) → place next PT</span></div>
+  <div class="file-ref">src/risk/position_monitor.py : lines 5409–5556 (_place_next_pt_bracket_inner)</div>
+</div>
+
+<!-- ═══════════════════ 8. SESSIONS ═══════════════════ -->
+<div class="section-header" id="sessions">
+  <div class="section-num">8</div>
+  <h2>Session &amp; Extended Hours</h2>
+</div>
+
+<div class="card">
+  <h3>&#128336; Schwab Session Types</h3>
+  <table>
+    <tr>
+      <th>Session</th>
+      <th>Hours</th>
+      <th>Supports STOP?</th>
+      <th>Used For</th>
+    </tr>
+    <tr>
+      <td><code>NORMAL</code></td>
+      <td>9:30 AM – 4:00 PM ET</td>
+      <td><span class="check">&#10003; Yes</span></td>
+      <td>All order types including STOP</td>
+    </tr>
+    <tr>
+      <td><code>SEAMLESS</code></td>
+      <td>Pre-market + Regular + After-hours</td>
+      <td><span class="cross">&#10007; No</span></td>
+      <td>Extended hours LIMIT and MARKET only</td>
+    </tr>
+  </table>
+  <br>
+  <div class="info-box danger">
+    <span class="icon">&#9888;&#65039;</span>
+    <div>
+      <strong>Schwab rejects STOP orders in SEAMLESS session.</strong><br>
+      The broker automatically forces <code>session = "NORMAL"</code> for all stop orders
+      (<code>place_stop_order</code> line 2609) and OCO stop legs (<code>place_oco_order</code> line 2901).
+      This means bracket SL orders only execute during regular market hours.
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>&#128336; Other Brokers</h3>
+  <table>
+    <tr><th>Broker</th><th>Extended Hours</th><th>Impact on Brackets</th></tr>
+    <tr>
+      <td><span class="broker-badge webull">WEBULL</span></td>
+      <td>Market orders auto-convert to limit (&#177;3% buffer)</td>
+      <td>STP orders may not execute outside RTH</td>
+    </tr>
+    <tr>
+      <td><span class="broker-badge ibkr">IBKR</span></td>
+      <td><code>outsideRth = True</code> flag on orders</td>
+      <td>N/A — no bracket methods implemented</td>
+    </tr>
+    <tr>
+      <td><span class="broker-badge tasty">TASTYTRADE</span></td>
+      <td>DAY orders only (no GTC)</td>
+      <td>N/A — no bracket methods implemented</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ═══════════════════ FOOTER ═══════════════════ -->
+<div style="text-align:center; padding:40px 0 20px; color:var(--text-muted); font-size:.85rem;">
+  <div style="margin-bottom:8px">BotifyTrades v9.3.1 &middot; Bracket Orders Guide</div>
+  <div>Generated 2026-04-26 &middot; Source files: schwab_broker.py, webull_broker.py, ibkr_broker.py, tastytrade_broker.py, position_monitor.py, risk_types.py</div>
+</div>
+
+</div><!-- container -->
+
+<!-- ═══════════════════ JS ═══════════════════ -->
+<script>
+function showBroker(broker) {
+  document.querySelectorAll('.broker-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.broker-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.broker-tab[data-broker="${broker}"]`).classList.add('active');
+  document.getElementById(`panel-${broker}`).classList.add('active');
+}
+</script>
+</body>
+</html>

@@ -8344,7 +8344,7 @@ def register_routes(app):
                     'total_pnl': round(row['total_pnl'] or 0, 2),
                     'avg_pnl': round(row['avg_pnl'] or 0, 2),
                     'avg_pnl_percent': round(row['avg_pnl_percent'] or 0, 1),
-                    'avg_holding_days': round(row['avg_holding_days'] or 0, 1)
+                    'avg_holding_days': round(row['avg_holding_days'] or 0, 4)
                 })
             
             # Calculate summary
@@ -8440,9 +8440,9 @@ def register_routes(app):
                     'avg_pnl_percent': round(user['avg_pnl_percent'] or 0, 1),
                     'best_trade': round(user['best_trade'] or 0, 2),
                     'worst_trade': round(user['worst_trade'] or 0, 2),
-                    'avg_holding_days': round(user['avg_holding_days'] or 0, 1)
+                    'avg_holding_days': round(user['avg_holding_days'] or 0, 4)
                 })
-            
+
             # Calculate summary with proper aggregation
             total_wins = sum(r['wins'] for r in results)
             total_trades = sum(r['total_trades'] for r in results)
@@ -12432,48 +12432,46 @@ def register_routes(app):
                 date_filter = "AND lc.closed_at >= ? AND lc.closed_at <= ?"
                 date_params = [date_start, date_end]
             
-            # Build market filter by joining with signals table
+            # Build market filter using channels.market directly
             market_filter = ""
             if market and market in ('US', 'INDIA'):
-                market_filter = "AND COALESCE(s.market, 'US') = ?"
-            
-            # Query to get user performance with gross profit/loss for TQS calculation
-            # Using weighted average % based on position cost basis for accurate returns
+                market_filter = "AND COALESCE(c.market, 'US') = ?"
+
             query = f'''
-                SELECT 
+                SELECT
                     sl.author_name,
                     COUNT(DISTINCT sl.id) as total_positions,
                     SUM(sl.original_qty) as total_contracts,
-                    
+
                     -- Closures stats
                     COUNT(lc.id) as total_closures,
                     SUM(lc.closed_qty) as total_closed_qty,
                     SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
                     SUM(CASE WHEN lc.pnl <= 0 THEN 1 ELSE 0 END) as losses,
-                    
+
                     -- P/L stats
                     SUM(lc.pnl) as total_pnl,
                     AVG(lc.pnl) as avg_pnl,
                     MAX(lc.pnl) as best_trade,
                     MIN(lc.pnl) as worst_trade,
-                    
+
                     -- Cost basis: US options multiply by 100, India F&O uses 1× (lot sizing in qty)
-                    SUM(sl.open_price * lc.closed_qty * 
-                        CASE 
-                            WHEN sl.asset_type = 'option' AND COALESCE(s.market, 'US') = 'US' THEN 100 
-                            ELSE 1 
+                    SUM(sl.open_price * lc.closed_qty *
+                        CASE
+                            WHEN sl.asset_type = 'option' AND COALESCE(c.market, 'US') = 'US' THEN 100
+                            ELSE 1
                         END
                     ) as total_cost_basis,
-                    
+
                     AVG(lc.holding_days) as avg_holding_days,
-                    
+
                     -- Gross profit/loss for TQS calculation
                     SUM(CASE WHEN lc.pnl > 0 THEN lc.pnl ELSE 0 END) as gross_profit,
                     SUM(CASE WHEN lc.pnl < 0 THEN lc.pnl ELSE 0 END) as gross_loss
-                    
+
                 FROM signal_lots sl
-                LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
-                LEFT JOIN signals s ON sl.signal_id = s.id
+                JOIN lot_closures lc ON sl.id = lc.lot_id
+                JOIN channels c ON CAST(sl.channel_id AS INTEGER) = c.id
                 WHERE sl.author_name IS NOT NULL {date_filter} {market_filter}
             '''
             
@@ -12481,15 +12479,15 @@ def register_routes(app):
             if market and market in ('US', 'INDIA'):
                 params.append(market)
             if channel_id:
-                query += ' AND sl.channel_id = ?'
+                query += ' AND c.id = ?'
                 params.append(channel_id)
-            
+
             query += ' GROUP BY sl.author_name'
             query += ' HAVING COUNT(lc.id) > 0'
-            
+
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            
+
             users = []
             for row in rows:
                 win_count = row['wins'] or 0
@@ -12518,7 +12516,7 @@ def register_routes(app):
                     'best_trade': round(row['best_trade'] or 0, 2),
                     'worst_trade': round(row['worst_trade'] or 0, 2),
                     'avg_pnl_percent': round(weighted_avg_pnl_percent, 1),
-                    'avg_holding_days': round(row['avg_holding_days'] or 0, 1),
+                    'avg_holding_days': round(row['avg_holding_days'] or 0, 4),
                     'gross_profit': round(row['gross_profit'] or 0, 2),
                     'gross_loss': round(row['gross_loss'] or 0, 2)
                 })
@@ -12564,12 +12562,51 @@ def register_routes(app):
             
             avg_win_rate_all = (total_wins_all / total_closures_all * 100) if total_closures_all > 0 else 0
             
+            # Direction breakdown per user (Stocks / Calls / Puts)
+            dir_query = f'''
+                SELECT
+                    sl.author_name,
+                    CASE
+                        WHEN sl.asset_type = 'option' AND sl.call_put = 'C' THEN 'calls'
+                        WHEN sl.asset_type = 'option' AND sl.call_put = 'P' THEN 'puts'
+                        ELSE 'stocks'
+                    END as direction,
+                    COUNT(lc.id) as trades,
+                    SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
+                    COALESCE(SUM(lc.pnl), 0) as pnl
+                FROM signal_lots sl
+                JOIN lot_closures lc ON sl.id = lc.lot_id
+                JOIN channels c ON CAST(sl.channel_id AS INTEGER) = c.id
+                WHERE sl.author_name IS NOT NULL {date_filter} {market_filter}
+                GROUP BY sl.author_name, direction
+            '''
+            dir_params = date_params.copy()
+            if market and market in ('US', 'INDIA'):
+                dir_params.append(market)
+            cursor.execute(dir_query, dir_params)
+            dir_map = {}
+            for dr in cursor.fetchall():
+                author = dr['author_name']
+                if author not in dir_map:
+                    dir_map[author] = {}
+                t = dr['trades'] or 0
+                w = dr['wins'] or 0
+                dir_map[author][dr['direction']] = {
+                    'trades': t,
+                    'wins': w,
+                    'losses': t - w,
+                    'win_rate': round((w / t * 100) if t > 0 else 0, 1),
+                    'pnl': round(float(dr['pnl'] or 0), 2)
+                }
+
             # Rename author to author_name for frontend consistency
             for user in users:
+                author_key = user['author']
                 user['author_name'] = user.pop('author')
                 user['total_trades'] = user['total_closures']
                 user['avg_return'] = user['avg_pnl']
-            
+                user['direction_breakdown'] = dir_map.get(author_key, {})
+
             return jsonify({
                 'success': True,
                 'users': users,
@@ -12578,7 +12615,7 @@ def register_routes(app):
                 'total_pnl': round(total_pnl_all, 2),
                 'avg_win_rate': round(avg_win_rate_all, 1)
             })
-            
+
         except Exception as e:
             print(f"[API] Error getting user leaderboard: {e}")
             import traceback
@@ -12603,45 +12640,44 @@ def register_routes(app):
             conn = db.get_connection()
             cursor = conn.cursor()
             
-            # Build market filter
+            # Build market filter using channels.market directly
             market_filter = ""
             params = []
             if market and market in ('US', 'INDIA'):
-                market_filter = "AND COALESCE(s.market, 'US') = ?"
+                market_filter = "AND COALESCE(c.market, 'US') = ?"
                 params.append(market)
-            
+
             # Get channel performance
             query = f'''
-                SELECT 
+                SELECT
                     c.id as channel_id,
                     c.name as channel_name,
                     c.discord_channel_id,
-                    
+
                     -- Position stats
                     COUNT(DISTINCT sl.id) as total_positions,
                     SUM(sl.original_qty) as total_contracts,
                     COUNT(DISTINCT sl.author_name) as total_users,
-                    
+
                     -- Closure stats
                     COUNT(lc.id) as total_closures,
                     SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
                     SUM(CASE WHEN lc.pnl <= 0 THEN 1 ELSE 0 END) as losses,
-                    
+
                     -- P/L stats
                     SUM(lc.pnl) as total_pnl,
                     AVG(lc.pnl) as avg_pnl,
                     MAX(lc.pnl) as best_trade,
                     MIN(lc.pnl) as worst_trade,
                     AVG(lc.pnl_percent) as avg_return,
-                    
+
                     -- Recent activity
                     MAX(lc.closed_at) as last_activity,
                     AVG(lc.holding_days) as avg_holding_days
-                    
+
                 FROM channels c
-                LEFT JOIN signal_lots sl ON c.id = sl.channel_id
-                LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
-                LEFT JOIN signals s ON sl.signal_id = s.id
+                JOIN signal_lots sl ON CAST(sl.channel_id AS INTEGER) = c.id
+                JOIN lot_closures lc ON sl.id = lc.lot_id
                 WHERE c.is_active = 1 {market_filter}
                 GROUP BY c.id, c.name, c.discord_channel_id
                 HAVING COUNT(lc.id) > 0
@@ -12689,7 +12725,7 @@ def register_routes(app):
                     'worst_trade': round(row['worst_trade'] or 0, 2),
                     'avg_return': round(row['avg_return'] or 0, 1),
                     'last_activity': row['last_activity'],
-                    'avg_holding_days': round(row['avg_holding_days'] or 0, 1),
+                    'avg_holding_days': round(row['avg_holding_days'] or 0, 4),
                     'top_user': top_user
                 })
             
@@ -16900,11 +16936,12 @@ def register_routes(app):
             
             if not license_key:
                 return jsonify({'success': False, 'error': 'License key is required'})
-            
+
+            print(f"[LICENSE] === Activate request for key: {license_key[:8]}... (v2 BTF-aware) ===")
             is_valid = False
             result = {}
             license_type = 'unknown'
-            
+
             # Try 1: Machine-bound license (format: base64:signature)
             if ':' in license_key and '::' not in license_key:
                 try:
@@ -16921,7 +16958,7 @@ def register_routes(app):
                         license_type = 'machine-bound'
             
             # Try 2: Legacy/transferable license (format: base64 with ::)
-            if not is_valid and '::' in license_key or (not is_valid and ':' not in license_key):
+            if not is_valid and not license_key.startswith('BTF-') and not license_key.startswith('BT-') and ('::' in license_key or ':' not in license_key):
                 try:
                     from src.license_manager import LicenseManager
                     valid, msg, lic_data = LicenseManager.validate_license(license_key)
@@ -16944,8 +16981,41 @@ def register_routes(app):
                 except Exception as e:
                     result = {'error': str(e)}
             
-            # Try 3: Activation-based license
-            if not is_valid:
+            # Try 3: Server-validated BTF-/BT- format keys
+            if not is_valid and (license_key.startswith('BTF-') or license_key.startswith('BT-')):
+                print(f"[LICENSE] Try 3: BTF/BT server validation for {license_key[:8]}...")
+                try:
+                    LicenseClient = None
+                    try:
+                        from src.license_client import LicenseClient
+                        print(f"[LICENSE] Imported LicenseClient from src.license_client")
+                    except ImportError:
+                        try:
+                            from license_client import LicenseClient
+                            print(f"[LICENSE] Imported LicenseClient from license_client")
+                        except ImportError:
+                            try:
+                                from license.client.client import LicenseClient
+                                print(f"[LICENSE] Imported LicenseClient from license.client.client")
+                            except ImportError:
+                                print(f"[LICENSE] ❌ Could not import LicenseClient from any path")
+
+                    if LicenseClient:
+                        client = LicenseClient()
+                        is_valid, result = client.validate_license(license_key)
+                        print(f"[LICENSE] Try 3 result: valid={is_valid}, result={result}")
+                        if is_valid:
+                            license_type = 'server'
+                    else:
+                        print(f"[LICENSE] ❌ LicenseClient is None, skipping server validation")
+                except Exception as e:
+                    print(f"[LICENSE] ❌ Try 3 exception: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    result = {'error': f'Server validation error: {str(e)}'}
+
+            # Try 4: Activation-based license (skip for BTF-/BT- keys — those are server-validated)
+            if not is_valid and not license_key.startswith('BTF-') and not license_key.startswith('BT-'):
                 try:
                     from license.client.manager_activation import activate_license
                 except ImportError:
@@ -16953,7 +17023,7 @@ def register_routes(app):
                         from src.license_manager_activation import activate_license
                     except ImportError:
                         activate_license = None
-                
+
                 if activate_license:
                     is_valid, result = activate_license(license_key)
                     if is_valid:
@@ -16996,7 +17066,7 @@ def register_routes(app):
                     'success': True,
                     'message': f'License activated successfully ({license_type})',
                     'customer_id': result.get('customer_id'),
-                    'expires': result.get('expires'),
+                    'expires': result.get('expires') or result.get('expires_at'),
                     'days_remaining': result.get('days_remaining'),
                     'license_type': license_type
                 })
@@ -17023,23 +17093,59 @@ def register_routes(app):
             if not license_key:
                 return jsonify({'is_valid': False, 'error': 'License key is required'})
             
-            try:
-                from license.client.manager_secure import validate_license
-            except ImportError:
+            is_valid = False
+            result = {}
+
+            if license_key.startswith('BTF-') or license_key.startswith('BT-'):
+                print(f"[LICENSE] Validate: BTF/BT server validation for {license_key[:8]}...")
                 try:
-                    from src.license_manager_secure import validate_license
+                    LicenseClient = None
+                    try:
+                        from src.license_client import LicenseClient
+                        print(f"[LICENSE] Validate: Imported LicenseClient from src.license_client")
+                    except ImportError:
+                        try:
+                            from license_client import LicenseClient
+                            print(f"[LICENSE] Validate: Imported LicenseClient from license_client")
+                        except ImportError:
+                            try:
+                                from license.client.client import LicenseClient
+                                print(f"[LICENSE] Validate: Imported LicenseClient from license.client.client")
+                            except ImportError:
+                                print(f"[LICENSE] Validate: ❌ Could not import LicenseClient")
+
+                    if LicenseClient:
+                        client = LicenseClient()
+                        is_valid, result = client.validate_license(license_key)
+                        print(f"[LICENSE] Validate: result valid={is_valid}, result={result}")
+                    else:
+                        print(f"[LICENSE] Validate: ❌ LicenseClient is None")
+                except Exception as e:
+                    print(f"[LICENSE] Validate: ❌ Exception: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    result = {'error': f'Server validation error: {str(e)}'}
+
+            # Fallback: manager_secure (skip for BTF-/BT- keys — those are server-validated)
+            if not is_valid and not license_key.startswith('BTF-') and not license_key.startswith('BT-'):
+                try:
+                    from license.client.manager_secure import validate_license
                 except ImportError:
-                    return jsonify({'is_valid': False, 'error': 'License module not available'})
-            
-            is_valid, result = validate_license(license_key)
-            
+                    try:
+                        from src.license_manager_secure import validate_license
+                    except ImportError:
+                        validate_license = None
+
+                if validate_license:
+                    is_valid, result = validate_license(license_key)
+
             if is_valid:
                 return jsonify({
                     'is_valid': True,
                     'customer_id': result.get('customer_id'),
                     'expires': result.get('expires'),
                     'days_remaining': result.get('days_remaining'),
-                    'license_type': result.get('license_type', 'unknown')
+                    'license_type': result.get('license_type', 'server')
                 })
             else:
                 return jsonify({
