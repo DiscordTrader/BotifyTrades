@@ -93,8 +93,18 @@ class BrokerSyncService:
 
     def _find_risk_cache_entry(self, cache, broker_name, symbol, trade):
         """Check if risk cache has an active entry for this trade.
-        
+
         Returns the current_price if found, None otherwise.
+        """
+        entry = self._get_risk_cache_entry(cache, broker_name, symbol, trade)
+        if entry and getattr(entry, 'current_price', 0) > 0:
+            return entry.current_price
+        return None
+
+    def _get_risk_cache_entry(self, cache, broker_name, symbol, trade):
+        """Get the full risk cache entry for a trade.
+
+        Returns the PositionCacheEntry if found, None otherwise.
         Handles both stock keys (broker_symbol_stock) and option keys
         (broker_symbol_strike_expiry_direction) by iterating cache entries.
         """
@@ -102,7 +112,7 @@ class BrokerSyncService:
         simple_key = f"{broker_name}_{symbol}_{asset_type}"
         entry = cache.get(simple_key)
         if entry and getattr(entry, 'current_price', 0) > 0:
-            return entry.current_price
+            return entry
 
         if asset_type == 'option':
             strike = trade.get('strike')
@@ -112,7 +122,7 @@ class BrokerSyncService:
                 option_key = f"{broker_name}_{symbol}_{strike}_{expiry}_{call_put}"
                 entry = cache.get(option_key)
                 if entry and getattr(entry, 'current_price', 0) > 0:
-                    return entry.current_price
+                    return entry
 
             try:
                 symbol_upper = symbol.upper()
@@ -121,7 +131,7 @@ class BrokerSyncService:
                     if symbol_upper in cache_key.upper() and broker_upper in cache_key.upper():
                         e = cache._cache.get(cache_key)
                         if e and getattr(e, 'current_price', 0) > 0:
-                            return e.current_price
+                            return e
             except Exception:
                 pass
 
@@ -398,7 +408,7 @@ class BrokerSyncService:
             print(f"[SYNC] No data from {broker_name}")
             return
         
-        await self._reconcile_trades(broker_name, normalized_data)
+        await self._reconcile_trades(broker_name, normalized_data, broker_instance=broker_instance)
         await asyncio.sleep(0)
         
         if not hasattr(self, '_fill_sync_counter'):
@@ -1149,10 +1159,10 @@ class BrokerSyncService:
             print(f"[SYNC] Error fetching account info for {broker_name}: {e}")
             return {}
     
-    async def _reconcile_trades(self, broker_name: str, normalized_data: Dict[str, Any]):
+    async def _reconcile_trades(self, broker_name: str, normalized_data: Dict[str, Any], broker_instance=None):
         """
         Reconcile normalized broker data with database trades
-        
+
         Three-stage process:
         0. Pre-enrich option positions with missing metadata from DB trades
         1. Update existing database trades (PENDING→OPEN→CLOSED)
@@ -1868,11 +1878,18 @@ class BrokerSyncService:
                         print(f"[SYNC] ⏳ Trade #{trade_id} ({symbol}) not in {broker_name} positions ({self._consecutive_empty_counts[_empty_key]}/{_REQUIRED_CONFIRMATIONS} confirmations)")
                         continue
 
+                    # Extract bracket order IDs from risk cache BEFORE cleanup
+                    _bracket_order_ids = {}
                     if hasattr(self, '_risk_manager') and self._risk_manager:
                         if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
-                            _risk_found = self._find_risk_cache_entry(
+                            _cache_entry = self._get_risk_cache_entry(
                                 self._risk_manager.cache, broker_name, symbol, trade)
-                            if _risk_found:
+                            if _cache_entry:
+                                _bracket_order_ids = {
+                                    'oco_id': getattr(_cache_entry, 'broker_oco_order_id', None),
+                                    'sl_id': getattr(_cache_entry, 'broker_stop_order_id', None),
+                                    'pt_id': getattr(_cache_entry, 'broker_pt_order_id', None),
+                                }
                                 pos_key = f"{broker_name}_{symbol}_{trade.get('asset_type', 'stock')}"
                                 try:
                                     self._risk_manager.cache.remove(pos_key)
@@ -1888,36 +1905,73 @@ class BrokerSyncService:
                     quantity = float(trade.get('quantity') or 0)
                     asset_type = trade.get('asset_type', 'option')
                     discord_channel_id = trade.get('channel_id')
-                    
+
                     exit_price = float(trade.get('current_price') or 0)
                     exit_price_source = 'last_sync'
-                    
-                    try:
-                        from gui_app.database import get_connection as _get_conn
-                        _conn = _get_conn()
-                        _cur = _conn.cursor()
-                        _fill_query = '''
-                            SELECT ec.fill_price, ec.filled_at FROM execution_closures ec
-                            JOIN execution_lots el ON ec.execution_lot_id = el.id
-                            WHERE UPPER(el.symbol) = UPPER(?) AND UPPER(el.broker) = UPPER(?)
-                        '''
-                        _fill_params = [symbol, broker_name]
-                        if asset_type == 'option' and trade.get('strike'):
-                            _fill_query += ' AND el.strike = ?'
-                            _fill_params.append(trade['strike'])
-                        if trade.get('expiry'):
-                            _fill_query += ' AND el.expiry = ?'
-                            _fill_params.append(trade['expiry'])
-                        _fill_query += ' ORDER BY ec.filled_at DESC LIMIT 1'
-                        _cur.execute(_fill_query, _fill_params)
-                        _fill_row = _cur.fetchone()
-                        if _fill_row and _fill_row['fill_price'] and float(_fill_row['fill_price']) > 0:
-                            exit_price = float(_fill_row['fill_price'])
-                            exit_price_source = 'execution_closure'
-                            print(f"[SYNC] ✓ Trade #{trade_id} exit price from execution_closures: ${exit_price:.4f} (vs last_sync ${float(trade.get('current_price') or 0):.4f})")
-                    except Exception as fill_lookup_err:
-                        print(f"[SYNC] ⚠️ Execution closure lookup: {fill_lookup_err}")
-                    
+                    exit_order_id = None
+                    exit_filled_at = None
+
+                    # Priority 1: Query broker for actual exit fill from bracket orders
+                    if exit_price_source == 'last_sync' and _bracket_order_ids:
+                        try:
+                            _exit_fill = await self._query_broker_exit_fill(
+                                broker_name, broker_instance, symbol, _bracket_order_ids, trade)
+                            if _exit_fill:
+                                exit_price = _exit_fill['price']
+                                exit_order_id = _exit_fill.get('order_id')
+                                exit_filled_at = _exit_fill.get('filled_at')
+                                exit_price_source = 'broker_fill'
+                                print(f"[SYNC] ✓ Trade #{trade_id} exit fill from broker: ${exit_price:.4f} order={exit_order_id} (actual bracket fill)")
+                        except Exception as bf_err:
+                            print(f"[SYNC] ⚠️ Broker exit fill query: {bf_err}")
+
+                    # Priority 2: Query broker directly by BTO order_id for child order fills
+                    if exit_price_source == 'last_sync' and broker_name.upper() == 'SCHWAB' and broker_instance:
+                        try:
+                            _bto_order_id = trade.get('order_id', '')
+                            if _bto_order_id:
+                                _exit_fill = await self._query_broker_exit_fill(
+                                    broker_name, broker_instance, symbol,
+                                    {'oco_id': None, 'sl_id': None, 'pt_id': None},
+                                    trade, bto_order_id=_bto_order_id)
+                                if _exit_fill:
+                                    exit_price = _exit_fill['price']
+                                    exit_order_id = _exit_fill.get('order_id')
+                                    exit_filled_at = _exit_fill.get('filled_at')
+                                    exit_price_source = 'broker_fill'
+                                    print(f"[SYNC] ✓ Trade #{trade_id} exit fill from broker (by BTO order): ${exit_price:.4f}")
+                        except Exception as bf_err2:
+                            print(f"[SYNC] ⚠️ Broker exit fill query (BTO): {bf_err2}")
+
+                    # Priority 3: Check execution_closures table
+                    if exit_price_source == 'last_sync':
+                        try:
+                            from gui_app.database import get_connection as _get_conn
+                            _conn = _get_conn()
+                            _cur = _conn.cursor()
+                            _fill_query = '''
+                                SELECT ec.fill_price, ec.filled_at FROM execution_closures ec
+                                JOIN execution_lots el ON ec.execution_lot_id = el.id
+                                WHERE UPPER(el.symbol) = UPPER(?) AND UPPER(el.broker) = UPPER(?)
+                            '''
+                            _fill_params = [symbol, broker_name]
+                            if asset_type == 'option' and trade.get('strike'):
+                                _fill_query += ' AND el.strike = ?'
+                                _fill_params.append(trade['strike'])
+                            if trade.get('expiry'):
+                                _fill_query += ' AND el.expiry = ?'
+                                _fill_params.append(trade['expiry'])
+                            _fill_query += ' ORDER BY ec.filled_at DESC LIMIT 1'
+                            _cur.execute(_fill_query, _fill_params)
+                            _fill_row = _cur.fetchone()
+                            if _fill_row and _fill_row['fill_price'] and float(_fill_row['fill_price']) > 0:
+                                exit_price = float(_fill_row['fill_price'])
+                                exit_price_source = 'execution_closure'
+                                print(f"[SYNC] ✓ Trade #{trade_id} exit price from execution_closures: ${exit_price:.4f}")
+                        except Exception as fill_lookup_err:
+                            print(f"[SYNC] ⚠️ Execution closure lookup: {fill_lookup_err}")
+
+                    # Priority 4: Check filled_orders by order_id
                     if exit_price_source == 'last_sync':
                         try:
                             _stc_order_id = trade.get('order_id', '')
@@ -1935,6 +1989,8 @@ class BrokerSyncService:
                                     print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders by order_id: ${exit_price:.4f}")
                         except Exception:
                             pass
+
+                    # Priority 5: Check filled_orders by symbol+time
                     if exit_price_source == 'last_sync':
                         try:
                             _trade_opened_at = trade.get('executed_at') or trade.get('created_at') or ''
@@ -1958,13 +2014,13 @@ class BrokerSyncService:
                                     print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders: ${exit_price:.4f}")
                         except Exception as fo_err:
                             print(f"[SYNC] ⚠️ Filled orders lookup: {fo_err}")
-                    
+
                     pnl = float(trade.get('pnl') or 0)
                     pnl_percent = float(trade.get('pnl_percent') or 0)
-                    
+
                     original_quantity = int(trade.get('original_quantity') or quantity)
                     multiplier = 100 if asset_type == 'option' else 1
-                    
+
                     try:
                         from gui_app.database import get_connection as _pnl_conn
                         _pc = _pnl_conn()
@@ -1976,7 +2032,7 @@ class BrokerSyncService:
                               AND executed_price IS NOT NULL AND executed_price > 0
                         ''', (trade_id,))
                         linked_stcs = _pcur.fetchall()
-                        
+
                         if linked_stcs:
                             total_pnl = 0
                             total_closed_qty = 0
@@ -1985,12 +2041,12 @@ class BrokerSyncService:
                                 sp = float(stc_row['executed_price'] or 0)
                                 total_pnl += (sp - entry_price) * sq * multiplier
                                 total_closed_qty += sq
-                            
+
                             unclosed_qty = original_quantity - total_closed_qty
                             if unclosed_qty > 0 and exit_price > 0:
                                 total_pnl += (exit_price - entry_price) * unclosed_qty * multiplier
                                 total_closed_qty += unclosed_qty
-                            
+
                             pnl = round(total_pnl, 2)
                             if total_closed_qty > 0 and entry_price > 0:
                                 weighted_exit = (sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in linked_stcs) + (exit_price * unclosed_qty if unclosed_qty > 0 else 0)) / total_closed_qty
@@ -2004,7 +2060,7 @@ class BrokerSyncService:
                         if exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
                             pnl = (exit_price - entry_price) * original_quantity * multiplier
                             pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
-                    
+
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
@@ -2014,44 +2070,7 @@ class BrokerSyncService:
                         pnl_percent=pnl_percent,
                         close_reason='broker_closed_position'
                     )
-                    
-                    if exit_price > 0:
-                        try:
-                            from gui_app.database import get_connection as _get_fill_conn, update_closure_exit_fill
-                            _fill_conn = _get_fill_conn()
-                            _fill_cur = _fill_conn.cursor()
-                            _fill_query = '''
-                                SELECT lc.id, lc.closed_qty, lc.close_price
-                                FROM lot_closures lc
-                                JOIN signal_lots sl ON lc.lot_id = sl.id
-                                JOIN trades t ON sl.trade_id = t.id
-                                WHERE UPPER(sl.symbol) = UPPER(?) AND lc.exit_fill_price IS NULL
-                                  AND UPPER(t.broker) = UPPER(?)
-                            '''
-                            _fill_params = [symbol, broker_name]
-                            if discord_channel_id and str(discord_channel_id) != 'UNKNOWN':
-                                _fill_query += ' AND sl.channel_id = ?'
-                                _fill_params.append(str(discord_channel_id))
-                            else:
-                                print(f"[SYNC] ⚠️ Skipping lot_closure fill for {symbol}: no channel_id (would risk cross-channel match)")
-                                raise Exception("skip_no_channel")
-                            if asset_type == 'option' and trade.get('strike'):
-                                _fill_query += ' AND sl.strike = ?'
-                                _fill_params.append(str(trade['strike']))
-                            if asset_type == 'option' and trade.get('expiry'):
-                                _fill_query += ' AND sl.expiry = ?'
-                                _fill_params.append(str(trade['expiry']))
-                            _fill_query += ' ORDER BY ABS(lc.closed_qty - ?) ASC, lc.closed_at DESC LIMIT 1'
-                            _fill_params.append(quantity)
-                            _fill_cur.execute(_fill_query, _fill_params)
-                            _best_closure = _fill_cur.fetchone()
-                            if _best_closure:
-                                _exit_src = 'broker_sync' if exit_price_source != 'last_sync' else 'provisional_sync'
-                                update_closure_exit_fill(_best_closure['id'], exit_price, broker_name, filled_at=datetime.now().isoformat(), exit_source=_exit_src)
-                                print(f"[SYNC] ✓ Updated lot_closure #{_best_closure['id']} exit fill: ${exit_price:.4f} via {broker_name} (src={_exit_src})")
-                        except Exception as fill_err:
-                            print(f"[SYNC] ⚠️ Lot closure fill update warning: {fill_err}")
-                    
+
                     try:
                         if hasattr(self, '_risk_manager') and self._risk_manager:
                             pos_key = f"{broker_name}_{symbol}_{trade.get('asset_type', 'stock')}"
@@ -2061,18 +2080,17 @@ class BrokerSyncService:
                                     print(f"[SYNC] ✓ Cleaned position cache: {pos_key} (trade closed)")
                     except Exception as cache_err:
                         print(f"[SYNC] Warning: Could not clean cache on close: {cache_err}")
-                    
-                    # Create lot_closure for PNL/leaderboard tracking
-                    # Note: exit_price can be 0 for expired worthless options - still valid closure
+
+                    # Create lot_closure FIRST, then update with exit fill data
+                    _new_closure_ids = []
                     if discord_channel_id and quantity > 0:
                         try:
-                            # Lookup db_channel_id using database module function
                             from gui_app.database import get_channel_by_discord_id
                             channel_row = get_channel_by_discord_id(str(discord_channel_id))
-                            
+
                             if channel_row:
                                 db_channel_id = channel_row['id']
-                                
+
                                 matcher = get_matcher()
                                 lot_signal = {
                                     'action': 'STC',
@@ -2091,11 +2109,60 @@ class BrokerSyncService:
                                 }
                                 lot_result = matcher.process_signal(lot_signal)
                                 if lot_result:
+                                    _new_closure_ids = [lr.get('closure_id') for lr in lot_result if lr.get('closure_id')]
                                     print(f"[SYNC] ✓ Created {len(lot_result)} lot_closure(s) for PNL tracking (exit=${exit_price})")
                             else:
                                 print(f"[SYNC] ⚠️ Channel {discord_channel_id} not found in database")
                         except Exception as le:
                             print(f"[SYNC] ⚠️ Lot matching warning: {le}")
+
+                    # NOW update lot_closures with exit fill data (after creation)
+                    if exit_price > 0 and exit_price_source != 'last_sync':
+                        try:
+                            from gui_app.database import get_connection as _get_fill_conn, update_closure_exit_fill
+                            _fill_conn = _get_fill_conn()
+                            _fill_cur = _fill_conn.cursor()
+                            _exit_src = exit_price_source
+                            _exit_ts = exit_filled_at or datetime.now().isoformat()
+
+                            if _new_closure_ids:
+                                for _cid in _new_closure_ids:
+                                    update_closure_exit_fill(
+                                        _cid, exit_price, broker_name,
+                                        order_id=exit_order_id, filled_at=_exit_ts,
+                                        exit_source=_exit_src)
+                                    print(f"[SYNC] ✓ Updated lot_closure #{_cid} exit fill: ${exit_price:.4f} via {broker_name} order={exit_order_id} (src={_exit_src})")
+                            else:
+                                _fill_query = '''
+                                    SELECT lc.id, lc.closed_qty, lc.close_price
+                                    FROM lot_closures lc
+                                    JOIN signal_lots sl ON lc.lot_id = sl.id
+                                    JOIN trades t ON sl.trade_id = t.id
+                                    WHERE UPPER(sl.symbol) = UPPER(?) AND lc.exit_fill_price IS NULL
+                                      AND UPPER(t.broker) = UPPER(?)
+                                '''
+                                _fill_params = [symbol, broker_name]
+                                if discord_channel_id and str(discord_channel_id) != 'UNKNOWN':
+                                    _fill_query += ' AND sl.channel_id = ?'
+                                    _fill_params.append(str(discord_channel_id))
+                                if asset_type == 'option' and trade.get('strike'):
+                                    _fill_query += ' AND sl.strike = ?'
+                                    _fill_params.append(str(trade['strike']))
+                                if asset_type == 'option' and trade.get('expiry'):
+                                    _fill_query += ' AND sl.expiry = ?'
+                                    _fill_params.append(str(trade['expiry']))
+                                _fill_query += ' ORDER BY ABS(lc.closed_qty - ?) ASC, lc.closed_at DESC LIMIT 1'
+                                _fill_params.append(quantity)
+                                _fill_cur.execute(_fill_query, _fill_params)
+                                _best_closure = _fill_cur.fetchone()
+                                if _best_closure:
+                                    update_closure_exit_fill(
+                                        _best_closure['id'], exit_price, broker_name,
+                                        order_id=exit_order_id, filled_at=_exit_ts,
+                                        exit_source=_exit_src)
+                                    print(f"[SYNC] ✓ Updated lot_closure #{_best_closure['id']} exit fill: ${exit_price:.4f} via {broker_name} order={exit_order_id} (src={_exit_src})")
+                        except Exception as fill_err:
+                            print(f"[SYNC] ⚠️ Lot closure fill update warning: {fill_err}")
                     elif not discord_channel_id:
                         print(f"[SYNC] ⚠️ No channel_id for trade #{trade_id} - PNL updated but leaderboard not updated")
     
@@ -2924,19 +2991,225 @@ class BrokerSyncService:
             
             if new_count > 0:
                 print(f"[SYNC] ✓ Synced {new_count} new filled orders from {broker_name}")
-            
+
+            # Backfill: match unfilled lot_closures against filled_orders
+            try:
+                await self._backfill_exit_fills(broker_name, filled_orders)
+            except Exception as bf_err:
+                print(f"[SYNC] ⚠️ Exit fill backfill: {bf_err}")
+
             # Update sync state
             update_broker_sync_state(
                 broker=broker_name,
                 last_sync_at=datetime.now().isoformat()
             )
-            
+
         except Exception as e:
             print(f"[SYNC] Error syncing filled orders from {broker_name}: {e}")
             import traceback
             traceback.print_exc()
             update_broker_sync_state(broker=broker_name, error=str(e))
     
+    async def _backfill_exit_fills(self, broker_name, filled_orders):
+        """Match STC filled_orders against lot_closures that have NULL exit_fill_price.
+
+        Runs after every filled_orders sync to catch closures created by
+        broker_closed_position that missed the exit fill because the lot_closure
+        was created before the filled_orders sync ran.
+
+        Also updates the parent trades table P&L to match the real broker fill.
+        """
+        from gui_app.database import get_connection, update_closure_exit_fill
+
+        stc_fills = [f for f in filled_orders if f.get('action', '').upper() in ('SELL', 'STC', 'SELL_TO_CLOSE')]
+        if not stc_fills:
+            return
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT lc.id, lc.closed_qty, lc.close_price, sl.symbol, sl.asset_type,
+                   sl.strike, sl.expiry, sl.entry_fill_price, sl.trade_id,
+                   t.broker, t.executed_price as entry_price
+            FROM lot_closures lc
+            JOIN signal_lots sl ON lc.lot_id = sl.id
+            LEFT JOIN trades t ON sl.trade_id = t.id
+            WHERE lc.exit_fill_price IS NULL
+              AND lc.exit_reason = 'BROKER_CLOSED'
+              AND UPPER(COALESCE(t.broker, ?)) = UPPER(?)
+              AND lc.closed_at >= datetime('now', '-7 days')
+        ''', (broker_name, broker_name))
+        unfilled = cursor.fetchall()
+
+        if not unfilled:
+            return
+
+        matched = 0
+        for closure in unfilled:
+            sym = closure['symbol'].upper()
+            qty = int(closure['closed_qty'] or 0)
+
+            for fill in stc_fills:
+                fill_sym = (fill.get('symbol') or '').upper()
+                fill_qty = int(fill.get('quantity', 0))
+                fill_price = float(fill.get('filled_price', 0))
+                if fill_sym != sym or fill_price <= 0:
+                    continue
+                if fill_qty != qty and abs(fill_qty - qty) > max(1, qty * 0.1):
+                    continue
+
+                if closure['asset_type'] == 'option':
+                    if str(closure.get('strike') or '') != str(fill.get('strike') or ''):
+                        continue
+
+                update_closure_exit_fill(
+                    closure['id'], fill_price, broker_name,
+                    order_id=str(fill.get('order_id', '')),
+                    filled_at=fill.get('filled_time') or datetime.now().isoformat(),
+                    exit_source='filled_orders_backfill')
+                matched += 1
+                print(f"[SYNC] ✓ Backfill: lot_closure #{closure['id']} {sym} exit fill ${fill_price:.4f} via {broker_name}")
+
+                # Also update the trades table P&L to match broker fill
+                trade_id = closure['trade_id']
+                entry_price = float(closure['entry_price'] or closure['entry_fill_price'] or 0)
+                if trade_id and entry_price > 0:
+                    try:
+                        multiplier = 100 if closure['asset_type'] == 'option' else 1
+                        trade_pnl = round((fill_price - entry_price) * qty * multiplier, 2)
+                        trade_pnl_pct = round(((fill_price - entry_price) / entry_price) * 100, 4) if entry_price > 0 else 0
+                        cursor.execute('''
+                            UPDATE trades SET current_price = ?, pnl = ?, pnl_percent = ?
+                            WHERE id = ? AND status = 'CLOSED' AND close_reason = 'broker_closed_position'
+                        ''', (fill_price, trade_pnl, trade_pnl_pct, trade_id))
+                        if cursor.rowcount > 0:
+                            conn.commit()
+                            print(f"[SYNC] ✓ Backfill: trades #{trade_id} P&L corrected: ${trade_pnl:+.2f} ({trade_pnl_pct:+.2f}%) exit=${fill_price:.4f}")
+                    except Exception as tp_err:
+                        print(f"[SYNC] ⚠️ Backfill trades P&L: {tp_err}")
+                break
+
+        if matched:
+            print(f"[SYNC] ✓ Backfilled {matched}/{len(unfilled)} lot_closure exit fills from {broker_name}")
+
+    async def _query_broker_exit_fill(self, broker_name, broker_instance, symbol, bracket_ids, trade, bto_order_id=None):
+        """Query the broker for actual exit fill price from bracket/OCO orders.
+
+        Checks each bracket order ID (OCO parent, SL, PT) at the broker. If any
+        is FILLED, returns the fill price and order details.
+
+        For Schwab, also searches recent account orders for STC fills matching the
+        symbol when no bracket IDs are available (fallback via bto_order_id).
+
+        Returns dict with 'price', 'order_id', 'filled_at' or None.
+        """
+        bn = broker_name.upper()
+
+        if bn == 'SCHWAB' and broker_instance and hasattr(broker_instance, 'get_order_status'):
+            order_ids_to_check = []
+            oco_id = bracket_ids.get('oco_id')
+            sl_id = bracket_ids.get('sl_id')
+            pt_id = bracket_ids.get('pt_id')
+
+            if oco_id:
+                order_ids_to_check.append(('OCO', str(oco_id)))
+            if sl_id and str(sl_id) != str(oco_id or ''):
+                order_ids_to_check.append(('SL', str(sl_id)))
+            if pt_id and str(pt_id) != str(oco_id or ''):
+                order_ids_to_check.append(('PT', str(pt_id)))
+
+            for label, oid in order_ids_to_check:
+                try:
+                    status_result = await asyncio.wait_for(
+                        broker_instance.get_order_status(oid),
+                        timeout=8.0
+                    )
+                    if status_result and status_result.get('status') == 'filled':
+                        avg_price = float(status_result.get('average_price', 0))
+                        if avg_price > 0:
+                            return {
+                                'price': avg_price,
+                                'order_id': oid,
+                                'filled_at': datetime.now().isoformat(),
+                                'source': f'bracket_{label.lower()}'
+                            }
+                except Exception as e:
+                    print(f"[SYNC] ⚠️ Bracket {label} order #{oid} status check: {e}")
+
+            # Fallback: search Schwab recent orders for STC fills
+            if bto_order_id and hasattr(broker_instance, '_make_request') and hasattr(broker_instance, 'account_hash'):
+                try:
+                    from datetime import timedelta
+                    now = datetime.now()
+                    from_time = (now - timedelta(hours=12)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                    to_time = now.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
+                    response = await broker_instance._make_request(
+                        'GET',
+                        f"{broker_instance.BASE_URL}/accounts/{broker_instance.account_hash}/orders",
+                        params={
+                            'fromEnteredTime': from_time,
+                            'toEnteredTime': to_time,
+                            'status': 'FILLED'
+                        }
+                    )
+                    if response and response.status_code == 200:
+                        orders = response.json()
+                        symbol_upper = symbol.upper()
+                        for order in orders:
+                            legs = order.get('orderLegCollection', [])
+                            for leg in legs:
+                                instr = leg.get('instrument', {})
+                                if instr.get('symbol', '').upper() == symbol_upper and \
+                                   leg.get('instruction', '').upper() in ('SELL', 'SELL_TO_CLOSE'):
+                                    activities = order.get('orderActivityCollection', [])
+                                    total_filled = 0
+                                    total_cost = 0.0
+                                    for activity in activities:
+                                        if activity.get('activityType') == 'EXECUTION':
+                                            for exec_leg in activity.get('executionLegs', []):
+                                                lq = int(exec_leg.get('quantity', 0))
+                                                lp = float(exec_leg.get('price', 0))
+                                                total_filled += lq
+                                                total_cost += lq * lp
+                                    if total_filled > 0:
+                                        avg = total_cost / total_filled
+                                        filled_time = order.get('closeTime') or order.get('enteredTime') or ''
+                                        return {
+                                            'price': avg,
+                                            'order_id': str(order.get('orderId', '')),
+                                            'filled_at': filled_time or datetime.now().isoformat(),
+                                            'source': 'schwab_recent_orders'
+                                        }
+                except Exception as e:
+                    print(f"[SYNC] ⚠️ Schwab recent orders search: {e}")
+
+        elif broker_instance and hasattr(broker_instance, 'get_order_status'):
+            for label, oid in [('SL', bracket_ids.get('sl_id')), ('PT', bracket_ids.get('pt_id'))]:
+                if not oid:
+                    continue
+                try:
+                    status_result = await asyncio.wait_for(
+                        broker_instance.get_order_status(str(oid)),
+                        timeout=8.0
+                    )
+                    if status_result:
+                        st = status_result.get('status', '').lower()
+                        if st == 'filled':
+                            avg_price = float(status_result.get('average_price', 0) or status_result.get('fill_price', 0) or 0)
+                            if avg_price > 0:
+                                return {
+                                    'price': avg_price,
+                                    'order_id': str(oid),
+                                    'filled_at': datetime.now().isoformat(),
+                                    'source': f'bracket_{label.lower()}'
+                                }
+                except Exception as e:
+                    print(f"[SYNC] ⚠️ {broker_name} bracket {label} order #{oid}: {e}")
+
+        return None
+
     async def reconcile_bracket_orders(self, risk_manager):
         """
         On restart, reconcile preserved bracket order IDs with actual broker state.

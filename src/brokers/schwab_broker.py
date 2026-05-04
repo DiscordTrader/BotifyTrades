@@ -2520,79 +2520,24 @@ class SchwabBroker(BrokerInterface):
                 return []
             
             to_date = datetime.now()
-            from_date = to_date - timedelta(days=30)
-            
+            from_date = to_date - timedelta(days=7)
+
             response = await self._make_request(
                 'GET',
                 f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
                 params={
                     'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
                     'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                    'status': 'FILLED'
                 }
             )
             
             if response.status_code == 200:
                 orders = response.json()
                 result = []
-                
+
                 for order in orders[:count]:
-                    order_legs = order.get('orderLegCollection', [])
-                    if not order_legs:
-                        continue
-                    
-                    leg = order_legs[0]
-                    instrument = leg.get('instrument', {})
-                    asset_type = instrument.get('assetType', 'EQUITY').lower()
-                    
-                    symbol = instrument.get('symbol', '')
-                    underlying = instrument.get('underlyingSymbol', symbol) if asset_type == 'option' else symbol
-                    
-                    activities = order.get('orderActivityCollection', [])
-                    total_filled_qty = 0
-                    total_cost = 0.0
-                    filled_time = order.get('closeTime', '') or order.get('enteredTime', '')
-                    
-                    for activity in activities:
-                        if activity.get('activityType') == 'EXECUTION':
-                            exec_legs = activity.get('executionLegs', [])
-                            for exec_leg in exec_legs:
-                                leg_qty = int(exec_leg.get('quantity', 0))
-                                leg_price = float(exec_leg.get('price', 0))
-                                total_filled_qty += leg_qty
-                                total_cost += leg_qty * leg_price
-                                leg_time = exec_leg.get('time', '')
-                                if leg_time and leg_time > filled_time:
-                                    filled_time = leg_time
-                    
-                    filled_qty = total_filled_qty
-                    filled_price = (total_cost / total_filled_qty) if total_filled_qty > 0 else 0
-                    
-                    if filled_qty == 0:
-                        filled_qty = int(order.get('filledQuantity', 0)) or int(leg.get('quantity', 0))
-                    if filled_price == 0:
-                        filled_price = float(order.get('price', 0))
-                    
-                    instruction = leg.get('instruction', '') if leg else ''
-                    
-                    order_data = {
-                        'order_id': str(order.get('orderId', '')),
-                        'symbol': underlying,
-                        'quantity': filled_qty,
-                        'filled_price': filled_price,
-                        'action': instruction,
-                        'filled_time': filled_time,
-                        'asset_type': 'option' if asset_type == 'option' else 'stock',
-                        'order_type': order.get('orderType', '')
-                    }
-                    
-                    if asset_type == 'option':
-                        order_data['strike'] = float(instrument.get('strikePrice', 0))
-                        order_data['expiry'] = instrument.get('expirationDate', '')[:10] if instrument.get('expirationDate') else ''
-                        order_data['direction'] = instrument.get('putCall', '')[0] if instrument.get('putCall') else ''
-                    
-                    result.append(order_data)
-                
+                    self._extract_filled_from_order(order, result)
+
                 if self._data_hub:
                     self._data_hub.update_order_history(result)
                 return result
@@ -2601,6 +2546,94 @@ class SchwabBroker(BrokerInterface):
             print(f"[{self.name}] Error getting order history: {e}")
         
         return []
+
+    def _extract_filled_from_order(self, order: Dict, result: List):
+        """Extract filled order entries, walking into childOrderStrategies for TRIGGER/OCO."""
+        seen_ids = {r['order_id'] for r in result}
+        order_legs = order.get('orderLegCollection', [])
+        strategy = order.get('orderStrategyType', 'SINGLE')
+        status = order.get('status', '')
+
+        if order_legs and status == 'FILLED':
+            parsed = self._parse_order_fill(order)
+            if parsed and parsed['order_id'] not in seen_ids:
+                result.append(parsed)
+
+        for child in order.get('childOrderStrategies', []):
+            child_status = child.get('status', '')
+            child_legs = child.get('orderLegCollection', [])
+
+            if child_legs and child_status == 'FILLED':
+                parsed = self._parse_order_fill(child)
+                if parsed and parsed['order_id'] not in seen_ids:
+                    result.append(parsed)
+                    seen_ids.add(parsed['order_id'])
+
+            for grandchild in child.get('childOrderStrategies', []):
+                gc_status = grandchild.get('status', '')
+                gc_legs = grandchild.get('orderLegCollection', [])
+
+                if gc_legs and gc_status == 'FILLED':
+                    parsed = self._parse_order_fill(grandchild)
+                    if parsed and parsed['order_id'] not in seen_ids:
+                        result.append(parsed)
+                        seen_ids.add(parsed['order_id'])
+
+    def _parse_order_fill(self, order: Dict) -> Optional[Dict]:
+        """Parse a single Schwab order node into a fill dict."""
+        order_legs = order.get('orderLegCollection', [])
+        if not order_legs:
+            return None
+
+        leg = order_legs[0]
+        instrument = leg.get('instrument', {})
+        asset_type = instrument.get('assetType', 'EQUITY').lower()
+        symbol = instrument.get('symbol', '')
+        underlying = instrument.get('underlyingSymbol', symbol) if asset_type == 'option' else symbol
+
+        activities = order.get('orderActivityCollection', [])
+        total_filled_qty = 0
+        total_cost = 0.0
+        filled_time = order.get('closeTime', '') or order.get('enteredTime', '')
+
+        for activity in activities:
+            if activity.get('activityType') == 'EXECUTION':
+                for exec_leg in activity.get('executionLegs', []):
+                    leg_qty = int(exec_leg.get('quantity', 0))
+                    leg_price = float(exec_leg.get('price', 0))
+                    total_filled_qty += leg_qty
+                    total_cost += leg_qty * leg_price
+                    leg_time = exec_leg.get('time', '')
+                    if leg_time and leg_time > filled_time:
+                        filled_time = leg_time
+
+        filled_qty = total_filled_qty
+        filled_price = (total_cost / total_filled_qty) if total_filled_qty > 0 else 0
+
+        if filled_qty == 0:
+            filled_qty = int(order.get('filledQuantity', 0)) or int(leg.get('quantity', 0))
+        if filled_price == 0:
+            filled_price = float(order.get('price', 0))
+
+        instruction = leg.get('instruction', '')
+
+        order_data = {
+            'order_id': str(order.get('orderId', '')),
+            'symbol': underlying,
+            'quantity': filled_qty,
+            'filled_price': filled_price,
+            'action': instruction,
+            'filled_time': filled_time,
+            'asset_type': 'option' if asset_type == 'option' else 'stock',
+            'order_type': order.get('orderType', '')
+        }
+
+        if asset_type == 'option':
+            order_data['strike'] = float(instrument.get('strikePrice', 0))
+            order_data['expiry'] = instrument.get('expirationDate', '')[:10] if instrument.get('expirationDate') else ''
+            order_data['direction'] = instrument.get('putCall', '')[0] if instrument.get('putCall') else ''
+
+        return order_data
 
     async def place_stop_order(
         self,
