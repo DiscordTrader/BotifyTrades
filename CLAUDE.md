@@ -1,4 +1,4 @@
-# BotifyTrades v9.3.6 — Project Context
+# BotifyTrades v9.3.7 — Project Context
 
 ## Summary
 Multi-broker automated trading bot. Monitors Discord signals, executes trades across 7 brokers (Schwab, Webull, Alpaca, IBKR, Tastytrade, Robinhood, Trading212), manages risk with tiered PT/SL/trailing/OCO brackets. Desktop app built with PyInstaller + PyArmor (user build) or plain PyInstaller (admin build). Web GUI via Flask. ~21K lines in selfbot_webull.py, ~9K in position_monitor.py.
@@ -24,7 +24,7 @@ Multi-broker automated trading bot. Monitors Discord signals, executes trades ac
 | `src/services/unified_price_hub.py` | ~600 | Cross-broker price aggregation |
 | `src/services/broker_sync_service.py` | ~3K | Position reconciliation |
 | `src/services/conditional_orders/base.py` | ~2K | Conditional order monitoring |
-| `upgrade/version.py` | ~160 | Version: APP_VERSION = "9.3.6" |
+| `upgrade/version.py` | ~160 | Version: APP_VERSION = "9.3.7" |
 
 ## Release Process
 ```bash
@@ -33,30 +33,10 @@ Multi-broker automated trading bot. Monitors Discord signals, executes trades ac
 ```
 Repos: DiscordTrader/BotifyTradesv2 (private), DiscordTrader/BotifyTrades (public)
 
-## Active Bug List (Schwab Architect Review — April 2026)
-Full HTML report: `docs/schwab_architect_review.html`
-
-### P0 (1) — FIXED April 29, 2026
-1. ~~**Event loop starvation**~~ — FIXED: streaming now runs in own thread, cross-loop subscription wrapper added
-
-### P1 (4) — FIXED April 29, 2026
-2. ~~**OCO cancel result ignored**~~ — FIXED: cancel result checked, abort on failure to prevent double-sell
-3. ~~**Stale broker_pt_order_id**~~ — FIXED: cleared on OCO re-place failure
-4. ~~**get_order_status bypasses rate limiter**~~ — FIXED: routed through `_make_request()`
-5. ~~**Double cancel sweep per sell**~~ — FIXED: redundant second sweep removed
-
-### P2 (9) — FIXED April 29, 2026
-6. ~~Deferred SL stale price~~ — FIXED: uses dynamic_sl_price or early_stop_price
-7. ~~Dynamic SL sync gated by wrong field~~ — FIXED: checks broker_oco_order_id too
-8. ~~No standalone SL after cascade~~ — FIXED: same guard fix as #7
-9. ~~`_extract_broker` missing Schwab~~ — FIXED: added Schwab, Tastytrade, Robinhood, Trading212
-10. ~~`get_option_chain` bypasses rate limiter~~ — FIXED: routed through `_make_request()`
-11. ~~SELL_SHORT misclassified as exit~~ — FIXED: removed from is_exit check
-12. ~~Streaming `_connected` before subscriptions~~ — FIXED: set after subscriptions restored
-13. ~~Streaming `stop()` no cleanup~~ — FIXED: ws.close() + thread.join()
-14. ~~`_fetch_streamer_info` bypasses rate limiter~~ — FIXED: routed through `_make_request()`
-
-### P3 (6) — not yet fixed, minor, see review doc
+## Bug Status (Schwab Architect Review — April 2026)
+Full report: `docs/schwab_architect_review.html`
+- P0 (1), P1 (4), P2 (9): All FIXED April 29, 2026
+- P3 (6): Minor, not yet fixed — see review doc for details
 
 ## Uncommitted Changes
 - All v9.4.0 changes committed in release
@@ -91,3 +71,4 @@ Full HTML report: `docs/schwab_architect_review.html`
 - Use `@file` references in responses instead of pasting large blocks.
 - For files >500 lines, read only the relevant section (offset/limit).
 - Prefer grep to find line numbers first, then targeted reads.
+- For log analysis: DON'T upload/paste logs. Instead tell Claude the file path and let it use Read/Grep tools with targeted offsets. For large logs, grep for errors first, then read surrounding context.
