@@ -1381,7 +1381,7 @@ def init_db():
             global_daily_loss_limit REAL DEFAULT 0,
             global_max_positions INTEGER DEFAULT 0,
             order_timeout_minutes INTEGER DEFAULT 5,
-            risk_check_interval_seconds REAL DEFAULT 2,
+            risk_check_interval_seconds REAL DEFAULT 0.2,
             acknowledged_v2_features INTEGER DEFAULT 0,
             daily_pnl_limit_enabled INTEGER DEFAULT 0,
             daily_profit_limit REAL DEFAULT 0,
@@ -1390,10 +1390,12 @@ def init_db():
             daily_loss_limit_pct REAL DEFAULT 0,
             daily_pnl_warning_pct REAL DEFAULT 80,
             daily_pnl_reset_time TEXT DEFAULT '09:30',
+            trading_paused INTEGER DEFAULT 0,
+            trading_paused_at TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
+
     cursor.execute('''
         INSERT OR IGNORE INTO global_risk_settings (id) VALUES (1)
     ''')
@@ -1401,7 +1403,15 @@ def init_db():
     try:
         cursor.execute('SELECT risk_check_interval_seconds FROM global_risk_settings LIMIT 1')
     except sqlite3.OperationalError:
-        cursor.execute('ALTER TABLE global_risk_settings ADD COLUMN risk_check_interval_seconds REAL DEFAULT 2')
+        cursor.execute('ALTER TABLE global_risk_settings ADD COLUMN risk_check_interval_seconds REAL DEFAULT 0.2')
+        conn.commit()
+    cursor.execute('UPDATE global_risk_settings SET risk_check_interval_seconds = 0.2 WHERE risk_check_interval_seconds = 2 AND id = 1')
+
+    try:
+        cursor.execute('SELECT trading_paused FROM global_risk_settings LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE global_risk_settings ADD COLUMN trading_paused INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE global_risk_settings ADD COLUMN trading_paused_at TEXT')
         conn.commit()
 
     _daily_pnl_columns = {
@@ -10632,6 +10642,11 @@ def init_signal_formats_table():
             ('IN', 'dhanq', 'DhanQ', '["client_id","access_token"]', 'dhanhq', 1, 1, 0, '24 hours (auto-refresh available)', 3),
             ('UK', 'trading212', 'Trading 212', '["api_key"]', 'aiohttp', 0, 1, 1, 'No expiry (API key)', 7)
     ''')
+
+    # Hide Robinhood and Trading212 from UI (brokers still functional if previously configured)
+    cursor.execute('''
+        UPDATE broker_profiles SET enabled = 0 WHERE broker_name IN ('robinhood', 'trading212')
+    ''')
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS broker_credentials (
@@ -10665,7 +10680,7 @@ def init_signal_formats_table():
     cursor.execute('''
         INSERT OR IGNORE INTO broker_profiles 
         (country_code, broker_name, display_name, credential_fields, python_library, supports_options, supports_stocks, supports_paper, token_expiry_info, display_order, enabled)
-        VALUES ('UK', 'trading212', 'Trading 212', '["api_key"]', 'aiohttp', 0, 1, 1, 'No expiry (API key)', 7, 1)
+        VALUES ('UK', 'trading212', 'Trading 212', '["api_key"]', 'aiohttp', 0, 1, 1, 'No expiry (API key)', 7, 0)
     ''')
     
     # Migration: Fix Zerodha credential fields to match API requirements
@@ -11893,7 +11908,7 @@ def get_global_risk_settings() -> Dict:
             'global_daily_loss_limit': 0,
             'global_max_positions': 0,
             'order_timeout_minutes': 5,
-            'risk_check_interval_seconds': 2,
+            'risk_check_interval_seconds': 0.2,
             'daily_pnl_limit_enabled': 0,
             'daily_profit_limit': 0,
             'daily_profit_limit_pct': 0,
@@ -11903,6 +11918,8 @@ def get_global_risk_settings() -> Dict:
             'daily_pnl_reset_time': '09:30',
             'max_daily_trades_default': 0,
             'max_daily_trades_overrides': '{}',
+            'trading_paused': 0,
+            'trading_paused_at': None,
         }
     except Exception as e:
         print(f"[OMS] Error getting global risk settings: {e}")
@@ -11933,7 +11950,7 @@ def update_global_risk_settings(updates: Dict) -> bool:
                 val = float(updates['risk_check_interval_seconds'])
                 updates['risk_check_interval_seconds'] = max(0.2, min(60.0, val))
             except (TypeError, ValueError):
-                updates['risk_check_interval_seconds'] = 2.0
+                updates['risk_check_interval_seconds'] = 0.2
         
         set_clauses = []
         params = []
@@ -12085,10 +12102,20 @@ def is_circuit_breaker_tripped() -> Dict:
     """
     settings = get_global_risk_settings()
     
+    if settings.get('trading_paused'):
+        return {
+            'tripped': True,
+            'reason': 'Trading paused by user',
+            'daily_loss': 0,
+            'limit': 0,
+            'paused': True,
+            'paused_at': settings.get('trading_paused_at')
+        }
+
     circuit_breaker_on = settings.get('enable_circuit_breaker', False)
     daily_loss_limit = settings.get('global_daily_loss_limit', 0)
     max_positions = settings.get('global_max_positions', 0)
-    
+
     has_any_check = circuit_breaker_on or daily_loss_limit > 0 or max_positions > 0
     if not has_any_check:
         return {'tripped': False, 'reason': None, 'daily_loss': 0, 'limit': 0}

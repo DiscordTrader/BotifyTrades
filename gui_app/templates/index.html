@@ -23,6 +23,23 @@
     </div>
 </div>
 
+<!-- Trading Pause/Resume Control -->
+<div id="trading-pause-bar" style="margin-bottom: 16px; padding: 12px 20px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.04));
+    border: 1px solid rgba(34, 197, 94, 0.3);">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span id="trading-pause-icon" style="font-size: 1.4rem;">▶️</span>
+        <div>
+            <div id="trading-pause-label" style="font-weight: 600; font-size: 0.95rem; color: #22c55e;">Trading Active</div>
+            <div id="trading-pause-detail" style="font-size: 0.78rem; color: rgba(255,255,255,0.5); margin-top: 2px;">Bot is executing signals from Discord channels</div>
+        </div>
+    </div>
+    <button id="trading-pause-btn" onclick="toggleTradingPause()" style="padding: 10px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.5px; transition: all 0.2s;
+        background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);">
+        PAUSE TRADING
+    </button>
+</div>
+
 <!-- Daily P&L Limit Banners -->
 <div id="daily-pnl-banners" style="display: none; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;"></div>
 
@@ -3432,7 +3449,68 @@ function selectBroker(brokerKey) {
 }
 
 // Load initial data with startup delay
+// ========== TRADING PAUSE/RESUME ==========
+async function loadTradingPauseState() {
+    try {
+        const resp = await fetch('/api/trading/status');
+        const data = await resp.json();
+        updatePauseUI(data.paused, data.paused_at);
+    } catch(e) { console.error('Error loading trading pause state:', e); }
+}
+
+function updatePauseUI(paused, pausedAt) {
+    const bar = document.getElementById('trading-pause-bar');
+    const icon = document.getElementById('trading-pause-icon');
+    const label = document.getElementById('trading-pause-label');
+    const detail = document.getElementById('trading-pause-detail');
+    const btn = document.getElementById('trading-pause-btn');
+    if (!bar) return;
+
+    if (paused) {
+        bar.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.06))';
+        bar.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+        icon.textContent = '⏸️';
+        label.style.color = '#ef4444';
+        label.textContent = 'Trading Paused';
+        const since = pausedAt ? ' since ' + new Date(pausedAt).toLocaleTimeString() : '';
+        detail.textContent = 'New signals will NOT be executed' + since;
+        btn.textContent = 'RESUME TRADING';
+        btn.style.background = 'linear-gradient(135deg, #22c55e, #16a34a)';
+        btn.style.boxShadow = '0 2px 8px rgba(34, 197, 94, 0.3)';
+    } else {
+        bar.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.04))';
+        bar.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+        icon.textContent = '▶️';
+        label.style.color = '#22c55e';
+        label.textContent = 'Trading Active';
+        detail.textContent = 'Bot is executing signals from Discord channels';
+        btn.textContent = 'PAUSE TRADING';
+        btn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+        btn.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+    }
+}
+
+async function toggleTradingPause() {
+    const btn = document.getElementById('trading-pause-btn');
+    const isPaused = btn.textContent.includes('RESUME');
+    if (!isPaused && !confirm('Pause all trading? Existing positions and risk monitoring will continue — only NEW signal execution will stop.')) return;
+
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    try {
+        const resp = await fetch('/api/trading/pause', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            updatePauseUI(data.paused, data.paused ? new Date().toISOString() : null);
+        }
+    } catch(e) { console.error('Error toggling pause:', e); }
+    btn.disabled = false;
+    btn.style.opacity = '1';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    loadTradingPauseState();
+
     // Initialize region selector from saved preference
     const regionSelector = document.getElementById('region-selector');
     if (regionSelector && currentRegion) {

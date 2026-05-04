@@ -8912,6 +8912,54 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/trading/pause', methods=['POST'])
+    @login_required
+    def api_toggle_trading_pause():
+        """Toggle trading pause/resume. Returns new state."""
+        try:
+            settings = db.get_global_risk_settings()
+            currently_paused = bool(settings.get('trading_paused', 0))
+            new_state = not currently_paused
+
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            if new_state:
+                from datetime import datetime
+                cursor.execute(
+                    'UPDATE global_risk_settings SET trading_paused = 1, trading_paused_at = ? WHERE id = 1',
+                    (datetime.now().isoformat(),)
+                )
+                print("[TRADING] ⏸️ Trading PAUSED by user")
+            else:
+                cursor.execute(
+                    'UPDATE global_risk_settings SET trading_paused = 0, trading_paused_at = NULL WHERE id = 1',
+                )
+                print("[TRADING] ▶️ Trading RESUMED by user")
+            conn.commit()
+
+            return jsonify({
+                'success': True,
+                'paused': new_state,
+                'message': 'Trading paused' if new_state else 'Trading resumed'
+            })
+        except Exception as e:
+            print(f"[API] Error toggling trading pause: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/trading/status', methods=['GET'])
+    @login_required
+    def api_get_trading_status():
+        """Get current trading pause status."""
+        try:
+            settings = db.get_global_risk_settings()
+            return jsonify({
+                'success': True,
+                'paused': bool(settings.get('trading_paused', 0)),
+                'paused_at': settings.get('trading_paused_at')
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'paused': False}), 500
+
     # Conditional Order Settings
     @app.route('/api/settings/conditional_orders', methods=['GET'])
     def api_get_conditional_order_settings():

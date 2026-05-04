@@ -1501,7 +1501,15 @@ class BaseConditionalOrderService(ABC):
         if not self.is_enabled():
             self._log("Service disabled")
             return None
-        
+
+        try:
+            from gui_app.database import get_global_risk_settings
+            if get_global_risk_settings().get('trading_paused'):
+                self._log("⏸️ BLOCKED: Trading is paused")
+                return None
+        except Exception:
+            pass
+
         try:
             from gui_app.database import get_channel_by_discord_id, get_channel_by_telegram_id
             ch_exec = get_channel_by_discord_id(str(channel_id))

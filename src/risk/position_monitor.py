@@ -1557,7 +1557,7 @@ class RiskManager:
     4. Trailing stop with activation threshold
     """
     
-    DEFAULT_MONITORING_INTERVAL = 1  # seconds - real-time monitoring for live positions
+    DEFAULT_MONITORING_INTERVAL = 0.2  # seconds - sub-second risk evaluation via streaming cache
     DEFAULT_TRAILING_ACTIVATION = 15.0  # percent
     
     def __init__(

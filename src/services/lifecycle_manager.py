@@ -239,27 +239,46 @@ class BotLifecycleManager:
             import tempfile
             
             if hasattr(sys, '_MEIPASS'):
-                # PyInstaller frozen executable - restart the exe itself
                 exe_path = sys.executable
-                print(f"[LIFECYCLE] Frozen build - restarting: {exe_path}")
-                
+                old_pid = os.getpid()
+                print(f"[LIFECYCLE] Frozen build - restarting: {exe_path} (PID {old_pid})")
+
                 if sys.platform == 'win32':
-                    # Windows: Create a batch script that waits then launches
-                    # This ensures the old process fully exits before new one starts
-                    # which prevents temp folder conflicts
+                    # Windows: batch script that waits for old process to fully die,
+                    # then retries launch up to 3 times (avoids "Failed to load Python DLL"
+                    # race when _MEI temp folder hasn't been released yet)
                     batch_content = f'''@echo off
+setlocal
+set EXE={exe_path}
+set OLD_PID={old_pid}
+
+:WAIT_EXIT
+tasklist /FI "PID eq %OLD_PID%" 2>nul | find /i "%OLD_PID%" >nul
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >nul
+    goto WAIT_EXIT
+)
+
 timeout /t 2 /nobreak >nul
-start "" "{exe_path}"
+
+set TRIES=0
+:RETRY
+set /a TRIES+=1
+start "" "%EXE%"
+if errorlevel 1 (
+    if %TRIES% lss 3 (
+        timeout /t 3 /nobreak >nul
+        goto RETRY
+    )
+)
 del "%~f0"
 '''
-                    # Write batch file to user's temp directory (not PyInstaller's temp)
-                    batch_path = os.path.join(tempfile.gettempdir(), f"botify_restart_{os.getpid()}.bat")
+                    batch_path = os.path.join(tempfile.gettempdir(), f"botify_restart_{old_pid}.bat")
                     with open(batch_path, 'w', encoding='utf-8') as f:
                         f.write(batch_content)
-                    
+
                     print(f"[LIFECYCLE] Created restart script: {batch_path}")
-                    
-                    # Launch batch script with hidden window, fully detached
+
                     CREATE_NO_WINDOW = 0x08000000
                     DETACHED_PROCESS = 0x00000008
                     subprocess.Popen(
@@ -269,30 +288,27 @@ del "%~f0"
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL
                     )
-                    print("[LIFECYCLE] Restart script launched, exiting immediately...")
-                    
+                    print("[LIFECYCLE] Restart script launched, exiting...")
+
                 elif sys.platform == 'darwin':
-                    # macOS: use open command for app bundles or direct exec with delay
                     if '.app' in exe_path:
                         app_path = exe_path.split('.app')[0] + '.app'
-                        # Use shell script with delay
                         subprocess.Popen(
-                            ['bash', '-c', f'sleep 2 && open -n "{app_path}"'],
+                            ['bash', '-c', f'sleep 4 && open -n "{app_path}"'],
                             start_new_session=True,
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL
                         )
                     else:
                         subprocess.Popen(
-                            ['bash', '-c', f'sleep 2 && "{exe_path}"'],
+                            ['bash', '-c', f'sleep 4 && "{exe_path}"'],
                             start_new_session=True,
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL
                         )
                 else:
-                    # Linux: Use bash with delay
                     subprocess.Popen(
-                        ['bash', '-c', f'sleep 2 && "{exe_path}"'],
+                        ['bash', '-c', f'sleep 4 && "{exe_path}"'],
                         start_new_session=True,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL
@@ -310,6 +326,8 @@ del "%~f0"
                 time.sleep(1)
             
             print("[LIFECYCLE] Exiting current process for restart...")
+            # os._exit required — sys.exit only kills the calling thread, not the process.
+            # The batch/shell script waits for this PID to fully die before relaunching.
             os._exit(0)
             
         except Exception as e:

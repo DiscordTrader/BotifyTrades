@@ -7288,6 +7288,10 @@ class SelfClient(discord.Client):
         self.processing_ready = None
         self._send_lock = None
         
+        # Trading pause cache (avoid DB hit on every Discord message)
+        self._trading_pause_cache = (False, 0.0)  # (is_paused, checked_at)
+        self._trading_pause_cache_ttl = 2.0  # seconds
+
         # Message deduplication (prevent duplicate event processing from Discord self-bot)
         self._processed_messages: set = set()
         self._max_processed_cache = 1000  # Keep last 1000 message IDs
@@ -7734,6 +7738,22 @@ class SelfClient(discord.Client):
             return getattr(self, 'trading212_broker', None)
         
         return None
+
+    def _is_trading_paused(self) -> bool:
+        """Cached check for trading_paused flag. 2s TTL to avoid DB hit per Discord message."""
+        import time
+        now = time.time()
+        cached_val, checked_at = self._trading_pause_cache
+        if now - checked_at < self._trading_pause_cache_ttl:
+            return cached_val
+        try:
+            from gui_app.database import get_global_risk_settings
+            settings = get_global_risk_settings()
+            paused = bool(settings.get('trading_paused', 0))
+        except Exception:
+            paused = cached_val
+        self._trading_pause_cache = (paused, now)
+        return paused
 
     async def setup(self):
         # Create async objects NOW when event loop is properly set up (fixes Windows "different loop" error)
@@ -11533,7 +11553,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # If not in database, not in legacy CHANNEL_IDS list, AND not a mapped/routing source, ignore
         if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel and not is_signal_routing_source:
             return
-        
+
+        # PAUSE GATE: Block ALL signal processing when trading is paused
+        if self._is_trading_paused():
+            return
+
         print(f"[DEBUG FLOW] [{trace_id}] ========== SIGNAL LIFECYCLE START ==========")
         print(f"[DEBUG FLOW] [{trace_id}] Message ID: {message.id}")
         print(f"[DEBUG FLOW] [{trace_id}] Channel: {message.channel.id} | Author: {message.author.name} (ID: {message.author.id})")

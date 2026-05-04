@@ -353,8 +353,8 @@ input:checked + .slider:before {
         <span id="tastytrade-live-status-badge" class="status-badge disconnected">Tasty Live</span>
         <span id="ibkr-status-badge" class="status-badge disconnected">IBKR</span>
         <span id="schwab-status-badge" class="status-badge disconnected">Schwab</span>
-        <span id="robinhood-status-badge" class="status-badge disconnected" style="background: rgba(0, 200, 83, 0.15); border-color: rgba(0, 200, 83, 0.3);">Robinhood</span>
-        <span id="trading212-status-badge" class="status-badge disconnected" style="background: rgba(0, 82, 255, 0.15); border-color: rgba(0, 163, 255, 0.3);">T212</span>
+        <span id="robinhood-status-badge" class="status-badge disconnected" style="display:none; background: rgba(0, 200, 83, 0.15); border-color: rgba(0, 200, 83, 0.3);">Robinhood</span>
+        <span id="trading212-status-badge" class="status-badge disconnected" style="display:none; background: rgba(0, 82, 255, 0.15); border-color: rgba(0, 163, 255, 0.3);">T212</span>
     </div>
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid rgba(0, 212, 255, 0.2);">
         <button id="btn-reload-credentials" onclick="reloadCredentials()" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">
@@ -764,8 +764,8 @@ input:checked + .slider:before {
         <div id="tastytrade-live-account-info" class="account-info" style="display: none;"></div>
     </div>
     
-    <!-- Robinhood LIVE Trading (NO PAPER MODE) -->
-    <div class="settings-card" style="background: linear-gradient(135deg, #1a2f1a 0%, #0d1f0d 100%); border-color: rgba(0, 200, 83, 0.4);">
+    <!-- Robinhood LIVE Trading (NO PAPER MODE) — hidden, broker disabled -->
+    <div class="settings-card" style="display:none; background: linear-gradient(135deg, #1a2f1a 0%, #0d1f0d 100%); border-color: rgba(0, 200, 83, 0.4);">
         <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #00c853;">🪶 Robinhood (LIVE Only)</h3><button type="button" onclick="showAdminHelp('robinhood')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">Connect your Robinhood account for stock and options trading</p>
         
@@ -836,8 +836,8 @@ input:checked + .slider:before {
         <div id="robinhood-account-info" class="account-info" style="display: none;"></div>
     </div>
     
-    <!-- Trading 212 -->
-    <div class="settings-card" style="background: linear-gradient(135deg, #0a1a3d 0%, #0d2654 100%); border-color: rgba(0, 163, 255, 0.4);">
+    <!-- Trading 212 — hidden, broker disabled -->
+    <div class="settings-card" style="display:none; background: linear-gradient(135deg, #0a1a3d 0%, #0d2654 100%); border-color: rgba(0, 163, 255, 0.4);">
         <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #00A3FF;">📊 Trading 212</h3><button type="button" onclick="showAdminHelp('trading212')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
         <p class="description">UK/EU stock trading via Trading 212 API (stocks only, no options)</p>
         
@@ -1656,9 +1656,9 @@ input:checked + .slider:before {
                     </div>
                     <p class="help-text">When traders edit signals (C1apped/WaxUI), auto-update broker SL/PT orders</p>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="display:none;">
                     <label>Risk Check Interval (seconds)</label>
-                    <input type="number" id="global-risk-check-interval" value="1" min="0.2" max="60" step="0.1">
+                    <input type="number" id="global-risk-check-interval" value="0.2" min="0.2" max="60" step="0.1">
                     <p class="help-text">How often positions are checked for SL/PT triggers. Min: 0.2s. Uses streaming cache — sub-second intervals won't increase API calls.</p>
                 </div>
             </div>
