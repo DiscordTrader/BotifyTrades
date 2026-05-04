@@ -426,6 +426,8 @@ class BrokerSyncService:
             self._fill_sync_counter[broker_name] = 0
         
         if hasattr(self, '_risk_manager') and self._risk_manager:
+            await self.reconcile_bracket_orders(self._risk_manager)
+            await asyncio.sleep(0)
             await self.reconcile_risk_orders(self._risk_manager)
             await asyncio.sleep(0)
         
@@ -2935,6 +2937,206 @@ class BrokerSyncService:
             traceback.print_exc()
             update_broker_sync_state(broker=broker_name, error=str(e))
     
+    async def reconcile_bracket_orders(self, risk_manager):
+        """
+        On restart, reconcile preserved bracket order IDs with actual broker state.
+        Runs once per position — the _bracket_needs_reconciliation flag is cleared after.
+        """
+        if not risk_manager or not hasattr(risk_manager, 'cache'):
+            return
+
+        cache = risk_manager.cache
+        reconcile_keys = []
+        for key in cache.get_all_keys():
+            entry = cache.get(key)
+            if entry and getattr(entry, '_bracket_needs_reconciliation', False):
+                reconcile_keys.append(key)
+
+        if not reconcile_keys:
+            return
+
+        print(f"[SYNC] ♻️ Reconciling bracket orders for {len(reconcile_keys)} position(s)...")
+        changed = False
+
+        for pos_key in reconcile_keys:
+            entry = cache.get(pos_key)
+            if not entry:
+                continue
+
+            broker_name = self._extract_broker(pos_key)
+            oco_id = entry.broker_oco_order_id
+            sl_id = entry.broker_stop_order_id
+            pt_id = entry.broker_pt_order_id
+
+            result = await self._reconcile_bracket_for_entry(
+                entry, pos_key, broker_name, oco_id, sl_id, pt_id
+            )
+
+            if result == 'restored':
+                entry._bracket_needs_reconciliation = False
+                print(f"[SYNC] ✓ BRACKET RESTORED {pos_key} — orders still active at {broker_name}")
+                changed = True
+            elif result == 'filled':
+                entry._bracket_needs_reconciliation = False
+                self._clear_bracket_ids(entry)
+                print(f"[SYNC] ✓ BRACKET FILLED {pos_key} — bracket triggered during downtime")
+                changed = True
+            elif result == 'cleared':
+                entry._bracket_needs_reconciliation = False
+                self._clear_bracket_ids(entry)
+                entry.broker_orders_placed = False
+                print(f"[SYNC] ✓ BRACKET CLEARED {pos_key} — will place fresh brackets on next eval")
+                changed = True
+            elif result == 'deferred':
+                print(f"[SYNC] ⏳ BRACKET DEFERRED {pos_key} — {broker_name} unreachable, retry next cycle")
+
+        if changed:
+            cache.save()
+
+    async def _reconcile_bracket_for_entry(self, entry, pos_key, broker_name, oco_id, sl_id, pt_id):
+        """Query broker for actual order status and return reconciliation outcome."""
+        if 'Schwab' in broker_name or 'SCHWAB' in broker_name:
+            return await self._reconcile_schwab_brackets(entry, pos_key, oco_id, sl_id, pt_id)
+        elif 'IBKR' in broker_name:
+            return await self._reconcile_ibkr_brackets(entry, pos_key, sl_id, pt_id)
+        else:
+            return await self._reconcile_generic_brackets(entry, pos_key, broker_name, sl_id, pt_id)
+
+    async def _reconcile_schwab_brackets(self, entry, pos_key, oco_id, sl_id, pt_id):
+        """Schwab uses a single OCO parent order — check its status."""
+        check_id = oco_id or sl_id or pt_id
+        if not check_id:
+            return 'cleared'
+
+        status_info = await self._get_order_status('SCHWAB', check_id)
+        if not status_info:
+            return 'deferred'
+
+        status = (status_info.get('status') or '').lower()
+        if status in ('pending', 'pending_activation', 'partial'):
+            return 'restored'
+        elif status == 'filled':
+            return 'filled'
+        elif status in ('cancelled', 'rejected', 'expired'):
+            if sl_id and sl_id != oco_id:
+                sl_info = await self._get_order_status('SCHWAB', sl_id)
+                if sl_info:
+                    sl_status = (sl_info.get('status') or '').lower()
+                    if sl_status in ('pending', 'pending_activation', 'partial'):
+                        entry.broker_oco_order_id = None
+                        entry.broker_oco_sl_price = None
+                        entry.broker_oco_pt_price = None
+                        entry.broker_oco_qty = 0
+                        entry.broker_pt_order_id = None
+                        return 'restored'
+            return 'cleared'
+        return 'deferred'
+
+    async def _reconcile_ibkr_brackets(self, entry, pos_key, sl_id, pt_id):
+        """IBKR uses OCA group with individual SL and PT orders."""
+        if not sl_id and not pt_id:
+            return 'cleared'
+
+        sl_alive = False
+        pt_alive = False
+        sl_filled = False
+        pt_filled = False
+        any_queried = False
+
+        if sl_id:
+            sl_info = await self._get_order_status('IBKR', sl_id)
+            if sl_info:
+                any_queried = True
+                sl_status = (sl_info.get('status') or '').upper()
+                if sl_status in ('PRESUBMITTED', 'SUBMITTED', 'PENDINGSUBMIT', 'PENDING'):
+                    sl_alive = True
+                elif sl_status == 'FILLED':
+                    sl_filled = True
+
+        if pt_id:
+            pt_info = await self._get_order_status('IBKR', pt_id)
+            if pt_info:
+                any_queried = True
+                pt_status = (pt_info.get('status') or '').upper()
+                if pt_status in ('PRESUBMITTED', 'SUBMITTED', 'PENDINGSUBMIT', 'PENDING'):
+                    pt_alive = True
+                elif pt_status == 'FILLED':
+                    pt_filled = True
+
+        if not any_queried:
+            return 'deferred'
+
+        if sl_alive or pt_alive:
+            if not sl_alive and sl_id:
+                entry.broker_stop_order_id = None
+            if not pt_alive and pt_id:
+                entry.broker_pt_order_id = None
+            return 'restored'
+        elif sl_filled or pt_filled:
+            return 'filled'
+        return 'cleared'
+
+    async def _reconcile_generic_brackets(self, entry, pos_key, broker_name, sl_id, pt_id):
+        """For Alpaca, Tastytrade, Robinhood, Trading212, Webull."""
+        if not sl_id and not pt_id:
+            return 'cleared'
+
+        sl_alive = False
+        pt_alive = False
+        sl_filled = False
+        pt_filled = False
+        any_queried = False
+
+        alive_statuses = {'PENDING', 'WORKING', 'OPEN', 'ACCEPTED', 'NEW', 'PARTIAL',
+                          'PENDING_ACTIVATION', 'QUEUED', 'AWAITING_CONDITION'}
+
+        if sl_id:
+            sl_info = await self._get_order_status(broker_name, sl_id)
+            if sl_info:
+                any_queried = True
+                sl_status = (sl_info.get('status') or '').upper()
+                if sl_status in alive_statuses:
+                    sl_alive = True
+                elif sl_status == 'FILLED':
+                    sl_filled = True
+
+        if pt_id:
+            pt_info = await self._get_order_status(broker_name, pt_id)
+            if pt_info:
+                any_queried = True
+                pt_status = (pt_info.get('status') or '').upper()
+                if pt_status in alive_statuses:
+                    pt_alive = True
+                elif pt_status == 'FILLED':
+                    pt_filled = True
+
+        if not any_queried:
+            return 'deferred'
+
+        if sl_alive or pt_alive:
+            if not sl_alive and sl_id:
+                entry.broker_stop_order_id = None
+            if not pt_alive and pt_id:
+                entry.broker_pt_order_id = None
+            return 'restored'
+        elif sl_filled or pt_filled:
+            return 'filled'
+        return 'cleared'
+
+    def _clear_bracket_ids(self, entry):
+        """Reset all bracket order fields on a cache entry."""
+        entry.broker_stop_order_id = None
+        entry.broker_pt_order_id = None
+        entry.broker_oco_order_id = None
+        entry.broker_oco_sl_price = None
+        entry.broker_oco_pt_price = None
+        entry.broker_oco_qty = 0
+        entry.broker_pt_tier = 0
+        if hasattr(entry, '_bracket_placed_qty'):
+            entry._bracket_placed_qty = 0
+        if hasattr(entry, '_bracket_attempt_count'):
+            entry._bracket_attempt_count = 0
+
     async def reconcile_risk_orders(self, risk_manager):
         """
         Reconcile pending risk orders with broker order statuses.

@@ -1,5 +1,31 @@
 # BotifyTrades Progress Log
 
+## Session: May 3, 2026 — Bracket Order Restart Reconciliation (v9.3.5)
+
+### Problem
+- On bot restart with open positions that have active bracket orders (Schwab OCO, IBKR OCA, standalone SL/PT), the cache loader cleared all bracket IDs and set `broker_orders_placed=False`. The first eval cycle then placed **duplicate** SL/PT orders at the broker — old ones still WORKING + fresh ones = double-sell risk.
+
+### Solution: Preserve-and-Reconcile Pattern
+1. **risk_types.py** — Added `_bracket_needs_reconciliation` runtime flag (not persisted)
+2. **position_cache.py** — Modified `load()` to preserve bracket IDs when they exist instead of clearing. Keeps `broker_orders_placed=True` to block duplicate placement before reconciliation
+3. **broker_sync_service.py** — Added ~150-line reconciliation engine:
+   - `reconcile_bracket_orders()` — runs once per position on first sync after restart
+   - Broker-specific handlers: Schwab (OCO parent status), IBKR (individual SL/PT), generic (all other brokers)
+   - 4 outcomes: RESTORED (orders still active), FILLED (triggered during downtime), CLEARED (gone → fresh placement), DEFERRED (broker unreachable → retry)
+   - `_clear_bracket_ids()` helper resets all bracket fields
+4. **ibkr_broker.py** — Added `oca_group` and `stop_price` fields to `get_pending_orders()` response
+
+### Files Modified
+- `src/risk/risk_types.py:335` — `_bracket_needs_reconciliation` flag
+- `src/risk/position_cache.py:283-297` — Preserve bracket IDs on load
+- `src/services/broker_sync_service.py:429,2940-3128` — Reconciliation hook + engine
+- `src/brokers/ibkr_broker.py:244-256` — OCA group exposure
+
+### Also This Session
+- License BTF-key validation fix (3 bugs in `gui_app/routes.py`)
+- Alertsify comparison doc update (score 82→89, gaps 8→3)
+- Version bump to 9.3.5, released to both repos
+
 ## Session: April 29, 2026 — Cross-Platform Encoding Fix + License Validation Hardening
 
 ### Problem

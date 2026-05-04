@@ -247,10 +247,12 @@ class IBKRBroker(BrokerInterface):
                         'symbol': contract.symbol if contract else '',
                         'quantity': int(order.totalQuantity) if hasattr(order, 'totalQuantity') else 0,
                         'limit_price': float(order.lmtPrice) if hasattr(order, 'lmtPrice') and order.lmtPrice else None,
+                        'stop_price': float(order.auxPrice) if hasattr(order, 'auxPrice') and order.auxPrice else None,
                         'action': order.action if hasattr(order, 'action') else '',
                         'order_type': order.orderType if hasattr(order, 'orderType') else '',
                         'status': status,
-                        'asset_type': 'option' if contract and contract.secType == 'OPT' else 'stock'
+                        'asset_type': 'option' if contract and contract.secType == 'OPT' else 'stock',
+                        'oca_group': getattr(order, 'ocaGroup', '') or '',
                     })
             return pending
         except Exception as e:

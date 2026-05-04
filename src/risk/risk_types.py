@@ -332,7 +332,8 @@ class PositionCacheEntry:
     broker_oco_sl_price: Optional[float] = None
     broker_oco_pt_price: Optional[float] = None
     broker_oco_qty: int = 0
-    
+    _bracket_needs_reconciliation: bool = False
+
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
     

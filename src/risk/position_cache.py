@@ -274,6 +274,7 @@ class PositionCache:
                 
                 closing_reset = 0
                 bracket_reset = 0
+                bracket_reconcile = 0
                 for key, entry_data in data.items():
                     entry = PositionCacheEntry.from_dict(entry_data)
                     if entry.closing:
@@ -289,28 +290,17 @@ class PositionCache:
                             entry._bracket_attempt_count = 0
                             bracket_reset += 1
                         else:
-                            entry.broker_orders_placed = False
-                            entry.broker_stop_order_id = None
-                            entry.broker_pt_order_id = None
-                            if hasattr(entry, 'broker_oco_order_id'):
-                                entry.broker_oco_order_id = None
-                            if hasattr(entry, 'broker_oco_sl_price'):
-                                entry.broker_oco_sl_price = None
-                            if hasattr(entry, 'broker_oco_pt_price'):
-                                entry.broker_oco_pt_price = None
-                            if hasattr(entry, 'broker_oco_qty'):
-                                entry.broker_oco_qty = 0
-                            if hasattr(entry, '_bracket_attempt_count'):
-                                entry._bracket_attempt_count = 0
-                            if hasattr(entry, '_bracket_placed_qty'):
-                                entry._bracket_placed_qty = 0
-                            bracket_reset += 1
+                            entry._bracket_needs_reconciliation = True
+                            entry._bracket_attempt_count = 0
+                            bracket_reconcile += 1
                     self._cache[key] = entry
 
                 if closing_reset > 0:
                     print(f"[RISK] ♻️ Cleared {closing_reset} stale closing flag(s) from previous session")
                 if bracket_reset > 0:
-                    print(f"[RISK] ♻️ Reset {bracket_reset} bracket flag(s) on restart — will place fresh brackets for current qty")
+                    print(f"[RISK] ♻️ Reset {bracket_reset} bracket flag(s) on restart (no order IDs stored)")
+                if bracket_reconcile > 0:
+                    print(f"[RISK] ♻️ Marked {bracket_reconcile} position(s) for bracket reconciliation on restart")
                 
                 return len(self._cache)
         except Exception as e:
