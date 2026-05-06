@@ -82,6 +82,8 @@ build/linux/build_temp_hardened/
 # Database files
 bot_data.db
 *.db
+*.db-shm
+*.db-wal
 
 # Runtime SOD snapshots (daily P&L baseline persistence)
 sod_snapshots.json
@@ -90,3 +92,15 @@ sod_snapshots.json
 attached_assets/*.ini
 attached_assets/
 .git_backup/
+
+# Claude Code / Agent artifacts
+.claude/
+session_summary.md
+.autosave_heartbeat
+extracted_*.json
+
+# Agent Studio
+agent_studio/
+
+# Backup files
+*_backup*.html

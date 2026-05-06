@@ -56,7 +56,7 @@ import ssl
 # ADMIN = Full features (Channel Mappings, Debug tools, etc.) - for developer use
 # USER = Limited features - for end-user distribution
 # This line is automatically updated by scripts/release.sh
-BUILD_TYPE = 'USER'  # Set by release.sh
+BUILD_TYPE = 'ADMIN'  # Set by release.sh
 
 def is_admin_build():
     """Check if this is an admin build with full features"""
@@ -9208,17 +9208,30 @@ class SelfClient(discord.Client):
         return (None, f"Unsupported timeframe: {timeframe}\nSupported: 1min, 5min, 15min, 30min, 1hr, 4hr, 1day")
     
     async def handle_extract_history(self, message: discord.Message, channel_id: int, limit: int = 200):
-        """Extract and analyze message history from a channel for pattern discovery."""
+        """Extract and analyze message history from a channel or thread for pattern discovery."""
         try:
             await message.channel.send(f"📊 Extracting last {limit} messages from channel {channel_id}...")
-            
+
             target_channel = self.get_channel(channel_id)
             if not target_channel:
                 try:
                     target_channel = await self.fetch_channel(channel_id)
-                except Exception as e:
-                    await message.channel.send(f"❌ Cannot access channel {channel_id}: {e}")
-                    return
+                except Exception:
+                    pass
+            if not target_channel:
+                for guild in self.guilds:
+                    try:
+                        target_channel = guild.get_thread(channel_id)
+                        if target_channel:
+                            break
+                        target_channel = await guild.fetch_channel(channel_id)
+                        if target_channel:
+                            break
+                    except Exception:
+                        continue
+            if not target_channel:
+                await message.channel.send(f"❌ Cannot access channel/thread {channel_id}. Check the ID and ensure the bot has access.")
+                return
             
             messages = []
             entries = []
@@ -9289,20 +9302,33 @@ class SelfClient(discord.Client):
             traceback.print_exc()
     
     async def handle_extract_raw(self, message: discord.Message, channel_id: int, limit: int = 1000):
-        """Extract ALL raw messages from a channel and save to JSON file."""
+        """Extract ALL raw messages from a channel or thread and save to JSON file."""
         import json
         from datetime import datetime
-        
+
         try:
             await message.channel.send(f"📥 Extracting last {limit} messages from channel {channel_id}...")
-            
+
             target_channel = self.get_channel(channel_id)
             if not target_channel:
                 try:
                     target_channel = await self.fetch_channel(channel_id)
-                except Exception as e:
-                    await message.channel.send(f"❌ Cannot access channel {channel_id}: {e}")
-                    return
+                except Exception:
+                    pass
+            if not target_channel:
+                for guild in self.guilds:
+                    try:
+                        target_channel = guild.get_thread(channel_id)
+                        if target_channel:
+                            break
+                        target_channel = await guild.fetch_channel(channel_id)
+                        if target_channel:
+                            break
+                    except Exception:
+                        continue
+            if not target_channel:
+                await message.channel.send(f"❌ Cannot access channel/thread {channel_id}. Check the ID and ensure the bot has access.")
+                return
             
             messages_data = []
             count = 0
@@ -9341,8 +9367,10 @@ class SelfClient(discord.Client):
                 messages_data.append(msg_data)
             
             channel_name = getattr(target_channel, 'name', str(channel_id))
-            filename = f"extracted_{channel_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            
+            import os
+            save_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '')
+            filename = os.path.join(save_dir, f"extracted_{channel_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump({
                     'channel_id': str(channel_id),
@@ -11527,6 +11555,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # !extractraw and !extracthistory work from any channel for admin use
         if self.user and message.author.id == self.user.id:
             content = message.content.strip().lower()
+            if content.startswith('!extract'):
+                print(f"[EXTRACT CMD] Detected admin extract command: {content[:60]}")
             if content.startswith('!extractraw') or content.startswith('!extractedraw'):
                 cmd_text = message.content.strip()
                 if cmd_text.lower().startswith('!extractedraw'):

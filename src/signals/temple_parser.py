@@ -84,6 +84,45 @@ TEMPLE_ZZ_PT_LEVEL = re.compile(
 )
 
 # =============================================================================
+# TRADING-FLOOR PATTERNS (🔥│trading-floor — traderzz1m conversational style)
+# =============================================================================
+
+# Conditional breakout: "SYMBOL break PRICE for TARGET" / "SYMBOL PRICE break takes it to TARGET"
+# Requires SYMBOL at start of line or after $, excludes common words
+TEMPLE_ZZ_BREAKOUT = re.compile(
+    r'(?:^|\n)\s*\$?([A-Z]{2,5})\s+(?:(\d+(?:\.\d+)?)\s+)?(?:only\s+if\s+(?:it\s+)?)?break(?:s)?\s*(?:of\s+)?(?:(\d+(?:\.\d+)?)\s+)?(?:for\s+|takes?\s+(?:it\s+)?to\s+)\$?(\d+(?:\.\d+)?)',
+    re.IGNORECASE
+)
+
+# Reverse breakout: "PRICE break for TARGET SYMBOL" (price-first, symbol at end)
+TEMPLE_ZZ_BREAKOUT_REVERSE = re.compile(
+    r'(?:^|\n)\s*\$?(\d+(?:\.\d+)?)\s+(?:has\s+to\s+|must\s+)?break(?:s)?\s+(?:only\s+)?(?:for\s+|takes?\s+(?:it\s+)?to\s+)\$?(\d+(?:\.\d+)?)\s+\$?([A-Z]{2,5})\b',
+    re.IGNORECASE
+)
+
+# Ticker + price + "now": "$EZGO 3.28 now"
+TEMPLE_ZZ_TICKER_PRICE_NOW = re.compile(
+    r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s+now$',
+    re.IGNORECASE
+)
+
+# Range entry: "SYMBOL LOW-HIGH" (with optional flame emoji)
+TEMPLE_ZZ_RANGE_ENTRY = re.compile(
+    r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(?:<[^>]*>|[^\x00-\x7F]|\s)*$',
+    re.IGNORECASE
+)
+
+# SL update: "PRICE should be your new SYMBOL SL" / "Move your SL up to PRICE"
+TEMPLE_ZZ_SL_UPDATE_NEW = re.compile(
+    r'(\d+(?:\.\d+)?)\s+should\s+be\s+your\s+(?:new\s+)?\$?([A-Z]{2,5})\s+SL',
+    re.IGNORECASE
+)
+TEMPLE_ZZ_SL_UPDATE_MOVE = re.compile(
+    r'[Mm]ove\s+your\s+(?:mental\s+)?(?:stop\s+loss|SL)\s+(?:up\s+)?(?:for\s+\$?([A-Z]{2,5})\s+)?to\s+\$?(\d+(?:\.\d+)?)',
+    re.IGNORECASE
+)
+
+# =============================================================================
 # OPTIONS PATTERNS (🚨│options-alerts💰 channel)
 # =============================================================================
 
@@ -329,6 +368,221 @@ def parse_temple_zz_trim(match: re.Match, text: str) -> Optional[Dict[str, Any]]
     if trim_pct is not None:
         result["trim_percentage"] = trim_pct
     return result
+
+
+def parse_temple_zz_breakout(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'SYMBOL break PRICE for TARGET' conditional entry."""
+    groups = match.groups()
+    symbol = groups[0].upper() if groups else None
+    pre_break_price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+    post_break_price = float(groups[2]) if len(groups) > 2 and groups[2] else None
+    target_price = float(groups[3]) if len(groups) > 3 and groups[3] else None
+    trigger_price = post_break_price or pre_break_price
+
+    if not symbol or not trigger_price:
+        return None
+
+    _REJECT_WORDS = {'OR', 'IF', 'IT', 'THE', 'AND', 'BUT', 'FOR', 'CAN', 'HAS', 'HIS',
+                     'HER', 'NOT', 'YOU', 'ALL', 'ARE', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY',
+                     'GET', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'WAY', 'WHO'}
+    if symbol in _REJECT_WORDS:
+        return None
+
+    result = {
+        'format': 'TEMPLE_ZZ_BREAKOUT',
+        'is_conditional': True,
+        '_conditional_order': True,
+        '_temple_entry': True,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'action': 'BTO',
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': 'over',
+        'trigger_price': trigger_price,
+        'entry_high': trigger_price,
+        'entry_low': None,
+        'stop_loss_type': None,
+        'stop_loss_value': None,
+        'stop_loss_fixed': None,
+        'stop_loss_pct': None,
+        'profit_targets': [target_price] if target_price else [],
+        'target_ranges': [],
+        'position_size_pct': None,
+        'fixed_qty': None,
+        'size_mode': None,
+        'qty': 1,
+        'qty_specified': False,
+        'confidence': 0.95,
+    }
+
+    additional_targets = re.findall(r'\.{2,}\s*(\d+(?:\.\d+)?)', text)
+    for t in additional_targets:
+        tv = float(t)
+        if tv not in result['profit_targets']:
+            result['profit_targets'].append(tv)
+
+    sl_match = TEMPLE_ZZ_SL_LEVEL.search(text)
+    if sl_match:
+        result['stop_loss_type'] = 'fixed'
+        result['stop_loss_value'] = float(sl_match.group(1))
+        result['stop_loss_fixed'] = result['stop_loss_value']
+
+    return result
+
+
+def parse_temple_zz_breakout_reverse(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'PRICE break for TARGET SYMBOL' — price-first, symbol at end."""
+    groups = match.groups()
+    trigger_price = float(groups[0]) if groups and groups[0] else None
+    target_price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+    symbol = groups[2].upper() if len(groups) > 2 and groups[2] else None
+
+    if not symbol or not trigger_price:
+        return None
+
+    _REJECT_WORDS = {'OR', 'IF', 'IT', 'THE', 'AND', 'BUT', 'FOR', 'CAN', 'HAS', 'HIS',
+                     'HER', 'NOT', 'YOU', 'ALL', 'ARE', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY',
+                     'GET', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'WAY', 'WHO'}
+    if symbol in _REJECT_WORDS:
+        return None
+
+    result = {
+        'format': 'TEMPLE_ZZ_BREAKOUT_REVERSE',
+        'is_conditional': True,
+        '_conditional_order': True,
+        '_temple_entry': True,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'action': 'BTO',
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': 'over',
+        'trigger_price': trigger_price,
+        'entry_high': trigger_price,
+        'entry_low': None,
+        'stop_loss_type': None,
+        'stop_loss_value': None,
+        'stop_loss_fixed': None,
+        'stop_loss_pct': None,
+        'profit_targets': [target_price] if target_price else [],
+        'target_ranges': [],
+        'position_size_pct': None,
+        'fixed_qty': None,
+        'size_mode': None,
+        'qty': 1,
+        'qty_specified': False,
+        'confidence': 0.90,
+    }
+
+    sl_match = TEMPLE_ZZ_SL_LEVEL.search(text)
+    if sl_match:
+        result['stop_loss_type'] = 'fixed'
+        result['stop_loss_value'] = float(sl_match.group(1))
+        result['stop_loss_fixed'] = result['stop_loss_value']
+
+    return result
+
+
+def parse_temple_zz_ticker_price_now(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse '$EZGO 3.28 now' — immediate entry."""
+    groups = match.groups()
+    symbol = groups[0].upper() if groups else None
+    price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+
+    if not symbol or not price:
+        return None
+
+    result = {
+        "asset": "stock",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": None,
+        "opt_type": None,
+        "expiry": None,
+        "price": price,
+        "is_market_order": False,
+        "confidence": 0.95,
+        "_temple_entry": True,
+    }
+    sl_match = TEMPLE_ZZ_SL_LEVEL.search(text)
+    if sl_match:
+        result["stop_loss"] = float(sl_match.group(1))
+    return result
+
+
+def parse_temple_zz_range_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'CRE 2.80-3.91' — range entry (low=entry, high=PT)."""
+    groups = match.groups()
+    symbol = groups[0].upper() if groups else None
+    low = float(groups[1]) if len(groups) > 1 and groups[1] else None
+    high = float(groups[2]) if len(groups) > 2 and groups[2] else None
+
+    if not symbol or not low or not high:
+        return None
+    if low >= high:
+        return None
+
+    result = {
+        "asset": "stock",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": None,
+        "opt_type": None,
+        "expiry": None,
+        "price": low,
+        "is_market_order": False,
+        "confidence": 0.85,
+        "take_profit": high,
+        "_temple_entry": True,
+    }
+    return result
+
+
+def parse_temple_zz_sl_update_new(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'PRICE should be your new SYMBOL SL'."""
+    groups = match.groups()
+    new_sl = float(groups[0]) if groups and groups[0] else None
+    symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+
+    if not new_sl:
+        return None
+
+    return {
+        "action": "SL_UPDATE",
+        "symbol": symbol,
+        "sl_update_type": "price",
+        "new_stop_loss": new_sl,
+        "asset": "stock",
+        "confidence": 0.95,
+        "is_sl_update": True,
+        "_temple_sl_update": True,
+    }
+
+
+def parse_temple_zz_sl_update_move(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'Move your SL up to PRICE' / 'Move your stop loss for SYMBOL to PRICE'."""
+    groups = match.groups()
+    symbol = groups[0].upper() if groups and groups[0] else None
+    new_sl = float(groups[1]) if len(groups) > 1 and groups[1] else None
+
+    if not new_sl:
+        return None
+
+    return {
+        "action": "SL_UPDATE",
+        "symbol": symbol,
+        "sl_update_type": "price",
+        "new_stop_loss": new_sl,
+        "asset": "stock",
+        "confidence": 0.95,
+        "is_sl_update": True,
+        "_temple_sl_update": True,
+    }
 
 
 def parse_temple_rf_options(match: re.Match, text: str) -> Optional[Dict[str, Any]]:

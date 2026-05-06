@@ -4130,10 +4130,14 @@ class RiskManager:
             return
 
         _bbm_check = getattr(channel_settings, 'broker_bracket_mode', 'both') if channel_settings else 'both'
+
+        _bracket_fill_handled = await self._detect_and_handle_bracket_fill(position, cache, channel_settings)
+
         if cache.broker_orders_placed and not cache.broker_stop_order_id and not cache.broker_pt_order_id and not cache.broker_oco_order_id and _bbm_check != 'none':
-            print(f"[RISK] 🔄 Bracket state stale for {position.symbol} — no active broker orders found, resetting for fresh placement")
-            cache.broker_orders_placed = False
-            cache._bracket_attempt_count = 0
+            if not _bracket_fill_handled:
+                print(f"[RISK] 🔄 Bracket state stale for {position.symbol} — no active broker orders found, resetting for fresh placement")
+                cache.broker_orders_placed = False
+                cache._bracket_attempt_count = 0
 
         _current_qty = int(position.quantity)
         _bracket_qty = getattr(cache, '_bracket_placed_qty', 0)
@@ -4937,6 +4941,129 @@ class RiskManager:
             return getattr(self, 'webull_broker', None) or (self.bot.webull if hasattr(self, 'bot') and self.bot else None)
         return None
 
+    async def _detect_and_handle_bracket_fill(self, position, cache, channel_settings) -> bool:
+        """Detect if a broker bracket (OCO/standalone) was filled and handle tier marking + cascade.
+        Returns True if a fill was detected and processed."""
+        if cache.broker_oco_order_id:
+            check_id = cache.broker_oco_order_id
+            _check_type = 'oco'
+        elif cache.broker_pt_order_id:
+            check_id = cache.broker_pt_order_id
+            _check_type = 'standalone_pt'
+        elif cache.broker_stop_order_id:
+            check_id = cache.broker_stop_order_id
+            _check_type = 'standalone_sl'
+        else:
+            return False
+
+        import time as _bf_time
+        if not hasattr(self, '_bracket_check_times'):
+            self._bracket_check_times = {}
+        pos_key = position.position_key
+        last_check = self._bracket_check_times.get(pos_key, 0)
+        if (_bf_time.time() - last_check) < 15:
+            return False
+        self._bracket_check_times[pos_key] = _bf_time.time()
+
+        broker_name = (position.broker or '').upper()
+        broker_instance = self._get_broker_instance_for_bracket(broker_name)
+        if not broker_instance or not hasattr(broker_instance, 'get_order_status'):
+            return False
+        try:
+            status_info = await broker_instance.get_order_status(check_id)
+        except Exception as e:
+            print(f"[RISK] ⚠️ Bracket status check failed for {pos_key}: {e}")
+            return False
+        if not status_info:
+            return False
+
+        status = (status_info.get('status') or '').lower()
+        if status in ('pending', 'pending_activation', 'partial'):
+            return False
+
+        fill_leg = status_info.get('fill_leg')
+        if status == 'filled' and not fill_leg:
+            if _check_type == 'standalone_pt':
+                fill_leg = 'pt'
+            elif _check_type == 'standalone_sl':
+                fill_leg = 'sl'
+            elif cache.broker_oco_pt_price and cache.broker_oco_sl_price:
+                fill_price = status_info.get('average_price', 0)
+                if fill_price > 0:
+                    pt_dist = abs(fill_price - cache.broker_oco_pt_price)
+                    sl_dist = abs(fill_price - cache.broker_oco_sl_price)
+                    fill_leg = 'pt' if pt_dist < sl_dist else 'sl'
+
+        if status != 'filled':
+            if status in ('cancelled', 'rejected', 'expired'):
+                print(f"[RISK] 🔄 Bracket {check_id} is {status} for {pos_key} — clearing for fresh placement")
+                self._clear_bracket_state(cache)
+                cache.broker_orders_placed = False
+            return False
+
+        tier = cache.broker_pt_tier or 1
+        fill_qty = status_info.get('fill_leg_qty', 0) or status_info.get('filled_quantity', 0)
+        fill_price = status_info.get('fill_leg_price', 0) or status_info.get('average_price', 0)
+
+        if fill_leg == 'pt':
+            print(f"[RISK] ✅ BRACKET PT{tier} FILLED for {pos_key} (qty={fill_qty}, price=${fill_price:.2f}) — marking tier + cascading")
+            self.cache.mark_tier_hit(pos_key, tier)
+            if cache.broker_stop_order_id and cache.broker_stop_order_id != cache.broker_oco_order_id:
+                try:
+                    await broker_instance.cancel_order(cache.broker_stop_order_id)
+                    print(f"[RISK] 🔄 Cancelled orphaned standalone SL #{cache.broker_stop_order_id} after PT{tier} fill")
+                except Exception as _cancel_err:
+                    print(f"[RISK] ⚠️ Orphaned SL cancel failed (non-blocking): {_cancel_err}")
+            cache._last_bracket_pt_price = cache.broker_oco_pt_price
+            cache._last_bracket_sl_price = cache.broker_oco_sl_price
+            cache._last_bracket_fill_tier = tier
+            self._clear_bracket_state(cache)
+
+            if channel_settings and channel_settings.enable_dynamic_sl:
+                pts_hit = {1: cache.tier1_hit, 2: cache.tier2_hit, 3: cache.tier3_hit, 4: cache.tier4_hit}
+                from src.risk.risk_engine import calculate_dynamic_sl
+                new_dsl = calculate_dynamic_sl(
+                    cache.entry_price, pts_hit,
+                    channel_settings.dynamic_sl_profile or 'standard',
+                    current_price=position.current_price
+                )
+                if new_dsl and (cache.dynamic_sl_price is None or new_dsl > cache.dynamic_sl_price):
+                    old_dsl = cache.dynamic_sl_price
+                    cache.dynamic_sl_price = new_dsl
+                    _sl_pnl = ((new_dsl / cache.entry_price) - 1) * 100 if cache.entry_price > 0 else 0
+                    print(f"[RISK] 🔒 Dynamic SL escalated to ${new_dsl:.2f} (+{_sl_pnl:.1f}%) after bracket PT{tier} fill")
+                    self.cache.update_enhanced_risk_state(pos_key, dynamic_sl_price=new_dsl)
+
+            self._enqueue_broker_op(pos_key, f'CASCADE_PT{tier+1}', 20,
+                lambda _p=position, _c=cache, _cs=channel_settings, _t=tier: self._place_next_pt_bracket(_p, _c, _cs, _t))
+            return True
+
+        elif fill_leg == 'sl':
+            print(f"[RISK] 🛑 BRACKET SL FILLED for {pos_key} (qty={fill_qty}, price=${fill_price:.2f}) — position exiting via broker stop")
+            cache._last_bracket_pt_price = cache.broker_oco_pt_price
+            cache._last_bracket_sl_price = cache.broker_oco_sl_price
+            self._clear_bracket_state(cache)
+            cache.broker_orders_placed = True
+            return True
+
+        print(f"[RISK] ⚠️ Bracket {check_id} filled for {pos_key} but could not determine which leg — clearing brackets")
+        self._clear_bracket_state(cache)
+        return True
+
+    def _clear_bracket_state(self, cache):
+        cache.broker_stop_order_id = None
+        cache.broker_pt_order_id = None
+        cache.broker_oco_order_id = None
+        cache.broker_oco_sl_price = None
+        cache.broker_oco_pt_price = None
+        cache.broker_oco_qty = 0
+        cache.broker_pt_tier = 0
+        cache.broker_orders_placed = False
+        if hasattr(cache, '_bracket_placed_qty'):
+            cache._bracket_placed_qty = 0
+        if hasattr(cache, '_bracket_attempt_count'):
+            cache._bracket_attempt_count = 0
+
     async def _place_initial_broker_bracket(self, position, cache, channel_settings):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
 
@@ -4951,7 +5078,14 @@ class RiskManager:
             return
 
         sl_pct = channel_settings.stop_loss_pct
-        pt1_pct = channel_settings.profit_target_1_pct
+
+        _target_tier = 1
+        for _t in [1, 2, 3, 4]:
+            _t_pct = getattr(channel_settings, f'profit_target_{_t}_pct', 0) or 0
+            if _t_pct > 0 and not getattr(cache, f'tier{_t}_hit', False):
+                _target_tier = _t
+                break
+        pt1_pct = getattr(channel_settings, f'profit_target_{_target_tier}_pct', 0) or 0
         if sl_pct <= 0 and pt1_pct <= 0:
             return
 
@@ -4977,6 +5111,9 @@ class RiskManager:
             _allows_sl = getattr(channel_settings, 'allows_broker_sl', True)
             _allows_pt = getattr(channel_settings, 'allows_broker_pt', True)
             sl_price = round(entry_price * (1 - sl_pct / 100), 4) if sl_pct > 0 and _allows_sl else None
+            if cache.dynamic_sl_price and cache.dynamic_sl_price > 0 and _allows_sl:
+                if sl_price is None or cache.dynamic_sl_price > sl_price:
+                    sl_price = round(cache.dynamic_sl_price, 4)
             pt1_price = round(entry_price * (1 + pt1_pct / 100), 4) if pt1_pct > 0 and _allows_pt else None
             if not sl_price and not pt1_price:
                 print(f"[RISK] ⏭ Broker bracket mode '{_bbm}' — no orders to place for {position.symbol}")
@@ -4997,13 +5134,14 @@ class RiskManager:
             custom_qtys = {t: getattr(channel_settings, f'profit_target_qty_{t}', None) for t in enabled_tiers}
             custom_trim_pcts = {t: getattr(channel_settings, f'profit_target_trim_pct_{t}', None) for t in enabled_tiers}
             tier_qtys = calculate_tier_quantities(qty, leave_runner, enabled_tiers, custom_qtys, custom_trim_pcts) if not escalation_only else {}
-            pt1_qty = tier_qtys.get(1, 0) if not escalation_only else 0
+            pt1_qty = tier_qtys.get(_target_tier, 0) if not escalation_only else 0
 
             _sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
             _pt1_display = f"${pt1_price:.2f}" if pt1_price else "N/A"
             _bracket_exit_mode = getattr(channel_settings, 'exit_strategy_mode', 'unknown')
+            _tier_label = f"PT{_target_tier}" if _target_tier > 1 else "PT1"
             print(f"[RISK] 📋 PROGRESSIVE BRACKET: {position.symbol} entry=${entry_price:.2f} "
-                  f"SL={_sl_display} PT1={_pt1_display} (qty={qty}, pt1_qty={pt1_qty}) broker={broker_name} exit_mode={_bracket_exit_mode}")
+                  f"SL={_sl_display} {_tier_label}={_pt1_display} (qty={qty}, {_tier_label.lower()}_qty={pt1_qty}) broker={broker_name} exit_mode={_bracket_exit_mode}")
 
             if not sl_price and (not pt1_price or pt1_qty <= 0):
                 _reasons = []
@@ -5089,8 +5227,8 @@ class RiskManager:
                             cache.broker_oco_pt_price = pt1_price
                             cache.broker_oco_qty = pt1_qty
                             cache.broker_pt_order_id = str(oco_result.order_id)
-                            cache.broker_pt_tier = 1
-                            print(f"[RISK] ✅ Schwab OCO placed: #{oco_result.order_id} SL=${sl_price:.2f} PT=${pt1_price:.2f} (qty={pt1_qty})")
+                            cache.broker_pt_tier = _target_tier
+                            print(f"[RISK] ✅ Schwab OCO placed: #{oco_result.order_id} SL=${sl_price:.2f} PT{_target_tier}=${pt1_price:.2f} (qty={pt1_qty})")
                         else:
                             msg = getattr(oco_result, 'message', 'unknown') if oco_result else 'no result'
                             print(f"[RISK] ⚠️ Schwab OCO order failed: {msg} — falling back to separate orders")
@@ -5148,12 +5286,12 @@ class RiskManager:
                             )
                             if pt_result and pt_result.success and pt_result.order_id:
                                 cache.broker_pt_order_id = str(pt_result.order_id)
-                                cache.broker_pt_tier = 1
-                                print(f"[RISK] ✅ Broker PT1 placed: Schwab limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
+                                cache.broker_pt_tier = _target_tier
+                                print(f"[RISK] ✅ Broker PT{_target_tier} placed: Schwab limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
                                 await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
                             else:
                                 msg = getattr(pt_result, 'message', 'unknown') if pt_result else 'no result'
-                                print(f"[RISK] ⚠️ Schwab PT1 order failed: {msg}")
+                                print(f"[RISK] ⚠️ Schwab PT{_target_tier} order failed: {msg}")
 
                     if cache.broker_stop_order_id or cache.broker_pt_order_id or cache.broker_oco_order_id:
                         cache.broker_orders_placed = True
@@ -5212,7 +5350,7 @@ class RiskManager:
                             pt_order = self.alpaca_broker.trading_client.submit_order(pt_req)
                             if pt_order and pt_order.id:
                                 cache.broker_pt_order_id = str(pt_order.id)
-                                cache.broker_pt_tier = 1
+                                cache.broker_pt_tier = _target_tier
                                 print(f"[RISK] ✅ Broker PT1 placed: Alpaca limit #{pt_order.id} at ${pt1_price:.2f} (qty={pt1_qty})")
                                 await self._register_pt_with_chaser(str(pt_order.id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
 
@@ -5282,7 +5420,7 @@ class RiskManager:
                         await asyncio.sleep(1)
                         if pt_trade and pt_trade.orderStatus.status in _ibkr_ok_statuses:
                             cache.broker_pt_order_id = str(pt_trade.order.orderId)
-                            cache.broker_pt_tier = 1
+                            cache.broker_pt_tier = _target_tier
                             cache.broker_oco_order_id = _ibkr_oca_group
                             print(f"[RISK] ✅ Broker PT1 placed: IBKR limit #{pt_trade.order.orderId} at ${pt1_price:.2f} (qty={pt1_qty}) [GTC{', OCA=' + _ibkr_oca_group if _ibkr_oca_group else ''}]")
                             await self._register_pt_with_chaser(str(pt_trade.order.orderId), broker_name, position, cache, pt1_qty, pt1_price, is_option)
@@ -5371,7 +5509,7 @@ class RiskManager:
                             _pt_oid = getattr(pt_result, 'order_id', None)
                             if _pt_oid:
                                 cache.broker_pt_order_id = str(_pt_oid)
-                            cache.broker_pt_tier = 1
+                            cache.broker_pt_tier = _target_tier
                             print(f"[RISK] ✅ Broker PT1 placed: TastyTrade limit #{_pt_oid or 'submitted'} at ${pt1_price:.2f} (qty={pt1_qty}){' [GTC]' if not is_option else ' [DAY]'}")
                             if _pt_oid:
                                 await self._register_pt_with_chaser(str(_pt_oid), broker_name, position, cache, pt1_qty, pt1_price, is_option)
@@ -5421,7 +5559,7 @@ class RiskManager:
                         )
                         if pt_result and pt_result.success and pt_result.order_id:
                             cache.broker_pt_order_id = str(pt_result.order_id)
-                            cache.broker_pt_tier = 1
+                            cache.broker_pt_tier = _target_tier
                             print(f"[RISK] ✅ Broker PT1 placed: Trading212 limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
                             await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
                         else:
@@ -5475,7 +5613,7 @@ class RiskManager:
                             )
                         if pt_result and pt_result.success and pt_result.order_id:
                             cache.broker_pt_order_id = str(pt_result.order_id)
-                            cache.broker_pt_tier = 1
+                            cache.broker_pt_tier = _target_tier
                             print(f"[RISK] ✅ Broker PT1 placed: Robinhood limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
                             await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
                         else:
@@ -5556,7 +5694,7 @@ class RiskManager:
                                 )
                                 if pt_result and pt_result.success and pt_result.order_id:
                                     cache.broker_pt_order_id = str(pt_result.order_id)
-                                    cache.broker_pt_tier = 1
+                                    cache.broker_pt_tier = _target_tier
                                     print(f"[RISK] ✅ Broker PT1 placed: Webull option limit #{pt_result.order_id} at ${pt1_price:.2f} (qty={pt1_qty})")
                                     await self._register_pt_with_chaser(str(pt_result.order_id), broker_name, position, cache, pt1_qty, pt1_price, is_option)
                                 else:
@@ -5583,7 +5721,7 @@ class RiskManager:
                                     _pt_oid = str(pt_resp.get('orderId', ''))
                                 if _pt_oid:
                                     cache.broker_pt_order_id = _pt_oid
-                                    cache.broker_pt_tier = 1
+                                    cache.broker_pt_tier = _target_tier
                                     print(f"[RISK] ✅ Broker PT1 placed: Webull limit #{_pt_oid} at ${pt1_price:.2f} (qty={pt1_qty})")
                                     await self._register_pt_with_chaser(_pt_oid, broker_name, position, cache, pt1_qty, pt1_price, is_option)
                                 else:
@@ -5675,6 +5813,9 @@ class RiskManager:
         remaining_qty = int(position.quantity)
         if next_qty > remaining_qty:
             next_qty = remaining_qty
+        if next_qty <= 0:
+            print(f"[RISK] ⏭ PROGRESSIVE: Remaining qty insufficient for PT{next_tier} — skipping")
+            return
 
         symbol = getattr(cache, 'raw_symbol', None) or getattr(position, 'raw_symbol', None) or position.symbol
         asset_type = getattr(position, 'asset', 'stock')

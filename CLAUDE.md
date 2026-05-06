@@ -1,7 +1,7 @@
-# BotifyTrades v9.3.8 — Project Context
+# BotifyTrades v10.0.0 — Project Context
 
 ## Summary
-Multi-broker automated trading bot. Monitors Discord signals, executes trades across 7 brokers (Schwab, Webull, Alpaca, IBKR, Tastytrade, Robinhood, Trading212), manages risk with tiered PT/SL/trailing/OCO brackets. Desktop app built with PyInstaller + PyArmor (user build) or plain PyInstaller (admin build). Web GUI via Flask. ~21K lines in selfbot_webull.py, ~9K in position_monitor.py.
+Multi-broker automated trading bot. Monitors Discord signals, executes trades across 5 brokers (Schwab, Webull, Alpaca, IBKR, Tastytrade), manages risk with tiered PT/SL/trailing/OCO brackets. Desktop app built with PyInstaller + PyArmor (user build) or plain PyInstaller (admin build). Web GUI via Flask. ~21K lines in selfbot_webull.py, ~9K in position_monitor.py.
 
 ## Tech Stack
 - Python 3.11, asyncio, discord.py (selfbot)
@@ -24,7 +24,7 @@ Multi-broker automated trading bot. Monitors Discord signals, executes trades ac
 | `src/services/unified_price_hub.py` | ~600 | Cross-broker price aggregation |
 | `src/services/broker_sync_service.py` | ~3K | Position reconciliation |
 | `src/services/conditional_orders/base.py` | ~2K | Conditional order monitoring |
-| `upgrade/version.py` | ~160 | Version: APP_VERSION = "9.3.8" |
+| `upgrade/version.py` | ~160 | Version: APP_VERSION = "10.0.0" |
 
 ## Release Process
 ```bash

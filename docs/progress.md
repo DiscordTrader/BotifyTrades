@@ -1,5 +1,114 @@
 # BotifyTrades Progress Log
 
+## Session: May 6, 2026 — QA Playbook, Gap Fixes, Architecture Page Redesign
+
+### QA Playbook (7-Point)
+Ran comprehensive QA across all 6 temple_zz parsers and bracket fill bridge. Found 2 actionable gaps:
+
+### Gap A Fix: "break of" variant
+- **Problem**: `"MASK break of 1.80 takes it to 2.00"` failed — regex didn't handle "break of"
+- **Fix**: Added `(?:of\s+)?` after `break(?:s)?` in `TEMPLE_ZZ_BREAKOUT` pattern (`temple_parser.py`)
+- **Registry**: Updated pattern + added example in `signal_format_registry.py`
+
+### Gap B Fix: Price-first with symbol at end
+- **Problem**: `"2.50 must break for 2.71 OCG"` — price-first, ticker-last format not parsed
+- **Fix**: New `TEMPLE_ZZ_BREAKOUT_REVERSE` regex + `parse_temple_zz_breakout_reverse()` function
+- Handles: `"21.50 break takes it to 25 AVTX"`, `"3.80 break only for 4.43 WAI"`, `"has to break"` / `"must break"` variants
+- Registered at priority 74 in format registry
+
+### Range Entry Emoji Fix
+- `"CRE 2.80-3.91🔥"` and Discord custom emoji variants now match via `[^\x00-\x7F]` alternative
+
+### QA Results
+- 17/17 edge cases pass, 0 false positives, 0 cross-pattern collisions
+- Real message coverage: 13 → 17 matches (+31%) from trading-floor export
+- Total registered formats: 109
+
+### Architecture Page Redesign
+- Backup saved to `gui_app/templates/architecture_backup.html`
+- Complete rewrite of `architecture.html` (1197 lines) — industry-grade professional layout
+- New sections: "How It Works" 4-step flow, 10 feature cards, Risk Architecture deep-dive, 12 capabilities
+- Enhanced hero: "Execute Smarter. Trade Faster." + 5 trust metrics
+- Professional 4-column footer with 5-paragraph legal disclaimer (not financial advice, no signal recommendations, trading risk, user responsibility)
+- Aurora dark theme preserved with glassmorphism, animated SVG logo, particles
+
+## Session: May 6, 2026 — OCO Bracket Fill → Risk Tier Bridge (CRITICAL)
+
+### Problem
+When bracket orders (OCO) are enabled, broker-side fills (PT hit or SL hit) were never fed back to the risk tier system. This caused:
+- No PT cascade (PT2/PT3/PT4 never placed after PT1 fills at broker)
+- No dynamic SL escalation (SL doesn't move to breakeven after PT1)
+- Double-sell risk (risk monitor doesn't know broker already sold shares)
+
+### Architecture: 4-Layer Fix
+
+**Layer 1 — Runtime Detection** (`position_monitor.py`):
+- New `_detect_and_handle_bracket_fill()` — rate-limited (15s/position), queries OCO status, determines PT vs SL, marks tier via `mark_tier_hit`, escalates dynamic SL, cascades next PT bracket via `_enqueue_broker_op`
+- New `_clear_bracket_state()` helper
+- Call site integrated before stale bracket reset, guards reset if fill was handled
+
+**Layer 2 — Enriched API** (`schwab_broker.py`):
+- `get_order_status()` now walks `childOrderStrategies` for OCO orders, returns `fill_leg` ('pt'/'sl'), `fill_leg_qty`, `fill_leg_price`
+
+**Layer 3 — Sync Attribution** (`broker_sync_service.py`):
+- `_sync_filled_orders()` matches STC fills against cached OCO PT/SL prices (3%/5% tolerance), marks tier and sets proper `exit_source`
+
+**Layer 4 — Bracket Reconciliation** (`broker_sync_service.py`):
+- All three reconciliation methods (`_reconcile_schwab_brackets`, `_reconcile_ibkr_brackets`, `_reconcile_generic_brackets`) now return enriched `'pt_filled'`/`'sl_filled'` instead of generic `'filled'`
+- Caller `_reconcile_brackets` handles enriched results: marks tier on PT fill, logs SL fill
+
+**Tier-Aware Initial Bracket** (`position_monitor.py`):
+- `_place_initial_broker_bracket` finds first unhit tier instead of always targeting T1
+- Uses escalated dynamic SL price when available
+- Updated `broker_pt_tier` assignment across all 9 broker sections
+
+### Architect Review — 7 Gaps Found and Fixed
+After initial 4-layer implementation, architect review found 7 gaps in the bracket-only code path (zero software path changes):
+
+| # | Severity | Gap | Fix |
+|---|----------|-----|-----|
+| 1 | CRITICAL | Orphaned standalone SL after OCO PT fill — `_clear_bracket_state` cleared ID without cancelling | Cancel standalone SL at broker before clearing state |
+| 2 | CRITICAL | SL fill reset `broker_orders_placed=False` → fresh brackets on stopped-out position | Override to `True` after clearing to prevent re-placement |
+| 3 | CRITICAL | Layer 1 ignored standalone SL-only fills (`sl_only`, `escalation_only`, options) | Added `broker_stop_order_id` as third check_type in priority chain |
+| 4 | HIGH | Standalone PT fill: tier never marked (no fill_leg, no OCO prices for inference) | Infer `fill_leg='pt'` when `check_type='standalone_pt'` |
+| 5 | HIGH | Layer 1 cleared OCO prices before Layer 3 sync attribution could use them | Preserve as `_last_bracket_pt_price`/`_last_bracket_sl_price` before clearing |
+| 6 | MEDIUM | Layer 4 `pt_filled` on restart didn't escalate dynamic SL | Calculate + set `dynamic_sl_price` after `mark_tier_hit` in sync reconciliation |
+| 7 | MEDIUM | Cascade used stale position snapshot (qty=0 after full exit) | Added `next_qty <= 0` guard after remaining_qty cap |
+
+### Software-Only Path
+Confirmed: when brackets are disabled, the existing software evaluation path (tiered_targets → risk_engine → position_monitor exits) remains fully intact and unaffected. All 7 fixes are contained within bracket detection, bracket state cleanup, and bracket cascade code.
+
+## Session: May 5, 2026 — Schwab Sync Service Gap Fix
+
+### Bug: Stale MNDR Position (trade #49)
+- **Root cause**: Schwab was never included in the sync service's broker list. At startup, Schwab had no tokens (`is_authenticated()` returned False), so `self.schwab_broker = None`. Even after Schwab connected later (via hot-connect or OAuth callback), the sync service's BrokerManager copy wasn't always updated.
+- **Evidence**: Bot log shows only `['Webull']` and `['Webull', 'IBKR_LIVE']` in sync cycles — never Schwab. No `[SCHWAB HOT-CONNECT]` log entries in session.
+- **Impact**: The `broker_closed_position` detection (line 1853) never ran for Schwab trades, leaving MNDR stuck as OPEN forever.
+
+### Fixes
+1. **`broker_sync_service.py`** — `_perform_sync()` Schwab check now falls back to `_bot_instance.schwab_broker` when `broker_manager.schwab_broker` is None (catches hot-connect gap). Also syncs if `connected=True` even when `is_authenticated()=False`. Auth check errors now logged instead of silently swallowed.
+2. **`schwab_auth.py`** — `_deferred_schwab_connect()` retry path now updates `bm.schwab_broker` on the sync service BrokerManager (was missing, only the bot instance was updated).
+3. **Manual cleanup**: Closed trade #49 (MNDR, SCHWAB) in DB as `broker_closed_position`, removed `SCHWAB_MNDR_stock` from position cache.
+
+## Session: May 4, 2026 — Trading Pause Gate, Restart DLL Fix, FOR Parser Fix (v9.3.6)
+
+### Features
+- **Trading pause early gate**: Added single check in `_process_message()` (selfbot_webull.py:11557) that blocks ALL Discord signal processing when trading is paused — parsing, conditional orders, execution. Uses 2s TTL cached DB check to avoid per-message DB hits. Defensive backup gate in `conditional_orders/base.py:create_order()`.
+- **Risk monitoring interval**: Changed default from 1.0s to 0.2s (`position_monitor.py`)
+- **UI cleanup**: Hidden Robinhood/Trading212 broker cards, hidden risk interval row in settings
+
+### Fixes
+- **Restart DLL race condition**: PyInstaller frozen builds failed with "Failed to load Python DLL" on restart because the batch script launched the new exe before Windows released `_MEI` temp folder file handles. Fixed with PID-polling batch script + 3-retry logic (`lifecycle_manager.py:246-275`). macOS/Linux delay increased to 4s.
+- **FOR conditional order false positive**: Message "first target for ABVE 0.78" was parsed as `FOR above $0.78` because FOR matched as ticker and ABVE matched as typo for "above". Fixed by adding `'FOR'` to `english_stopwords` set in `parser.py:945`.
+
+### Release
+- v9.3.6 committed and pushed, CI builds triggered on both private (admin) and public (user) repos
+
+### Trade Audit (May 4)
+- 5 trades executed: NIVF (-$0.36), ABVE (+$4.99), FOR (-$0.24, false positive), CNSP (-$8.76), ELPW (+$1.30)
+- All had OCO brackets placed and triggered correctly at Schwab
+- Orphaned brackets cleaned up properly for FOR, ELPW, CNSP
+
 ## Session: May 3, 2026 — Bracket Order Restart Reconciliation (v9.3.5)
 
 ### Problem

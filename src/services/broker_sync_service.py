@@ -268,16 +268,27 @@ class BrokerSyncService:
             broker_label = 'TASTYTRADE_LIVE' if getattr(tt_broker, 'is_live', False) else 'TASTYTRADE_PAPER'
             brokers_to_sync.append((broker_label, tt_broker))
         
-        # Add Schwab if available
-        if hasattr(self.broker_manager, 'schwab_broker') and self.broker_manager.schwab_broker:
-            schwab_broker = self.broker_manager.schwab_broker
+        # Add Schwab if available (check both broker_manager and bot instance for hot-connect)
+        schwab_broker = getattr(self.broker_manager, 'schwab_broker', None)
+        if not schwab_broker:
             try:
-                # is_authenticated is a regular function, not async
+                from gui_app.routes import _bot_instance
+                if _bot_instance and getattr(_bot_instance, 'schwab_broker', None):
+                    schwab_broker = _bot_instance.schwab_broker
+                    self.broker_manager.schwab_broker = schwab_broker
+                    print("[SYNC] 🔗 Schwab broker recovered from bot instance (hot-connect sync)", flush=True)
+            except Exception:
+                pass
+        if schwab_broker:
+            try:
                 is_auth = schwab_broker.is_authenticated()
                 if is_auth:
                     brokers_to_sync.append(('SCHWAB', schwab_broker))
-            except Exception:
-                pass
+                elif getattr(schwab_broker, 'connected', False):
+                    brokers_to_sync.append(('SCHWAB', schwab_broker))
+                    print("[SYNC] ⚠️ Schwab: is_authenticated()=False but connected=True — syncing anyway", flush=True)
+            except Exception as schwab_err:
+                print(f"[SYNC] ⚠️ Schwab auth check failed: {schwab_err}", flush=True)
         
         # Add IBKR if available (requires TWS/Gateway running)
         if hasattr(self.broker_manager, 'ibkr_broker') and self.broker_manager.ibkr_broker:
@@ -2960,6 +2971,34 @@ class BrokerSyncService:
                                     exit_source = map_risk_trigger_to_exit_source(stc_row['risk_trigger'])
                                     stc_channel_id = stc_channel_id or stc_row['channel_id']
                             
+                            if exit_source == 'SIGNAL' and hasattr(self, 'risk_manager') and self.risk_manager:
+                                try:
+                                    _rm = self.risk_manager
+                                    _fill_sym = order.get('symbol', '')
+                                    _fill_price = order.get('filled_price', 0) or 0
+                                    for _pk in _rm.cache.get_all_keys():
+                                        _ce = _rm.cache.get(_pk)
+                                        if not _ce or _fill_sym.upper() not in _pk.upper():
+                                            continue
+                                        _bpt_price = _ce.broker_oco_pt_price or getattr(_ce, '_last_bracket_pt_price', None)
+                                        _bsl_price = _ce.broker_oco_sl_price or getattr(_ce, '_last_bracket_sl_price', None)
+                                        if _bpt_price and _fill_price > 0:
+                                            _pt_dist = abs(_fill_price - _bpt_price) / _bpt_price if _bpt_price > 0 else 999
+                                            if _pt_dist < 0.03:
+                                                _bt = _ce.broker_pt_tier or getattr(_ce, '_last_bracket_fill_tier', 0) or 1
+                                                exit_source = f'PROFIT_TARGET_T{_bt}'
+                                                _rm.cache.mark_tier_hit(_pk, _bt)
+                                                print(f"[SYNC] ✅ Bracket PT{_bt} fill matched for {_pk} (fill=${_fill_price:.2f} ≈ PT=${_bpt_price:.2f})")
+                                                break
+                                        if _bsl_price and _fill_price > 0:
+                                            _sl_dist = abs(_fill_price - _bsl_price) / _bsl_price if _bsl_price > 0 else 999
+                                            if _sl_dist < 0.05:
+                                                exit_source = 'STOP_LOSS_BRACKET'
+                                                print(f"[SYNC] ✅ Bracket SL fill matched for {_pk} (fill=${_fill_price:.2f} ≈ SL=${_bsl_price:.2f})")
+                                                break
+                                except Exception as _bm_err:
+                                    print(f"[SYNC] ⚠️ Bracket fill attribution: {_bm_err}")
+
                             if not stc_channel_id:
                                 bto_trade = find_open_bto_trade(
                                     symbol=order.get('symbol', ''),
@@ -3245,22 +3284,46 @@ class BrokerSyncService:
                 entry, pos_key, broker_name, oco_id, sl_id, pt_id
             )
 
-            if result == 'restored':
+            _fill_result = result if isinstance(result, tuple) else (result,)
+            _result_type = _fill_result[0]
+
+            if _result_type == 'restored':
                 entry._bracket_needs_reconciliation = False
                 print(f"[SYNC] ✓ BRACKET RESTORED {pos_key} — orders still active at {broker_name}")
                 changed = True
-            elif result == 'filled':
+            elif _result_type in ('filled', 'pt_filled', 'sl_filled'):
                 entry._bracket_needs_reconciliation = False
+                _tier = entry.broker_pt_tier or 1
+                if _result_type == 'pt_filled':
+                    risk_manager.cache.mark_tier_hit(pos_key, _tier)
+                    if entry.entry_price > 0:
+                        _pts_hit = {1: entry.tier1_hit, 2: entry.tier2_hit, 3: entry.tier3_hit, 4: entry.tier4_hit}
+                        _dsl_profile = 'standard'
+                        _ch = getattr(entry, 'channel_settings', None)
+                        if _ch:
+                            _dsl_profile = getattr(_ch, 'dynamic_sl_profile', 'standard') or 'standard'
+                        try:
+                            from src.risk.risk_engine import calculate_dynamic_sl
+                            _new_dsl = calculate_dynamic_sl(entry.entry_price, _pts_hit, _dsl_profile)
+                            if _new_dsl and (not entry.dynamic_sl_price or _new_dsl > entry.dynamic_sl_price):
+                                entry.dynamic_sl_price = _new_dsl
+                                print(f"[SYNC] 🔒 Dynamic SL escalated to ${_new_dsl:.2f} after bracket PT{_tier} fill on restart")
+                        except Exception as _dsl_err:
+                            print(f"[SYNC] ⚠️ Dynamic SL escalation failed: {_dsl_err}")
+                    print(f"[SYNC] ✅ BRACKET PT{_tier} FILLED {pos_key} — tier marked, cascade on next eval")
+                elif _result_type == 'sl_filled':
+                    print(f"[SYNC] 🛑 BRACKET SL FILLED {pos_key} — position exiting via broker stop")
+                else:
+                    print(f"[SYNC] ✓ BRACKET FILLED {pos_key} — bracket triggered during downtime")
                 self._clear_bracket_ids(entry)
-                print(f"[SYNC] ✓ BRACKET FILLED {pos_key} — bracket triggered during downtime")
                 changed = True
-            elif result == 'cleared':
+            elif _result_type == 'cleared':
                 entry._bracket_needs_reconciliation = False
                 self._clear_bracket_ids(entry)
                 entry.broker_orders_placed = False
                 print(f"[SYNC] ✓ BRACKET CLEARED {pos_key} — will place fresh brackets on next eval")
                 changed = True
-            elif result == 'deferred':
+            elif _result_type == 'deferred':
                 print(f"[SYNC] ⏳ BRACKET DEFERRED {pos_key} — {broker_name} unreachable, retry next cycle")
 
         if changed:
@@ -3289,6 +3352,17 @@ class BrokerSyncService:
         if status in ('pending', 'pending_activation', 'partial'):
             return 'restored'
         elif status == 'filled':
+            fill_leg = status_info.get('fill_leg')
+            if fill_leg == 'pt':
+                return 'pt_filled'
+            elif fill_leg == 'sl':
+                return 'sl_filled'
+            if entry.broker_oco_pt_price and entry.broker_oco_sl_price:
+                fill_price = status_info.get('average_price', 0)
+                if fill_price > 0:
+                    pt_dist = abs(fill_price - entry.broker_oco_pt_price)
+                    sl_dist = abs(fill_price - entry.broker_oco_sl_price)
+                    return 'pt_filled' if pt_dist < sl_dist else 'sl_filled'
             return 'filled'
         elif status in ('cancelled', 'rejected', 'expired'):
             if sl_id and sl_id != oco_id:
@@ -3345,8 +3419,10 @@ class BrokerSyncService:
             if not pt_alive and pt_id:
                 entry.broker_pt_order_id = None
             return 'restored'
-        elif sl_filled or pt_filled:
-            return 'filled'
+        elif pt_filled:
+            return 'pt_filled'
+        elif sl_filled:
+            return 'sl_filled'
         return 'cleared'
 
     async def _reconcile_generic_brackets(self, entry, pos_key, broker_name, sl_id, pt_id):
@@ -3392,8 +3468,10 @@ class BrokerSyncService:
             if not pt_alive and pt_id:
                 entry.broker_pt_order_id = None
             return 'restored'
-        elif sl_filled or pt_filled:
-            return 'filled'
+        elif pt_filled:
+            return 'pt_filled'
+        elif sl_filled:
+            return 'sl_filled'
         return 'cleared'
 
     def _clear_bracket_ids(self, entry):

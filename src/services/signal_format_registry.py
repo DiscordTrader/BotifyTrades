@@ -1180,6 +1180,10 @@ class SignalFormatRegistry:
             parse_temple_rf_options, parse_temple_options_standard,
             parse_temple_zz_options_a, parse_temple_zz_options_b,
             parse_temple_ts_options, parse_temple_options_exit,
+            parse_temple_zz_breakout, parse_temple_zz_breakout_reverse,
+            parse_temple_zz_ticker_price_now,
+            parse_temple_zz_range_entry, parse_temple_zz_sl_update_new,
+            parse_temple_zz_sl_update_move,
         )
 
         # --- Stock channel (⚡│zz) ---
@@ -1241,6 +1245,71 @@ class SignalFormatRegistry:
             pattern=r'\b[Tt]rim\s+(?:\$?([A-Z]{1,5})\s+)?(\d+(?:\.\d+)?)\s*%',
             parser=parse_temple_zz_trim,
             examples=["Trim 35%", "Trim PLTR 50%"],
+            flags=re.IGNORECASE
+        )
+
+        # --- Trading floor (🔥│trading-floor — traderzz1m conversational) ---
+
+        self.register(
+            name="temple_zz_breakout",
+            description="Temple ZZ breakout: SYMBOL break PRICE for TARGET",
+            priority=75,
+            pattern=r'(?:^|\n)\s*\$?([A-Z]{2,5})\s+(?:(\d+(?:\.\d+)?)\s+)?(?:only\s+if\s+(?:it\s+)?)?break(?:s)?\s*(?:of\s+)?(?:(\d+(?:\.\d+)?)\s+)?(?:for\s+|takes?\s+(?:it\s+)?to\s+)\$?(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_breakout,
+            examples=["PMAX break 2.82 for 3.12", "EZGO 3.11 break takes it to 3.41",
+                       "PMAX only if it breaks 2.82 for 3.00", "MASK break of 1.80 takes it to 2.00"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_breakout_reverse",
+            description="Temple ZZ breakout reverse: PRICE break for TARGET SYMBOL",
+            priority=74,
+            pattern=r'(?:^|\n)\s*\$?(\d+(?:\.\d+)?)\s+(?:has\s+to\s+|must\s+)?break(?:s)?\s+(?:only\s+)?(?:for\s+|takes?\s+(?:it\s+)?to\s+)\$?(\d+(?:\.\d+)?)\s+\$?([A-Z]{2,5})\b',
+            parser=parse_temple_zz_breakout_reverse,
+            examples=["2.50 must break for 2.71 OCG", "21.50 break takes it to 25 AVTX",
+                       "3.80 break only for 4.43 WAI"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_ticker_price_now",
+            description="Temple ZZ immediate entry: $SYMBOL PRICE now",
+            priority=76,
+            pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s+now$',
+            parser=parse_temple_zz_ticker_price_now,
+            examples=["$EZGO 3.28 now", "ERNA 5.50 now"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_range_entry",
+            description="Temple ZZ range entry: SYMBOL LOW-HIGH",
+            priority=77,
+            pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(?:<[^>]*>|[^\x00-\x7F]|\s)*$',
+            parser=parse_temple_zz_range_entry,
+            examples=["CRE 2.80-3.91", "SDOT 0.36-0.50", "BLZE 5.70-6.47"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_sl_update_new",
+            description="Temple ZZ SL update: PRICE should be your new SYMBOL SL",
+            priority=55,
+            pattern=r'(\d+(?:\.\d+)?)\s+should\s+be\s+your\s+(?:new\s+)?\$?([A-Z]{2,5})\s+SL',
+            parser=parse_temple_zz_sl_update_new,
+            examples=["5.50 should be your new ERNA SL", "9.67 should be your SKK SL"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_sl_update_move",
+            description="Temple ZZ SL update: Move your SL to PRICE",
+            priority=55,
+            pattern=r'[Mm]ove\s+your\s+(?:mental\s+)?(?:stop\s+loss|SL)\s+(?:up\s+)?(?:for\s+\$?([A-Z]{2,5})\s+)?to\s+\$?(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_sl_update_move,
+            examples=["Move your SL up to 5.00 if in", "You can move your mental stop loss for ERNA to 5.30",
+                       "Move your SL to 9.67"],
             flags=re.IGNORECASE
         )
 

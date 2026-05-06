@@ -972,6 +972,11 @@ def _hot_connect_schwab_broker(creds: dict):
                             _bot_instance.schwab_broker = schwab_broker
                             schwab_broker.connected = True
                             print(f"[SCHWAB HOT-CONNECT] ✅ Deferred retry succeeded — broker is now live")
+                            if hasattr(_bot_instance, 'sync_service') and _bot_instance.sync_service:
+                                bm = getattr(_bot_instance.sync_service, 'broker_manager', None)
+                                if bm and hasattr(bm, 'schwab_broker'):
+                                    bm.schwab_broker = schwab_broker
+                                    print("[SCHWAB HOT-CONNECT] ✓ BrokerManager reference updated (deferred)")
                             try:
                                 from gui_app.broker_credentials_service import set_broker_status
                                 set_broker_status('schwab', True, 'connected')

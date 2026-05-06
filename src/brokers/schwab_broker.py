@@ -3606,6 +3606,26 @@ class SchwabBroker(BrokerInterface):
                     result['status_description'] = status_desc
                     result['close_time'] = close_time
                     result['schwab_raw_status'] = schwab_status
+
+                if order.get('orderStrategyType') == 'OCO':
+                    children = order.get('childOrderStrategies', [])
+                    for child in children:
+                        child_status = (child.get('status') or '').upper()
+                        child_type = (child.get('orderType') or '').upper()
+                        if child_status == 'FILLED':
+                            result['fill_leg'] = 'pt' if child_type == 'LIMIT' else 'sl'
+                            child_activities = child.get('orderActivityCollection', [])
+                            child_cost, child_filled = 0.0, 0
+                            for act in child_activities:
+                                if act.get('activityType') == 'EXECUTION':
+                                    for el in act.get('executionLegs', []):
+                                        child_filled += int(el.get('quantity', 0))
+                                        child_cost += int(el.get('quantity', 0)) * float(el.get('price', 0))
+                            if child_filled > 0:
+                                result['fill_leg_qty'] = child_filled
+                                result['fill_leg_price'] = child_cost / child_filled
+                            break
+
                 return result
 
             else:
