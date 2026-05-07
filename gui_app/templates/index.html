@@ -1458,8 +1458,12 @@ function renderRegionBrokers() {
                     background: ${bgColor}; border: 1px solid ${borderColor}; transition: all 0.2s ease; min-width: 140px;">
                     <span style="width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${shadowColor};"></span>
                     <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">${broker.broker_name}</span>
-                    ${broker.is_paper 
+                    ${broker.is_paper
                         ? '<span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>'
+                        : ''
+                    }
+                    ${broker.delayed_data
+                        ? '<span style="font-size: 0.65rem; padding: 2px 8px; background: rgba(255, 165, 0, 0.2); border-radius: 4px; color: #ffa500; font-weight: 600;">DELAYED</span>'
                         : ''
                     }
                 </div>`;

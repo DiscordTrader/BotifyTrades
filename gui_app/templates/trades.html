@@ -1842,8 +1842,10 @@ async function updateConditionalPrices() {
                 const direction = info.direction || 'ABOVE';
                 
                 const isStream = info.source === 'streaming';
-                const streamDot = isStream ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#0f8;margin-right:4px;animation:pulse 2s infinite;"></span>' : '';
-                priceCell.innerHTML = `${streamDot}$${price.toFixed(2)}`;
+                const isDelayed = info.delayed === true;
+                const streamDot = isStream && !isDelayed ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#0f8;margin-right:4px;animation:pulse 2s infinite;"></span>' : '';
+                const delayedBadge = isDelayed ? ' <span style="background:rgba(255,165,0,0.2);color:#ffa500;padding:1px 5px;border-radius:3px;font-size:0.65rem;vertical-align:middle;">15m DELAYED</span>' : '';
+                priceCell.innerHTML = `${streamDot}$${price.toFixed(2)}${delayedBadge}`;
                 priceCell.style.color = '#fff';
                 
                 if (trigger > 0) {

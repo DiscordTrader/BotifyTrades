@@ -96,6 +96,7 @@ class IBKRDataHub:
 
         self._mktdata_denied_symbols: Set[str] = set()
         self._mktdata_denied_lock = threading.Lock()
+        self._using_delayed_data = False
 
         self._reconnect_in_progress = False
         self._reconnect_lock = threading.Lock()
@@ -131,6 +132,11 @@ class IBKRDataHub:
         self._ib = broker.ib
         self._loop = loop
         self._attach_events()
+        try:
+            self._ib.reqMarketDataType(4)
+            print("[IBKR_HUB] ✓ Requested delayed-frozen market data fallback (type 4)")
+        except Exception as e:
+            print(f"[IBKR_HUB] ⚠️ reqMarketDataType failed: {e}")
         self._streaming_active = True
         if self._reconcile_task is None or self._reconcile_task.done():
             if self._loop and not self._loop.is_closed():
@@ -189,6 +195,10 @@ class IBKRDataHub:
             print(f"[IBKR_HUB] ⚠️ Not connected to TWS (error 504)")
         elif errorCode == 502:
             print(f"[IBKR_HUB] ⚠️ Could not connect to TWS (error 502)")
+        elif errorCode == 10167:
+            if not self._using_delayed_data:
+                self._using_delayed_data = True
+                print("[IBKR_HUB] ⚠️ Using delayed market data (no real-time subscription)")
         elif errorCode in (10089, 10168):
             symbol = ''
             if contract:
@@ -197,10 +207,19 @@ class IBKRDataHub:
                 with self._mktdata_denied_lock:
                     already_denied = symbol in self._mktdata_denied_symbols
                     self._mktdata_denied_symbols.add(symbol)
-                self._subscribe_fail_cache[symbol] = time.time() + 3600
-                self._subscribed_symbols.discard(symbol)
                 if not already_denied:
-                    logger.warning(f"[IBKR_HUB] ⚠️ Market data denied for {symbol} (error {errorCode}) — will fall back to other brokers")
+                    logger.warning(f"[IBKR_HUB] ⚠️ Market data denied for {symbol} (error {errorCode}) — requesting delayed data and retrying")
+                    try:
+                        self._ib.reqMarketDataType(4)
+                        self._subscribed_symbols.discard(symbol)
+                        self._pending_subscriptions.add(symbol)
+                    except Exception as e:
+                        logger.warning(f"[IBKR_HUB] Delayed data retry failed for {symbol}: {e}")
+                        self._subscribe_fail_cache[symbol] = time.time() + 3600
+                        self._subscribed_symbols.discard(symbol)
+                else:
+                    self._subscribe_fail_cache[symbol] = time.time() + 3600
+                    self._subscribed_symbols.discard(symbol)
 
     def _on_disconnected(self):
         print(f"[IBKR_HUB] ⚠️ TWS/Gateway DISCONNECTED — streaming prices will stop. Auto-reconnect will attempt in reconciliation loop.")
@@ -302,16 +321,23 @@ class IBKRDataHub:
     def _on_pending_tickers(self, tickers):
         now = time.time()
         updated_symbols = []
+        try:
+            ticker_list = list(tickers) if not isinstance(tickers, list) else tickers
+        except Exception:
+            return
+        conid_updates = {}
         with self._quotes_lock:
-            for ticker in tickers:
-                con_id = ticker.contract.conId if ticker.contract else 0
+            for ticker in ticker_list:
+                try:
+                    con_id = ticker.contract.conId if ticker.contract else 0
+                except Exception:
+                    continue
                 symbol = self._conid_to_symbol.get(con_id)
                 if not symbol:
                     if ticker.contract:
                         symbol = self._build_symbol_key(ticker.contract)
                         if symbol:
-                            with self._contract_lock:
-                                self._conid_to_symbol[con_id] = symbol
+                            conid_updates[con_id] = symbol
                 if not symbol:
                     continue
 
@@ -344,7 +370,12 @@ class IBKRDataHub:
                     q.timestamp = now
                     updated_symbols.append(symbol)
 
+        if conid_updates:
+            with self._contract_lock:
+                self._conid_to_symbol.update(conid_updates)
         self._last_quote_ts = now
+        if not self._streaming_active:
+            self._streaming_active = True
         for sym in updated_symbols:
             self._emit('quote_updated', {'symbol': sym, 'source': 'ibkr_stream'})
 
@@ -498,6 +529,9 @@ class IBKRDataHub:
             if (_t.time() - self._last_quote_ts) > 60:
                 return False
         return True
+
+    def is_delayed(self) -> bool:
+        return self._using_delayed_data
 
     def request_risk_eval(self):
         self._risk_eval_requested.set()
@@ -715,6 +749,10 @@ class IBKRDataHub:
                     self._consecutive_stale_checks = 0
 
                 if is_connected:
+                    if not self._streaming_active:
+                        self._streaming_active = True
+                        print("[IBKR_HUB] ✓ Connection alive — restored streaming_active after timeout")
+
                     await self._refresh_positions_from_ib()
 
                     for sym in list(self._pending_subscriptions):

@@ -9168,6 +9168,8 @@ def register_routes(app):
                             if hub_price and hub_price > 0:
                                 price_info['price'] = hub_price
                                 price_info['source'] = 'streaming'
+                                if hasattr(hub, 'is_delayed') and hub.is_delayed():
+                                    price_info['delayed'] = True
                                 quote = hub.get_quote(symbol)
                                 if quote:
                                     price_info['age'] = round(time.time() - quote.timestamp, 1) if hasattr(quote, 'timestamp') else 0
@@ -20921,6 +20923,16 @@ def register_routes(app):
                             else:
                                 disconnect_reason = 'Broker not connected'
                     
+                    delayed_data = False
+                    if broker_name == 'IBKR' and is_connected:
+                        try:
+                            from src.services.ibkr_data_hub import get_ibkr_data_hub
+                            ibkr_hub = get_ibkr_data_hub()
+                            if ibkr_hub and hasattr(ibkr_hub, 'is_delayed'):
+                                delayed_data = ibkr_hub.is_delayed()
+                        except Exception:
+                            pass
+
                     state = {
                         'broker_name': broker_name,
                         'region': region,
@@ -20932,7 +20944,8 @@ def register_routes(app):
                         'status': health.get('status', 'connected' if is_connected else 'disconnected'),
                         'reason': disconnect_reason,
                         'error_code': health.get('error_code'),
-                        'last_check': health.get('last_check')
+                        'last_check': health.get('last_check'),
+                        'delayed_data': delayed_data
                     }
                     
                     configured_brokers.append(state)
