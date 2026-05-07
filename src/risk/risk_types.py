@@ -112,7 +112,7 @@ class ChannelRiskSettings:
 
     escalation_only_mode: bool = False
     
-    broker_bracket_mode: str = 'both'  # 'both', 'sl_only', 'pt_only', 'none'
+    broker_bracket_mode: str = 'none'  # 'both', 'sl_only', 'pt_only', 'none'
     
     @property
     def allows_broker_sl(self) -> bool:

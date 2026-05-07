@@ -829,7 +829,7 @@ class RiskDBAdapter:
                                 trailing_stop_pct=row[5] or 0,
                                 trailing_activation_pct=row[6] or 15.0,
                                 exit_strategy_mode=channel_exit_mode,
-                                broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'both',
+                                broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'none',
                             )
                     ch_sl = row[4] or 0
                     ch_pt1 = row[1] or 0
@@ -882,7 +882,7 @@ class RiskDBAdapter:
                             ema_use_underlying=bool(row[42]) if len(row) > 42 and row[42] is not None else True,
                             ema_no_trend_candles=row[43] if len(row) > 43 and row[43] is not None else 3,
                             escalation_only_mode=bool(row[44]) if len(row) > 44 and row[44] else False,
-                            broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'both',
+                            broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'none',
                         )
                     return None
                 else:
@@ -1022,7 +1022,7 @@ class RiskDBAdapter:
                     ema_use_underlying=ema_use_underlying,
                     ema_no_trend_candles=ema_no_trend_candles,
                     escalation_only_mode=escalation_only_mode,
-                    broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'both',
+                    broker_bracket_mode=row[49] if len(row) > 49 and row[49] else 'none',
                 )
             
             return None
@@ -4129,7 +4129,7 @@ class RiskManager:
             self._log_position_status(position, cache, channel_settings, pct_change)
             return
 
-        _bbm_check = getattr(channel_settings, 'broker_bracket_mode', 'both') if channel_settings else 'both'
+        _bbm_check = getattr(channel_settings, 'broker_bracket_mode', 'none') if channel_settings else 'none'
 
         _bracket_fill_handled = await self._detect_and_handle_bracket_fill(position, cache, channel_settings)
 
@@ -5067,7 +5067,7 @@ class RiskManager:
     async def _place_initial_broker_bracket(self, position, cache, channel_settings):
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''
 
-        _bbm = getattr(channel_settings, 'broker_bracket_mode', 'both')
+        _bbm = getattr(channel_settings, 'broker_bracket_mode', 'none')
         if _bbm == 'none':
             print(f"[RISK] ⏭ Broker bracket mode is 'none' — skipping all broker bracket orders for {position.symbol}")
             cache.broker_orders_placed = True
@@ -5762,8 +5762,8 @@ class RiskManager:
                         lambda _p=position, _c=cache, _sp=_current_sl: self._sync_stop_to_broker(_p, _c, _sp))
 
     async def _place_next_pt_bracket_inner(self, position, cache, channel_settings, completed_tier: int, _retry_count: int = 0):
-        if not getattr(channel_settings, 'allows_broker_pt', True):
-            print(f"[RISK] ⏭ Broker bracket mode '{getattr(channel_settings, 'broker_bracket_mode', 'both')}' — skipping PT{completed_tier + 1} broker order for {position.symbol}")
+        if not getattr(channel_settings, 'allows_broker_pt', False):
+            print(f"[RISK] ⏭ Broker bracket mode '{getattr(channel_settings, 'broker_bracket_mode', 'none')}' — skipping PT{completed_tier + 1} broker order for {position.symbol}")
             return
 
         broker_name = position.broker.upper() if hasattr(position, 'broker') else ''

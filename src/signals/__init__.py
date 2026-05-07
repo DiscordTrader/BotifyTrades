@@ -48,6 +48,10 @@ from .temple_parser import (
     parse_temple_zz_options_b,
     parse_temple_ts_options,
     parse_temple_options_exit,
+    parse_temple_zz_structured_entry,
+    parse_temple_zz_inline_role_entry,
+    parse_temple_zz_swing_update,
+    parse_temple_zz_standalone_targets,
 )
 
 __all__ = [
@@ -87,4 +91,8 @@ __all__ = [
     'parse_temple_zz_options_b',
     'parse_temple_ts_options',
     'parse_temple_options_exit',
+    'parse_temple_zz_structured_entry',
+    'parse_temple_zz_inline_role_entry',
+    'parse_temple_zz_swing_update',
+    'parse_temple_zz_standalone_targets',
 ]

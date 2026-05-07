@@ -387,7 +387,7 @@ async function loadChannels() {
                                     </div>
                                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                                         <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="both" ${(channel.broker_bracket_mode || 'both') === 'both' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="both" ${(channel.broker_bracket_mode || 'none') === 'both' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
                                             <span style="font-size: 12px; color: white;">Both</span>
                                         </label>
                                         <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
@@ -399,7 +399,7 @@ async function loadChannels() {
                                             <span style="font-size: 12px; color: white;">PT Only</span>
                                         </label>
                                         <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="none" ${channel.broker_bracket_mode === 'none' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
+                                            <input type="radio" name="broker-bracket-mode-${channel.id}" value="none" ${(channel.broker_bracket_mode || 'none') === 'none' ? 'checked' : ''} style="cursor: pointer;" onchange="handleBracketModeChange('${channel.id}', this.value)">
                                             <span style="font-size: 12px; color: white;">Disabled</span>
                                         </label>
                                     </div>

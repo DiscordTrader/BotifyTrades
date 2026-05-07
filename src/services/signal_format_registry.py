@@ -107,25 +107,31 @@ class SignalFormatRegistry:
         text = re.sub(r'^@\w+\s+', '', text)
         return text.strip()
     
+    _ROLE_AWARE_FORMATS = frozenset({
+        'temple_zz_structured_entry', 'temple_zz_inline_role_entry',
+        'temple_zz_swing_update',
+    })
+
     def parse(self, text: str) -> Optional[Dict[str, Any]]:
         """
         Parse text using registered formats in priority order.
-        
+
         Returns:
             Parsed signal dict with '_format_name' indicating which format matched,
             or None if no format matched.
         """
-        # Strip Discord mentions to allow patterns to match
-        clean_text = self._strip_discord_mentions(text.strip())
-        
+        raw_text = text.strip()
+        clean_text = self._strip_discord_mentions(raw_text)
+
         for fmt in self._sorted_formats:
             if not fmt.enabled:
                 continue
-            
-            match = fmt.pattern.search(clean_text)
+
+            match_text = raw_text if fmt.name in self._ROLE_AWARE_FORMATS else clean_text
+            match = fmt.pattern.search(match_text)
             if match:
                 try:
-                    result = fmt.parser(match, clean_text)
+                    result = fmt.parser(match, match_text)
                     if result:
                         result['_format_name'] = fmt.name
                         print(f"[FORMAT REGISTRY] ✓ Matched '{fmt.name}': {result.get('action')} {result.get('symbol')} {result.get('strike')}{result.get('opt_type', '')}")
@@ -133,7 +139,7 @@ class SignalFormatRegistry:
                 except Exception as e:
                     print(f"[FORMAT REGISTRY] Error in {fmt.name} parser: {e}")
                     continue
-        
+
         return None
     
     def list_formats(self) -> List[Dict[str, Any]]:
@@ -1184,6 +1190,8 @@ class SignalFormatRegistry:
             parse_temple_zz_ticker_price_now,
             parse_temple_zz_range_entry, parse_temple_zz_sl_update_new,
             parse_temple_zz_sl_update_move,
+            parse_temple_zz_structured_entry, parse_temple_zz_inline_role_entry,
+            parse_temple_zz_swing_update, parse_temple_zz_standalone_targets,
         )
 
         # --- Stock channel (⚡│zz) ---
@@ -1310,6 +1318,62 @@ class SignalFormatRegistry:
             parser=parse_temple_zz_sl_update_move,
             examples=["Move your SL up to 5.00 if in", "You can move your mental stop loss for ERNA to 5.30",
                        "Move your SL to 9.67"],
+            flags=re.IGNORECASE
+        )
+
+        # --- ZZ structured emoji (✅/❌/🎯 format — author "ZZ") ---
+
+        self.register(
+            name="temple_zz_structured_entry",
+            description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL / 🎯 targets",
+            priority=50,
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[ \t]*\n❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n🎯[ \t]*([\d.,\s]+(?:\.{2,3}[\d.,\s]+)*)',
+            parser=parse_temple_zz_structured_entry,
+            examples=[
+                "$AREB <@&1330929339134640179> \n✅ 0.30\n❌ 0.28\n🎯 0.33...0.37...0.40",
+                "$BIYA\n✅ 1.55\n❌ 1.45\n🎯 1.64...1.74...1.88...2.00",
+                "$FBLG <@&1330915546513805463>\n✅ 1.30-1.50\n❌ 1.25\n🎯 1.80...3.60...4.50",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_inline_role_entry",
+            description="ZZ inline entry with role: SYMBOL price @Momentum/@Swing",
+            priority=51,
+            pattern=r'^\$?([A-Z]{1,5})\s+(?:(?:in\s+(?:small\s+)?(?:at\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:!?\s*)?<@&(\d+)>|<@&(\d+)>\s*(?:/\w+\s*)?\$?(\d+(?:\.\d+)?))',
+            parser=parse_temple_zz_inline_role_entry,
+            examples=[
+                "OCG  in at 2.12 <@&1330929339134640179>",
+                "MNTS 4.8 <@&1330929339134640179>",
+                "$EDHL <@&1330929339134640179> 2.67",
+                "OUST 29.26 <@&1330915546513805463>",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_swing_update",
+            description="ZZ swing update with targets/SL: $TICKER @Swing 🎯 targets ❌ SL",
+            priority=51,
+            pattern=r'\$?([A-Z]{1,5})\s*<@&(\d+)>.*?🎯\s*([\d.]+(?:\s*[-–]\s*[\d.]+)*)\s*❌\s*(?:below\s+)?\$?(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_swing_update,
+            examples=[
+                "$TRUG <@&1330915546513805463> \nWill average down around these levels. 🎯 2.60-3.00 ❌ below 2.00",
+            ],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+
+        self.register(
+            name="temple_zz_standalone_targets",
+            description="ZZ standalone targets: 🎯 T1...T2...T3 (no ticker)",
+            priority=80,
+            pattern=r'^🎯\s*([\d.]+(?:\s*\.{2,3}\s*[\d.]+)+)\s*$',
+            parser=parse_temple_zz_standalone_targets,
+            examples=[
+                "🎯 2.41...2.71",
+                "🎯 0.33...0.37...0.40",
+            ],
             flags=re.IGNORECASE
         )
 

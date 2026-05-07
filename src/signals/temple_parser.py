@@ -123,6 +123,45 @@ TEMPLE_ZZ_SL_UPDATE_MOVE = re.compile(
 )
 
 # =============================================================================
+# ZZ STRUCTURED EMOJI PATTERNS (✅/❌/🎯 format — author "ZZ")
+# =============================================================================
+
+# Role mention IDs → trade type tags
+ZZ_ROLE_MOMENTUM = '1330929339134640179'
+ZZ_ROLE_SWING = '1330915546513805463'
+
+# Structured entry: "$TICKER <@&role>\n✅ PRICE\n❌ PRICE\n🎯 T1...T2...T3"
+TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
+    r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n'
+    r'✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[ \t]*\n'
+    r'❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n'
+    r'🎯[ \t]*([\d.,\s]+(?:\.{2,3}[\d.,\s]+)*)',
+    re.IGNORECASE
+)
+
+# Inline entry with role: "SYMBOL in at PRICE <@&role>" or "$SYMBOL <@&role> PRICE"
+TEMPLE_ZZ_INLINE_ROLE_ENTRY_A = re.compile(
+    r'^\$?([A-Z]{1,5})\s+(?:in\s+(?:small\s+)?(?:at\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:!?\s*)?<@&(\d+)>',
+    re.IGNORECASE
+)
+TEMPLE_ZZ_INLINE_ROLE_ENTRY_B = re.compile(
+    r'^\$?([A-Z]{1,5})\s*<@&(\d+)>\s*(?:/\w+\s*)?\$?(\d+(?:\.\d+)?)',
+    re.IGNORECASE
+)
+
+# Swing update with targets/SL: "$TICKER <@&swing>\ntext 🎯 T1-T2 ❌ below PRICE"
+TEMPLE_ZZ_SWING_UPDATE = re.compile(
+    r'\$?([A-Z]{1,5})\s*<@&(\d+)>.*?🎯\s*([\d.]+(?:\s*[-–]\s*[\d.]+)*)\s*❌\s*(?:below\s+)?\$?(\d+(?:\.\d+)?)',
+    re.IGNORECASE | re.DOTALL
+)
+
+# Standalone targets: "🎯 T1...T2...T3" (no ticker — links to prior ZZ message)
+TEMPLE_ZZ_STANDALONE_TARGETS = re.compile(
+    r'^🎯\s*([\d.]+(?:\s*\.{2,3}\s*[\d.]+)+)\s*$',
+    re.IGNORECASE
+)
+
+# =============================================================================
 # OPTIONS PATTERNS (🚨│options-alerts💰 channel)
 # =============================================================================
 
@@ -754,4 +793,179 @@ def parse_temple_options_exit(match: re.Match, text: str) -> Optional[Dict[str, 
         "confidence": 1.0,
         "_temple_options_exit": True,
         "_expiry_defaulted": True,
+    }
+
+
+# =============================================================================
+# ZZ STRUCTURED EMOJI PARSER FUNCTIONS
+# =============================================================================
+
+def _parse_zz_targets(targets_str: str) -> list:
+    """Parse targets from '0.33...0.37...0.40' or '2.60-3.00' format."""
+    targets_str = targets_str.strip().rstrip('​')
+    parts = re.split(r'\.{2,3}|/|,', targets_str)
+    targets = []
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        range_match = re.match(r'(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)', part)
+        if range_match:
+            targets.append(float(range_match.group(1)))
+            targets.append(float(range_match.group(2)))
+        else:
+            try:
+                targets.append(float(part))
+            except ValueError:
+                continue
+    return targets
+
+
+def _detect_zz_trade_type(text: str) -> str:
+    """Detect trade type from role mentions in text."""
+    if ZZ_ROLE_SWING in text:
+        return 'swing'
+    if ZZ_ROLE_MOMENTUM in text:
+        return 'momentum'
+    if '/swing' in text.lower():
+        return 'swing'
+    return 'day'
+
+
+def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse structured ZZ entry: $TICKER @role / ✅ entry / ❌ stoploss / 🎯 targets."""
+    symbol = match.group(1).upper()
+    entry_price = float(match.group(2))
+    entry_low = float(match.group(3)) if match.group(3) else None
+    stop_loss = float(match.group(4))
+    targets = _parse_zz_targets(match.group(5))
+
+    trade_type = _detect_zz_trade_type(text)
+    entry_high = entry_price
+    if entry_low and entry_low > entry_high:
+        entry_high, entry_low = entry_low, entry_high
+
+    return {
+        'format': 'TEMPLE_ZZ_STRUCTURED',
+        'is_conditional': True,
+        '_conditional_order': True,
+        '_temple_zz_structured': True,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'action': 'BTO',
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': 'over',
+        'trigger_price': entry_low if entry_low else entry_high,
+        'entry_high': entry_high,
+        'entry_low': entry_low,
+        'stop_loss_type': 'fixed',
+        'stop_loss_value': stop_loss,
+        'stop_loss_fixed': stop_loss,
+        'stop_loss_pct': None,
+        'profit_targets': targets,
+        'target_ranges': [],
+        'position_size_pct': None,
+        'fixed_qty': None,
+        'size_mode': None,
+        'qty': 1,
+        'qty_specified': False,
+        'price': entry_high,
+        'confidence': 1.0,
+        '_trade_type': trade_type,
+    }
+
+
+def parse_temple_zz_inline_role_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse inline ZZ entry with role: 'OCG in at 2.12 @Momentum' or '$EDHL @Momentum 2.67'."""
+    symbol = match.group(1).upper()
+
+    m_a = TEMPLE_ZZ_INLINE_ROLE_ENTRY_A.search(text)
+    m_b = TEMPLE_ZZ_INLINE_ROLE_ENTRY_B.search(text)
+
+    if m_a:
+        price = float(m_a.group(2))
+        role_id = m_a.group(3)
+    elif m_b:
+        role_id = m_b.group(2)
+        price = float(m_b.group(3))
+    else:
+        price = float(match.group(2))
+        role_id = match.group(3) if match.lastindex >= 3 else None
+
+    trade_type = 'swing' if role_id == ZZ_ROLE_SWING else 'momentum'
+
+    result = {
+        "asset": "stock",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": None,
+        "opt_type": None,
+        "expiry": None,
+        "price": price,
+        "is_market_order": False,
+        "confidence": 1.0,
+        "_temple_entry": True,
+        "_temple_zz_role_entry": True,
+        "_trade_type": trade_type,
+    }
+    return result
+
+
+def parse_temple_zz_swing_update(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse ZZ swing update: '$TRUG @Swing ... 🎯 2.60-3.00 ❌ below 2.00'."""
+    symbol = match.group(1).upper()
+    role_id = match.group(2)
+    targets = _parse_zz_targets(match.group(3))
+    stop_loss = float(match.group(4))
+
+    trade_type = 'swing' if role_id == ZZ_ROLE_SWING else 'momentum'
+
+    return {
+        'format': 'TEMPLE_ZZ_SWING_UPDATE',
+        'is_conditional': True,
+        '_conditional_order': True,
+        '_temple_zz_structured': True,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'action': 'BTO',
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': 'over',
+        'trigger_price': targets[0] if targets else None,
+        'entry_high': None,
+        'entry_low': None,
+        'stop_loss_type': 'fixed',
+        'stop_loss_value': stop_loss,
+        'stop_loss_fixed': stop_loss,
+        'stop_loss_pct': None,
+        'profit_targets': targets,
+        'target_ranges': [],
+        'position_size_pct': None,
+        'fixed_qty': None,
+        'size_mode': None,
+        'qty': 1,
+        'qty_specified': False,
+        'price': None,
+        'confidence': 0.9,
+        '_trade_type': trade_type,
+    }
+
+
+def parse_temple_zz_standalone_targets(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse standalone ZZ targets: '🎯 2.41...2.71' (no ticker)."""
+    targets = _parse_zz_targets(match.group(1))
+    if not targets:
+        return None
+
+    return {
+        "asset": "stock",
+        "action": "UPDATE_TARGETS",
+        "symbol": None,
+        "profit_targets": targets,
+        "confidence": 0.7,
+        "_temple_zz_standalone_targets": True,
+        "_needs_context_symbol": True,
     }

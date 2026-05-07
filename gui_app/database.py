@@ -508,7 +508,7 @@ def init_db():
     try:
         cursor.execute('SELECT broker_bracket_mode FROM channels LIMIT 1')
     except sqlite3.OperationalError:
-        cursor.execute("ALTER TABLE channels ADD COLUMN broker_bracket_mode TEXT DEFAULT 'both'")
+        cursor.execute("ALTER TABLE channels ADD COLUMN broker_bracket_mode TEXT DEFAULT 'none'")
         conn.commit()
         print("[DATABASE] ✓ Added broker_bracket_mode column (both/sl_only/pt_only/none) for per-channel broker bracket control")
     
