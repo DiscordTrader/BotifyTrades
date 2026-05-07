@@ -485,7 +485,7 @@ class SignalFormatRegistry:
             description="Phoenix entry with 'over' price trigger and percentage stop loss",
             priority=55,
             pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ocver|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
-            parser=self._parse_phoenix_entry_over_pct_sl,
+            parser=self._parse_phoenix_over_pct_sl_conditional,
             examples=["PHEG over 7.50 SL 10%", "MOVE ober 30 SL 10%", "ARTV iver 4.60 SL 8%", "CURV ocver 1.80 SL 10%"],
             flags=re.IGNORECASE | re.DOTALL
         )
@@ -496,7 +496,7 @@ class SignalFormatRegistry:
             description="Phoenix entry with 'over' price trigger and stop loss",
             priority=56,
             pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ocver|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)(?!\s*%)',
-            parser=self._parse_phoenix_entry,
+            parser=self._parse_phoenix_over_conditional,
             examples=["PAVM over 21.50 SL 20", "AMZE ocer 0.67 SL 0.62"],
             flags=re.IGNORECASE | re.DOTALL
         )
@@ -507,7 +507,7 @@ class SignalFormatRegistry:
             description="Phoenix entry with 'over' price trigger, no stop loss",
             priority=58,
             pattern=r'^\s*\$?([A-Z]{1,5})\s+(?:over|ocer|ocver|ober|ovre|ovwe|ovr|iver)\s+\$?([\d.]+)',
-            parser=self._parse_phoenix_entry_no_sl,
+            parser=self._parse_phoenix_over_no_sl_conditional,
             examples=["ENVB over 12.80", "ENVB over 13"],
             flags=re.IGNORECASE | re.DOTALL
         )
@@ -2122,6 +2122,57 @@ class SignalFormatRegistry:
             "_phoenix_entry": True
         }
     
+    def _extract_targets_from_text(self, text: str) -> list:
+        """Extract profit targets from text lines like 'first target 7.87' or 'targets 8.00 9.00'."""
+        targets = []
+        for line in text.split('\n'):
+            m = re.search(r'(?:first\s+)?targets?\s+\$?([\d.]+(?:\s*[,/]\s*\$?[\d.]+)*)', line, re.IGNORECASE)
+            if m:
+                for p in re.split(r'[,/\s]+', m.group(1)):
+                    p = p.strip().lstrip('$')
+                    if p:
+                        try:
+                            targets.append(float(p))
+                        except ValueError:
+                            pass
+        return targets
+
+    def _parse_phoenix_over_conditional(self, match: re.Match, text: str) -> Optional[Dict]:
+        result = self._parse_phoenix_entry(match, text)
+        if not result:
+            return None
+        result['_conditional_order'] = True
+        result['is_conditional'] = True
+        result['trigger_type'] = 'over'
+        targets = self._extract_targets_from_text(text)
+        if targets:
+            result['profit_targets'] = targets
+        return result
+
+    def _parse_phoenix_over_pct_sl_conditional(self, match: re.Match, text: str) -> Optional[Dict]:
+        result = self._parse_phoenix_entry_over_pct_sl(match, text)
+        if not result:
+            return None
+        result['_conditional_order'] = True
+        result['is_conditional'] = True
+        result['trigger_type'] = 'over'
+        targets = self._extract_targets_from_text(text)
+        if targets:
+            result['profit_targets'] = targets
+        return result
+
+    def _parse_phoenix_over_no_sl_conditional(self, match: re.Match, text: str) -> Optional[Dict]:
+        result = self._parse_phoenix_entry_no_sl(match, text)
+        if not result:
+            return None
+        result['_conditional_order'] = True
+        result['is_conditional'] = True
+        result['trigger_type'] = 'over'
+        targets = self._extract_targets_from_text(text)
+        if targets:
+            result['profit_targets'] = targets
+        return result
+
     def _parse_phoenix_entry_no_sl(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Phoenix entry without SL: ENVB over 12.80"""
         groups = match.groups()
