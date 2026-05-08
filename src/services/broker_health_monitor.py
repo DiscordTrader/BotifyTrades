@@ -701,13 +701,14 @@ class BrokerHealthMonitor:
         
         return True, ""
     
-    def record_trade_rejection(self, signal: Dict, broker_name: str, 
+    def record_trade_rejection(self, signal: Dict, broker_name: str,
                                rejection_reason: str, channel_id: str = None) -> Optional[int]:
         """
         Record a trade rejection in the database.
-        
+
         Returns the trade ID if successful, None otherwise.
         """
+        broker_name = self._normalize_broker_name(broker_name) or broker_name
         try:
             from gui_app.database import get_connection
             conn = get_connection()
