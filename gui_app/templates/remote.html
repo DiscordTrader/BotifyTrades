@@ -1,0 +1,539 @@
+{% extends "base.html" %}
+
+{% block title %}📡 Remote Access - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<style>
+.remote-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.remote-card {
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.remote-card:hover {
+    border-color: rgba(0, 212, 255, 0.4);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.remote-card h3 {
+    color: #00d4ff;
+    margin-bottom: 20px;
+    font-size: 1.15rem;
+}
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+    color: #8fb8cc;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group input[type="password"] {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
+    color: #e0f0ff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.form-group input:focus {
+    border-color: rgba(0, 212, 255, 0.5);
+}
+
+.help-text {
+    color: #5a8a9e;
+    font-size: 0.78rem;
+    margin-top: 4px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.btn-success { background: linear-gradient(135deg, #00c853, #00a844); color: white; }
+.btn-success:hover { background: linear-gradient(135deg, #00e676, #00c853); }
+.btn-primary { background: linear-gradient(135deg, #2196F3, #1976D2); color: white; }
+.btn-primary:hover { background: linear-gradient(135deg, #42A5F5, #2196F3); }
+.btn-danger { background: linear-gradient(135deg, #f44336, #d32f2f); color: white; }
+.btn-danger:hover { background: linear-gradient(135deg, #ef5350, #f44336); }
+.btn-outline { background: transparent; border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; }
+.btn-outline:hover { background: rgba(0, 212, 255, 0.1); }
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.status-connected {
+    background: rgba(0, 200, 83, 0.15);
+    border: 1px solid rgba(0, 200, 83, 0.3);
+    color: #69f0ae;
+}
+
+.status-disconnected {
+    background: rgba(244, 67, 54, 0.15);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    color: #ef9a9a;
+}
+
+.status-disabled {
+    background: rgba(158, 158, 158, 0.15);
+    border: 1px solid rgba(158, 158, 158, 0.3);
+    color: #bdbdbd;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-dot.green { background: #69f0ae; box-shadow: 0 0 6px #69f0ae; }
+.status-dot.red { background: #ef5350; box-shadow: 0 0 6px #ef5350; }
+.status-dot.grey { background: #9e9e9e; }
+
+.toggle-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.toggle-label span {
+    color: #c0d8e8;
+    font-size: 0.9rem;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    transition: 0.3s;
+}
+
+.slider:before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+input:checked + .slider { background: #00c853; }
+input:checked + .slider:before { transform: translateX(20px); }
+
+.pairing-code {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 8px;
+    color: #00d4ff;
+    text-align: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    margin: 12px 0;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.pairing-timer {
+    text-align: center;
+    color: #5a8a9e;
+    font-size: 0.8rem;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-row .label { color: #5a8a9e; font-size: 0.85rem; }
+.info-row .value { color: #e0f0ff; font-size: 0.85rem; font-weight: 500; }
+
+.message {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin: 12px 0;
+    font-size: 0.85rem;
+    display: none;
+}
+
+.message.success { background: rgba(0, 200, 83, 0.15); border: 1px solid rgba(0, 200, 83, 0.3); color: #69f0ae; }
+.message.error { background: rgba(244, 67, 54, 0.15); border: 1px solid rgba(244, 67, 54, 0.3); color: #ef9a9a; }
+
+.section-header {
+    margin-bottom: 24px;
+}
+
+.section-header h2 {
+    color: #e0f0ff;
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+}
+
+.section-header p {
+    color: #5a8a9e;
+    font-size: 0.9rem;
+}
+
+.permissions-section {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 16px;
+    margin-top: 16px;
+}
+
+.permissions-section h4 {
+    color: #8fb8cc;
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+}
+</style>
+
+<div class="section-header">
+    <h2>📡 Remote Access</h2>
+    <p>Connect your bot to the BotifyTrades mobile app via relay server</p>
+</div>
+
+<div id="relay-message" class="message"></div>
+
+<div class="remote-grid">
+    <!-- Connection Status Card -->
+    <div class="remote-card">
+        <h3>🔗 Connection Status</h3>
+        <div id="relay-status" class="status-badge status-disabled">
+            <span class="status-dot grey" id="status-dot"></span>
+            <span id="status-text">Loading...</span>
+        </div>
+
+        <div id="connection-info" style="display: none;">
+            <div class="info-row">
+                <span class="label">Bot ID</span>
+                <span class="value" id="info-bot-id">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Server</span>
+                <span class="value" id="info-server">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Last Heartbeat</span>
+                <span class="value" id="info-heartbeat">—</span>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button id="btn-connect" class="btn btn-success" onclick="toggleRelay()">Connect</button>
+            <button id="btn-pairing" class="btn btn-primary" onclick="generatePairingCode()" style="display: none;">Generate Pairing Code</button>
+        </div>
+
+        <!-- Pairing code display -->
+        <div id="pairing-section" style="display: none;">
+            <div class="pairing-code" id="pairing-code">------</div>
+            <div class="pairing-timer" id="pairing-timer">Enter this code in your mobile app</div>
+        </div>
+    </div>
+
+    <!-- Settings Card -->
+    <div class="remote-card">
+        <h3>⚙️ Relay Settings</h3>
+
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Enable Remote Access</span>
+                <label class="switch">
+                    <input type="checkbox" id="relay-enabled" onchange="settingsChanged()">
+                    <span class="slider"></span>
+                </label>
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>Server URL</label>
+            <input type="text" id="relay-server-url" placeholder="wss://botifytrades.com/ws/bot" onchange="settingsChanged()">
+        </div>
+
+        <div class="form-group">
+            <label>Bot Token</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="password" id="relay-bot-token" placeholder="Paste bot token from botifytrades.com" style="flex: 1;" onchange="settingsChanged()">
+                <button class="btn btn-outline" onclick="toggleTokenVisibility()" style="padding: 10px 12px;">👁</button>
+            </div>
+            <p class="help-text">Register your bot at botifytrades.com to get a token</p>
+        </div>
+
+        <div class="permissions-section">
+            <h4>📲 Mobile Permissions</h4>
+
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Send trade notifications</span>
+                    <label class="switch">
+                        <input type="checkbox" id="perm-send-trades" checked onchange="settingsChanged()">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Send risk alerts</span>
+                    <label class="switch">
+                        <input type="checkbox" id="perm-send-alerts" checked onchange="settingsChanged()">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Allow remote pause/resume</span>
+                    <label class="switch">
+                        <input type="checkbox" id="perm-allow-pause" checked onchange="settingsChanged()">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Allow remote position close</span>
+                    <label class="switch">
+                        <input type="checkbox" id="perm-allow-close" onchange="settingsChanged()">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Allow remote close all</span>
+                    <label class="switch">
+                        <input type="checkbox" id="perm-allow-close-all" onchange="settingsChanged()">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button id="btn-save" class="btn btn-success" onclick="saveSettings()">💾 Save Settings</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let statusInterval = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadSettings();
+    loadStatus();
+    statusInterval = setInterval(loadStatus, 10000);
+});
+
+async function loadSettings() {
+    try {
+        const resp = await fetch('/api/settings/relay');
+        const data = await resp.json();
+
+        document.getElementById('relay-enabled').checked = data.enabled || false;
+        document.getElementById('relay-server-url').value = data.server_url || 'wss://botifytrades.com/ws/bot';
+        document.getElementById('relay-bot-token').value = data.bot_token || '';
+        document.getElementById('perm-send-trades').checked = data.send_trades !== false;
+        document.getElementById('perm-send-alerts').checked = data.send_alerts !== false;
+        document.getElementById('perm-allow-pause').checked = data.allow_pause !== false;
+        document.getElementById('perm-allow-close').checked = data.allow_close || false;
+        document.getElementById('perm-allow-close-all').checked = data.allow_close_all || false;
+    } catch (e) {
+        console.error('Failed to load relay settings:', e);
+    }
+}
+
+async function loadStatus() {
+    try {
+        const resp = await fetch('/api/remote/status');
+        const data = await resp.json();
+
+        const badge = document.getElementById('relay-status');
+        const dot = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
+        const info = document.getElementById('connection-info');
+        const btnConnect = document.getElementById('btn-connect');
+        const btnPairing = document.getElementById('btn-pairing');
+
+        if (!data.enabled) {
+            badge.className = 'status-badge status-disabled';
+            dot.className = 'status-dot grey';
+            text.textContent = 'Disabled';
+            info.style.display = 'none';
+            btnConnect.textContent = 'Enable & Connect';
+            btnConnect.className = 'btn btn-success';
+            btnPairing.style.display = 'none';
+        } else if (data.connected) {
+            badge.className = 'status-badge status-connected';
+            dot.className = 'status-dot green';
+            text.textContent = 'Connected to relay server';
+            info.style.display = 'block';
+            document.getElementById('info-bot-id').textContent = data.bot_id || '—';
+            document.getElementById('info-server').textContent = data.server_url || '—';
+            document.getElementById('info-heartbeat').textContent = data.last_heartbeat || 'now';
+            btnConnect.textContent = 'Disconnect';
+            btnConnect.className = 'btn btn-danger';
+            btnPairing.style.display = 'inline-block';
+        } else {
+            badge.className = 'status-badge status-disconnected';
+            dot.className = 'status-dot red';
+            text.textContent = 'Disconnected';
+            info.style.display = 'none';
+            btnConnect.textContent = 'Connect';
+            btnConnect.className = 'btn btn-success';
+            btnPairing.style.display = 'none';
+        }
+    } catch (e) {
+        console.error('Failed to load relay status:', e);
+    }
+}
+
+async function saveSettings() {
+    try {
+        const settings = {
+            enabled: document.getElementById('relay-enabled').checked,
+            server_url: document.getElementById('relay-server-url').value.trim(),
+            bot_token: document.getElementById('relay-bot-token').value.trim(),
+            send_trades: document.getElementById('perm-send-trades').checked,
+            send_alerts: document.getElementById('perm-send-alerts').checked,
+            allow_pause: document.getElementById('perm-allow-pause').checked,
+            allow_close: document.getElementById('perm-allow-close').checked,
+            allow_close_all: document.getElementById('perm-allow-close-all').checked,
+        };
+
+        const resp = await fetch('/api/settings/relay', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings),
+        });
+        const data = await resp.json();
+
+        showMessage(data.success ? 'success' : 'error', data.message || 'Settings saved');
+        if (data.success) {
+            await loadStatus();
+        }
+    } catch (e) {
+        showMessage('error', 'Failed to save settings: ' + e.message);
+    }
+}
+
+async function toggleRelay() {
+    const btn = document.getElementById('btn-connect');
+    const text = document.getElementById('status-text');
+
+    if (btn.textContent.includes('Disconnect')) {
+        try {
+            await fetch('/api/remote/disconnect', { method: 'POST' });
+            showMessage('success', 'Disconnected from relay server');
+        } catch (e) {
+            showMessage('error', 'Failed to disconnect');
+        }
+    } else {
+        document.getElementById('relay-enabled').checked = true;
+        await saveSettings();
+    }
+    await loadStatus();
+}
+
+async function generatePairingCode() {
+    try {
+        const resp = await fetch('/api/remote/pairing-code', { method: 'POST' });
+        const data = await resp.json();
+
+        if (data.success && data.pairing_code) {
+            document.getElementById('pairing-section').style.display = 'block';
+            document.getElementById('pairing-code').textContent = data.pairing_code;
+            document.getElementById('pairing-timer').textContent = 'Valid for 10 minutes — enter in mobile app';
+
+            setTimeout(() => {
+                document.getElementById('pairing-section').style.display = 'none';
+            }, 600000);
+        } else {
+            showMessage('error', data.message || 'Failed to generate pairing code');
+        }
+    } catch (e) {
+        showMessage('error', 'Failed to generate pairing code: ' + e.message);
+    }
+}
+
+function toggleTokenVisibility() {
+    const input = document.getElementById('relay-bot-token');
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function settingsChanged() {
+    // Visual indicator that settings need saving
+}
+
+function showMessage(type, text) {
+    const msg = document.getElementById('relay-message');
+    msg.className = `message ${type}`;
+    msg.textContent = text;
+    msg.style.display = 'block';
+    setTimeout(() => { msg.style.display = 'none'; }, 5000);
+}
+</script>
+{% endblock %}

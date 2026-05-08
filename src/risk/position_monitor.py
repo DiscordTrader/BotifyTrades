@@ -6872,7 +6872,21 @@ class RiskManager:
             if retry_state.get('use_market'):
                 print(f"[RISK]   📊 Using MARKET order (limit orders failed)")
         print(f"{'='*60}")
-        
+
+        try:
+            from src.services.relay_client import get_relay_client
+            _rc = get_relay_client()
+            if _rc and _rc.connected:
+                import asyncio as _aio
+                import time as _relay_t
+                _aio.ensure_future(_rc.send_alert({
+                    'level': 'warning',
+                    'msg': f"{decision.reason}: {pos_key} qty={decision.exit_qty} @ ${position.current_price:.2f}",
+                    'ts': _relay_t.time(),
+                }))
+        except Exception:
+            pass
+
         current_price = position.current_price
         entry_price = position.avg_cost
         pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price and entry_price > 0 else 0.0

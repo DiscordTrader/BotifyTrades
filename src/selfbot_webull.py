@@ -7685,7 +7685,20 @@ class SelfClient(discord.Client):
             
             self.db.add_trade(trade_data)
             print(f"[DATABASE] ✓ Trade saved: {signal['symbol']} {signal['action']} qty={signal['qty']} order_id={trade_data.get('order_id')}")
-            
+
+            if hasattr(self, 'relay_client') and self.relay_client and self.relay_client.connected:
+                try:
+                    relay_trade = {
+                        'action': signal['action'],
+                        'symbol': signal['symbol'],
+                        'qty': signal['qty'],
+                        'price': signal.get('price', 0),
+                        'broker': broker,
+                    }
+                    asyncio.ensure_future(self.relay_client.send_trade(relay_trade))
+                except Exception:
+                    pass
+
             # NOTE: Broker-executed trades are tracked in the 'trades' table, NOT in position_ledger.
             # Position ledger is exclusively for Signal Routing virtual positions (source_type='signal_routing').
             # This architectural separation ensures Channel Execution and Signal Routing remain isolated flows.
@@ -8762,6 +8775,25 @@ class SelfClient(discord.Client):
             import traceback
             traceback.print_exc()
         
+        try:
+            from gui_app.config_service import load_config
+            relay_cfg = load_config('relay_settings') or {}
+            if relay_cfg.get('enabled') and relay_cfg.get('bot_token'):
+                from src.services.relay_client import RelayClient, set_relay_client
+                self.relay_client = RelayClient(
+                    bot_token=relay_cfg['bot_token'],
+                    server_url=relay_cfg.get('server_url', 'wss://botifytrades.com/ws/bot'),
+                    bot_instance=self,
+                )
+                set_relay_client(self.relay_client)
+                self.loop.create_task(self.relay_client.connect())
+                print("[RELAY] ✅ Relay client initialized — connecting to relay server")
+            else:
+                self.relay_client = None
+        except Exception as e:
+            self.relay_client = None
+            print(f"[RELAY] ⚠️ Could not start relay client: {e}")
+
         try:
             from src.services.conditional_orders.router import conditional_order_router
             try:

@@ -1964,6 +1964,16 @@ def register_routes(app):
         response.headers['Expires'] = '0'
         return response
     
+    @app.route('/remote')
+    @login_required
+    def remote_access():
+        """Remote Access settings page — relay to mobile app"""
+        response = make_response(render_template('remote.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
     @app.route('/architecture')
     def architecture():
         """System architecture presentation page (PUBLIC - no auth required)"""
@@ -8992,6 +9002,152 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    # ─── Relay / Remote Access Settings ───
+
+    @app.route('/api/settings/relay', methods=['GET'])
+    def api_get_relay_settings():
+        try:
+            from gui_app.config_service import load_config
+            cfg = load_config('relay_settings') or {}
+            return jsonify({
+                'enabled': cfg.get('enabled', False),
+                'server_url': cfg.get('server_url', 'wss://botifytrades.com/ws/bot'),
+                'bot_token': cfg.get('bot_token', ''),
+                'send_trades': cfg.get('send_trades', True),
+                'send_alerts': cfg.get('send_alerts', True),
+                'allow_pause': cfg.get('allow_pause', True),
+                'allow_close': cfg.get('allow_close', False),
+                'allow_close_all': cfg.get('allow_close_all', False),
+            })
+        except Exception as e:
+            print(f"[API] Error fetching relay settings: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/settings/relay', methods=['POST'])
+    def api_save_relay_settings():
+        try:
+            from gui_app.config_service import save_config
+            data = request.json
+            settings = {
+                'enabled': bool(data.get('enabled', False)),
+                'server_url': data.get('server_url', 'wss://botifytrades.com/ws/bot'),
+                'bot_token': data.get('bot_token', ''),
+                'send_trades': bool(data.get('send_trades', True)),
+                'send_alerts': bool(data.get('send_alerts', True)),
+                'allow_pause': bool(data.get('allow_pause', True)),
+                'allow_close': bool(data.get('allow_close', False)),
+                'allow_close_all': bool(data.get('allow_close_all', False)),
+            }
+            save_config('relay_settings', settings)
+
+            if settings['enabled'] and settings['bot_token']:
+                _start_relay_client(settings)
+            else:
+                _stop_relay_client()
+
+            return jsonify({'success': True, 'message': 'Relay settings saved'})
+        except Exception as e:
+            print(f"[API] Error saving relay settings: {e}")
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+    @app.route('/api/remote/status', methods=['GET'])
+    def api_relay_status():
+        try:
+            from gui_app.config_service import load_config
+            from src.services.relay_client import get_relay_client
+            cfg = load_config('relay_settings') or {}
+            client = get_relay_client()
+            bot_token = cfg.get('bot_token', '')
+            bot_id = f"...{bot_token[-6:]}" if len(bot_token) > 6 else '—'
+            return jsonify({
+                'enabled': cfg.get('enabled', False),
+                'connected': client.connected if client else False,
+                'server_url': cfg.get('server_url', ''),
+                'bot_id': bot_id,
+            })
+        except Exception as e:
+            return jsonify({'enabled': False, 'connected': False}), 200
+
+    @app.route('/api/remote/disconnect', methods=['POST'])
+    def api_relay_disconnect():
+        try:
+            from src.services.relay_client import get_relay_client
+            client = get_relay_client()
+            if client:
+                loop = _get_event_loop()
+                if loop and not loop.is_closed():
+                    asyncio.run_coroutine_threadsafe(client.disconnect(), loop)
+            return jsonify({'success': True, 'message': 'Disconnected'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+    @app.route('/api/remote/pairing-code', methods=['POST'])
+    def api_relay_pairing_code():
+        try:
+            from gui_app.config_service import load_config
+            import httpx
+            cfg = load_config('relay_settings') or {}
+            bot_token = cfg.get('bot_token', '')
+            if not bot_token:
+                return jsonify({'success': False, 'message': 'No bot token configured'})
+
+            server_base = cfg.get('server_url', 'wss://botifytrades.com/ws/bot')
+            api_base = server_base.replace('wss://', 'https://').replace('ws://', 'http://').split('/ws/')[0]
+            resp = httpx.post(
+                f"{api_base}/api/bot/pairing-code",
+                headers={'Authorization': f'Bearer {bot_token}'},
+                json={'bot_token': bot_token},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return jsonify({'success': True, 'pairing_code': data.get('pairing_code', '')})
+            return jsonify({'success': False, 'message': f'Server returned {resp.status_code}'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)})
+
+    def _get_event_loop():
+        if _bot_instance and hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
+            return _bot_instance.loop
+        return None
+
+    def _start_relay_client(settings: dict):
+        from src.services.relay_client import RelayClient, set_relay_client, get_relay_client
+        import asyncio
+
+        existing = get_relay_client()
+        if existing and existing.connected:
+            loop = _get_event_loop()
+            if loop:
+                asyncio.run_coroutine_threadsafe(existing.disconnect(), loop)
+
+        bot_token = settings.get('bot_token', '')
+        server_url = settings.get('server_url', 'wss://botifytrades.com/ws/bot')
+        if not bot_token:
+            return
+
+        permissions = {
+            'allow_pause': settings.get('allow_pause', True),
+            'allow_close': settings.get('allow_close', False),
+            'allow_close_all': settings.get('allow_close_all', False),
+        }
+        client = RelayClient(bot_token=bot_token, server_url=server_url, bot_instance=_bot_instance, permissions=permissions)
+        set_relay_client(client)
+
+        loop = _get_event_loop()
+        if loop and not loop.is_closed():
+            asyncio.run_coroutine_threadsafe(client.connect(), loop)
+            print("[RELAY] ✅ Relay client started from settings page")
+
+    def _stop_relay_client():
+        from src.services.relay_client import get_relay_client, set_relay_client
+        client = get_relay_client()
+        if client:
+            loop = _get_event_loop()
+            if loop and not loop.is_closed():
+                asyncio.run_coroutine_threadsafe(client.disconnect(), loop)
+            set_relay_client(None)
+
     @app.route('/api/conditional_orders', methods=['GET'])
     def api_get_conditional_orders():
         """Get all conditional orders with optional status and market filter"""

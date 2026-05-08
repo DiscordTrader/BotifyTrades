@@ -222,6 +222,18 @@ class DailyPnLLimitService:
         if new_lock != 'none':
             print(f"[DAILY P&L] ⛔ {normalized} LOCKED ({new_lock}) — {lock_reason} | P&L: ${daily_pnl:+,.2f} ({daily_pnl_pct:+.1f}%)")
             self._log_lock_event(normalized, new_lock, lock_reason, state)
+            try:
+                from src.services.relay_client import get_relay_client
+                _rc = get_relay_client()
+                if _rc and _rc.connected:
+                    import asyncio, time as _t
+                    asyncio.ensure_future(_rc.send_alert({
+                        'level': 'critical',
+                        'msg': f"Daily {new_lock} limit reached on {normalized} — {lock_reason}",
+                        'ts': _t.time(),
+                    }))
+            except Exception:
+                pass
         else:
             self._check_warning(normalized, daily_pnl, daily_pnl_pct, settings, warning_pct)
 

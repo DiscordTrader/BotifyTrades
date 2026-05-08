@@ -101,7 +101,7 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/help', '/admin/signal-routing'] %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/remote', '/help', '/admin/signal-routing'] %}active{% endif %}">
                     Admin
                     <span class="dropdown-arrow">▼</span>
                 </button>
@@ -120,6 +120,11 @@
                         <span class="dropdown-icon">📱</span>
                         <span class="dropdown-text">Telegram</span>
                         <span class="dropdown-desc">Telegram integration</span>
+                    </a>
+                    <a href="/remote" class="dropdown-item {% if request.path == '/remote' %}active{% endif %}">
+                        <span class="dropdown-icon">📡</span>
+                        <span class="dropdown-text">Remote Access</span>
+                        <span class="dropdown-desc">Mobile app relay</span>
                     </a>
                     <a href="/license" class="dropdown-item {% if request.path == '/license' %}active{% endif %}">
                         <span class="dropdown-icon">🔐</span>
