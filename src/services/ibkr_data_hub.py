@@ -89,7 +89,7 @@ class IBKRDataHub:
 
         self.POSITION_CACHE_TTL = 15
         self.ACCOUNT_CACHE_TTL = 30
-        self.QUOTE_STALE_THRESHOLD = 30
+        self.QUOTE_STALE_THRESHOLD = 120
 
         self._risk_eval_requested = threading.Event()
         self._reconcile_task = None
@@ -282,6 +282,11 @@ class IBKRDataHub:
             self._attach_events()
             self._streaming_active = True
             self._consecutive_stale_checks = 0
+            self._using_delayed_data = False
+
+            with self._quotes_lock:
+                for q in self._quotes.values():
+                    q.timestamp = 0
 
             old_symbols = set(self._subscribed_symbols)
             self._subscribed_symbols.clear()
@@ -377,7 +382,7 @@ class IBKRDataHub:
         if not self._streaming_active:
             self._streaming_active = True
         for sym in updated_symbols:
-            self._emit('quote_updated', {'symbol': sym, 'source': 'ibkr_stream'})
+            self._emit('quote_updated', {'symbol': sym, 'source': 'ibkr_stream', 'quote': self._quotes.get(sym)})
 
     def _on_position_event(self, *args):
         self._risk_eval_requested.set()
@@ -429,7 +434,7 @@ class IBKRDataHub:
             q.timestamp = now
             q.source = source
         self._last_quote_ts = now
-        self._emit('quote_updated', {'symbol': symbol, 'source': source})
+        self._emit('quote_updated', {'symbol': symbol, 'source': source, 'quote': q})
 
     def get_quote(self, symbol: str, max_age: Optional[float] = None) -> Optional[IBKRQuoteData]:
         with self._quotes_lock:
@@ -524,10 +529,6 @@ class IBKRDataHub:
                 return False
         except Exception:
             pass
-        if self._last_quote_ts > 0:
-            import time as _t
-            if (_t.time() - self._last_quote_ts) > 60:
-                return False
         return True
 
     def is_delayed(self) -> bool:

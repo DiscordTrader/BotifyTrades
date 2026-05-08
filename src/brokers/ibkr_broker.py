@@ -14,6 +14,8 @@ try:
 except ImportError:
     print("[IBKR] ⚠️ nest_asyncio not available — IBKR may fail if event loop is already running")
 
+import time
+
 from ib_insync import IB, Stock, Option, MarketOrder, LimitOrder, util
 from datetime import datetime
 
@@ -41,6 +43,11 @@ class IBKRBroker(BrokerInterface):
         self._quote_fail_cache = {}
         self._event_loop_broken = False
         self._event_loop_broken_ts = 0
+        self._reconnect_in_progress = False
+        self._last_reconnect_ts = 0.0
+        self._RECONNECT_COOLDOWN = 5.0
+        self._MAX_RECONNECT_DELAY = 120.0
+        self._consecutive_reconnect_failures = 0
     
     @staticmethod
     def _normalize_expiry_yyyymmdd(expiry: str) -> str:
@@ -89,9 +96,12 @@ class IBKRBroker(BrokerInterface):
             
             if self.ib.isConnected():
                 self.connected = True
+                self._consecutive_reconnect_failures = 0
                 mode = "PAPER" if self.paper_trade else "LIVE"
                 print(f"[{self.name}] ✓ Connected successfully ({mode} trading)")
-                
+
+                self.ib.disconnectedEvent += self._on_disconnected
+
                 try:
                     account_values = self.ib.accountValues()
                     for av in account_values:
@@ -100,7 +110,7 @@ class IBKRBroker(BrokerInterface):
                             break
                 except Exception as e_summary:
                     print(f"[{self.name}] ⚠️ Connected but could not read account values: {e_summary}")
-                
+
                 return True
             
             print(f"[{self.name}] ❌ Failed to connect to TWS/Gateway")
@@ -113,11 +123,77 @@ class IBKRBroker(BrokerInterface):
     
     async def disconnect(self):
         """Disconnect from Interactive Brokers"""
+        try:
+            self.ib.disconnectedEvent -= self._on_disconnected
+        except Exception:
+            pass
         if self.ib.isConnected():
             self.ib.disconnect()
         self.connected = False
         print(f"[{self.name}] Disconnected")
-    
+
+    def _on_disconnected(self):
+        self.connected = False
+        print(f"[{self.name}] ⚠️ TWS/Gateway disconnected — scheduling auto-reconnect")
+        if self._event_loop and not self._event_loop.is_closed():
+            self._event_loop.call_soon_threadsafe(
+                lambda: self._event_loop.create_task(self._auto_reconnect())
+            )
+
+    async def _auto_reconnect(self):
+        if self._reconnect_in_progress:
+            return
+        self._reconnect_in_progress = True
+        try:
+            delay = min(
+                self._RECONNECT_COOLDOWN * (2 ** self._consecutive_reconnect_failures),
+                self._MAX_RECONNECT_DELAY
+            )
+            elapsed = time.time() - self._last_reconnect_ts
+            if elapsed < delay:
+                wait = delay - elapsed
+                print(f"[{self.name}] Waiting {wait:.0f}s before reconnect attempt...")
+                await asyncio.sleep(wait)
+
+            for attempt in range(1, 4):
+                self._last_reconnect_ts = time.time()
+                print(f"[{self.name}] 🔄 Reconnect attempt {attempt}/3...")
+                try:
+                    if self.ib.isConnected():
+                        try:
+                            self.ib.disconnectedEvent -= self._on_disconnected
+                        except Exception:
+                            pass
+                        self.ib.disconnect()
+                        await asyncio.sleep(2)
+
+                    self.ib = IB()
+                    await self.ib.connectAsync(
+                        host=self.host, port=self.port,
+                        clientId=self.client_id, timeout=20
+                    )
+                    if self.ib.isConnected():
+                        self.connected = True
+                        self._consecutive_reconnect_failures = 0
+                        self.ib.disconnectedEvent += self._on_disconnected
+                        print(f"[{self.name}] ✅ Reconnected successfully (attempt {attempt})")
+                        try:
+                            from src.services.ibkr_data_hub import get_ibkr_data_hub
+                            hub = get_ibkr_data_hub()
+                            hub.attach_broker(self, self._event_loop)
+                        except Exception:
+                            pass
+                        return
+                except Exception as e:
+                    print(f"[{self.name}] ❌ Reconnect attempt {attempt} failed: {e}")
+                if attempt < 3:
+                    await asyncio.sleep(5 * attempt)
+
+            self._consecutive_reconnect_failures += 1
+            print(f"[{self.name}] ❌ All reconnect attempts failed — will retry in {min(self._RECONNECT_COOLDOWN * (2 ** self._consecutive_reconnect_failures), self._MAX_RECONNECT_DELAY):.0f}s")
+        finally:
+            self._reconnect_in_progress = False
+
     def _get_extended_hours_enabled(self) -> bool:
         """Check if extended hours trading is enabled for IBKR.
         
@@ -373,7 +449,8 @@ class IBKRBroker(BrokerInterface):
         symbol: str,
         action: str,
         quantity: int,
-        price: Optional[float] = None
+        price: Optional[float] = None,
+        _auto_adjust_depth: int = 0
     ) -> OrderResult:
         """Place a stock order"""
         try:
@@ -392,48 +469,41 @@ class IBKRBroker(BrokerInterface):
             order.outsideRth = self._get_extended_hours_enabled()
             
             trade = self.ib.placeOrder(contract, order)
-            
-            # Wait for order to be acknowledged
-            await asyncio.sleep(1)
-            
-            if trade and trade.orderStatus.status != 'Cancelled':
-                return OrderResult(
-                    success=True,
-                    order_id=str(trade.order.orderId),
-                    message=f"Stock order placed: {action} {quantity} {symbol}",
-                    price=price,
-                    quantity=quantity,
-                    symbol=symbol,
-                    action=action
-                )
-            else:
-                status = trade.orderStatus.status if trade else 'Unknown'
+
+            filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
+
+            status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
+            if status in ('Cancelled', 'Inactive'):
                 return OrderResult(
                     success=False,
-                    message=f"Order failed with status: {status}",
+                    message=f"Order rejected with status: {status}",
                     symbol=symbol,
                     action=action
                 )
+            avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus and trade.orderStatus.avgFillPrice else price
+            return OrderResult(
+                success=True,
+                order_id=str(trade.order.orderId),
+                message=f"Stock order placed: {action} {quantity} {symbol} (status={status})",
+                price=avg_price,
+                quantity=quantity,
+                symbol=symbol,
+                action=action
+            )
                 
         except Exception as e:
             error_msg = str(e)
             
-            # Handle insufficient funds
-            if 'insufficient' in error_msg.lower():
+            if 'insufficient' in error_msg.lower() and _auto_adjust_depth < 1:
                 try:
                     account_info = await self.get_account_info()
                     buying_power = account_info['buying_power']
-                    
-                    # Get current price
                     current_price = await self.get_quote(symbol)
-                    
                     if current_price and buying_power > 0:
-                        # Calculate max quantity
                         max_qty = int(buying_power / current_price)
-                        
-                        if max_qty > 0:
+                        if 0 < max_qty < quantity:
                             print(f"[{self.name}] Auto-adjusting: {quantity} → {max_qty} shares")
-                            return await self.place_stock_order(symbol, action, max_qty, price)
+                            return await self.place_stock_order(symbol, action, max_qty, price, _auto_adjust_depth=1)
                 except Exception as adjust_error:
                     print(f"[{self.name}] Auto-adjust failed: {adjust_error}")
             
@@ -478,30 +548,28 @@ class IBKRBroker(BrokerInterface):
             # Enable extended hours trading if configured
             order.outsideRth = self._get_extended_hours_enabled()
             
-            # Place order
             trade = self.ib.placeOrder(contract, order)
-            
-            # Wait for acknowledgment
-            await asyncio.sleep(1)
-            
-            if trade and trade.orderStatus.status != 'Cancelled':
-                return OrderResult(
-                    success=True,
-                    order_id=str(trade.order.orderId),
-                    message=f"Option order placed: {action} {quantity} {symbol} ${strike}{option_type} {expiry}",
-                    price=price,
-                    quantity=quantity,
-                    symbol=symbol,
-                    action=action
-                )
-            else:
-                status = trade.orderStatus.status if trade else 'Unknown'
+
+            filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
+
+            status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
+            if status in ('Cancelled', 'Inactive'):
                 return OrderResult(
                     success=False,
-                    message=f"Order failed with status: {status}",
+                    message=f"Order rejected with status: {status}",
                     symbol=symbol,
                     action=action
                 )
+            avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus and trade.orderStatus.avgFillPrice else price
+            return OrderResult(
+                success=True,
+                order_id=str(trade.order.orderId),
+                message=f"Option order placed: {action} {quantity} {symbol} ${strike}{option_type} {expiry} (status={status})",
+                price=avg_price,
+                quantity=quantity,
+                symbol=symbol,
+                action=action
+            )
                 
         except Exception as e:
             return OrderResult(
@@ -511,6 +579,38 @@ class IBKRBroker(BrokerInterface):
                 action=action
             )
     
+    async def _wait_for_fill(self, trade, symbol: str, timeout: float = 10) -> Optional[float]:
+        """Wait for order acknowledgment using event-driven approach with timeout fallback."""
+        if not trade:
+            return None
+        try:
+            done = asyncio.Event()
+            final_status = [None]
+
+            def on_status(t):
+                s = t.orderStatus.status if t.orderStatus else ''
+                if s in ('Filled', 'Cancelled', 'Inactive'):
+                    final_status[0] = s
+                    done.set()
+                elif s in ('Submitted', 'PreSubmitted'):
+                    done.set()
+
+            trade.statusEvent += on_status
+
+            try:
+                await asyncio.wait_for(done.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                print(f"[{self.name}] ⚠️ Order for {symbol} — no status update within {timeout}s, continuing")
+            finally:
+                trade.statusEvent -= on_status
+
+            if trade.orderStatus and trade.orderStatus.avgFillPrice:
+                return float(trade.orderStatus.avgFillPrice)
+        except Exception as e:
+            print(f"[{self.name}] ⚠️ Fill wait error for {symbol}: {e}")
+            await asyncio.sleep(1)
+        return None
+
     def _is_on_ib_loop(self) -> bool:
         """Check if we're currently running on the IB event loop."""
         if not self._event_loop:

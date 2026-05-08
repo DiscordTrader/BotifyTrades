@@ -1447,24 +1447,27 @@ class BaseConditionalOrderService(ABC):
         monitoring_orders = [o for o in market_orders if o.get('status') != 'EXECUTING']
         
         if executing_orders:
-            self._log(f"Found {len(executing_orders)} orders stuck in EXECUTING — re-executing")
+            self._log(f"Found {len(executing_orders)} orders stuck in EXECUTING — resetting to monitor for fresh price trigger")
             for order in executing_orders:
                 order_id = order['id']
                 symbol = order.get('symbol', '?')
                 broker = order.get('broker_primary', '?')
-                self._log(f"Re-executing stuck order #{order_id} {symbol} on {broker}")
+                self._log(f"Resetting stuck order #{order_id} {symbol} on {broker} → ACTIVE_MONITORING (will re-trigger on fresh price)")
                 try:
                     self.pending_orders[order_id] = order
-                    self._price_reset_needed[order_id] = False
-                    update_conditional_order_status(order_id, 'ACTIVE_MONITORING')
-                    restore_trigger = float(order.get('trigger_price', 0) or 0)
-                    await self._execute_order(order_id, order, restore_trigger)
+                    self._price_reset_needed[order_id] = True
+                    update_conditional_order_status(
+                        order_id, 'ACTIVE_MONITORING',
+                        event='RESTART_RESET',
+                        details='Reset from EXECUTING on restart — awaiting fresh price confirmation'
+                    )
+                    await self._start_monitor(order_id, order)
                 except Exception as e:
-                    self._log(f"Re-execution failed for #{order_id}: {e}")
+                    self._log(f"Monitor restart failed for #{order_id}: {e}")
                     update_conditional_order_status(
                         order_id, 'ERROR',
-                        event='RESTART_REEXEC_FAILED',
-                        error_message=f"Re-execution on restart failed: {e}"
+                        event='RESTART_MONITOR_FAILED',
+                        error_message=f"Monitor restart failed: {e}"
                     )
         
         self._log(f"Restoring {len(monitoring_orders)} active orders")
@@ -2694,6 +2697,26 @@ class BaseConditionalOrderService(ABC):
                                 callback_success = False
                                 print(f"[CONDITIONAL] ⚠️ Callback returned False for #{order_id} {symbol}", flush=True)
                                 self._log(f"Execution callback returned False for #{order_id}")
+                        except TimeoutError:
+                            future.cancel()
+                            print(f"[CONDITIONAL] ⚠️ Callback timeout #{order_id} {symbol} — retrying once after 5s", flush=True)
+                            self._log(f"Execution timeout #{order_id} — retrying")
+                            time.sleep(5)
+                            try:
+                                retry_result = self.execution_callback(order, trigger_price)
+                                if asyncio.iscoroutine(retry_result):
+                                    retry_future = asyncio.run_coroutine_threadsafe(retry_result, self.main_event_loop)
+                                    retry_future.result(timeout=30)
+                                print(f"[CONDITIONAL] ✅ Retry succeeded for #{order_id} {symbol}", flush=True)
+                            except Exception as retry_err:
+                                callback_success = False
+                                print(f"[CONDITIONAL] ❌ Retry also failed #{order_id} {symbol}: {retry_err}", flush=True)
+                                self._log(f"Execution retry failed #{order_id}: {retry_err}")
+                                update_conditional_order_status(
+                                    order_id, 'ERROR',
+                                    event='EXECUTION_FAILED',
+                                    error_message=f"Callback timeout + retry failed: {str(retry_err)[:200]}"
+                                )
                         except Exception as e:
                             callback_success = False
                             print(f"[CONDITIONAL] ❌ Async callback error #{order_id} {symbol}: {e}", flush=True)

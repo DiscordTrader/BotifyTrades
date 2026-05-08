@@ -209,8 +209,17 @@ class BrokerHealthMonitor:
             print(f"[HEALTH] Error marking disconnect notifications read for {broker_name}: {e}")
 
     def _normalize_broker_name(self, broker_name: str) -> str:
-        """Normalize broker name to uppercase for consistent lookups."""
-        return broker_name.upper().strip() if broker_name else ""
+        """Normalize broker name to uppercase, resolving short names like IBKR to IBKR_LIVE."""
+        if not broker_name:
+            return ""
+        key = broker_name.upper().strip()
+        with self._state_lock:
+            if key in self._broker_states:
+                return key
+            for tracked in self._broker_states:
+                if tracked.startswith(key + '_'):
+                    return tracked
+        return key
     
     def register_disconnect_callback(self, callback: callable):
         """Register callback for disconnect notifications."""
