@@ -77,11 +77,11 @@ class RelayClient:
 
             except Exception as e:
                 err_str = str(e)
-                if '4001' in err_str or 'invalid' in err_str.lower():
-                    print("[RELAY] ❌ Invalid bot token — check Remote Access settings")
+                if '4001' in err_str or '403' in err_str or 'invalid' in err_str.lower() or 'forbidden' in err_str.lower():
+                    print(f"[RELAY] Auth rejected ({e}) -- check bot token in Remote Access settings")
                     self._should_run = False
                     return
-                print(f"[RELAY] ⚠️ Connection error: {e}")
+                print(f"[RELAY] Connection error: {e}")
             finally:
                 self._connected = False
                 self._ws = None
@@ -236,8 +236,10 @@ class RelayClient:
 
             return {
                 'running': True,
+                'version': self._get_bot_version(),
                 'trading_paused': paused,
                 'positions': len(positions),
+                'positions_count': len(positions),
                 'pnl': round(total_pnl, 2),
                 'risk_active': len(risk_states) > 0,
                 'brokers': brokers,
@@ -272,15 +274,25 @@ class RelayClient:
                         pt = rs.get('profit_target_price')
                         break
 
+                pnl_pct = round(((current - entry) / entry) * 100, 2) if entry > 0 else 0.0
+                side = pos.get('side', 'long')
+
                 result.append({
                     'symbol': symbol,
+                    'side': side,
+                    'quantity': qty,
                     'qty': qty,
-                    'entry': round(entry, 2) if entry else 0,
-                    'current': round(current, 2) if current else 0,
+                    'entry_price': round(entry, 2) if entry else 0,
+                    'avg_price': round(entry, 2) if entry else 0,
+                    'current_price': round(current, 2) if current else 0,
+                    'last_price': round(current, 2) if current else 0,
                     'pnl': round(pnl, 2),
+                    'unrealized_pnl': round(pnl, 2),
+                    'pnl_pct': pnl_pct,
+                    'unrealized_pnl_pct': pnl_pct,
                     'broker': broker,
-                    'sl': round(sl, 2) if sl else None,
-                    'pt': round(pt, 2) if pt else None,
+                    'stop_loss': round(sl, 2) if sl else None,
+                    'profit_target': round(pt, 2) if pt else None,
                 })
 
             return result
@@ -294,13 +306,28 @@ class RelayClient:
             orders = get_active_conditional_orders()
             result = []
             for o in orders:
+                trigger_type = o.get('trigger_type', '')
+                tt_lower = trigger_type.lower()
+                if 'above' in tt_lower:
+                    order_type = 'Buy Above'
+                elif 'below' in tt_lower:
+                    order_type = 'Buy Below'
+                else:
+                    order_type = trigger_type or 'Conditional'
+
                 result.append({
                     'id': o.get('id'),
                     'symbol': o.get('symbol', ''),
+                    'order_type': order_type,
+                    'type': order_type,
+                    'trigger_type': trigger_type,
+                    'trigger_price': float(o.get('adjusted_trigger_price') or o.get('trigger_price', 0) or 0),
                     'trigger': float(o.get('trigger_price', 0) or 0),
-                    'current': float(o.get('current_price', 0) or 0),
-                    'direction': o.get('trigger_direction', 'ABOVE'),
+                    'quantity': o.get('calculated_qty') or o.get('qty_value'),
+                    'qty': o.get('calculated_qty') or o.get('qty_value'),
+                    'broker': o.get('broker_primary', ''),
                     'status': o.get('status', ''),
+                    'asset_type': o.get('asset_type', 'stock'),
                 })
             return result
         except Exception as e:
@@ -360,6 +387,16 @@ class RelayClient:
                     return
                 success, result_msg = await self._close_all_positions()
                 await self.send_command_ack(action, success, result_msg)
+
+            elif action == "emergency_stop":
+                cancelled, closed_count, result_msg = await self._emergency_stop()
+                await self.send_command_ack(action, True, result_msg)
+                await self.send_alert({
+                    'alert_type': 'emergency_stop',
+                    'level': 'critical',
+                    'msg': result_msg,
+                    'ts': time.time(),
+                })
 
             elif action == "cancel_conditional":
                 order_id = data.get("order_id")
@@ -496,3 +533,85 @@ class RelayClient:
             if name.startswith(prefix):
                 return getattr(self._bot, attr, None)
         return None
+
+    def _get_all_broker_instances(self) -> list:
+        if not self._bot:
+            return []
+        broker_attrs = [
+            'schwab_broker', 'paper_broker', 'broker', 'ibkr_broker',
+            'tastytrade_broker', 'robinhood_broker', 'trading212_broker',
+        ]
+        seen = set()
+        result = []
+        for attr in broker_attrs:
+            inst = getattr(self._bot, attr, None)
+            if inst and id(inst) not in seen:
+                seen.add(id(inst))
+                result.append(inst)
+        return result
+
+    async def _cancel_all_broker_orders(self) -> int:
+        cancelled = 0
+        loop = asyncio.get_event_loop()
+        for broker in self._get_all_broker_instances():
+            try:
+                broker_name = getattr(broker, 'name', type(broker).__name__)
+                orders = []
+                if hasattr(broker, 'get_pending_orders'):
+                    fn = broker.get_pending_orders
+                    if asyncio.iscoroutinefunction(fn):
+                        orders = await fn()
+                    else:
+                        orders = await loop.run_in_executor(None, fn)
+                elif hasattr(broker, 'get_open_orders'):
+                    fn = broker.get_open_orders
+                    if asyncio.iscoroutinefunction(fn):
+                        orders = await fn()
+                    else:
+                        orders = await loop.run_in_executor(None, fn)
+
+                if not orders:
+                    continue
+
+                is_robinhood = 'Robinhood' in type(broker).__name__
+                for order in orders:
+                    oid = order.get('order_id') or order.get('broker_order_id')
+                    if not oid:
+                        continue
+                    try:
+                        if is_robinhood:
+                            o_type = 'option' if order.get('asset_type') == 'option' else 'stock'
+                            await broker.cancel_order(str(oid), order_type=o_type)
+                        elif asyncio.iscoroutinefunction(broker.cancel_order):
+                            await broker.cancel_order(str(oid))
+                        else:
+                            await loop.run_in_executor(None, broker.cancel_order, str(oid))
+                        cancelled += 1
+                        print(f"[RELAY] EMERGENCY: Cancelled order {oid} on {broker_name}")
+                    except Exception as ce:
+                        print(f"[RELAY] EMERGENCY: Failed to cancel {oid} on {broker_name}: {ce}")
+            except Exception as e:
+                print(f"[RELAY] EMERGENCY: Error cancelling orders on {getattr(broker, 'name', '?')}: {e}")
+        return cancelled
+
+    async def _emergency_stop(self) -> tuple:
+        print("[RELAY] 🚨 EMERGENCY STOP initiated from mobile")
+
+        cancelled = await self._cancel_all_broker_orders()
+        print(f"[RELAY] 🚨 Phase 1: Cancelled {cancelled} broker orders")
+
+        closed_count = 0
+        close_success, close_msg = await self._close_all_positions()
+        if close_success:
+            import re
+            m = re.search(r'Closed (\d+)', close_msg)
+            closed_count = int(m.group(1)) if m else 0
+        print(f"[RELAY] 🚨 Phase 2: {close_msg}")
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._do_set_trading_paused, True)
+        print("[RELAY] 🚨 Phase 3: Trading PAUSED")
+
+        msg = f"Emergency stop: {cancelled} orders cancelled, {close_msg}, trading paused"
+        print(f"[RELAY] 🚨 COMPLETE: {msg}")
+        return cancelled, closed_count, msg

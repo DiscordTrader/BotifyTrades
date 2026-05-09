@@ -6879,8 +6879,26 @@ class RiskManager:
             if _rc and _rc.connected:
                 import asyncio as _aio
                 import time as _relay_t
+                _trigger = decision.risk_trigger or ''
+                if _trigger in ('stop_loss', 'dynamic_sl'):
+                    _alert_type = 'stop_loss'
+                elif _trigger in ('trailing_stop', 'early_trailing', 'profit_target'):
+                    _alert_type = 'bracket_triggered'
+                elif _trigger in ('giveback_guard', 'ema_exit', 'ema_no_trend'):
+                    _alert_type = 'risk_breach'
+                else:
+                    _alert_type = 'position_exit'
                 _aio.ensure_future(_rc.send_alert({
-                    'level': 'warning',
+                    'alert_type': _alert_type,
+                    'level': 'critical' if _alert_type == 'stop_loss' else 'warning',
+                    'symbol': position.symbol,
+                    'broker': position.broker,
+                    'reason': decision.reason,
+                    'trigger': _trigger,
+                    'exit_price': position.current_price,
+                    'entry_price': position.avg_cost or 0,
+                    'pnl_pct': round(((position.current_price - (position.avg_cost or 0)) / position.avg_cost * 100), 2) if position.avg_cost and position.avg_cost > 0 else 0,
+                    'quantity': int(decision.exit_qty) if decision.exit_qty else 0,
                     'msg': f"{decision.reason}: {pos_key} qty={decision.exit_qty} @ ${position.current_price:.2f}",
                     'ts': _relay_t.time(),
                 }))
@@ -7501,6 +7519,28 @@ class RiskManager:
                         status='FILLED',
                         execution_type='risk_direct_exit'
                     )
+                except Exception:
+                    pass
+                try:
+                    from src.services.relay_client import get_relay_client
+                    _rc = get_relay_client()
+                    if _rc and _rc.connected:
+                        _exit_p = stc_signal.get('price', 0)
+                        _qty = stc_signal.get('qty', 0)
+                        _entry = 0
+                        _cached = self.cache.get(pos_key) if hasattr(self.cache, 'get') else None
+                        if _cached and hasattr(_cached, 'entry_price') and _cached.entry_price > 0:
+                            _entry = _cached.entry_price
+                        await _rc.send_trade({
+                            'symbol': stc_signal.get('symbol', ''),
+                            'action': 'STC',
+                            'broker': broker_name,
+                            'quantity': _qty,
+                            'price': _exit_p,
+                            'pnl': round((_exit_p - _entry) * _qty, 2) if _entry else 0,
+                            'pnl_pct': round((_exit_p - _entry) / _entry * 100, 2) if _entry and _entry > 0 else 0,
+                            'exit_type': 'risk_direct',
+                        })
                 except Exception:
                     pass
             else:

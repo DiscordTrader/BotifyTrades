@@ -8780,19 +8780,27 @@ class SelfClient(discord.Client):
             relay_cfg = load_config('relay_settings') or {}
             if relay_cfg.get('enabled') and relay_cfg.get('bot_token'):
                 from src.services.relay_client import RelayClient, set_relay_client
+                permissions = {
+                    'allow_pause': relay_cfg.get('allow_pause', True),
+                    'allow_close': relay_cfg.get('allow_close', False),
+                    'allow_close_all': relay_cfg.get('allow_close_all', False),
+                }
                 self.relay_client = RelayClient(
                     bot_token=relay_cfg['bot_token'],
                     server_url=relay_cfg.get('server_url', 'wss://botifytrades.com/ws/bot'),
                     bot_instance=self,
+                    permissions=permissions,
                 )
                 set_relay_client(self.relay_client)
                 self.loop.create_task(self.relay_client.connect())
-                print("[RELAY] ✅ Relay client initialized — connecting to relay server")
+                _original_print("[RELAY] Relay client initialized - connecting to relay server", flush=True)
             else:
                 self.relay_client = None
         except Exception as e:
             self.relay_client = None
-            print(f"[RELAY] ⚠️ Could not start relay client: {e}")
+            _original_print(f"[RELAY] Could not start relay client: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
 
         try:
             from src.services.conditional_orders.router import conditional_order_router
@@ -18937,7 +18945,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 }
                                                 stc_trade_id = db.add_trade(trade_data)
                                                 _original_print(f"[RISK] ✓ Trade #{stc_trade_id} saved with risk_trigger={signal.get('risk_trigger')}")
-                                                
+
+                                                try:
+                                                    from src.services.relay_client import get_relay_client
+                                                    _rc = get_relay_client()
+                                                    if _rc and _rc.connected:
+                                                        asyncio.ensure_future(_rc.send_trade({
+                                                            'symbol': signal['symbol'],
+                                                            'action': 'STC',
+                                                            'broker': 'ALPACA_PAPER',
+                                                            'quantity': signal['qty'],
+                                                            'price': signal.get('price', 0),
+                                                            'pnl': 0,
+                                                            'pnl_pct': 0,
+                                                            'exit_type': signal.get('risk_trigger', 'risk_exit'),
+                                                        }))
+                                                except Exception:
+                                                    pass
+
                                                 # Close (or partially close) the original BTO trade
                                                 if signal.get('origin_trade_id'):
                                                     _origin_id = signal['origin_trade_id']
@@ -20698,6 +20723,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         stc_trade_id = db.add_trade(trade_data)
                                         _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={broker_name_upper} qty={broker_executed_qty} channel={channel_id_str or 'NONE'}")
 
+                                        try:
+                                            from src.services.relay_client import get_relay_client
+                                            _rc = get_relay_client()
+                                            if _rc and _rc.connected:
+                                                asyncio.ensure_future(_rc.send_trade({
+                                                    'symbol': signal['symbol'],
+                                                    'action': 'STC',
+                                                    'broker': broker_name_upper,
+                                                    'quantity': broker_executed_qty,
+                                                    'price': stc_resp.get('fill_price') or signal.get('price', 0),
+                                                    'exit_type': signal.get('risk_trigger', 'signal_exit'),
+                                                }))
+                                        except Exception:
+                                            pass
+
                                         if stc_origin_trade_id:
                                             try:
                                                 origin_trade = db.get_trade_by_id(stc_origin_trade_id)
@@ -20735,6 +20775,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     }
                                     stc_trade_id = db.add_trade(trade_data)
                                     _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']} qty={broker_executed_qty} channel={channel_id_str or 'NONE'}")
+
+                                    try:
+                                        from src.services.relay_client import get_relay_client
+                                        _rc = get_relay_client()
+                                        if _rc and _rc.connected:
+                                            asyncio.ensure_future(_rc.send_trade({
+                                                'symbol': signal['symbol'],
+                                                'action': 'STC',
+                                                'broker': trade_data.get('broker', 'UNKNOWN'),
+                                                'quantity': broker_executed_qty,
+                                                'price': signal.get('price', 0),
+                                                'exit_type': signal.get('risk_trigger', 'signal_exit'),
+                                            }))
+                                    except Exception:
+                                        pass
 
                                     if stc_origin_trade_id:
                                         _new_status = db.get_origin_status_after_stc(stc_origin_trade_id)
