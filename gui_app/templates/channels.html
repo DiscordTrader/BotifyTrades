@@ -1416,7 +1416,8 @@ function getBrokerBadgeColor(broker) {
         'WEBULL': '#FF6D00', 'SCHWAB': '#00BCD4', 'ALPACA_PAPER': '#4CAF50',
         'ALPACA_LIVE': '#2E7D32', 'IBKR': '#E91E63', 'IBKR_PAPER': '#F06292',
         'ROBINHOOD': '#00C805', 'TASTYTRADE': '#9C27B0', 'TRADING212': '#00A3FF',
-        'TRADING212_PAPER': '#29B6F6', 'QUESTRADE': '#43A047'
+        'TRADING212_PAPER': '#29B6F6', 'QUESTRADE': '#43A047',
+        'WEBULL_OFFICIAL': '#00A8FF', 'WEBULL_OFFICIAL_LIVE': '#00A8FF', 'WEBULL_OFFICIAL_PAPER': '#29B6F6'
     };
     return colors[broker] || '#8BA1C7';
 }
@@ -1426,7 +1427,8 @@ function getBrokerShortName(broker) {
         'WEBULL': 'Webull', 'SCHWAB': 'Schwab', 'ALPACA_PAPER': 'Alpaca P',
         'ALPACA_LIVE': 'Alpaca', 'IBKR': 'IBKR', 'IBKR_PAPER': 'IBKR P',
         'ROBINHOOD': 'Robinhood', 'TASTYTRADE': 'Tastytrade', 'TRADING212': 'T212',
-        'TRADING212_PAPER': 'T212 P', 'QUESTRADE': 'Questrade'
+        'TRADING212_PAPER': 'T212 P', 'QUESTRADE': 'Questrade',
+        'WEBULL_OFFICIAL': 'WB Off', 'WEBULL_OFFICIAL_LIVE': 'WB Off', 'WEBULL_OFFICIAL_PAPER': 'WB Off P'
     };
     return names[broker] || broker;
 }

@@ -1,5 +1,109 @@
 # BotifyTrades Progress Log
 
+## Session: May 10, 2026 — AEHL Stop Loss Price Truncation Bug Fix
+
+### Bug: AEHL SL Sent $1.00 Instead of $1.008
+- **Symptom**: AEHL entry $1.12, SL 10%, expected SL price $1.008 → bot sent SELL LIMIT $1.00 GTC, filled $1.0201
+- **Root cause**: `_format_price()` in schwab_broker.py used `math.floor` with 2-decimal precision for ALL prices >= $1.00. For $1.008: `floor(1.008 * 100) / 100 = 1.00` — lost almost a full cent
+- **Fix**: Changed `_format_price()` from `floor` to `round` for prices >= $1.00. SEC Rule 612 requires penny increments for NMS stocks above $1; sub-penny (4-decimal) only valid for OTC stocks under $1.
+- **Architect review**: Initial fix used 4-decimal sub-penny for all stocks under $5 — rejected because Schwab/exchanges would reject sub-penny prices for NMS stocks above $1. Revised to `round(price, 2)` which properly snaps to nearest cent.
+- **`_stock_tick_below()`**: Unchanged — already correct at $1.00 boundary (sub-$1 stocks get 0.0001 tick, $1+ stocks get 0.01 tick)
+- **Files changed**: `src/brokers/schwab_broker.py` — `_format_price()` (line 589)
+- **Verification**: $1.008 now formats as `"1.01"` (was `"1.00"`). All 539 tests pass.
+
+### Architect Review: Cross-Broker Price Formatting Audit
+Reviewed all 6 active brokers for the same `floor()` / sub-penny truncation bug:
+
+| Broker | How Price Sent | Penny Stock Handling | Bug? | Fix |
+|--------|---------------|---------------------|------|-----|
+| **Schwab** | `_format_price()` → string | Was `floor()` for all ≥$1 | **YES** | Changed to `round(price, 2)` |
+| **Webull Legacy** | `float(price)` → SDK | `round(bid*0.97, 2)` for all prices | **YES** | Added `_rd = 4 if price < 1.0 else 2` to 8 rounding sites |
+| **Alpaca** | SDK `round(price, 4 if <1 else 2)` | Already correct | No | — |
+| **IBKR** | `LimitOrder(side, qty, float)` → TWS | TWS API handles rounding | No | — |
+| **Tastytrade** | `Decimal(str(price))` → SDK | Full precision preserved | No | — |
+| **Robinhood** | `float(price)` → robin_stocks SDK | SDK handles formatting | No | — |
+| **Webull Official** | `str(float)` → v2 API | API handles rounding | No | — |
+
+**Webull Legacy fix details**: Aggressive exit paths (`round(bid * 0.97, 2)`) used 2 decimals for ALL stocks. For extreme pennies ($0.0045), this rounded to $0.00 — then `max(0.01, ...)` caught it but set price 122% above bid. Fixed 8 rounding sites to use 4 decimals when price < $1.00. Also fixed extended-hours MKT→LMT conversion (was hardcoded 4 decimals for all prices).
+
+### Bug: IBKR Risk Engine Skipping All Positions (Broker Name Mismatch)
+- **Symptom**: All IBKR positions logged as "⏭️ Skipping external position" — no SL/PT applied. MASK dropped -8.1% with 10% SL configured but never triggered.
+- **Root cause**: Position snapshots use `IBKR_LIVE`/`IBKR_PAPER` labels (position_monitor.py:3293), but trade DB stores `IBKR` (selfbot_webull.py:19577). DB lookup `LOWER(broker) = LOWER('IBKR_LIVE')` never matches `'ibkr'` → trade_id=None → position treated as external → risk engine skips it.
+- **Scope**: Affects ALL brokers with live/paper suffixes: IBKR, Alpaca, Tastytrade, Trading212.
+- **Fix**: 
+  1. Added `db_broker` property to `PositionSnapshot` (risk_types.py) that strips `_LIVE`/`_PAPER` suffix via regex
+  2. Normalized broker name in `get_open_trade_id_for_position()` and `get_channel_risk_settings()` (position_monitor.py)
+  3. Updated 8 scattered DB query sites in position_monitor.py to use `position.db_broker` instead of `position.broker`
+  4. Auto-import trade creation now stores normalized broker name
+- **Files changed**: `src/risk/risk_types.py`, `src/risk/position_monitor.py`
+
+### Bug: IBKR Sub-Penny Price Rejection (Warning 110)
+- **Symptom**: IBKR TWS rejected MASK conditional order at $3.1363 — "price does not conform to minimum price variation"
+- **Root cause**: `ibkr_broker.py` passed raw float prices from conditional orders directly to `LimitOrder()`. Conditional order system computes prices with 4-decimal precision regardless of stock price.
+- **Fix**: Added SEC Rule 612 price rounding in `ibkr_broker.py` — `round(price, 2)` for stocks >= $1.00, `round(price, 4)` for sub-$1 penny stocks. Applied to both stock (line 467) and option (line 551) order paths.
+- **Files changed**: `src/brokers/ibkr_broker.py`
+
+### Webull Official Full Cross-System Wiring (14 files)
+- Wired Webull Official into every integration point: conditional order router (3 registration blocks), position_monitor (fetch + 5 dispatch blocks), broker_sync_service (discovery + fetch), execution pipeline (broker_override), unified_price_hub, broker_credentials_service, broker_live_analytics, routes.py, index.html, channels.html, channels.js, settings.html
+- All dispatch chains place `WEBULL_OFFICIAL` BEFORE `WEBULL` to prevent false substring matches
+
+### QA Playbook Update (v4.4.0 → v4.5.0)
+- Added 26 Webull Official cross-system wiring test cases (17.52x–17.52aw) covering conditional order router, position monitor, broker sync, execution pipeline, UI templates, routes
+- Added 11 broker name normalization (`db_broker`) test cases (17.64–17.74) covering the IBKR/Alpaca/Tastytrade/Trading212 mismatch fix
+- Added 5 IBKR sub-penny price guard test cases (17.75–17.79) covering SEC Rule 612 rounding
+- Total test cases: 625+ → 670+
+
+### Architecture Note: Risk Engine Uses Software SL, Not Broker-Side STOP Orders
+- The risk engine monitors prices in software and sends reactive SELL LIMIT orders when SL breaches
+- `place_stop_order()` (broker-side STOP) exists in schwab_broker.py but is only used by the OCO/bracket system
+- SL exits force `use_market=True` (position_monitor.py:7280-7283) → Schwab converts to aggressive LIMIT → `_format_price()` truncates
+
+## Session: May 8-9, 2026 — Webull Official API Integration Design
+
+### Deliverable: `docs/webull_official_api_design.md`
+Complete architecture design for official Webull API integration (v2 REST API).
+
+### Task 1: Documentation Review (15 categories)
+- Auth: HMAC-SHA1 per-request signing (stateless, no token refresh needed)
+- Full endpoint catalog: place/cancel/replace/batch orders, account balance, positions, order history
+- Rate limits mapped: 600 req/min (orders), 2 req/2s (account data), 10 req/30s (auth)
+- MQTT streaming: protobuf format, max 100 symbols, 5 connections per app key
+- gRPC trade events: fill notifications, but grpcio doesn't build on Python 3.14
+- Sandbox: UAT environment with 3 public test accounts available
+
+### Task 2: Feature Mapping (30 features → exact endpoints)
+- All 27+ BotifyTrades features mapped to specific Webull v2 API endpoints
+- **Critical finding:** Options are supported via standard `/openapi/trade/order/place` with `instrument_type: "OPTION"` + `legs[]` — the SDK's separate HK-only `place_option()` methods are NOT needed
+- **Major upgrade:** Native OCO/OTO/OTOCO bracket orders via `combo_type` field — replaces client-side bracket management
+- Gap identified: No REST quote endpoint (quotes come from MQTT streaming only)
+
+### Task 3: Architecture Design
+- 13-file module under `src/brokers/webull_official/`
+- Direct httpx HTTP client (NOT the outdated v1 SDK)
+- Full BrokerInterface implementation with stock + option orders
+- Native bracket order support (OTOCO with MASTER + STOP_PROFIT + STOP_LOSS)
+- MQTT streaming client + trade event polling fallback
+- Token bucket rate limiter per endpoint category
+- Estimated: ~1,575 lines, ~14 days, 4-phase rollout
+
+### Key Design Decisions
+1. **Direct HTTP over SDK**: Installed SDK is old v1 API (HK-focused); v2 REST API uses `symbol` directly
+2. **Native brackets**: OTOCO replaces client-side position_monitor brackets for Webull
+3. **gRPC fallback**: Poll open orders every 3s instead of gRPC (Python 3.14 compat)
+4. **client_order_id**: UUID hex, 32 chars, stored in position cache for cancel/replace
+
+### QA Plan: `docs/webull_official_qa_plan.md`
+- 4 QA gates (one per implementation phase), each with:
+  - Automated pytest suite (~80 new tests across 4 test files)
+  - Regression check (existing 423-test suite must pass unchanged)
+  - Manual validation checklist (8-15 items per gate)
+  - Gap report template with Go/No-Go criteria
+- Gate 1: Core module (auth signing, config, rate limiter, models, exceptions)
+- Gate 2: Trading operations (orders, accounts, positions, BrokerInterface contract)
+- Gate 3: Bot integration (UPH, relay, GUI routes, signal routing, import safety)
+- Gate 4: Streaming + final validation (MQTT, trade event polling, UAT smoke test)
+- Total test count after all gates: ~503 (80 new + 423 existing)
+
 ## Session: May 6, 2026 — QA Playbook, Gap Fixes, Architecture Page Redesign
 
 ### QA Playbook (7-Point)
@@ -329,3 +433,31 @@ Verified live with OSRH Trade #36 on IBKR_PAPER:
 14:35:52 — Cycle 3: per-trade 2/3
 14:36:11 — Cycle 4: per-trade 3/3 → OPEN → CLOSED (58s total)
 ```
+
+## May 9, 2026 — Webull Official API Integration (Complete)
+
+### Implemented
+- **Phase 1**: Core module — `src/brokers/webull_official/` with 13 files
+  - `auth.py`: HMAC-SHA1 per-request signing (v2 API)
+  - `config.py`: Production/UAT environment config
+  - `exceptions.py`: Error hierarchy (Auth, Order, RateLimit, Connection)
+  - `rate_limiter.py`: Token bucket per endpoint category
+  - `models.py`: WebullBalance, WebullPosition, WebullOrder, PlaceOrderResult
+  - `client.py`: httpx-based async HTTP client with auto rate limiting
+  - `accounts.py`, `positions.py`, `orders.py`: REST API wrappers
+  - `streaming.py`: MQTT market data + trade event poller
+  - `broker.py`: Main broker class implementing BotifyTrades interface
+- **Phase 2**: 56 unit tests (auth, config, rate limiter, models, exceptions, orders, broker interface)
+- **Phase 3**: Full integration wiring
+  - `selfbot_webull.py`: Import flag, broker init block, BrokerManager, get_broker_instance, signal routing
+  - `broker_credentials_service.py`: get/save/clear credentials, startup config, enabled_brokers
+  - `unified_price_hub.py`: Hub registry + broker name mapping
+  - `relay_client.py`: Broker name + instance mapping
+  - `index.html`: GUI dropdown + JS balance URL routing
+  - `routes.py`: `/api/webull_official/balance` endpoint
+- **Phase 4**: 21 streaming/wiring tests (MQTT batching, event poller, credential service, broker resolution)
+
+### Test Results
+- **539 total tests, 0 failures, 0 regressions**
+- New tests: 77 (28 auth + 28 trading + 21 streaming/wiring)
+- Existing tests: 462 — all pass unchanged

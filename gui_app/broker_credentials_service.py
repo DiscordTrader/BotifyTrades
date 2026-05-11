@@ -23,6 +23,9 @@ BROKER_STATUS = {
     'trading212': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'trading212_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'trading212_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'webull_official': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'webull_official_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'webull_official_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
 }
 
 
@@ -372,6 +375,46 @@ def clear_trading212_credentials():
     })
 
 
+def get_webull_official_credentials() -> Dict[str, Any]:
+    creds = load_config('webull_official_credentials') or {}
+    defaults = {
+        'app_key': '',
+        'app_secret': '',
+        'environment': 'production',
+        'paper_mode': False,
+        'account_id': '',
+        'account_type': 'MARGIN',
+    }
+    for k, v in defaults.items():
+        creds.setdefault(k, v)
+    return creds
+
+
+def save_webull_official_credentials(app_key: str, app_secret: str, environment: str = 'production',
+                                     paper_mode: bool = False, account_id: str = '',
+                                     account_type: str = 'MARGIN'):
+    save_config('webull_official_credentials', {
+        'app_key': app_key,
+        'app_secret': app_secret,
+        'environment': environment,
+        'paper_mode': paper_mode,
+        'account_id': account_id,
+        'account_type': account_type,
+    })
+
+
+def clear_webull_official_credentials():
+    save_config('webull_official_credentials', {
+        'app_key': '',
+        'app_secret': '',
+        'environment': 'production',
+        'paper_mode': False,
+        'account_id': '',
+        'account_type': 'MARGIN',
+    })
+    set_broker_status('webull_official', False, 'disconnected')
+
+
 def save_api_keys_extended(
     openai: str = '',
     alpha_vantage: str = '',
@@ -444,7 +487,13 @@ def get_all_credentials_for_startup() -> Dict[str, Any]:
         'TRADING212_API_KEY': get_trading212_credentials().get('api_key', ''),
         'TRADING212_API_SECRET': get_trading212_credentials().get('api_secret', ''),
         'TRADING212_ENVIRONMENT': get_trading212_credentials().get('environment', 'demo'),
-        
+
+        'WEBULL_OFFICIAL_APP_KEY': get_webull_official_credentials().get('app_key', ''),
+        'WEBULL_OFFICIAL_APP_SECRET': get_webull_official_credentials().get('app_secret', ''),
+        'WEBULL_OFFICIAL_ENVIRONMENT': get_webull_official_credentials().get('environment', 'production'),
+        'WEBULL_OFFICIAL_PAPER_MODE': get_webull_official_credentials().get('paper_mode', False),
+        'WEBULL_OFFICIAL_ACCOUNT_ID': get_webull_official_credentials().get('account_id', ''),
+
         'OPENAI_API_KEY': api_keys.get('openai', ''),
         'ALPHA_VANTAGE_API_KEY': api_keys.get('alpha_vantage', ''),
         'FINNHUB_API_KEY': api_keys.get('finnhub', ''),
@@ -484,5 +533,6 @@ def get_enabled_brokers() -> Dict[str, bool]:
         'ibkr': bool(ibkr.get('host')),
         'tastytrade': bool(tastytrade.get('username')),
         'robinhood': bool(robinhood.get('username')),
-        'trading212': bool(trading212.get('api_key'))
+        'trading212': bool(trading212.get('api_key')),
+        'webull_official': bool(get_webull_official_credentials().get('app_key'))
     }

@@ -246,6 +246,29 @@ input:checked + .slider:before { transform: translateX(20px); }
     font-size: 0.9rem;
     margin-bottom: 12px;
 }
+
+.btn.loading {
+    pointer-events: none;
+    opacity: 0.8;
+    position: relative;
+}
+
+.btn.loading::after {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-left: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
 </style>
 
 <div class="section-header">
@@ -436,6 +459,8 @@ async function loadStatus() {
             document.getElementById('info-heartbeat').textContent = data.last_heartbeat || 'now';
             btnConnect.textContent = 'Disconnect';
             btnConnect.className = 'btn btn-danger';
+            btnConnect.disabled = false;
+            btnConnect.classList.remove('loading');
             btnPairing.style.display = 'inline-block';
         } else {
             badge.className = 'status-badge status-disconnected';
@@ -444,6 +469,8 @@ async function loadStatus() {
             info.style.display = 'none';
             btnConnect.textContent = 'Connect';
             btnConnect.className = 'btn btn-success';
+            btnConnect.disabled = false;
+            btnConnect.classList.remove('loading');
             btnPairing.style.display = 'none';
         }
     } catch (e) {
@@ -451,19 +478,27 @@ async function loadStatus() {
     }
 }
 
-async function saveSettings() {
-    try {
-        const settings = {
-            enabled: document.getElementById('relay-enabled').checked,
-            server_url: document.getElementById('relay-server-url').value.trim(),
-            bot_token: document.getElementById('relay-bot-token').value.trim(),
-            send_trades: document.getElementById('perm-send-trades').checked,
-            send_alerts: document.getElementById('perm-send-alerts').checked,
-            allow_pause: document.getElementById('perm-allow-pause').checked,
-            allow_close: document.getElementById('perm-allow-close').checked,
-            allow_close_all: document.getElementById('perm-allow-close-all').checked,
-        };
+function getSettings() {
+    return {
+        enabled: document.getElementById('relay-enabled').checked,
+        server_url: document.getElementById('relay-server-url').value.trim(),
+        bot_token: document.getElementById('relay-bot-token').value.trim(),
+        send_trades: document.getElementById('perm-send-trades').checked,
+        send_alerts: document.getElementById('perm-send-alerts').checked,
+        allow_pause: document.getElementById('perm-allow-pause').checked,
+        allow_close: document.getElementById('perm-allow-close').checked,
+        allow_close_all: document.getElementById('perm-allow-close-all').checked,
+    };
+}
 
+async function saveSettings() {
+    const btn = document.getElementById('btn-save');
+    const origText = btn.textContent;
+    try {
+        btn.textContent = 'Saving...';
+        btn.classList.add('loading');
+
+        const settings = getSettings();
         const resp = await fetch('/api/settings/relay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -471,31 +506,101 @@ async function saveSettings() {
         });
         const data = await resp.json();
 
-        showMessage(data.success ? 'success' : 'error', data.message || 'Settings saved');
-        if (data.success) {
+        if (!data.success) {
+            showMessage('error', data.message || 'Failed to save settings');
+            return;
+        }
+
+        showMessage('success', 'Settings saved');
+
+        if (settings.enabled && settings.bot_token) {
+            await waitForConnection();
+        } else {
             await loadStatus();
         }
     } catch (e) {
         showMessage('error', 'Failed to save settings: ' + e.message);
+    } finally {
+        btn.textContent = origText;
+        btn.classList.remove('loading');
     }
+}
+
+async function waitForConnection() {
+    const btn = document.getElementById('btn-connect');
+    const text = document.getElementById('status-text');
+    const badge = document.getElementById('relay-status');
+    const dot = document.getElementById('status-dot');
+
+    btn.textContent = 'Connecting';
+    btn.classList.add('loading');
+    btn.disabled = true;
+    badge.className = 'status-badge status-disconnected';
+    dot.className = 'status-dot red';
+    text.textContent = 'Connecting to relay server...';
+
+    const maxAttempts = 15;
+    const pollInterval = 1000;
+
+    for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, pollInterval));
+        try {
+            const resp = await fetch('/api/remote/status');
+            const data = await resp.json();
+            if (data.connected) {
+                showMessage('success', 'Connected to relay server');
+                await loadStatus();
+                return;
+            }
+        } catch (e) { /* retry */ }
+    }
+
+    showMessage('error', 'Connection timed out — check bot token and server URL');
+    await loadStatus();
+    btn.disabled = false;
+    btn.classList.remove('loading');
+}
+
+async function waitForDisconnect() {
+    const maxAttempts = 10;
+    const pollInterval = 500;
+
+    for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, pollInterval));
+        try {
+            const resp = await fetch('/api/remote/status');
+            const data = await resp.json();
+            if (!data.connected) return true;
+        } catch (e) { /* retry */ }
+    }
+    return false;
 }
 
 async function toggleRelay() {
     const btn = document.getElementById('btn-connect');
-    const text = document.getElementById('status-text');
 
     if (btn.textContent.includes('Disconnect')) {
+        const origText = btn.textContent;
+        btn.textContent = 'Disconnecting';
+        btn.classList.add('loading');
+        btn.disabled = true;
+
         try {
             await fetch('/api/remote/disconnect', { method: 'POST' });
-            showMessage('success', 'Disconnected from relay server');
+            const disconnected = await waitForDisconnect();
+            showMessage(disconnected ? 'success' : 'error',
+                disconnected ? 'Disconnected from relay server' : 'Disconnect timed out');
         } catch (e) {
             showMessage('error', 'Failed to disconnect');
         }
+
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        await loadStatus();
     } else {
         document.getElementById('relay-enabled').checked = true;
         await saveSettings();
     }
-    await loadStatus();
 }
 
 async function generatePairingCode() {

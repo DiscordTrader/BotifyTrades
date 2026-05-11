@@ -3,7 +3,7 @@
 let channelCategory = 'EXECUTE';
 
 // All available broker options
-const ALL_BROKERS = ['WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'ROBINHOOD', 'TRADING212', 'TRADING212_PAPER'];
+const ALL_BROKERS = ['WEBULL', 'WEBULL_OFFICIAL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'ROBINHOOD', 'TRADING212', 'TRADING212_PAPER'];
 
 // Helper function to parse enabled_brokers (handles both JSON string and array)
 function parseEnabledBrokers(enabledBrokers) {
@@ -208,6 +208,13 @@ async function loadChannels() {
                                         <div>
                                             <div style="font-weight: 600; color: #00ff88; font-size: 13px;">📊 Trading 212 PAPER</div>
                                             <div style="font-size: 11px; color: #8E8E93;">Demo account</div>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 168, 255, 0.15); border: 1px solid rgba(0, 168, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00a8ff'" onmouseout="this.style.borderColor='rgba(0, 168, 255, 0.4)'">
+                                        <input type="checkbox" id="broker-WEBULL_OFFICIAL-${channel.id}" value="WEBULL_OFFICIAL" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'WEBULL_OFFICIAL')}>
+                                        <div>
+                                            <div style="font-weight: 600; color: #00a8ff; font-size: 13px;">🌐 Webull Official API</div>
+                                            <div style="font-size: 11px; color: #8E8E93;">v2 REST API (stocks + options)</div>
                                         </div>
                                     </label>
                                 </div>

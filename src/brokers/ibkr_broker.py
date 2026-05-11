@@ -464,10 +464,15 @@ class IBKRBroker(BrokerInterface):
             if price is None:
                 order = MarketOrder(side, quantity)
             else:
+                # SEC Rule 612: penny increments for NMS stocks >= $1.00
+                if price >= 1.0:
+                    price = round(price, 2)
+                else:
+                    price = round(price, 4)
                 order = LimitOrder(side, quantity, price)
-            
+
             order.outsideRth = self._get_extended_hours_enabled()
-            
+
             trade = self.ib.placeOrder(contract, order)
 
             filled_price = await self._wait_for_fill(trade, symbol, timeout=10)
@@ -542,7 +547,7 @@ class IBKRBroker(BrokerInterface):
                 # Market order
                 order = MarketOrder(side, quantity)
             else:
-                # Limit order
+                price = round(price, 2)
                 order = LimitOrder(side, quantity, price)
             
             # Enable extended hours trading if configured

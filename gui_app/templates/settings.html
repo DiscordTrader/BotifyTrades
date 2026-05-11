@@ -355,6 +355,7 @@ input:checked + .slider:before {
         <span id="schwab-status-badge" class="status-badge disconnected">Schwab</span>
         <span id="robinhood-status-badge" class="status-badge disconnected" style="display:none; background: rgba(0, 200, 83, 0.15); border-color: rgba(0, 200, 83, 0.3);">Robinhood</span>
         <span id="trading212-status-badge" class="status-badge disconnected" style="display:none; background: rgba(0, 82, 255, 0.15); border-color: rgba(0, 163, 255, 0.3);">T212</span>
+        <span id="webull-official-status-badge" class="status-badge disconnected" style="background: rgba(232, 65, 24, 0.15); border-color: rgba(232, 65, 24, 0.3);">WB Official</span>
     </div>
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid rgba(0, 212, 255, 0.2);">
         <button id="btn-reload-credentials" onclick="reloadCredentials()" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">
@@ -871,6 +872,60 @@ input:checked + .slider:before {
         <div id="trading212-account-info" class="account-info" style="display: none;"></div>
     </div>
     
+    <!-- Webull Official API -->
+    <div class="settings-card" style="background: linear-gradient(135deg, #1a0a0a 0%, #2d1a1a 100%); border-color: rgba(232, 65, 24, 0.4);">
+        <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #E84118;">🔗 Webull Official API</h3><button type="button" onclick="showAdminHelp('webull_official')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
+        <p class="description">Connect via Webull's official v2 REST API with HMAC-SHA1 signing (stocks & options)</p>
+
+        <div id="webull-official-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="webull-official-status-text">Not connected</span>
+        </div>
+
+        <div class="form-group">
+            <label>App Key</label>
+            <input type="password" id="webull-official-app-key" placeholder="Your Webull Developer App Key">
+            <p class="help-text">From <a href="https://developer.webull.com" target="_blank" style="color:#E84118;">Webull Developer Portal</a> → My Apps → App Key</p>
+        </div>
+        <div class="form-group">
+            <label>App Secret</label>
+            <input type="password" id="webull-official-app-secret" placeholder="Your Webull Developer App Secret">
+            <p class="help-text">Keep this secret — used for HMAC-SHA1 request signing, never sent over the wire</p>
+        </div>
+        <div class="form-group">
+            <label>Environment</label>
+            <select id="webull-official-environment" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(232, 65, 24, 0.3); border-radius: 8px; color: #fff; font-size: 14px;">
+                <option value="production">Production (Live Trading)</option>
+                <option value="test">UAT / Sandbox (Test)</option>
+            </select>
+            <p class="help-text">Use UAT for testing with Webull's sandbox accounts</p>
+        </div>
+        <div class="form-group">
+            <label>Account Type Preference</label>
+            <select id="webull-official-account-type" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(232, 65, 24, 0.3); border-radius: 8px; color: #fff; font-size: 14px;">
+                <option value="MARGIN">Margin</option>
+                <option value="CASH">Cash</option>
+                <option value="IRA">Traditional IRA</option>
+                <option value="ROTH_IRA">Roth IRA</option>
+                <option value="ROLLOVER_IRA">Rollover IRA</option>
+                <option value="">Auto (first available)</option>
+            </select>
+            <p class="help-text">Which account type to trade on — the bot will select the matching account after connecting</p>
+        </div>
+        <div id="webull-official-account-selector" class="form-group" style="display: none;">
+            <label>Specific Account</label>
+            <select id="webull-official-account-id" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(232, 65, 24, 0.3); border-radius: 8px; color: #fff; font-size: 14px;">
+                <option value="">-- Connect first to load accounts --</option>
+            </select>
+            <p class="help-text">After connecting, pick the exact account if you have multiple of the same type</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-webull-official" class="btn btn-success">💾 Save</button>
+            <button id="connect-webull-official" class="btn btn-connect" style="background: linear-gradient(135deg, #E84118 0%, #c23616 100%);">🔌 Connect</button>
+        </div>
+        <div id="webull-official-account-info" class="account-info" style="display: none;"></div>
+    </div>
+
     <!-- Charles Schwab OAuth Integration -->
     <div class="settings-card" style="background: linear-gradient(135deg, #0a1628 0%, #1a2d47 100%); border-color: rgba(0, 123, 255, 0.4);">
         <div style="display:flex;align-items:center;gap:8px;"><h3 style="color: #0078d7;">🏦 Charles Schwab</h3><button type="button" onclick="showAdminHelp('schwab')" style="width:22px;height:22px;border-radius:50%;border:1.5px solid #52525B;background:rgba(99,102,241,0.08);color:#818CF8;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s;padding:0;line-height:1;font-family:system-ui,sans-serif;" onmouseover="this.style.background='rgba(99,102,241,0.2)';this.style.borderColor='#818CF8';this.style.color='#A5B4FC'" onmouseout="this.style.background='rgba(99,102,241,0.08)';this.style.borderColor='#52525B';this.style.color='#818CF8'" title="Click for help">?</button></div>
@@ -2367,6 +2422,134 @@ document.getElementById('connect-trading212').addEventListener('click', async ()
     }
 });
 
+// ========== WEBULL OFFICIAL API SETTINGS ==========
+
+async function loadWebullOfficialSettings() {
+    try {
+        const response = await fetch('/api/brokers/credentials/webull_official');
+        const data = await response.json();
+        if (data.success) {
+            if (data.has_credentials) {
+                document.getElementById('webull-official-app-key').value = data.app_key_masked;
+                document.getElementById('webull-official-app-key').placeholder = 'App key saved (enter new to replace)';
+            }
+            if (data.has_app_secret) {
+                document.getElementById('webull-official-app-secret').value = data.app_secret_masked;
+                document.getElementById('webull-official-app-secret').placeholder = 'App secret saved (enter new to replace)';
+            }
+            if (data.environment) {
+                document.getElementById('webull-official-environment').value = data.environment;
+            }
+            if (data.account_type) {
+                document.getElementById('webull-official-account-type').value = data.account_type;
+            }
+            if (data.account_id) {
+                const selector = document.getElementById('webull-official-account-id');
+                const selectorDiv = document.getElementById('webull-official-account-selector');
+                const opt = document.createElement('option');
+                opt.value = data.account_id;
+                opt.textContent = `Saved: ${data.account_id}`;
+                opt.selected = true;
+                selector.innerHTML = '';
+                selector.appendChild(opt);
+                selectorDiv.style.display = 'block';
+            }
+            if (data.status) {
+                const statusStr = data.status.status || 'disconnected';
+                updateConnectionStatus('webull-official-connection-status', statusStr, statusStr === 'connected' ? 'Connected' : 'Not connected');
+                updateStatusBadge('webull_official', data.status);
+            }
+        }
+    } catch (e) {
+        console.log('[WB-OFF] Could not load settings:', e);
+    }
+}
+loadWebullOfficialSettings();
+
+document.getElementById('save-webull-official').addEventListener('click', async () => {
+    let appKey = document.getElementById('webull-official-app-key').value.trim();
+    let appSecret = document.getElementById('webull-official-app-secret').value.trim();
+    const environment = document.getElementById('webull-official-environment').value;
+    const accountType = document.getElementById('webull-official-account-type').value;
+    const accountId = document.getElementById('webull-official-account-id').value;
+
+    if (!appKey || appKey.includes('****')) {
+        showMessage('error', 'Please enter your actual App Key (not the masked value)');
+        return;
+    }
+    if (appSecret && appSecret.includes('****')) {
+        appSecret = '';
+    }
+
+    try {
+        const response = await fetch('/api/brokers/credentials/webull_official', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                app_key: appKey,
+                app_secret: appSecret,
+                environment: environment,
+                account_type: accountType,
+                account_id: accountId
+            })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showMessage('success', `Webull Official API credentials saved (${environment})! Use Connect to test.`);
+        } else {
+            showMessage('error', result.error || 'Failed to save');
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+document.getElementById('connect-webull-official').addEventListener('click', async () => {
+    updateConnectionStatus('webull-official-connection-status', 'connecting', 'Connecting...');
+
+    try {
+        const response = await fetch('/api/brokers/connect/webull_official', { method: 'POST' });
+        const result = await response.json();
+
+        if (result.success) {
+            updateConnectionStatus('webull-official-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge('webull_official', { status: 'connected' });
+            showMessage('success', result.message);
+
+            if (result.accounts && result.accounts.length > 0) {
+                const selector = document.getElementById('webull-official-account-id');
+                const selectorDiv = document.getElementById('webull-official-account-selector');
+                selector.innerHTML = '';
+                result.accounts.forEach(acct => {
+                    const label = `${acct.account_type || 'Unknown'} — ${acct.account_id}${acct.account_label ? ' (' + acct.account_label + ')' : ''}`;
+                    const opt = document.createElement('option');
+                    opt.value = acct.account_id;
+                    opt.textContent = label;
+                    if (result.account && acct.account_id === result.account.account_id) {
+                        opt.selected = true;
+                    }
+                    selector.appendChild(opt);
+                });
+                selectorDiv.style.display = 'block';
+            }
+
+            if (result.account) {
+                const infoDiv = document.getElementById('webull-official-account-info');
+                infoDiv.style.display = 'block';
+                const acctType = result.account.account_type ? ` (${result.account.account_type})` : '';
+                infoDiv.innerHTML = `<strong>Account:</strong> ${result.account.account_id}${acctType} | <strong>Net Liq:</strong> $${(result.account.portfolio_value || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Buying Power:</strong> $${(result.account.buying_power || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            }
+        } else {
+            updateConnectionStatus('webull-official-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('webull-official-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
 // ========== ROBINHOOD SETTINGS ==========
 
 async function loadRobinhoodSettings() {
@@ -3804,7 +3987,8 @@ async function loadBrokerStatus() {
             updateStatusBadge('robinhood', data.status.robinhood);
             updateStatusBadge('schwab', data.status.schwab);
             updateStatusBadge('trading212', data.status.trading212);
-            
+            updateStatusBadge('webull_official', data.status.webull_official);
+
             updateBrokerConnectionDisplay('webull_live', data.status.webull_live);
             updateBrokerConnectionDisplay('webull_paper', data.status.webull_paper);
             updateBrokerConnectionDisplay('alpaca_paper', data.status.alpaca_paper);
@@ -3814,6 +3998,7 @@ async function loadBrokerStatus() {
             updateBrokerConnectionDisplay('tastytrade_live', data.status.tastytrade_live);
             updateBrokerConnectionDisplay('schwab', data.status.schwab);
             updateBrokerConnectionDisplay('trading212', data.status.trading212);
+            updateBrokerConnectionDisplay('webull_official', data.status.webull_official);
         }
     } catch (error) {
         console.error('Error loading broker status:', error);
@@ -3832,12 +4017,13 @@ function updateBrokerConnectionDisplay(brokerId, status) {
         'tastytrade_paper': 'tastytrade-paper',
         'tastytrade_live': 'tastytrade-live',
         'schwab': 'schwab',
-        'trading212': 'trading212'
+        'trading212': 'trading212',
+        'webull_official': 'webull-official'
     };
-    
+
     const prefix = elementMap[brokerId];
     if (!prefix) return;
-    
+
     const statusDiv = document.getElementById(`${prefix}-connection-status`);
     const textSpan = document.getElementById(`${prefix}-status-text`);
     
@@ -3868,9 +4054,10 @@ function updateStatusBadge(brokerId, status) {
         'tastytrade_live': 'tastytrade-live-status-badge',
         'robinhood': 'robinhood-status-badge',
         'schwab': 'schwab-status-badge',
-        'trading212': 'trading212-status-badge'
+        'trading212': 'trading212-status-badge',
+        'webull_official': 'webull-official-status-badge'
     };
-    
+
     const badge = document.getElementById(badgeMap[brokerId]);
     if (!badge) return;
     
@@ -4570,7 +4757,7 @@ async function loadStaleTradeCounts() {
             const countsContainer = document.getElementById('stale-counts-container');
             const buttonsContainer = document.getElementById('stale-buttons-container');
             
-            const knownBrokers = ['WEBULL', 'ALPACA', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'ROBINHOOD', 'QUESTRADE', 'DHAN', 'UPSTOX', 'ZERODHA', 'TRADING212'];
+            const knownBrokers = ['WEBULL', 'WEBULL_OFFICIAL', 'ALPACA', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'ROBINHOOD', 'QUESTRADE', 'DHAN', 'UPSTOX', 'ZERODHA', 'TRADING212'];
             const allBrokers = new Set([...knownBrokers, ...Object.keys(result.counts)]);
             
             let countsHtml = '';
@@ -4834,6 +5021,16 @@ const ADMIN_HELP_CONTENT = {
             { heading: 'Credentials', body: 'Get your API Key and API Secret from the Trading 212 app → Settings → API. Both are required (the API uses Basic Auth with key + secret).' },
             { heading: 'Environment', body: 'Choose <strong>Demo</strong> for paper trading or <strong>Live</strong> for real money. The environment setting determines which Trading 212 API endpoint the bot connects to.' },
             { heading: 'How It Works', body: 'When a stock signal is detected, the bot converts ticker symbols using a built-in symbol conversion map (e.g., US tickers to Trading 212 instrument codes). Options signals are automatically skipped for T212 channels. Per-channel symbol conversion rules can be configured in the Channels page.' }
+        ]
+    },
+    'webull_official': {
+        title: '🔗 Webull Official API',
+        sections: [
+            { heading: 'What This Is', body: 'Connects via Webull\'s <strong>official v2 REST API</strong> with HMAC-SHA1 per-request signing. Supports stocks, options, bracket orders (OCO/OTO/OTOCO), and trailing stops — all natively managed by the broker.' },
+            { heading: 'Setup Steps', body: '1. Register at <a href="https://developer.webull.com" target="_blank" style="color:#E84118;">developer.webull.com</a><br>2. Create an application and get your <strong>App Key</strong> and <strong>App Secret</strong><br>3. Enter them here and click Connect<br>4. Select your trading account from the dropdown (Cash, Margin, IRA, etc.)<br>5. Click Save to persist your selection' },
+            { heading: 'Account Selection', body: 'After connecting, a <strong>Trading Account</strong> dropdown appears with all accounts linked to your credentials — Cash, Margin, Traditional IRA, Roth IRA, Rollover IRA, etc. Each has its own Account ID. Select the one you want the bot to trade on, then Save.' },
+            { heading: 'Environment', body: '<strong>Production</strong> connects to api.webull.com for live trading. <strong>UAT/Sandbox</strong> connects to the Webull test environment with sandbox accounts — use this for testing before going live.' },
+            { heading: 'vs Legacy Webull', body: 'This replaces the unofficial Webull integration. Key differences: official API support, HMAC-SHA1 auth (no cookies/session tokens), native broker-managed brackets, and rate-limited endpoints. Both can run simultaneously on different channels.' }
         ]
     },
     'schwab': {

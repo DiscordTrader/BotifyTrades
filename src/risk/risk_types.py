@@ -45,6 +45,11 @@ class PositionSnapshot:
         return f"{self.broker}_{self.symbol}_stock"
     
     @property
+    def db_broker(self) -> str:
+        import re
+        return re.sub(r'_(LIVE|PAPER)$', '', self.broker, flags=re.IGNORECASE)
+
+    @property
     def db_key(self) -> str:
         """Generate position key for database lookups (no broker prefix)."""
         if self.asset == 'option':

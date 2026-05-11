@@ -523,6 +523,7 @@ class RelayClient:
         broker_map = {
             'SCHWAB': 'schwab_broker',
             'ALPACA': 'broker',
+            'WEBULL_OFFICIAL': 'webull_official_broker',
             'WEBULL': 'broker',
             'IBKR': 'ibkr_broker',
             'TASTYTRADE': 'tastytrade_broker',
@@ -540,6 +541,7 @@ class RelayClient:
         broker_attrs = [
             'schwab_broker', 'paper_broker', 'broker', 'ibkr_broker',
             'tastytrade_broker', 'robinhood_broker', 'trading212_broker',
+            'webull_official_broker',
         ]
         seen = set()
         result = []

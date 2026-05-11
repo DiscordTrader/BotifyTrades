@@ -82,6 +82,8 @@ class RobinhoodBroker(BrokerInterface):
                 print(f"[{self.name}] ❌ Missing username or password")
                 return False
             
+            print(f"[{self.name}] ⚠️  NOTICE: Robinhood integration uses the unofficial robin-stocks library (not Robinhood's official API).")
+            print(f"[{self.name}] ⚠️  Robinhood may restrict or terminate accounts using unofficial API access.")
             print(f"[{self.name}] ⚠️  WARNING: Robinhood has NO paper trading mode")
             print(f"[{self.name}] ⚠️  ALL trades will be executed with REAL money")
             print(f"[{self.name}] Connecting to account: {username[:3]}***@***")

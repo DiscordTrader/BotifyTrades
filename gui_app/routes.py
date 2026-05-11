@@ -1763,6 +1763,7 @@ def register_routes(app):
                 'tastytrade_paper': {'region': 'USA', 'display_name': 'Tastytrade (Paper)', 'is_paper': True},
                 'schwab': {'region': 'USA', 'display_name': 'Schwab', 'is_paper': False},
                 'trading212': {'region': 'UK_EU', 'display_name': 'Trading 212', 'is_paper': False},
+                'webull_official': {'region': 'USA', 'display_name': 'Webull Official', 'is_paper': False},
             }
             
             # Get centralized broker status
@@ -1796,6 +1797,13 @@ def register_routes(app):
             _t212 = get_trading212_credentials()
             if _t212 and _t212.get('api_key'):
                 _configured_brokers.add('trading212')
+            try:
+                from .broker_credentials_service import get_webull_official_credentials
+                _wo = get_webull_official_credentials()
+                if _wo and _wo.get('app_key'):
+                    _configured_brokers.add('webull_official')
+            except ImportError:
+                pass
             for broker_id, config in broker_config.items():
                 status = all_status.get(broker_id, {})
                 is_connected = status.get('connected', False)
@@ -3805,7 +3813,90 @@ def register_routes(app):
                 'error': str(e)
             })
             return result
-    
+
+    @app.route('/api/webull_official/balance', methods=['GET'])
+    def api_webull_official_balance() -> Any:
+        """Get Webull Official API account balance for Dashboard"""
+        import asyncio
+
+        cache_key = 'webull_official_balance'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return jsonify(cached_value)
+
+        try:
+            broker = None
+            if _bot_instance:
+                broker = getattr(_bot_instance, 'webull_official_broker', None)
+
+            if broker and getattr(broker, 'connected', False):
+                try:
+                    balance_future = asyncio.run_coroutine_threadsafe(
+                        broker.get_account_info(),
+                        _bot_instance.loop
+                    )
+                    account_info = balance_future.result(timeout=10)
+
+                    positions_future = asyncio.run_coroutine_threadsafe(
+                        broker.get_positions(),
+                        _bot_instance.loop
+                    )
+                    positions = positions_future.result(timeout=10)
+
+                    formatted_positions = []
+                    for pos in positions:
+                        if isinstance(pos, dict):
+                            formatted_positions.append(pos)
+                        else:
+                            formatted_positions.append({
+                                'symbol': getattr(pos, 'symbol', ''),
+                                'quantity': getattr(pos, 'quantity', 0),
+                                'cost_price': getattr(pos, 'cost_price', 0),
+                                'last_price': getattr(pos, 'last_price', 0),
+                                'unrealized_pnl': getattr(pos, 'unrealized_pnl', 0),
+                                'instrument_type': getattr(pos, 'instrument_type', 'EQUITY'),
+                            })
+
+                    result_data = {
+                        'buying_power': account_info.get('buying_power', 0),
+                        'cash_balance': account_info.get('cash_balance', 0),
+                        'net_liquidation': account_info.get('portfolio_value', 0),
+                        'equity': account_info.get('market_value', 0),
+                        'unrealized_pnl': account_info.get('unrealized_pnl', 0),
+                        'day_pnl': account_info.get('day_pnl', 0),
+                        'positions': formatted_positions,
+                        'status': 'connected'
+                    }
+                    _api_cache[cache_key] = (result_data, time.time())
+                    return jsonify(result_data)
+                except Exception as e:
+                    print(f"[API] Error fetching Webull Official balance: {e}")
+                    return jsonify({
+                        'buying_power': 0, 'cash_balance': 0,
+                        'net_liquidation': 0, 'equity': 0,
+                        'unrealized_pnl': 0,
+                        'status': 'error', 'error': str(e)
+                    })
+            else:
+                return jsonify({
+                    'buying_power': 0, 'cash_balance': 0,
+                    'net_liquidation': 0, 'equity': 0,
+                    'unrealized_pnl': 0,
+                    'status': 'disconnected',
+                    'error': 'Webull Official broker not connected'
+                })
+        except Exception as e:
+            print(f"[API] Exception in Webull Official balance endpoint: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'buying_power': 0, 'cash_balance': 0,
+                'net_liquidation': 0, 'equity': 0,
+                'unrealized_pnl': 0,
+                'status': 'error', 'error': str(e)
+            })
+
     @app.route('/api/schwab/balance', methods=['GET'])
     def api_schwab_balance() -> Any:
         """Get Charles Schwab account balance for Dashboard — uses bot's live broker instance"""
@@ -14971,7 +15062,15 @@ def register_routes(app):
                     status['schwab'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
                 else:
                     status['schwab'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
-            
+
+                # Webull Official API broker
+                wo_broker = getattr(_bot_instance, 'webull_official_broker', None)
+                if wo_broker and getattr(wo_broker, 'connected', False):
+                    set_broker_status('webull_official', True, 'connected')
+                    status['webull_official'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
+                else:
+                    status['webull_official'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+
             try:
                 from src.services.broker_health_monitor import get_health_monitor
                 health_monitor = get_health_monitor()
@@ -14985,6 +15084,7 @@ def register_routes(app):
                         broker_map = {
                             'WEBULL': 'webull_live',
                             'WEBULL_LIVE': 'webull_live',
+                            'WEBULL_OFFICIAL': 'webull_official',
                             'ALPACA_PAPER': 'alpaca_paper',
                             'ALPACA_LIVE': 'alpaca_live',
                             'ROBINHOOD': 'robinhood',
@@ -15689,6 +15789,70 @@ def register_routes(app):
             print(f"[API] Error saving Trading 212 credentials: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/brokers/credentials/webull_official', methods=['GET'])
+    def api_get_webull_official_credentials():
+        """Get Webull Official API credentials (masked)"""
+        try:
+            from .broker_credentials_service import get_webull_official_credentials, get_broker_status
+            creds = get_webull_official_credentials()
+            app_key = creds.get('app_key', '')
+            app_secret = creds.get('app_secret', '')
+            environment = creds.get('environment', 'production')
+            status = get_broker_status('webull_official')
+            return jsonify({
+                'success': True,
+                'has_credentials': bool(app_key),
+                'app_key_masked': f"{'*' * (len(app_key) - 4)}{app_key[-4:]}" if len(app_key) > 4 else ('****' if app_key else ''),
+                'app_secret_masked': f"{'*' * (len(app_secret) - 4)}{app_secret[-4:]}" if len(app_secret) > 4 else ('****' if app_secret else ''),
+                'has_app_secret': bool(app_secret),
+                'environment': environment,
+                'account_id': creds.get('account_id', ''),
+                'account_type': creds.get('account_type', 'MARGIN'),
+                'status': status
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/brokers/credentials/webull_official', methods=['POST'])
+    def api_save_webull_official_credentials():
+        """Save Webull Official API credentials"""
+        try:
+            from .broker_credentials_service import save_webull_official_credentials
+
+            data = request.json
+            app_key = data.get('app_key', '').strip()
+            app_secret = data.get('app_secret', '').strip()
+            environment = data.get('environment', 'production').strip()
+            account_id = data.get('account_id', '').strip()
+            account_type = data.get('account_type', 'MARGIN').strip()
+
+            if not app_key:
+                return jsonify({'success': False, 'error': 'App Key is required'}), 400
+
+            if environment not in ('production', 'test'):
+                return jsonify({'success': False, 'error': 'Environment must be "production" or "test"'}), 400
+
+            if not app_secret:
+                from .broker_credentials_service import get_webull_official_credentials
+                existing = get_webull_official_credentials()
+                app_secret = existing.get('app_secret', '')
+
+            if not app_secret:
+                return jsonify({'success': False, 'error': 'App Secret is required'}), 400
+
+            save_webull_official_credentials(app_key=app_key, app_secret=app_secret,
+                                            environment=environment, account_id=account_id,
+                                            account_type=account_type)
+            print(f"[API] Webull Official API credentials saved ({environment})")
+
+            return jsonify({
+                'success': True,
+                'message': f'Webull Official API credentials saved ({environment}). Use Connect to test.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Webull Official credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/brokers/credentials/ibkr', methods=['GET'])
     def api_get_ibkr_credentials():
         """Get IBKR credentials"""
@@ -15743,7 +15907,7 @@ def register_routes(app):
         try:
             from .broker_credentials_service import set_broker_status, get_discord_credentials, get_webull_credentials, get_alpaca_credentials, get_ibkr_credentials
             
-            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper', 'robinhood', 'schwab_live', 'schwab_paper', 'trading212_live', 'trading212_paper', 'trading212']
+            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper', 'robinhood', 'schwab_live', 'schwab_paper', 'trading212_live', 'trading212_paper', 'trading212', 'webull_official']
             
             if broker_id not in valid_brokers:
                 return jsonify({'success': False, 'error': f'Invalid broker ID: {broker_id}'}), 400
@@ -15791,6 +15955,65 @@ def register_routes(app):
                     set_broker_status(broker_id, False, 'error', error_msg)
                     return jsonify({'success': False, 'error': error_msg}), 500
             
+            elif broker_id == 'webull_official':
+                from .broker_credentials_service import get_webull_official_credentials
+                wo_creds = get_webull_official_credentials()
+
+                if not wo_creds.get('app_key') or not wo_creds.get('app_secret'):
+                    set_broker_status(broker_id, False, 'error', 'App Key and App Secret required')
+                    return jsonify({'success': False, 'error': 'Please enter your App Key and App Secret from the Webull Developer Portal'}), 400
+
+                try:
+                    import asyncio
+                    from src.brokers.webull_official import WebullOfficialBroker
+
+                    env = wo_creds.get('environment', 'production')
+                    broker = WebullOfficialBroker(
+                        paper_trade=wo_creds.get('paper_mode', False),
+                        credentials={
+                            'app_key': wo_creds['app_key'],
+                            'app_secret': wo_creds['app_secret'],
+                            'environment': env,
+                            'account_id': wo_creds.get('account_id', ''),
+                            'account_type': wo_creds.get('account_type', ''),
+                        }
+                    )
+
+                    loop = None
+                    if _bot_instance and hasattr(_bot_instance, 'loop'):
+                        loop = _bot_instance.loop
+
+                    if loop and loop.is_running():
+                        future = asyncio.run_coroutine_threadsafe(broker.connect(), loop)
+                        connected = future.result(timeout=30)
+                    else:
+                        connected = asyncio.run(broker.connect())
+
+                    if connected:
+                        if loop and loop.is_running():
+                            future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
+                            account_info = future.result(timeout=15)
+                        else:
+                            account_info = asyncio.run(broker.get_account_info())
+
+                        accounts_list = broker.get_accounts_list()
+
+                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                        return jsonify({
+                            'success': True,
+                            'message': f'Webull Official API connected ({env})',
+                            'status': 'connected',
+                            'account': account_info,
+                            'accounts': accounts_list
+                        })
+                    else:
+                        set_broker_status(broker_id, False, 'error', 'Connection failed')
+                        return jsonify({'success': False, 'error': 'Failed to connect to Webull Official API. Check your App Key and App Secret.'}), 400
+                except Exception as e:
+                    error_msg = f'Connection error: {str(e)}'
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': error_msg}), 500
+
             elif broker_id.startswith('webull'):
                 creds = get_webull_credentials()
                 data = request.json or {}
@@ -21224,8 +21447,9 @@ def register_routes(app):
                 'upstox': {'country': 'IN', 'currency': 'INR'},
                 'zerodha': {'country': 'IN', 'currency': 'INR'},
                 'trading212': {'country': 'UK', 'currency': 'GBP'},
+                'webull_official': {'country': 'US', 'currency': 'USD'},
             }
-            
+
             config = broker_config.get(broker_name.lower())
             if not config:
                 return jsonify({'success': False, 'error': f'Unknown broker: {broker_name}'})

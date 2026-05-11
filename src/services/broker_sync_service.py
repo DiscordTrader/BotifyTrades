@@ -347,7 +347,17 @@ class BrokerSyncService:
                     brokers_to_sync.append((broker_label, t212))
             except Exception:
                 pass
-        
+
+        # Add Webull Official if available
+        if hasattr(self.broker_manager, 'webull_official_broker') and self.broker_manager.webull_official_broker:
+            wo = self.broker_manager.webull_official_broker
+            try:
+                if getattr(wo, 'connected', False):
+                    broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(wo, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
+                    brokers_to_sync.append((broker_label, wo))
+            except Exception:
+                pass
+
         if not brokers_to_sync:
             print("[SYNC] No brokers available for sync", flush=True)
             return
@@ -979,7 +989,41 @@ class BrokerSyncService:
                         print(f"[SYNC] Trading 212 fetch error: {e}")
                         import traceback
                         traceback.print_exc()
-            
+
+            elif broker_name.startswith('WEBULL_OFFICIAL'):
+                if hasattr(broker_instance, 'get_positions'):
+                    try:
+                        positions = await broker_instance.get_positions() or []
+                        for pos in positions:
+                            asset = pos.get('asset', 'stock')
+                            call_put = None
+                            strike = None
+                            expiry = None
+                            if asset == 'option':
+                                ot = (pos.get('option_type') or '').upper()
+                                call_put = 'C' if 'CALL' in ot else ('P' if 'PUT' in ot else None)
+                                strike = float(pos.get('strike_price') or 0) or None
+                                expiry = pos.get('expiry_date')
+                            qty = abs(float(pos.get('quantity', 0)))
+                            if qty == 0:
+                                continue
+                            result['positions'].append({
+                                'symbol': pos.get('symbol'),
+                                'quantity': qty,
+                                'avg_price': float(pos.get('avg_cost', 0) or 0),
+                                'current_price': float(pos.get('current_price', 0) or 0),
+                                'unrealized_pnl': float(pos.get('unrealized_pl', 0) or 0),
+                                'position_id': pos.get('position_id'),
+                                'asset_type': asset,
+                                'strike': strike,
+                                'expiry': expiry,
+                                'call_put': call_put
+                            })
+                    except Exception as e:
+                        print(f"[SYNC] Webull Official fetch error: {e}")
+                        import traceback
+                        traceback.print_exc()
+
             print(f"[SYNC] {broker_name}: {len(result['positions'])} positions, {len(result['pending_orders'])} pending orders")
             if result['positions']:
                 symbols = [p['symbol'] for p in result['positions']]

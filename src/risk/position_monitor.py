@@ -448,7 +448,11 @@ class RiskDBAdapter:
         """
         if not self._db:
             return None
-        
+
+        import re as _re
+        if broker_name:
+            broker_name = _re.sub(r'_(LIVE|PAPER)$', '', broker_name.strip(), flags=_re.IGNORECASE)
+
         SYMBOL_ALIASES = {
             'SPX': ['SPXW', 'SPX'],
             'SPXW': ['SPX', 'SPXW'],
@@ -462,7 +466,7 @@ class RiskDBAdapter:
             'DJXW': ['DJX', 'DJXW'],
         }
         symbols_to_check = [symbol] + [s for s in SYMBOL_ALIASES.get(symbol, []) if s != symbol]
-        
+
         try:
             conn = self._db.get_connection()
             cursor = conn.cursor()
@@ -1045,7 +1049,11 @@ class RiskDBAdapter:
         
         broker = (broker or '').strip()
         symbol = (symbol or '').strip().upper()
-        
+
+        # Position labels use IBKR_LIVE/IBKR_PAPER etc, trade DB stores IBKR
+        import re
+        broker = re.sub(r'_(LIVE|PAPER)$', '', broker, flags=re.IGNORECASE)
+
         SYMBOL_ALIASES = {
             'SPX': ['SPXW', 'SPX'],
             'SPXW': ['SPX', 'SPXW'],
@@ -1299,7 +1307,7 @@ class RiskDBAdapter:
                 pending_trades = get_trades(status='PENDING', limit=500)
                 for ot in (open_trades + pending_trades):
                     if ((ot.get('symbol') or '').upper() == position.symbol.upper() and
-                        (ot.get('broker') or '').upper() == position.broker.upper() and
+                        (ot.get('broker') or '').upper() == position.db_broker.upper() and
                         ot.get('channel_id')):
                         _ot_source = (ot.get('source') or '').strip().lower()
                         if _ot_source not in ('discord', 'signal', 'sync_routing'):
@@ -1325,7 +1333,7 @@ class RiskDBAdapter:
                     recent_closed = get_trades(status='CLOSED', limit=50)
                     for rc in recent_closed:
                         if ((rc.get('symbol') or '').upper() == position.symbol.upper() and
-                            (rc.get('broker') or '').upper() == position.broker.upper() and
+                            (rc.get('broker') or '').upper() == position.db_broker.upper() and
                             rc.get('channel_id')):
                             _rc_source = (rc.get('source') or '').strip().lower()
                             if _rc_source not in ('discord', 'signal', 'sync_routing'):
@@ -1368,7 +1376,7 @@ class RiskDBAdapter:
                 'current_price': current_price,
                 'pnl': round(pnl, 2),
                 'pnl_percent': round(pnl_percent, 4),
-                'broker': position.broker,
+                'broker': position.db_broker,
                 'status': 'OPEN',
                 'asset_type': position.asset or 'stock',
                 'executed': True,
@@ -1403,7 +1411,7 @@ class RiskDBAdapter:
                 for ex in existing:
                     ex_broker = (ex.get('broker') or '').upper()
                     ex_symbol = (ex.get('symbol') or '').upper()
-                    if ex_symbol in symbols_to_match and ex_broker == position.broker.upper():
+                    if ex_symbol in symbols_to_match and ex_broker == position.db_broker.upper():
                         if position.asset == 'stock':
                             return ex.get('id')
                         elif position.asset == 'option':
@@ -1573,6 +1581,7 @@ class RiskManager:
         robinhood_broker=None,
         trading212_broker=None,
         webull_broker=None,
+        webull_official_broker=None,
         monitoring_interval: int = DEFAULT_MONITORING_INTERVAL,
         trailing_activation_pct: float = DEFAULT_TRAILING_ACTIVATION,
         loop: Optional[asyncio.AbstractEventLoop] = None,
@@ -1606,6 +1615,7 @@ class RiskManager:
         self.tastytrade_broker = tastytrade_broker
         self.robinhood_broker = robinhood_broker
         self.trading212_broker = trading212_broker
+        self.webull_official_broker = webull_official_broker
         self.monitoring_interval = monitoring_interval
         self.trailing_activation_pct = trailing_activation_pct
         self.loop = loop or asyncio.get_event_loop()
@@ -2269,6 +2279,10 @@ class RiskManager:
         if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
             names.add('IBKR_LIVE')
             names.add('IBKR_PAPER')
+        if self.webull_official_broker and getattr(self.webull_official_broker, 'connected', False):
+            names.add('WEBULL_OFFICIAL')
+            names.add('WEBULL_OFFICIAL_LIVE')
+            names.add('WEBULL_OFFICIAL_PAPER')
         self._connected_broker_names_cache = names
         self._connected_broker_names_ts = _now
         return names
@@ -3469,6 +3483,7 @@ class RiskManager:
             _timed('tastytrade', _fetch_tastytrade_cached()),
             _timed('robinhood', _fetch_robinhood_cached()),
             _timed('trading212', _fetch_trading212_cached()),
+            _timed('webull_official', self._fetch_webull_official_positions()),
             return_exceptions=True
         )
         for r in results:
@@ -3767,7 +3782,39 @@ class RiskManager:
             print(f"[RISK] Error fetching Trading 212 positions: {e}")
 
         return positions
-    
+
+    async def _fetch_webull_official_positions(self) -> List[PositionSnapshot]:
+        positions = []
+        if not self.webull_official_broker or not getattr(self.webull_official_broker, 'connected', False):
+            return positions
+        try:
+            raw = await self.webull_official_broker.get_positions() or []
+            broker_label = 'WEBULL_OFFICIAL_LIVE' if not getattr(self.webull_official_broker, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
+            for pos in raw:
+                asset = pos.get('asset', 'stock')
+                call_put = None
+                strike = None
+                expiry = None
+                if asset == 'option':
+                    ot = (pos.get('option_type') or '').upper()
+                    call_put = 'C' if 'CALL' in ot else ('P' if 'PUT' in ot else None)
+                    strike = float(pos.get('strike_price') or 0) or None
+                    expiry = pos.get('expiry_date')
+                positions.append(PositionSnapshot(
+                    symbol=pos.get('symbol', ''),
+                    quantity=abs(float(pos.get('quantity', 0))),
+                    avg_cost=float(pos.get('avg_cost', 0) or 0),
+                    current_price=float(pos.get('current_price', 0) or 0),
+                    asset=asset,
+                    broker=broker_label,
+                    strike=strike,
+                    expiry=expiry,
+                    direction=call_put
+                ))
+        except Exception as e:
+            print(f"[RISK] Error fetching Webull Official positions: {e}")
+        return positions
+
     async def _evaluate_position(
         self, 
         position: PositionSnapshot, 
@@ -3837,7 +3884,7 @@ class RiskManager:
                           AND asset_type = ?
                           AND closed_at >= datetime('now', '-30 minutes')
                         ORDER BY closed_at DESC LIMIT 1
-                    ''', (position.symbol, position.broker, position.asset))
+                    ''', (position.symbol, position.db_broker, position.asset))
                     _false_closed = _rcur.fetchone()
                     if _false_closed:
                         _fc_id = _false_closed['id']
@@ -3894,7 +3941,7 @@ class RiskManager:
                                   AND status IN ('OPEN','PENDING','PARTIAL') AND asset_type = 'option'
                                   AND strike = ? AND expiry = ? AND call_put = ?
                                 LIMIT 1
-                            ''', (position.symbol, position.broker, position.strike,
+                            ''', (position.symbol, position.db_broker, position.strike,
                                   position.expiry, _ghost_call_put))
                         else:
                             _ghcur.execute('''
@@ -3902,7 +3949,7 @@ class RiskManager:
                                 WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
                                   AND status IN ('OPEN','PENDING','PARTIAL') AND asset_type = 'stock'
                                 LIMIT 1
-                            ''', (position.symbol, position.broker))
+                            ''', (position.symbol, position.db_broker))
                         _conflict = _ghcur.fetchone()
                         _ghost_row = None
                         if not _conflict:
@@ -3915,7 +3962,7 @@ class RiskManager:
                                       AND closed_at >= datetime('now', '-10 minutes')
                                       AND (close_reason IS NULL OR LOWER(close_reason) != 'broker_closed_position')
                                     ORDER BY closed_at DESC LIMIT 1
-                                ''', (position.symbol, position.broker, position.strike,
+                                ''', (position.symbol, position.db_broker, position.strike,
                                       position.expiry, _ghost_call_put))
                             else:
                                 _ghcur.execute('''
@@ -3925,7 +3972,7 @@ class RiskManager:
                                       AND closed_at >= datetime('now', '-10 minutes')
                                       AND (close_reason IS NULL OR LOWER(close_reason) != 'broker_closed_position')
                                     ORDER BY closed_at DESC LIMIT 1
-                                ''', (position.symbol, position.broker))
+                                ''', (position.symbol, position.db_broker))
                             _ghost_row = _ghcur.fetchone()
                         if _ghost_row:
                             if not hasattr(self, '_ghost_position_logged'):
@@ -4090,7 +4137,7 @@ class RiskManager:
                                 WHERE id != ? AND UPPER(symbol) IN ({_sym_phs}) AND UPPER(broker) = UPPER(?)
                                 AND channel_id = ? AND source IN ('discord', 'signal', 'sync_routing')
                                 AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                            ''', (trade_id, *[s.upper() for s in _syms], position.broker, _trade_channel_id))
+                            ''', (trade_id, *[s.upper() for s in _syms], position.db_broker, _trade_channel_id))
                             _signal_count = _cur.fetchone()[0]
                             _has_real_signal_trade = _signal_count > 0
                         except Exception:
@@ -4933,6 +4980,8 @@ class RiskManager:
             return self.tastytrade_broker
         elif 'TRADING212' in broker_upper:
             return self.trading212_broker
+        elif 'WEBULL_OFFICIAL' in broker_upper:
+            return self.webull_official_broker
         elif 'ROBINHOOD' in broker_upper:
             return self.robinhood_broker
         elif 'WEBULL_PAPER' in broker_upper:
@@ -6067,6 +6116,8 @@ class RiskManager:
             return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
         elif 'ROBINHOOD' in broker_name:
             return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, price=price)
+        elif 'WEBULL_OFFICIAL' in broker_name:
+            return await broker_instance.place_stock_order(symbol=symbol, action='STC', quantity=qty, order_type='LIMIT', limit_price=price)
         elif 'WEBULL' in broker_name:
             _wb_c = getattr(broker_instance, '_client', None) or getattr(broker_instance, 'wb', None)
             if not _wb_c:
@@ -6137,6 +6188,8 @@ class RiskManager:
             elif 'ROBINHOOD' in broker_upper and self.robinhood_broker:
                 _rh_type = 'option' if asset_type.lower() in ('option', 'options') else 'stock'
                 result = await self.robinhood_broker.cancel_order(order_id, order_type=_rh_type)
+            elif 'WEBULL_OFFICIAL' in broker_upper and self.webull_official_broker:
+                result = await self.webull_official_broker.cancel_order(order_id)
             elif 'WEBULL' in broker_upper and broker_instance:
                 result = await broker_instance.cancel_order(order_id)
         except Exception as e:
@@ -7435,6 +7488,8 @@ class RiskManager:
             broker_instance = self.tastytrade_broker
         elif 'TRADING212' in broker_upper:
             broker_instance = self.trading212_broker
+        elif 'WEBULL_OFFICIAL' in broker_upper:
+            broker_instance = self.webull_official_broker
         elif 'WEBULL_PAPER' in broker_upper:
             broker_instance = getattr(self, 'webull_paper_broker', None) or (getattr(self.bot, 'webull_paper', None) if hasattr(self, 'bot') and self.bot else None)
         elif 'WEBULL' in broker_upper:
@@ -8739,6 +8794,8 @@ class RiskManager:
             broker_instance = self.ibkr_broker
         elif 'TRADING212' in broker_upper or 'T212' in broker_upper:
             broker_instance = self.trading212_broker
+        elif 'WEBULL_OFFICIAL' in broker_upper:
+            broker_instance = self.webull_official_broker
         if not broker_instance or not hasattr(broker_instance, 'get_quote'):
             return None
         try:

@@ -247,6 +247,7 @@
                     <option value="" style="background-color: #2C2C2E; color: #FFFFFF;">All Brokers</option>
                     <optgroup label="🇺🇸 USA">
                         <option value="Webull" style="background-color: #2C2C2E; color: #FFFFFF;">Webull LIVE</option>
+                        <option value="WEBULL_OFFICIAL" style="background-color: #1a3a5c; color: #4fc3f7;">Webull Official API</option>
                         <option value="ALPACA" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca LIVE</option>
                         <option value="ALPACA_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca PAPER</option>
                         <option value="IBKR" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR LIVE</option>
@@ -1195,6 +1196,7 @@
 }
 
 .broker-badge.webull { background: rgba(0, 128, 255, 0.2); color: #0080ff; }
+.broker-badge.webull_official { background: rgba(0, 168, 255, 0.2); color: #00a8ff; }
 .broker-badge.alpaca { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
 .broker-badge.ibkr { background: rgba(220, 53, 69, 0.2); color: #dc3545; }
 
@@ -2526,7 +2528,9 @@ async function loadStats() {
         try {
             let balanceUrl = '/api/webull/balance';
             const brokerUpper = currentBroker ? currentBroker.toUpperCase() : '';
-            if (brokerUpper.startsWith('ALPACA')) {
+            if (brokerUpper.startsWith('WEBULL_OFFICIAL')) {
+                balanceUrl = '/api/webull_official/balance';
+            } else if (brokerUpper.startsWith('ALPACA')) {
                 balanceUrl = '/api/alpaca/balance';
             } else if (brokerUpper.startsWith('IBKR')) {
                 balanceUrl = '/api/ibkr/balance';
@@ -3237,7 +3241,10 @@ function getBotBrokerBadge(broker) {
         'IBKR_PAPER': 'linear-gradient(135deg, #d41f2c, #ff4444)',
         'TASTYTRADE': 'linear-gradient(135deg, #e91e63, #ff5722)',
         'TRADING212': 'linear-gradient(135deg, #0052FF, #00A3FF)',
-        'TRADING212_PAPER': 'linear-gradient(135deg, #0052FF, #00A3FF)'
+        'TRADING212_PAPER': 'linear-gradient(135deg, #0052FF, #00A3FF)',
+        'WEBULL_OFFICIAL': 'linear-gradient(135deg, #00a8ff, #0080ff)',
+        'WEBULL_OFFICIAL_LIVE': 'linear-gradient(135deg, #00a8ff, #0080ff)',
+        'WEBULL_OFFICIAL_PAPER': 'linear-gradient(135deg, #00a8ff, #0080ff)'
     };
     const bg = colors[broker] || 'linear-gradient(135deg, #555, #777)';
     return `<span style="background: ${bg}; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${broker}</span>`;

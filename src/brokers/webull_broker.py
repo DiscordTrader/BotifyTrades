@@ -1080,10 +1080,11 @@ class WebullBroker(BrokerInterface):
                         if quote:
                             _qp = self._extract_current_price(quote)
                             if _qp > 0:
+                                _rd = 4 if _qp < 1.0 else 2
                                 if side == 'SELL':
-                                    _effective_price = round(_qp * 0.97, 4)
+                                    _effective_price = round(_qp * 0.97, _rd)
                                 else:
-                                    _effective_price = round(_qp * 1.03, 4)
+                                    _effective_price = round(_qp * 1.03, _rd)
                                 _use_limit = True
                                 print(f"[{self.name}] ⚠️ Extended hours — converting MKT to LMT @ ${_effective_price:.4f}")
                     except Exception as _eq:
@@ -1464,49 +1465,57 @@ class WebullBroker(BrokerInterface):
             if is_stc and is_risk_order:
                 current_bid = await asyncio.to_thread(_get_bid_price)
                 if current_bid and current_bid > 0:
-                    price = max(0.01, round(current_bid * (1 - sell_buffers[0]), 2))
-                    print(f"[{self.name}] ⚡ Risk STC: bid=${current_bid:.2f} → aggressive limit ${price:.2f} (-{sell_buffers[0]*100:.0f}% buffer) for fast fill")
+                    _rd = 4 if current_bid < 1.0 else 2
+                    price = max(0.0001, round(current_bid * (1 - sell_buffers[0]), _rd))
+                    print(f"[{self.name}] ⚡ Risk STC: bid=${current_bid:.4f} → aggressive limit ${price:.4f} (-{sell_buffers[0]*100:.0f}% buffer) for fast fill")
                     use_aggressive_limit = True
                 elif _fallback_price and _fallback_price > 0:
-                    price = max(0.01, round(_fallback_price * 0.80, 2))
-                    print(f"[{self.name}] ⚡ Risk STC: no bid, fallback ${_fallback_price:.2f} → aggressive limit ${price:.2f} (20% below)")
+                    _rd = 4 if _fallback_price < 1.0 else 2
+                    price = max(0.0001, round(_fallback_price * 0.80, _rd))
+                    print(f"[{self.name}] ⚡ Risk STC: no bid, fallback ${_fallback_price:.4f} → aggressive limit ${price:.4f} (20% below)")
                     use_aggressive_limit = True
                 elif price and price > 0:
-                    price = max(0.01, round(price * 0.85, 2))
-                    print(f"[{self.name}] ⚡ Risk STC: no bid/fallback, using signal price -15% → ${price:.2f}")
+                    _rd = 4 if price < 1.0 else 2
+                    price = max(0.0001, round(price * 0.85, _rd))
+                    print(f"[{self.name}] ⚡ Risk STC: no bid/fallback, using signal price -15% → ${price:.4f}")
                 else:
                     price = 0.01
                     print(f"[{self.name}] ⚡ Risk STC: no price available, using $0.01 floor")
             elif is_stc and price is not None and price > 0:
                 current_bid = await asyncio.to_thread(_get_bid_price)
                 if current_bid and current_bid > 0:
-                    aggressive_price = max(0.01, round(current_bid * 0.90, 2))
+                    _rd = 4 if current_bid < 1.0 else 2
+                    aggressive_price = max(0.0001, round(current_bid * 0.90, _rd))
                     if price > current_bid * 1.5:
-                        print(f"[{self.name}] ⚡ STC price ${price} >> current bid ${current_bid:.2f} — using aggressive limit ${aggressive_price:.2f} for fast fill")
+                        print(f"[{self.name}] ⚡ STC price ${price} >> current bid ${current_bid:.4f} — using aggressive limit ${aggressive_price:.4f} for fast fill")
                         price = aggressive_price
                     else:
-                        print(f"[{self.name}] STC price ${price} near bid ${current_bid:.2f} — keeping limit")
+                        print(f"[{self.name}] STC price ${price} near bid ${current_bid:.4f} — keeping limit")
             elif price is None:
                 if is_stc:
                     current_bid = await asyncio.to_thread(_get_bid_price)
                     if current_bid and current_bid > 0:
-                        price = max(0.01, round(current_bid * (1 - sell_buffers[0]), 2))
-                        print(f"[{self.name}] ⚡ Market STC: bid=${current_bid:.2f} → aggressive limit ${price:.2f}")
+                        _rd = 4 if current_bid < 1.0 else 2
+                        price = max(0.0001, round(current_bid * (1 - sell_buffers[0]), _rd))
+                        print(f"[{self.name}] ⚡ Market STC: bid=${current_bid:.4f} → aggressive limit ${price:.4f}")
                         use_aggressive_limit = True
                     elif _fallback_price and _fallback_price > 0:
-                        price = max(0.01, round(_fallback_price * 0.80, 2))
-                        print(f"[{self.name}] ⚡ Market STC: no bid, fallback → ${price:.2f}")
+                        _rd = 4 if _fallback_price < 1.0 else 2
+                        price = max(0.0001, round(_fallback_price * 0.80, _rd))
+                        print(f"[{self.name}] ⚡ Market STC: no bid, fallback → ${price:.4f}")
                     else:
                         price = 0.01
                         print(f"[{self.name}] ⚡ Market STC: no price data, using $0.01 floor")
                 else:
                     current_ask = await asyncio.to_thread(_get_ask_price)
                     if current_ask and current_ask > 0:
-                        price = round(current_ask * (1 + sell_buffers[0]), 2)
-                        print(f"[{self.name}] ⚡ Market BTO: ask=${current_ask:.2f} → aggressive limit ${price:.2f} (+{sell_buffers[0]*100:.0f}% buffer)")
+                        _rd = 4 if current_ask < 1.0 else 2
+                        price = round(current_ask * (1 + sell_buffers[0]), _rd)
+                        print(f"[{self.name}] ⚡ Market BTO: ask=${current_ask:.4f} → aggressive limit ${price:.4f} (+{sell_buffers[0]*100:.0f}% buffer)")
                     elif _fallback_price and _fallback_price > 0:
-                        price = round(_fallback_price * 1.03, 2)
-                        print(f"[{self.name}] ⚡ Market BTO: no quote, fallback → ${price:.2f}")
+                        _rd = 4 if _fallback_price < 1.0 else 2
+                        price = round(_fallback_price * 1.03, _rd)
+                        print(f"[{self.name}] ⚡ Market BTO: no quote, fallback → ${price:.4f}")
                     else:
                         print(f"[{self.name}] ❌ Market BTO: no ask quote and no fallback price — cannot place order")
                         return OrderResult(

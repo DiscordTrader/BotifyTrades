@@ -43,6 +43,8 @@ class BrokerLiveAnalytics:
         'schwab_live': {'name': 'Schwab Live', 'type': 'schwab', 'paper': False},
         'schwab_paper': {'name': 'Schwab Paper', 'type': 'schwab', 'paper': True},
         'robinhood': {'name': 'Robinhood', 'type': 'robinhood', 'paper': False},
+        'webull_official_live': {'name': 'Webull Official Live', 'type': 'webull_official', 'paper': False},
+        'webull_official_paper': {'name': 'Webull Official Paper', 'type': 'webull_official', 'paper': True},
     }
     
     def __init__(self):
@@ -116,6 +118,14 @@ class BrokerLiveAnalytics:
             try:
                 from .broker_credentials_service import get_robinhood_credentials
                 return get_robinhood_credentials()
+            except (ImportError, Exception):
+                return {}
+        elif broker_type == 'webull_official':
+            try:
+                from .broker_credentials_service import get_webull_official_credentials
+                creds = get_webull_official_credentials()
+                creds['paper_mode'] = is_paper
+                return creds
             except (ImportError, Exception):
                 return {}
         return {}
@@ -364,9 +374,25 @@ class BrokerLiveAnalytics:
             return await self.connect_schwab(broker_id, credentials)
         elif broker_type == 'robinhood':
             return await self.connect_robinhood(broker_id, credentials)
-        
+        elif broker_type == 'webull_official':
+            return await self.connect_webull_official(broker_id, credentials)
+
         return None
-    
+
+    async def connect_webull_official(self, broker_id: str, credentials: Dict) -> Optional[Any]:
+        if not credentials or not credentials.get('app_key'):
+            return None
+        try:
+            from gui_app.routes import _bot_instance
+            if _bot_instance and getattr(_bot_instance, 'webull_official_broker', None):
+                wo = _bot_instance.webull_official_broker
+                if getattr(wo, 'connected', False):
+                    self._clients[broker_id] = wo
+                    return wo
+        except Exception:
+            pass
+        return None
+
     async def get_account_info(self, broker_id: str) -> Dict[str, Any]:
         """Get account information from broker"""
         config = self.BROKER_CONFIGS.get(broker_id, {})

@@ -588,16 +588,15 @@ class SchwabBroker(BrokerInterface):
 
     def _format_price(self, price: float) -> str:
         """Format price for Schwab API.
-        For prices < $1: truncate to 4 decimal places
-        For prices >= $1: truncate to 2 decimal places
+        Sub-$1 (OTC/penny): 4-decimal sub-penny allowed by SEC Rule 612.
+        $1+: penny increments only — round to nearest cent (not floor).
         """
         import math
         if price < 1.0:
             truncated = math.floor(price * 10000) / 10000
             return f"{truncated:.4f}"
         else:
-            truncated = math.floor(price * 100) / 100
-            return f"{truncated:.2f}"
+            return f"{round(price, 2):.2f}"
 
     def _create_http_client(self):
         """Create a fresh httpx AsyncClient."""
@@ -997,10 +996,10 @@ class SchwabBroker(BrokerInterface):
     
     def _stock_tick_below(self, price: float) -> float:
         import math
-        if price >= 1.0:
-            return math.floor((price - 0.01) * 100) / 100
-        else:
+        if price < 1.0:
             return math.floor((price - 0.0001) * 10000) / 10000
+        else:
+            return math.floor((price - 0.01) * 100) / 100
 
     def _clamp_to_last_band(self, aggressive: float, last: float, price_for_log: float) -> float:
         if last <= 0:

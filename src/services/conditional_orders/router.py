@@ -62,6 +62,9 @@ class ConditionalOrderRouter:
         'trading212': 'US',
         'trading212_live': 'US',
         'trading212_paper': 'US',
+        'webull_official': 'US',
+        'webull_official_live': 'US',
+        'webull_official_paper': 'US',
     }
     
     def __init__(self):

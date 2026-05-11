@@ -76,6 +76,7 @@ _HUB_REGISTRY = [
     ('ibkr', 'src.services.ibkr_data_hub', 'get_ibkr_data_hub'),
     ('tastytrade', 'src.services.tastytrade_data_hub', 'get_tastytrade_data_hub'),
     ('trading212', 'src.services.trading212_data_hub', 'get_trading212_data_hub'),
+    ('webull_official', 'src.services.webull_data_hub', 'get_webull_data_hub'),
 ]
 
 
@@ -455,6 +456,7 @@ class UnifiedPriceHub:
     _BROKER_NAME_TO_HUB = {
         'SCHWAB': 'schwab', 'SCHWAB_LIVE': 'schwab', 'SCHWAB_PAPER': 'schwab',
         'WEBULL': 'webull', 'WEBULL_LIVE': 'webull', 'WEBULL_PAPER': 'webull',
+        'WEBULL_OFFICIAL': 'webull_official', 'WEBULL_OFFICIAL_LIVE': 'webull_official', 'WEBULL_OFFICIAL_PAPER': 'webull_official',
         'IBKR': 'ibkr', 'IBKR_LIVE': 'ibkr', 'IBKR_PAPER': 'ibkr',
         'TASTYTRADE': 'tastytrade', 'TASTYTRADE_LIVE': 'tastytrade', 'TASTYTRADE_PAPER': 'tastytrade',
         'TRADING212': 'trading212', 'TRADING212_LIVE': 'trading212', 'TRADING212_PAPER': 'trading212',

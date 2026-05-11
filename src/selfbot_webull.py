@@ -40,6 +40,10 @@ except ImportError:
 _early_print("=" * 60)
 _early_print(f"BUILD VERSION: {_build_version}")
 _early_print("=" * 60)
+_early_print("BotifyTrades is a software automation tool only.")
+_early_print("It does not provide financial advice or trading recommendations.")
+_early_print("All trading decisions and outcomes are your responsibility.")
+_early_print("=" * 60)
 if sys.stdout and hasattr(sys.stdout, 'flush'):
     sys.stdout.flush()
 
@@ -106,6 +110,14 @@ try:
 except ImportError as e:
     print(f"[WARNING] Could not import AlpacaBroker: {e}")
     ALPACA_AVAILABLE = False
+
+# Import Webull Official API broker
+try:
+    from src.brokers.webull_official import WebullOfficialBroker
+    WEBULL_OFFICIAL_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import WebullOfficialBroker: {e}")
+    WEBULL_OFFICIAL_AVAILABLE = False
 
 # Import Tastytrade broker
 try:
@@ -7429,6 +7441,7 @@ class SelfClient(discord.Client):
             return cond_brokers
         broker_map = {
             'WEBULL': 'Webull',
+            'WEBULL_OFFICIAL': 'WEBULL_OFFICIAL',
             'ALPACA': 'ALPACA_PAPER',
             'ALPACA_PAPER': 'ALPACA_PAPER',
             'TASTYTRADE': 'TASTYTRADE',
@@ -7725,6 +7738,8 @@ class SelfClient(discord.Client):
         
         if broker_lower in ('webull_paper', 'webull paper'):
             return getattr(self, 'webull_paper_broker', None)
+        elif 'webull_official' in broker_lower:
+            return getattr(self, 'webull_official_broker', None)
         elif 'webull' in broker_lower:
             return getattr(self, 'broker', None)
         elif 'alpaca' in broker_lower:
@@ -8006,6 +8021,73 @@ class SelfClient(discord.Client):
             import traceback
             traceback.print_exc()
             self.tastytrade_broker = None
+
+        # Initialize Webull Official API broker
+        self.webull_official_broker = None
+        try:
+            if WEBULL_OFFICIAL_AVAILABLE:
+                _original_print("[WEBULL_OFFICIAL] Starting broker initialization...", flush=True)
+                from gui_app.broker_credentials_service import get_webull_official_credentials
+                wo_creds = get_webull_official_credentials()
+
+                if wo_creds.get('app_key') and wo_creds.get('app_secret'):
+                    paper_mode = wo_creds.get('paper_mode', False)
+                    env = wo_creds.get('environment', 'production')
+                    mode_str = "PAPER" if paper_mode else "LIVE"
+                    _original_print(f"[WEBULL_OFFICIAL] Creating WebullOfficialBroker instance ({env}, {mode_str})...", flush=True)
+
+                    self.webull_official_broker = WebullOfficialBroker(
+                        loop=self.loop,
+                        paper_trade=paper_mode,
+                        credentials={
+                            'app_key': wo_creds['app_key'],
+                            'app_secret': wo_creds['app_secret'],
+                            'environment': env,
+                            'account_id': wo_creds.get('account_id', ''),
+                            'account_type': wo_creds.get('account_type', ''),
+                        }
+                    )
+
+                    try:
+                        connected = await asyncio.wait_for(self.webull_official_broker.connect(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        _original_print("[WEBULL_OFFICIAL] ⚠️ Connection timeout (30s) - broker skipped", flush=True)
+                        self.webull_official_broker = None
+                        connected = False
+                    if connected:
+                        _original_print(f"[WEBULL_OFFICIAL] ✓ Connected successfully ({mode_str})", flush=True)
+                        try:
+                            account_info = await self.webull_official_broker.get_account_info()
+                            nlv = account_info.get('portfolio_value', 0)
+                            _original_print(f"[WEBULL_OFFICIAL]   Net Liq: ${nlv:,.2f}", flush=True)
+                            _original_print(f"[WEBULL_OFFICIAL]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
+                            from gui_app.broker_credentials_service import set_broker_status
+                            set_broker_status('webull_official', True, 'connected', account_info=account_info)
+                        except Exception as status_err:
+                            _original_print(f"[WEBULL_OFFICIAL] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                        try:
+                            from gui_app.discord_notifier import notify_broker_reconnected
+                            notify_broker_reconnected(f'Webull Official {mode_str}')
+                        except Exception:
+                            pass
+                    else:
+                        _original_print("[WEBULL_OFFICIAL] ⚠️ Connection failed", flush=True)
+                        self.webull_official_broker = None
+                        try:
+                            from gui_app.discord_notifier import notify_broker_disconnected
+                            notify_broker_disconnected('Webull Official', 'Connection failed')
+                        except Exception:
+                            pass
+                else:
+                    _original_print("[WEBULL_OFFICIAL] No credentials configured - broker disabled", flush=True)
+                    _original_print("[WEBULL_OFFICIAL]   Need app_key + app_secret from Webull Developer Portal", flush=True)
+            else:
+                _original_print("[WEBULL_OFFICIAL] WebullOfficialBroker not available", flush=True)
+        except Exception as e:
+            _original_print(f"[WEBULL_OFFICIAL] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.webull_official_broker = None
 
         # Initialize Robinhood broker (WARNING: No paper trading - all trades are LIVE)
         self.robinhood_broker = None
@@ -8563,7 +8645,7 @@ class SelfClient(discord.Client):
                 
                 # Create simple broker manager for sync service
                 class BrokerManager:
-                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None, schwab_broker=None, webull_paper_broker=None, trading212_broker=None):
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None, schwab_broker=None, webull_paper_broker=None, trading212_broker=None, webull_official_broker=None):
                         self.webull_broker = webull_broker
                         self.alpaca_paper_broker = alpaca_paper_broker
                         self.tastytrade_broker = tastytrade_broker
@@ -8575,8 +8657,9 @@ class SelfClient(discord.Client):
                         self.schwab_broker = schwab_broker
                         self.webull_paper_broker = webull_paper_broker
                         self.trading212_broker = trading212_broker
-                
-                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker, trading212_broker=self.trading212_broker)
+                        self.webull_official_broker = webull_official_broker
+
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker, trading212_broker=self.trading212_broker, webull_official_broker=getattr(self, 'webull_official_broker', None))
                 self._broker_manager = broker_manager
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=15)
@@ -8685,6 +8768,7 @@ class SelfClient(discord.Client):
                     ibkr_broker=getattr(self, 'ibkr_broker', None),
                     tastytrade_broker=getattr(self, 'tastytrade_broker', None),
                     webull_broker=self.broker,
+                    webull_official_broker=getattr(self, 'webull_official_broker', None),
                     loop=self.loop,
                     sync_ready_event=self.sync_ready
                 )
@@ -8836,6 +8920,10 @@ class SelfClient(discord.Client):
             if getattr(self, 'ibkr_broker', None) and getattr(self.ibkr_broker, 'connected', False):
                 conditional_order_router.set_broker_instance('IBKR', self.ibkr_broker)
                 _cond_print("[CONDITIONAL] ✓ IBKR registered for price monitoring", flush=True)
+                _reg_count += 1
+            if getattr(self, 'webull_official_broker', None) and getattr(self.webull_official_broker, 'connected', False):
+                conditional_order_router.set_broker_instance('Webull_Official', self.webull_official_broker)
+                _cond_print("[CONDITIONAL] ✓ Webull Official registered for price monitoring", flush=True)
                 _reg_count += 1
             _cond_print(f"[CONDITIONAL] Broker registration complete: {_reg_count} broker(s)", flush=True)
             
@@ -10617,7 +10705,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 broker_lower = broker_name.lower()
                                 broker_instance = None
                                 
-                                if 'webull' in broker_lower and hasattr(self, 'broker') and self.broker:
+                                if 'webull_official' in broker_lower and hasattr(self, 'webull_official_broker') and self.webull_official_broker:
+                                    broker_instance = self.webull_official_broker
+                                elif 'webull' in broker_lower and hasattr(self, 'broker') and self.broker:
                                     broker_instance = self.broker
                                 elif 'alpaca' in broker_lower and hasattr(self, 'paper_broker') and self.paper_broker:
                                     broker_instance = self.paper_broker
@@ -10994,7 +11084,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if getattr(self, 'tastytrade_broker', None) and getattr(self.tastytrade_broker, 'connected', False):
                     conditional_order_router.set_broker_instance('Tastytrade', self.tastytrade_broker)
                     _early_reg += 1
-                
+                if getattr(self, 'webull_official_broker', None) and getattr(self.webull_official_broker, 'connected', False):
+                    conditional_order_router.set_broker_instance('Webull_Official', self.webull_official_broker)
+                    _early_reg += 1
+
                 try:
                     from src.services.trading212_data_hub import get_trading212_data_hub
                     _t212_hub = get_trading212_data_hub()
@@ -11041,6 +11134,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _late_reg += 1
                         if getattr(self, 'tastytrade_broker', None) and getattr(self.tastytrade_broker, 'connected', False):
                             conditional_order_router.set_broker_instance('Tastytrade', self.tastytrade_broker)
+                            _late_reg += 1
+                        if getattr(self, 'webull_official_broker', None) and getattr(self.webull_official_broker, 'connected', False):
+                            conditional_order_router.set_broker_instance('Webull_Official', self.webull_official_broker)
                             _late_reg += 1
                         try:
                             from src.services.trading212_data_hub import get_trading212_data_hub
@@ -18433,6 +18529,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if broker_name_lower in ('alpaca_paper', 'alpaca') and self.paper_broker and hasattr(self.paper_broker, 'name') and self.paper_broker.name == 'ALPACA':
                             broker_instance = self.paper_broker
                             _original_print(f"[MULTI-BROKER] Queuing Alpaca PAPER broker")
+                        # Webull Official API: 'webull_official', 'WEBULL_OFFICIAL'
+                        elif broker_name_lower in ('webull_official', 'webull_official_live', 'webull_official_paper') and hasattr(self, 'webull_official_broker') and self.webull_official_broker and self.webull_official_broker.connected:
+                            broker_instance = self.webull_official_broker
+                            _original_print(f"[MULTI-BROKER] Queuing Webull Official API broker")
                         # Webull Live: 'webull_live', 'WEBULL_LIVE', 'webull', 'WEBULL'
                         elif broker_name_lower in ('webull_live', 'webull') and self.broker and hasattr(self.broker, 'name') and self.broker.name == 'WEBULL':
                             broker_instance = self.broker
@@ -19511,6 +19611,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 live_broker = self.trading212_broker
                                 broker_name_used = 'Trading212'
                                 _original_print(f"[LIVE TRADE] Using channel broker override: Trading 212")
+                            elif broker_override in ('webull_official', 'webull_official_live', 'webull_official_paper') and hasattr(self, 'webull_official_broker') and self.webull_official_broker and self.webull_official_broker.connected:
+                                live_broker = self.webull_official_broker
+                                broker_name_used = 'Webull_Official'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Webull Official")
                             else:
                                 _original_print(f"[LIVE TRADE] ❌ REJECTED: Broker override '{broker_override}' not available or not connected")
                                 _original_print(f"[LIVE TRADE] Please check broker configuration in Settings")

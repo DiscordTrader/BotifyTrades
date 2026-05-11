@@ -826,6 +826,30 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 - [ ] `POST /api/webull/auth/security-question` — security question
 - [ ] `POST /api/webull/auth/session-login` — session login
 
+#### 13l-2. Webull Official API
+
+| # | Test | Status |
+|---|------|--------|
+| 13.56a | App Key input (password field, masked on load) | [ ] |
+| 13.56b | App Secret input (password field, masked on load) | [ ] |
+| 13.56c | Environment dropdown (Production / Test UAT) | [ ] |
+| 13.56d | Account Type Preference dropdown (Auto, Margin, Cash, Traditional IRA, Roth IRA, Rollover IRA) | [ ] |
+| 13.56e | Account Type dropdown visible BEFORE connect | [ ] |
+| 13.56f | Save credentials button persists to encrypted DB | [ ] |
+| 13.56g | Connect button tests API connection | [ ] |
+| 13.56h | Account selector populated after successful connect | [ ] |
+| 13.56i | Account info displayed (balance, buying power) after connect | [ ] |
+| 13.56j | Connection status badge (connected/disconnected) | [ ] |
+| 13.56k | Status badge updates on periodic polling | [ ] |
+| 13.56l | Help button shows admin help overlay | [ ] |
+| 13.56m | Partial credential update (secret kept if not re-entered) | [ ] |
+
+- [ ] `GET /api/brokers/credentials/webull_official` — get (returns masked creds + account_type + status)
+- [ ] `POST /api/brokers/credentials/webull_official` — save (app_key, app_secret, environment, account_type, account_id)
+- [ ] `POST /api/brokers/connect/webull_official` — test connection (returns account info + accounts list)
+- [ ] `GET /api/webull_official/balance` — live balance from running broker instance
+- [ ] `GET /api/brokers/status` — includes webull_official connection state
+
 #### 13m. Interactive Brokers (IBKR)
 
 | # | Test | Status |
@@ -1202,12 +1226,13 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 | 16.6 | Broker-specific balance check | [ ] |
 | 16.7 | Extended hours execution | [ ] |
 
-**Supported Brokers:** Schwab, Alpaca, Webull, Tastytrade, Trading212, IBKR, Robinhood, Upstox (India)
+**Supported Brokers:** Schwab, Alpaca, Webull, Webull Official, Tastytrade, Trading212, IBKR, Robinhood, Upstox (India)
 
 **Balance API Endpoints (one per broker):**
 - [ ] `GET /api/schwab/balance`
 - [ ] `GET /api/alpaca/balance`
 - [ ] `GET /api/webull/balance`
+- [ ] `GET /api/webull_official/balance`
 - [ ] `GET /api/tastytrade/balance`
 - [ ] `GET /api/trading212/balance`
 - [ ] `GET /api/ibkr/balance`
@@ -1295,12 +1320,97 @@ The Settings page has **28 distinct sections** organized as collapsible cards.
 | 17.49 | Entry-price corruption guard (`_guard_against_corrupt_risk_levels`) clears invalid SL/PT | [ ] |
 | 17.50 | Flip-flop entry-price detection locks price after oscillation detected | [ ] |
 
-#### Webull SL Retry
+#### Webull (Legacy) SL Retry
 
 | # | Test | Status |
 |---|------|--------|
 | 17.51 | Webull SL uses retry counter (`_webull_stp_fail_count`) not permanent flag | [ ] |
 | 17.52 | Webull SL retries on next cycle instead of permanently disabling | [ ] |
+
+#### Webull Official API Integration [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.52a | HMAC-SHA1 request signing (7 auth headers per request) | [ ] |
+| 17.52b | Rate limiter: order 600/60s, account_data 2/2s, token 10/30s | [ ] |
+| 17.52c | Stock order: BUY/SELL/SHORT/COVER action mapping | [ ] |
+| 17.52d | Stock order: MARKET/LIMIT/STOP/STOP_LIMIT type mapping | [ ] |
+| 17.52e | Option order: BTO/STC/STO/BTC intent mapping | [ ] |
+| 17.52f | Bracket order: MASTER + STOP_PROFIT + STOP_LOSS 3-leg combo | [ ] |
+| 17.52g | Trailing stop: TRAILING_STOP_LOSS order type | [ ] |
+| 17.52h | Order cancel by client_order_id | [ ] |
+| 17.52i | Order replace (modify price/qty/TIF) | [ ] |
+| 17.52j | Account type selection: Margin, Cash, IRA variants, Auto | [ ] |
+| 17.52k | MQTT streaming: subscribe batches at 100 symbols | [ ] |
+| 17.52l | TradeEventPoller: fill detection at 3s interval | [ ] |
+| 17.52m | TradeEventPoller: no duplicate fill events | [ ] |
+| 17.52n | TradeEventPoller: terminal events (FILLED/CANCELLED/FAILED) | [ ] |
+| 17.52o | Multi-broker dispatch includes webull_official | [ ] |
+| 17.52p | get_broker_instance('webull_official') resolves BEFORE 'webull' | [ ] |
+| 17.52q | UPH maps WEBULL_OFFICIAL/WEBULL_OFFICIAL_LIVE/WEBULL_OFFICIAL_PAPER | [ ] |
+| 17.52r | RelayClient broker_map has WEBULL_OFFICIAL entry | [ ] |
+| 17.52s | BrokerManager includes webull_official_broker parameter | [ ] |
+| 17.52t | Disconnected broker returns OrderResult(success=False) | [ ] |
+| 17.52u | API errors surface as OrderResult(success=False, message=...) | [ ] |
+| 17.52v | Position fetching returns standard dict shape (symbol, quantity, avg_cost, asset) | [ ] |
+| 17.52w | Balance route returns portfolio_value and market_value keys | [ ] |
+
+#### Webull Official Cross-System Wiring [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.52x | Conditional order router: `BROKER_MARKET_MAP` has `webull_official`, `webull_official_live`, `webull_official_paper` → `US` | [ ] |
+| 17.52y | Conditional order router: registered at initial startup (~8924), early (~11087), deferred (~11135) in selfbot_webull.py | [ ] |
+| 17.52z | Position monitor: `_fetch_webull_official_positions()` returns `List[PositionSnapshot]` with correct broker label | [ ] |
+| 17.52aa | Position monitor: broker label uses `WEBULL_OFFICIAL_LIVE` or `WEBULL_OFFICIAL_PAPER` based on `paper_trade` flag | [ ] |
+| 17.52ab | Position monitor: Webull Official included in parallel `asyncio.gather()` position fetch | [ ] |
+| 17.52ac | Position monitor: STC direct exit dispatch resolves `WEBULL_OFFICIAL` BEFORE `WEBULL` | [ ] |
+| 17.52ad | Position monitor: cancel order dispatch resolves `WEBULL_OFFICIAL` BEFORE `WEBULL` | [ ] |
+| 17.52ae | Position monitor: quote broker dispatch resolves `WEBULL_OFFICIAL` BEFORE `WEBULL` | [ ] |
+| 17.52af | Position monitor: connected broker names list includes `WEBULL_OFFICIAL` | [ ] |
+| 17.52ag | Broker sync service: `_perform_sync()` discovers `webull_official_broker` | [ ] |
+| 17.52ah | Broker sync service: `_fetch_and_normalize()` handles `WEBULL_OFFICIAL` prefix for position fetch | [ ] |
+| 17.52ai | Execution pipeline: `broker_override` accepts `webull_official`, `webull_official_live`, `webull_official_paper` | [ ] |
+| 17.52aj | Execution pipeline: `broker_override` resolves `webull_official` BEFORE `webull` in dispatch chain | [ ] |
+| 17.52ak | `channels.js`: `ALL_BROKERS` array includes `WEBULL_OFFICIAL` | [ ] |
+| 17.52al | `channels.js`: per-channel broker checkbox renders for Webull Official | [ ] |
+| 17.52am | `channels.html`: `getBrokerBadgeColor()` maps `WEBULL_OFFICIAL`/`_LIVE`/`_PAPER` | [ ] |
+| 17.52an | `channels.html`: `getBrokerShortName()` maps `WEBULL_OFFICIAL` variants | [ ] |
+| 17.52ao | `index.html`: `.broker-badge.webull_official` CSS class defined | [ ] |
+| 17.52ap | `index.html`: `getBotBrokerBadge()` color map includes `WEBULL_OFFICIAL`/`_LIVE`/`_PAPER` | [ ] |
+| 17.52aq | `settings.html`: `knownBrokers` array includes `WEBULL_OFFICIAL` | [ ] |
+| 17.52ar | `broker_credentials_service.py`: `BROKER_STATUS` dict includes `webull_official`, `webull_official_live`, `webull_official_paper` | [ ] |
+| 17.52as | `broker_live_analytics.py`: `BROKER_CONFIGS` has entries for `webull_official_live` and `webull_official_paper` | [ ] |
+| 17.52at | `broker_live_analytics.py`: `connect_webull_official()` reuses running bot instance | [ ] |
+| 17.52au | Routes: dashboard `broker_config` dict includes `webull_official` | [ ] |
+| 17.52av | Routes: refresh endpoint `broker_config` dict includes `webull_official` | [ ] |
+| 17.52aw | Routes: configured brokers check uses `get_webull_official_credentials()` | [ ] |
+
+#### Broker Name Normalization (`db_broker`) [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.64 | `PositionSnapshot.db_broker` strips `_LIVE` suffix (e.g. `IBKR_LIVE` → `IBKR`) | [ ] |
+| 17.65 | `PositionSnapshot.db_broker` strips `_PAPER` suffix (e.g. `ALPACA_PAPER` → `Alpaca`) | [ ] |
+| 17.66 | `PositionSnapshot.db_broker` case-insensitive strip (handles `_live`, `_Live`, `_LIVE`) | [ ] |
+| 17.67 | `PositionSnapshot.db_broker` no-op when no suffix (e.g. `Schwab` → `Schwab`) | [ ] |
+| 17.68 | `get_open_trade_id_for_position()` normalizes broker via `re.sub(r'_(LIVE\|PAPER)')` before DB lookup | [ ] |
+| 17.69 | `get_channel_risk_settings()` normalizes `broker_name` before DB lookup | [ ] |
+| 17.70 | All position monitor DB queries use `position.db_broker` not `position.broker` | [ ] |
+| 17.71 | Auto-import trade creation stores `position.db_broker` in DB | [ ] |
+| 17.72 | Affected brokers: IBKR (`IBKR_LIVE`/`IBKR_PAPER`), Alpaca (`ALPACA_LIVE`/`ALPACA_PAPER`), Tastytrade (`TASTYTRADE_LIVE`/`TASTYTRADE_PAPER`), Trading212 (`TRADING212_PAPER`), Webull Official (`WEBULL_OFFICIAL_LIVE`/`WEBULL_OFFICIAL_PAPER`) | [ ] |
+| 17.73 | Risk engine correctly identifies IBKR positions as managed (not skipped as "external") after normalization | [ ] |
+| 17.74 | SL/PT brackets applied to IBKR positions that were previously skipped | [ ] |
+
+#### IBKR Sub-Penny Price Guard (SEC Rule 612) [GATE]
+
+| # | Test | Status |
+|---|------|--------|
+| 17.75 | Stock orders: price ≥ $1.00 rounded to 2 decimals (penny increments) | [ ] |
+| 17.76 | Stock orders: price < $1.00 rounded to 4 decimals (sub-penny allowed for OTC) | [ ] |
+| 17.77 | Option orders: price always rounded to 2 decimals | [ ] |
+| 17.78 | TWS Warning 110 (sub-penny rejection) no longer triggered for NMS stocks | [ ] |
+| 17.79 | Conditional order limit prices also rounded before IBKR submission | [ ] |
 
 #### HTTP Pool Recovery (Schwab Broker) [GATE]
 
@@ -1842,10 +1952,10 @@ done
 
 ---
 
-**Last Updated**: 2026-05-03
-**Version**: 4.3.0
-**Total Sections**: 35 main + 42 sub-sections
-**Total Test Cases**: 589 field-level checks
-**Total API Endpoint Checks**: 374 (all verified against running app)
+**Last Updated**: 2026-05-10
+**Version**: 4.5.0
+**Total Sections**: 35 main + 47 sub-sections
+**Total Test Cases**: 670+ field-level checks (includes 62 Webull Official checks, 11 db_broker checks, 5 IBKR sub-penny checks)
+**Total API Endpoint Checks**: 380 (all verified against running app)
 **Total Database Tables**: 82+ (72 in bot_data.db, 6 agent, 9 india, 5 license)
 **Validation Script**: `scripts/validate_qa_playbook.py` — run to verify all routes
