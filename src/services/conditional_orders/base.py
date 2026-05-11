@@ -2677,6 +2677,7 @@ class BaseConditionalOrderService(ABC):
             try:
                 order['triggered_price'] = trigger_price
                 order['_triggered_at'] = datetime.now().isoformat()
+                order['_conditional_created_at'] = order.get('created_at')
                 metadata_str = order.get('metadata')
                 if metadata_str:
                     try:

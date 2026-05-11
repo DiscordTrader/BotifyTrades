@@ -11040,6 +11040,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Latency tracking: triggered_at from conditional order monitor
                         signal['detected_at'] = order.get('_triggered_at') or datetime.now().isoformat()
                         signal['parsed_at'] = datetime.now().isoformat()
+                        if order.get('_conditional_created_at'):
+                            signal['_conditional_created_at'] = order['_conditional_created_at']
 
                         # Use sync signal queue (thread-safe, same as Telegram)
                         if _telegram_signal_queue is not None:
@@ -17855,7 +17857,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             action='STC',
                             quantity=signal.get('qty', 1),
                             signal_price=signal.get('price'),
-                            exit_source=exit_source
+                            exit_source=exit_source,
+                            signal_detected_at=signal.get('detected_at'),
+                            signal_parsed_at=signal.get('parsed_at'),
+                            order_submitted_at=signal.get('_order_submitted_at')
                         )
                     except Exception as meta_err:
                         _original_print(f"[EXEC] Warning: Could not save STC metadata: {meta_err}")
@@ -20289,7 +20294,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     action='STC',
                                     quantity=signal.get('qty', 1),
                                     signal_price=signal.get('price'),
-                                    exit_source=exit_src
+                                    exit_source=exit_src,
+                                    signal_detected_at=signal.get('detected_at'),
+                                    signal_parsed_at=signal.get('parsed_at'),
+                                    order_submitted_at=signal.get('_order_submitted_at')
                                 )
                             elif action_upper in ('BTO', 'BUY'):
                                 save_pending_order_metadata(

@@ -2979,7 +2979,7 @@ def register_routes(app):
             status = request.args.get('status')
             broker = request.args.get('broker')
             limit = int(request.args.get('limit', 500))
-            
+
             result = db.get_bot_trades(
                 channel_id=channel_id,
                 symbol=symbol,
@@ -2987,7 +2987,37 @@ def register_routes(app):
                 broker=broker,
                 limit=limit
             )
-            
+
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT el.channel_id, el.symbol, el.broker,
+                           el.latency_total_ms, el.latency_parse_ms, el.latency_broker_ms,
+                           ec.latency_broker_ms as exit_latency_ms
+                    FROM execution_lots el
+                    LEFT JOIN execution_closures ec ON ec.execution_lot_id = el.id
+                    WHERE el.latency_total_ms IS NOT NULL AND el.latency_total_ms > 0
+                    ORDER BY el.order_filled_at DESC LIMIT 500
+                ''')
+                latency_rows = cursor.fetchall()
+                latency_map = {}
+                for row in latency_rows:
+                    key = f"{row['symbol']}_{row['broker']}_{row['channel_id']}"
+                    if key not in latency_map:
+                        latency_map[key] = {
+                            'entry_total_ms': row['latency_total_ms'],
+                            'entry_parse_ms': row['latency_parse_ms'],
+                            'entry_broker_ms': row['latency_broker_ms'],
+                            'exit_broker_ms': row['exit_latency_ms']
+                        }
+
+                for pos in result['positions']:
+                    key = f"{pos['symbol']}_{pos['broker']}_{pos['channel_id']}"
+                    pos['latency'] = latency_map.get(key)
+            except Exception:
+                pass
+
             response = make_response(jsonify({
                 'success': True,
                 'positions': result['positions'],
@@ -2996,7 +3026,7 @@ def register_routes(app):
             }))
             response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             return response
-            
+
         except Exception as e:
             print(f"[API] Error in bot-trades: {e}")
             import traceback

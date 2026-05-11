@@ -3057,6 +3057,7 @@ class BrokerSyncService:
                         except Exception as lookup_err:
                             print(f"[SYNC] ⚠️ Exit source lookup: {lookup_err}")
                         
+                        _stc_submitted_at = stc_meta.get('order_submitted_at') if stc_meta else None
                         await self._record_execution_closure(
                             broker=broker_name,
                             broker_order_id=str(order.get('order_id', '')),
@@ -3069,6 +3070,7 @@ class BrokerSyncService:
                             fill_price=price,
                             filled_at=filled_time,
                             exit_source=exit_source,
+                            order_submitted_at=_stc_submitted_at,
                             channel_id=stc_channel_id
                         )
             

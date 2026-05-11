@@ -51,6 +51,10 @@
                     <span class="pnl-kpi-label">Win Rate</span>
                     <span class="pnl-kpi-value pnl-kpi-white" id="winRate">—</span>
                 </div>
+                <div class="pnl-kpi">
+                    <span class="pnl-kpi-label">Avg Speed</span>
+                    <span class="pnl-kpi-value pnl-kpi-white" id="avgSpeed">—</span>
+                </div>
                 <div class="pnl-kpi pnl-kpi-dir" id="directionBreakdown" style="display:none;">
                     <span class="pnl-kpi-label">By Type</span>
                     <div id="dirBreakdownContent" class="pnl-dir-row"></div>
@@ -698,6 +702,15 @@ function formatHoldTime(days) {
     return `<span style="background: ${color}20; color: ${color}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${text}</span>`;
 }
 
+function formatLatency(ms) {
+    if (!ms || ms <= 0) return '<span style="color: #555; font-size: 11px;">—</span>';
+    let color = '#10B981';
+    if (ms > 3000) color = '#EF4444';
+    else if (ms > 1500) color = '#F59E0B';
+    const text = ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms';
+    return `<span style="background: ${color}20; color: ${color}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${text}</span>`;
+}
+
 // Render PNL data
 function renderPNLData(positions) {
     const container = document.getElementById('pnl-container');
@@ -749,6 +762,10 @@ function renderPNLData(positions) {
                     <div class="col">
                         <div class="label">Hold Time</div>
                         <div class="value">${formatHoldTime(pos.total_holding_days)}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Speed</div>
+                        <div class="value">${formatLatency(pos.latency_ms)}</div>
                     </div>
                     <div class="col">
                         <span class="status-badge ${statusClass}">${pos.status}</span>
@@ -836,6 +853,17 @@ function updateSummaryStats(positions) {
     const wrEl = document.getElementById('winRate');
     wrEl.textContent = closedPositions.length > 0 ? `${winRate.toFixed(1)}%` : '—';
     wrEl.className = 'pnl-kpi-value ' + (winRate >= 50 ? 'profit-text' : (closedPositions.length > 0 ? 'loss-text' : ''));
+
+    const latencyValues = positions.filter(p => p.latency_ms && p.latency_ms > 0).map(p => p.latency_ms);
+    const speedEl = document.getElementById('avgSpeed');
+    if (latencyValues.length > 0) {
+        const avgMs = Math.round(latencyValues.reduce((a, b) => a + b, 0) / latencyValues.length);
+        speedEl.textContent = avgMs >= 1000 ? (avgMs / 1000).toFixed(1) + 's' : avgMs + 'ms';
+        speedEl.className = 'pnl-kpi-value ' + (avgMs <= 1500 ? 'profit-text' : (avgMs <= 3000 ? '' : 'loss-text'));
+    } else {
+        speedEl.textContent = '—';
+        speedEl.className = 'pnl-kpi-value pnl-kpi-white';
+    }
 
     const dirBreakdown = {};
     closedPositions.forEach(pos => {

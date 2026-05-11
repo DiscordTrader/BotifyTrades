@@ -7711,6 +7711,7 @@ class RiskManager:
         if not position.current_price or position.current_price <= 0:
             print(f"[RISK] ⚠️ Cannot build STC signal for {position.position_key} — current_price is ${position.current_price} (no valid price)")
             return None
+        _exit_decision_at = datetime.now().isoformat()
         stc_signal = {
             'asset': position.asset,
             'action': 'STC',
@@ -7724,7 +7725,9 @@ class RiskManager:
             '_risk_management_order': True,
             '_tier_to_mark': decision.tier_hit,
             '_position_key': position.position_key,
-            '_is_partial': decision.is_partial
+            '_is_partial': decision.is_partial,
+            'detected_at': _exit_decision_at,
+            'parsed_at': _exit_decision_at,
         }
         
         if position.asset == 'option':

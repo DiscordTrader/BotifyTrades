@@ -3342,6 +3342,18 @@ function renderBotPositionCards(positions) {
                     <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Profit Target</div>
                     <div style="color: #00ff88; font-weight: 600;">$${parseFloat(pos.profit_target).toFixed(2)}</div>
                 </div>` : ''}
+                ${pos.latency ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Entry Speed</div>
+                    <div style="font-weight: 600; color: ${pos.latency.entry_total_ms <= 1500 ? '#10B981' : (pos.latency.entry_total_ms <= 3000 ? '#F59E0B' : '#EF4444')};">${pos.latency.entry_total_ms >= 1000 ? (pos.latency.entry_total_ms / 1000).toFixed(1) + 's' : pos.latency.entry_total_ms + 'ms'}</div>
+                </div>
+                <div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Parse / Broker</div>
+                    <div style="font-weight: 600; color: #fff;">${pos.latency.entry_parse_ms || 0}ms / ${pos.latency.entry_broker_ms || 0}ms</div>
+                </div>
+                ${pos.latency.exit_broker_ms ? `<div>
+                    <div style="color: #636366; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Exit Speed</div>
+                    <div style="font-weight: 600; color: ${pos.latency.exit_broker_ms <= 1500 ? '#10B981' : (pos.latency.exit_broker_ms <= 3000 ? '#F59E0B' : '#EF4444')};">${pos.latency.exit_broker_ms >= 1000 ? (pos.latency.exit_broker_ms / 1000).toFixed(1) + 's' : pos.latency.exit_broker_ms + 'ms'}</div>
+                </div>` : ''}` : ''}
             </div>`;
         
         return `
