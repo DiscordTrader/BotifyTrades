@@ -209,7 +209,8 @@ class UnifiedPriceHub:
                 if quote_obj is not None:
                     data = {}
                     for attr in ('bid', 'ask', 'last', 'volume', 'high', 'low',
-                                 'delta', 'gamma', 'theta', 'vega'):
+                                 'delta', 'gamma', 'theta', 'vega',
+                                 'open_price', 'close_price'):
                         val = getattr(quote_obj, attr, None)
                         if val is not None:
                             data[attr] = val
@@ -289,6 +290,14 @@ class UnifiedPriceHub:
                 existing.high = float(data['high'])
             if 'low' in data and data['low']:
                 existing.low = float(data['low'])
+            if 'open_price' in data and data['open_price']:
+                existing.open_price = float(data['open_price'])
+            elif 'open' in data and data['open']:
+                existing.open_price = float(data['open'])
+            if 'close_price' in data and data['close_price']:
+                existing.close_price = float(data['close_price'])
+            elif 'close' in data and data['close']:
+                existing.close_price = float(data['close'])
             if 'delta' in data:
                 existing.delta = float(data['delta'] or 0)
             if 'gamma' in data:
@@ -376,6 +385,8 @@ class UnifiedPriceHub:
             'gamma': quote.gamma,
             'theta': quote.theta,
             'vega': quote.vega,
+            'open_price': quote.open_price,
+            'close_price': quote.close_price,
             'source': quote.source_hub,
             'timestamp': quote.timestamp,
             'freshness': quote.freshness,
@@ -436,7 +447,8 @@ class UnifiedPriceHub:
                     try:
                         data = {}
                         for attr in ('bid', 'ask', 'last', 'volume', 'high', 'low',
-                                     'delta', 'gamma', 'theta', 'vega', 'timestamp'):
+                                     'delta', 'gamma', 'theta', 'vega',
+                                     'open_price', 'close_price', 'timestamp'):
                             val = getattr(qdata, attr, None) if not isinstance(qdata, dict) else qdata.get(attr)
                             if val is not None:
                                 data[attr] = val

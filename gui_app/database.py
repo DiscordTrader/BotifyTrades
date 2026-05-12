@@ -2384,11 +2384,23 @@ def init_db():
             print("[DATABASE] ✓ Applied Phoenix channel defaults: SL=7%, PT1=6%, Sizing=15%, Confirm=2%, Leave Runner=15%, Trailing=7%/3%, Market orders")
     
     conn.commit()
-    
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS watchlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL UNIQUE,
+            name TEXT DEFAULT '',
+            added_from TEXT DEFAULT 'manual',
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+
     init_broker_states_table()
-    
+
     ensure_signal_verification_tables()
-    
+
     print("[DATABASE] ✓ Database initialized")
 
 def ensure_signal_verification_tables():

@@ -1965,166 +1965,181 @@ class BrokerSyncService:
                     exit_price_source = 'last_sync'
                     exit_order_id = None
                     exit_filled_at = None
+                    pnl = float(trade.get('pnl') or 0)
+                    pnl_percent = float(trade.get('pnl_percent') or 0)
 
-                    # Priority 1: Query broker for actual exit fill from bracket orders
-                    if exit_price_source == 'last_sync' and _bracket_order_ids:
-                        try:
-                            _exit_fill = await self._query_broker_exit_fill(
-                                broker_name, broker_instance, symbol, _bracket_order_ids, trade)
-                            if _exit_fill:
-                                exit_price = _exit_fill['price']
-                                exit_order_id = _exit_fill.get('order_id')
-                                exit_filled_at = _exit_fill.get('filled_at')
-                                exit_price_source = 'broker_fill'
-                                print(f"[SYNC] ✓ Trade #{trade_id} exit fill from broker: ${exit_price:.4f} order={exit_order_id} (actual bracket fill)")
-                        except Exception as bf_err:
-                            print(f"[SYNC] ⚠️ Broker exit fill query: {bf_err}")
-
-                    # Priority 2: Query broker directly by BTO order_id for child order fills
-                    if exit_price_source == 'last_sync' and broker_name.upper() == 'SCHWAB' and broker_instance:
-                        try:
-                            _bto_order_id = trade.get('order_id', '')
-                            if _bto_order_id:
+                    try:
+                        # Priority 1: Query broker for actual exit fill from bracket orders
+                        if exit_price_source == 'last_sync' and _bracket_order_ids:
+                            try:
                                 _exit_fill = await self._query_broker_exit_fill(
-                                    broker_name, broker_instance, symbol,
-                                    {'oco_id': None, 'sl_id': None, 'pt_id': None},
-                                    trade, bto_order_id=_bto_order_id)
+                                    broker_name, broker_instance, symbol, _bracket_order_ids, trade)
                                 if _exit_fill:
                                     exit_price = _exit_fill['price']
                                     exit_order_id = _exit_fill.get('order_id')
                                     exit_filled_at = _exit_fill.get('filled_at')
                                     exit_price_source = 'broker_fill'
-                                    print(f"[SYNC] ✓ Trade #{trade_id} exit fill from broker (by BTO order): ${exit_price:.4f}")
-                        except Exception as bf_err2:
-                            print(f"[SYNC] ⚠️ Broker exit fill query (BTO): {bf_err2}")
+                                    print(f"[SYNC] ✓ Trade #{trade_id} exit fill from broker: ${exit_price:.4f} order={exit_order_id} (actual bracket fill)")
+                            except Exception as bf_err:
+                                print(f"[SYNC] ⚠️ Broker exit fill query: {bf_err}")
 
-                    # Priority 3: Check execution_closures table
-                    if exit_price_source == 'last_sync':
-                        try:
-                            from gui_app.database import get_connection as _get_conn
-                            _conn = _get_conn()
-                            _cur = _conn.cursor()
-                            _fill_query = '''
-                                SELECT ec.fill_price, ec.filled_at FROM execution_closures ec
-                                JOIN execution_lots el ON ec.execution_lot_id = el.id
-                                WHERE UPPER(el.symbol) = UPPER(?) AND UPPER(el.broker) = UPPER(?)
-                            '''
-                            _fill_params = [symbol, broker_name]
-                            if asset_type == 'option' and trade.get('strike'):
-                                _fill_query += ' AND el.strike = ?'
-                                _fill_params.append(trade['strike'])
-                            if trade.get('expiry'):
-                                _fill_query += ' AND el.expiry = ?'
-                                _fill_params.append(trade['expiry'])
-                            _fill_query += ' ORDER BY ec.filled_at DESC LIMIT 1'
-                            _cur.execute(_fill_query, _fill_params)
-                            _fill_row = _cur.fetchone()
-                            if _fill_row and _fill_row['fill_price'] and float(_fill_row['fill_price']) > 0:
-                                exit_price = float(_fill_row['fill_price'])
-                                exit_price_source = 'execution_closure'
-                                print(f"[SYNC] ✓ Trade #{trade_id} exit price from execution_closures: ${exit_price:.4f}")
-                        except Exception as fill_lookup_err:
-                            print(f"[SYNC] ⚠️ Execution closure lookup: {fill_lookup_err}")
+                        # Priority 2: Query broker directly by BTO order_id for child order fills
+                        if exit_price_source == 'last_sync' and broker_name.upper() == 'SCHWAB' and broker_instance:
+                            try:
+                                _bto_order_id = trade.get('order_id', '')
+                                if _bto_order_id:
+                                    _exit_fill = await self._query_broker_exit_fill(
+                                        broker_name, broker_instance, symbol,
+                                        {'oco_id': None, 'sl_id': None, 'pt_id': None},
+                                        trade, bto_order_id=_bto_order_id)
+                                    if _exit_fill:
+                                        exit_price = _exit_fill['price']
+                                        exit_order_id = _exit_fill.get('order_id')
+                                        exit_filled_at = _exit_fill.get('filled_at')
+                                        exit_price_source = 'broker_fill'
+                                        print(f"[SYNC] ✓ Trade #{trade_id} exit fill from broker (by BTO order): ${exit_price:.4f}")
+                            except Exception as bf_err2:
+                                print(f"[SYNC] ⚠️ Broker exit fill query (BTO): {bf_err2}")
 
-                    # Priority 4: Check filled_orders by order_id
-                    if exit_price_source == 'last_sync':
-                        try:
-                            _stc_order_id = trade.get('order_id', '')
-                            if _stc_order_id:
-                                _cur.execute('''
-                                    SELECT filled_price, filled_at FROM filled_orders
-                                    WHERE broker_order_id = ? AND UPPER(broker) = UPPER(?)
-                                      AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
-                                    LIMIT 1
-                                ''', (_stc_order_id, broker_name))
-                                _fo_row = _cur.fetchone()
-                                if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
-                                    exit_price = float(_fo_row['filled_price'])
-                                    exit_price_source = 'filled_orders_oid'
-                                    print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders by order_id: ${exit_price:.4f}")
-                        except Exception:
-                            pass
-
-                    # Priority 5: Check filled_orders by symbol+time
-                    if exit_price_source == 'last_sync':
-                        try:
-                            _trade_opened_at = trade.get('executed_at') or trade.get('created_at') or ''
-                            if _trade_opened_at:
-                                _fo_query = '''
-                                    SELECT filled_price, filled_at FROM filled_orders
-                                    WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
-                                      AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
-                                      AND filled_at >= ?
+                        # Priority 3: Check execution_closures table
+                        if exit_price_source == 'last_sync':
+                            try:
+                                from gui_app.database import get_connection as _get_conn
+                                _conn = _get_conn()
+                                _cur = _conn.cursor()
+                                _fill_query = '''
+                                    SELECT ec.fill_price, ec.filled_at FROM execution_closures ec
+                                    JOIN execution_lots el ON ec.execution_lot_id = el.id
+                                    WHERE UPPER(el.symbol) = UPPER(?) AND UPPER(el.broker) = UPPER(?)
                                 '''
-                                _fo_params = [symbol, broker_name, _trade_opened_at]
+                                _fill_params = [symbol, broker_name]
                                 if asset_type == 'option' and trade.get('strike'):
-                                    _fo_query += ' AND strike = ?'
-                                    _fo_params.append(trade['strike'])
-                                _fo_query += ' ORDER BY filled_at DESC LIMIT 1'
-                                _cur.execute(_fo_query, _fo_params)
-                                _fo_row = _cur.fetchone()
-                                if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
-                                    exit_price = float(_fo_row['filled_price'])
-                                    exit_price_source = 'filled_orders'
-                                    print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders: ${exit_price:.4f}")
-                        except Exception as fo_err:
-                            print(f"[SYNC] ⚠️ Filled orders lookup: {fo_err}")
+                                    _fill_query += ' AND el.strike = ?'
+                                    _fill_params.append(trade['strike'])
+                                if trade.get('expiry'):
+                                    _fill_query += ' AND el.expiry = ?'
+                                    _fill_params.append(trade['expiry'])
+                                _fill_query += ' ORDER BY ec.filled_at DESC LIMIT 1'
+                                _cur.execute(_fill_query, _fill_params)
+                                _fill_row = _cur.fetchone()
+                                if _fill_row and _fill_row['fill_price'] and float(_fill_row['fill_price']) > 0:
+                                    exit_price = float(_fill_row['fill_price'])
+                                    exit_price_source = 'execution_closure'
+                                    print(f"[SYNC] ✓ Trade #{trade_id} exit price from execution_closures: ${exit_price:.4f}")
+                            except Exception as fill_lookup_err:
+                                print(f"[SYNC] ⚠️ Execution closure lookup: {fill_lookup_err}")
 
-                    pnl = float(trade.get('pnl') or 0)
-                    pnl_percent = float(trade.get('pnl_percent') or 0)
+                        # Priority 4: Check filled_orders by order_id
+                        if exit_price_source == 'last_sync':
+                            try:
+                                _stc_order_id = trade.get('order_id', '')
+                                if _stc_order_id:
+                                    _cur.execute('''
+                                        SELECT filled_price, filled_at FROM filled_orders
+                                        WHERE broker_order_id = ? AND UPPER(broker) = UPPER(?)
+                                          AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
+                                        LIMIT 1
+                                    ''', (_stc_order_id, broker_name))
+                                    _fo_row = _cur.fetchone()
+                                    if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
+                                        exit_price = float(_fo_row['filled_price'])
+                                        exit_price_source = 'filled_orders_oid'
+                                        print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders by order_id: ${exit_price:.4f}")
+                            except Exception:
+                                pass
 
-                    original_quantity = int(trade.get('original_quantity') or quantity)
-                    multiplier = 100 if asset_type == 'option' else 1
+                        # Priority 5: Check filled_orders by symbol+time
+                        if exit_price_source == 'last_sync':
+                            try:
+                                _trade_opened_at = trade.get('executed_at') or trade.get('created_at') or ''
+                                if _trade_opened_at:
+                                    _fo_query = '''
+                                        SELECT filled_price, filled_at FROM filled_orders
+                                        WHERE UPPER(symbol) = UPPER(?) AND UPPER(broker) = UPPER(?)
+                                          AND UPPER(side) IN ('SELL', 'STC', 'SELL_TO_CLOSE')
+                                          AND filled_at >= ?
+                                    '''
+                                    _fo_params = [symbol, broker_name, _trade_opened_at]
+                                    if asset_type == 'option' and trade.get('strike'):
+                                        _fo_query += ' AND strike = ?'
+                                        _fo_params.append(trade['strike'])
+                                    _fo_query += ' ORDER BY filled_at DESC LIMIT 1'
+                                    _cur.execute(_fo_query, _fo_params)
+                                    _fo_row = _cur.fetchone()
+                                    if _fo_row and _fo_row['filled_price'] and float(_fo_row['filled_price']) > 0:
+                                        exit_price = float(_fo_row['filled_price'])
+                                        exit_price_source = 'filled_orders'
+                                        print(f"[SYNC] ✓ Trade #{trade_id} exit price from filled_orders: ${exit_price:.4f}")
+                            except Exception as fo_err:
+                                print(f"[SYNC] ⚠️ Filled orders lookup: {fo_err}")
+
+                        original_quantity = int(trade.get('original_quantity') or quantity)
+                        multiplier = 100 if asset_type == 'option' else 1
+
+                        try:
+                            from gui_app.database import get_connection as _pnl_conn
+                            _pc = _pnl_conn()
+                            _pcur = _pc.cursor()
+                            _pcur.execute('''
+                                SELECT id, quantity, executed_price FROM trades
+                                WHERE origin_trade_id = ? AND direction = 'STC'
+                                  AND status IN ('CLOSED', 'FILLED')
+                                  AND executed_price IS NOT NULL AND executed_price > 0
+                            ''', (trade_id,))
+                            linked_stcs = _pcur.fetchall()
+
+                            if linked_stcs:
+                                total_pnl = 0
+                                total_closed_qty = 0
+                                for stc_row in linked_stcs:
+                                    sq = int(stc_row['quantity'] or 0)
+                                    sp = float(stc_row['executed_price'] or 0)
+                                    total_pnl += (sp - entry_price) * sq * multiplier
+                                    total_closed_qty += sq
+
+                                unclosed_qty = original_quantity - total_closed_qty
+                                if unclosed_qty > 0 and exit_price > 0:
+                                    total_pnl += (exit_price - entry_price) * unclosed_qty * multiplier
+                                    total_closed_qty += unclosed_qty
+
+                                pnl = round(total_pnl, 2)
+                                if total_closed_qty > 0 and entry_price > 0:
+                                    weighted_exit = (sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in linked_stcs) + (exit_price * unclosed_qty if unclosed_qty > 0 else 0)) / total_closed_qty
+                                    pnl_percent = ((weighted_exit - entry_price) / entry_price) * 100
+                                print(f"[SYNC] ✓ Trade #{trade_id} PNL from {len(linked_stcs)} linked STCs: ${pnl:+.2f} ({pnl_percent:+.2f}%) [{total_closed_qty}/{original_quantity} shares]")
+                            elif exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
+                                pnl = (exit_price - entry_price) * original_quantity * multiplier
+                                pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+                        except Exception as pnl_err:
+                            print(f"[SYNC] ⚠️ Linked STC PNL calc error: {pnl_err}")
+                            try:
+                                original_quantity = int(trade.get('original_quantity') or quantity)
+                                multiplier = 100 if asset_type == 'option' else 1
+                                if exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
+                                    pnl = (exit_price - entry_price) * original_quantity * multiplier
+                                    pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+                            except Exception:
+                                pass
+
+                    except Exception as close_calc_err:
+                        print(f"[SYNC] ⚠️ Exit price/PNL calc failed for trade #{trade_id} ({symbol}): {close_calc_err}")
+                        import traceback
+                        traceback.print_exc()
 
                     try:
-                        from gui_app.database import get_connection as _pnl_conn
-                        _pc = _pnl_conn()
-                        _pcur = _pc.cursor()
-                        _pcur.execute('''
-                            SELECT id, quantity, executed_price FROM trades
-                            WHERE origin_trade_id = ? AND direction = 'STC'
-                              AND status IN ('CLOSED', 'FILLED')
-                              AND executed_price IS NOT NULL AND executed_price > 0
-                        ''', (trade_id,))
-                        linked_stcs = _pcur.fetchall()
-
-                        if linked_stcs:
-                            total_pnl = 0
-                            total_closed_qty = 0
-                            for stc_row in linked_stcs:
-                                sq = int(stc_row['quantity'] or 0)
-                                sp = float(stc_row['executed_price'] or 0)
-                                total_pnl += (sp - entry_price) * sq * multiplier
-                                total_closed_qty += sq
-
-                            unclosed_qty = original_quantity - total_closed_qty
-                            if unclosed_qty > 0 and exit_price > 0:
-                                total_pnl += (exit_price - entry_price) * unclosed_qty * multiplier
-                                total_closed_qty += unclosed_qty
-
-                            pnl = round(total_pnl, 2)
-                            if total_closed_qty > 0 and entry_price > 0:
-                                weighted_exit = (sum(float(s['executed_price'] or 0) * int(s['quantity'] or 0) for s in linked_stcs) + (exit_price * unclosed_qty if unclosed_qty > 0 else 0)) / total_closed_qty
-                                pnl_percent = ((weighted_exit - entry_price) / entry_price) * 100
-                            print(f"[SYNC] ✓ Trade #{trade_id} PNL from {len(linked_stcs)} linked STCs: ${pnl:+.2f} ({pnl_percent:+.2f}%) [{total_closed_qty}/{original_quantity} shares]")
-                        elif exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
-                            pnl = (exit_price - entry_price) * original_quantity * multiplier
-                            pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
-                    except Exception as pnl_err:
-                        print(f"[SYNC] ⚠️ Linked STC PNL calc error: {pnl_err}")
-                        if exit_price_source != 'last_sync' or (pnl == 0 and entry_price > 0 and exit_price > 0):
-                            pnl = (exit_price - entry_price) * original_quantity * multiplier
-                            pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
-
-                    self.db.update_trade(
-                        trade_id,
-                        status='CLOSED',
-                        closed_at=datetime.now().isoformat(),
-                        current_price=exit_price,
-                        pnl=pnl,
-                        pnl_percent=pnl_percent,
-                        close_reason='broker_closed_position'
-                    )
+                        self.db.update_trade(
+                            trade_id,
+                            status='CLOSED',
+                            closed_at=datetime.now().isoformat(),
+                            current_price=exit_price,
+                            pnl=pnl,
+                            pnl_percent=pnl_percent,
+                            close_reason='broker_closed_position'
+                        )
+                    except Exception as db_err:
+                        print(f"[SYNC] ❌ CRITICAL: Failed to close trade #{trade_id} ({symbol}) in DB: {db_err}")
+                        import traceback
+                        traceback.print_exc()
 
                     try:
                         if hasattr(self, '_risk_manager') and self._risk_manager:

@@ -1015,8 +1015,23 @@ class SchwabBroker(BrokerInterface):
             return floor
         return aggressive
 
-    async def _get_aggressive_exit_price(self, symbol: str, asset_type: str = 'stock', 
-                                         strike: float = None, expiry: str = None, 
+    def _parse_schwab_error(self, raw_text: str) -> str:
+        """Extract human-readable error from Schwab API response body."""
+        try:
+            import json
+            data = json.loads(raw_text)
+            for key in ('message', 'error', 'errors', 'description'):
+                val = data.get(key)
+                if val:
+                    if isinstance(val, list):
+                        return '; '.join(str(v.get('message', v) if isinstance(v, dict) else v) for v in val)
+                    return str(val)
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            pass
+        return raw_text[:300] if raw_text else 'Unknown error'
+
+    async def _get_aggressive_exit_price(self, symbol: str, asset_type: str = 'stock',
+                                         strike: float = None, expiry: str = None,
                                          call_put: str = None) -> Optional[float]:
         """Get aggressive exit price for STC orders — near-touch limit for instant fill.
         
@@ -1377,7 +1392,7 @@ class SchwabBroker(BrokerInterface):
 
                 return OrderResult(
                     success=False,
-                    message=f"Order failed: {response.status_code} - {error_msg}",
+                    message=f"Schwab rejected (HTTP {response.status_code}): {self._parse_schwab_error(error_msg)}",
                     symbol=symbol,
                     action=action
                 )
@@ -1386,7 +1401,7 @@ class SchwabBroker(BrokerInterface):
             err_detail = str(e) or type(e).__name__
             return OrderResult(
                 success=False,
-                message=f"Exception: {err_detail}",
+                message=f"Schwab error: {err_detail}",
                 symbol=symbol,
                 action=action
             )
@@ -1854,7 +1869,7 @@ class SchwabBroker(BrokerInterface):
 
                 return OrderResult(
                     success=False,
-                    message=f"Order failed: {response.status_code} - {error_msg}",
+                    message=f"Schwab rejected (HTTP {response.status_code}): {self._parse_schwab_error(error_msg)}",
                     symbol=symbol,
                     action=action
                 )
@@ -1862,7 +1877,7 @@ class SchwabBroker(BrokerInterface):
         except Exception as e:
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"Schwab error: {str(e)}",
                 symbol=symbol,
                 action=action
             )

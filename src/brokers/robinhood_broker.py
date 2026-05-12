@@ -804,7 +804,7 @@ class RobinhoodBroker(BrokerInterface):
         except Exception as e:
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"Robinhood rejected: {str(e)}",
                 symbol=symbol,
                 action=action
             )
@@ -936,7 +936,7 @@ class RobinhoodBroker(BrokerInterface):
             traceback.print_exc()
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"Robinhood rejected: {str(e)}",
                 symbol=symbol,
                 action=action
             )

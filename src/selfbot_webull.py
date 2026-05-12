@@ -60,7 +60,7 @@ import ssl
 # ADMIN = Full features (Channel Mappings, Debug tools, etc.) - for developer use
 # USER = Limited features - for end-user distribution
 # This line is automatically updated by scripts/release.sh
-BUILD_TYPE = 'USER'  # Set by release.sh
+BUILD_TYPE = 'ADMIN'  # Set by release.sh
 
 def is_admin_build():
     """Check if this is an admin build with full features"""
@@ -5975,7 +5975,20 @@ STACK_TICKERLESS_REGEX = re.compile(STACK_TICKERLESS_PATTERN, re.IGNORECASE)
 STACK_STRANGLE_REGEX = re.compile(STACK_STRANGLE_PATTERN, re.IGNORECASE)
 TRADE_ECHO_REGEX = re.compile(TRADE_ECHO_PATTERN, re.IGNORECASE)
 
+_DISCORD_MD_RE = re.compile(r'\*{1,3}|_{1,2}|~{2}|\|{2}|`{1,3}')
+_UNICODE_PERIOD_MAP = str.maketrans({
+    '․': '.', '·': '.', '‧': '.', '．': '.',
+    ' ': ' ', ' ': ' ', ' ': ' ', ' ': ' ',
+    '＄': '$', '​': '', '‌': '', '‍': '', '﻿': '',
+})
+
+def _sanitize_discord_text(text: str) -> str:
+    text = _DISCORD_MD_RE.sub('', text)
+    text = text.translate(_UNICODE_PERIOD_MAP)
+    return text
+
 def parse_option_signal(text: str) -> Optional[dict]:
+    text = _sanitize_discord_text(text)
     learned_result = try_parse_with_learned_formats(text)
     if learned_result and learned_result.get('asset') == 'option':
         print(f"[SIGNAL] Parsed using learned format: {learned_result.get('action')} {learned_result.get('symbol')} {learned_result.get('strike')}{learned_result.get('opt_type')}")
@@ -7036,6 +7049,7 @@ def _parse_natural_lang_stock(text: str) -> Optional[dict]:
 
 
 def parse_stock_signal(text: str) -> Optional[dict]:
+    text = _sanitize_discord_text(text)
     incomplete_option = INCOMPLETE_OPTION_PATTERN.search(text.strip())
     if incomplete_option:
         print(f"[SIGNAL] ❌ Rejected incomplete option signal (missing C/P): {text[:80]}")
@@ -17150,6 +17164,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[DAILY_PNL] Post-BTO skipped: no running event loop")
                         except ImportError:
                             pass
+                else:
+                    _fail_msg = ''
+                    if hasattr(result, 'message'):
+                        _fail_msg = result.message or ''
+                    elif isinstance(result, dict):
+                        _fail_msg = result.get('msg') or result.get('error') or ''
+                    try:
+                        from gui_app.discord_notifier import notify_order_failed
+                        notify_order_failed(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            error_message=_fail_msg or 'Unknown error',
+                            quantity=signal.get('qty', 1),
+                            price=signal.get('price') or 0,
+                        )
+                    except Exception as _nf_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send failure notification: {_nf_err}", flush=True)
 
             elif signal['asset'] == 'option':
                 broker_upper = broker_name.upper()
@@ -17524,6 +17556,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[DAILY_PNL] Post-BTO skipped: no running event loop")
                         except ImportError:
                             pass
+                else:
+                    _fail_msg = ''
+                    if hasattr(result, 'message'):
+                        _fail_msg = result.message or ''
+                    elif isinstance(result, dict):
+                        _fail_msg = result.get('msg') or result.get('error') or ''
+                    try:
+                        from gui_app.discord_notifier import notify_order_failed
+                        notify_order_failed(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            error_message=_fail_msg or 'Unknown error',
+                            quantity=signal.get('qty', 1),
+                            price=signal.get('price') or 0,
+                        )
+                    except Exception as _nf_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send failure notification: {_nf_err}", flush=True)
 
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
@@ -17813,6 +17863,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[DAILY_PNL] Post-BTO skipped: no running event loop")
                         except ImportError:
                             pass
+                else:
+                    _fail_msg = ''
+                    if hasattr(result, 'message'):
+                        _fail_msg = result.message or ''
+                    elif isinstance(result, dict):
+                        _fail_msg = result.get('msg') or result.get('error') or ''
+                    try:
+                        from gui_app.discord_notifier import notify_order_failed
+                        notify_order_failed(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            error_message=_fail_msg or 'Unknown error',
+                            quantity=signal.get('qty', 1),
+                            price=signal.get('price') or 0,
+                        )
+                    except Exception as _nf_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send failure notification: {_nf_err}", flush=True)
 
             # Save pending order metadata for execution tracking
             if resp.get('success') or resp.get('orderId'):

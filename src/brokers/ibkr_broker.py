@@ -479,9 +479,14 @@ class IBKRBroker(BrokerInterface):
 
             status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
             if status in ('Cancelled', 'Inactive'):
+                # Defense-in-depth: Gateway/TWS auto-adjustments (TIF→DAY) cause transient Cancelled
+                await asyncio.sleep(2)
+                status = trade.orderStatus.status if trade and trade.orderStatus else status
+            if status in ('Cancelled', 'Inactive'):
+                reject_reason = self._extract_rejection_reason(trade)
                 return OrderResult(
                     success=False,
-                    message=f"Order rejected with status: {status}",
+                    message=reject_reason,
                     symbol=symbol,
                     action=action
                 )
@@ -495,10 +500,10 @@ class IBKRBroker(BrokerInterface):
                 symbol=symbol,
                 action=action
             )
-                
+
         except Exception as e:
             error_msg = str(e)
-            
+
             if 'insufficient' in error_msg.lower() and _auto_adjust_depth < 1:
                 try:
                     account_info = await self.get_account_info()
@@ -514,7 +519,7 @@ class IBKRBroker(BrokerInterface):
             
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"IBKR error: {error_msg}",
                 symbol=symbol,
                 action=action
             )
@@ -559,9 +564,13 @@ class IBKRBroker(BrokerInterface):
 
             status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
             if status in ('Cancelled', 'Inactive'):
+                await asyncio.sleep(2)
+                status = trade.orderStatus.status if trade and trade.orderStatus else status
+            if status in ('Cancelled', 'Inactive'):
+                reject_reason = self._extract_rejection_reason(trade)
                 return OrderResult(
                     success=False,
-                    message=f"Order rejected with status: {status}",
+                    message=reject_reason,
                     symbol=symbol,
                     action=action
                 )
@@ -579,11 +588,41 @@ class IBKRBroker(BrokerInterface):
         except Exception as e:
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"IBKR error: {str(e)}",
                 symbol=symbol,
                 action=action
             )
     
+    def _extract_rejection_reason(self, trade) -> str:
+        """Extract human-readable rejection reason from IBKR trade log entries."""
+        _IBKR_REASON_MAP = {
+            'closing-only': 'Stock is in CLOSING-ONLY mode at IBKR — new positions blocked by broker risk management',
+            'No Trading Permission': 'No trading permission for this product at IBKR — check Account Settings → Trading Permissions',
+            'Customer Ineligible': 'Customer ineligible for this product at IBKR',
+            'insufficient': 'Insufficient funds or buying power at IBKR',
+            'margin': 'Margin requirement not met at IBKR',
+            'cannot be traded': 'This security cannot be traded through IBKR',
+            'outside of trading hours': 'Order placed outside IBKR trading hours',
+            'price cap': 'Order price exceeds IBKR price cap for this security',
+        }
+        try:
+            if trade and hasattr(trade, 'log') and trade.log:
+                for entry in reversed(trade.log):
+                    msg = getattr(entry, 'message', '') or ''
+                    error_code = getattr(entry, 'errorCode', 0) or 0
+                    if not msg or error_code == 0:
+                        continue
+                    raw = msg.replace('<br>', ' ').replace('<br/>', ' ').strip()
+                    for keyword, friendly in _IBKR_REASON_MAP.items():
+                        if keyword.lower() in raw.lower():
+                            return f"{friendly} | IBKR error {error_code}: {raw[:200]}"
+                    if error_code and error_code != 10349:
+                        return f"IBKR rejected (error {error_code}): {raw[:200]}"
+            status = trade.orderStatus.status if trade and trade.orderStatus else 'Unknown'
+            return f"Order rejected by IBKR with status: {status}"
+        except Exception:
+            return "Order rejected by IBKR (unable to extract reason)"
+
     async def _wait_for_fill(self, trade, symbol: str, timeout: float = 10) -> Optional[float]:
         """Wait for order acknowledgment using event-driven approach with timeout fallback."""
         if not trade:
@@ -598,12 +637,24 @@ class IBKRBroker(BrokerInterface):
                     final_status[0] = s
                     done.set()
                 elif s in ('Submitted', 'PreSubmitted'):
+                    final_status[0] = s
                     done.set()
 
             trade.statusEvent += on_status
 
             try:
                 await asyncio.wait_for(done.wait(), timeout=timeout)
+
+                # IB Gateway/TWS may auto-adjust order params (e.g., TIF→DAY, error 10349)
+                # causing a transient Cancelled→Submitted within ~1s.
+                # Wait briefly for potential resubmission before treating as final.
+                if final_status[0] in ('Cancelled', 'Inactive'):
+                    done.clear()
+                    final_status[0] = None
+                    try:
+                        await asyncio.wait_for(done.wait(), timeout=3)
+                    except asyncio.TimeoutError:
+                        pass
             except asyncio.TimeoutError:
                 print(f"[{self.name}] ⚠️ Order for {symbol} — no status update within {timeout}s, continuing")
             finally:

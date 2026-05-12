@@ -1,5 +1,21 @@
 # BotifyTrades Progress Log
 
+## Session: May 11, 2026 — IBKR Risk Engine SL/PT Not Applied (Root Cause: TWS TIF Auto-Adjustment)
+
+### Bug: Risk Engine Skips IBKR Positions as "External" — SL/PT Never Applied
+- **Symptom**: Signal `BTO WOK @ 1.8, SL=1.66, PT=1.94` placed on IBKR. Order filled at $1.80, price reached $2.11 (+16%) — PT at $1.94 never triggered. Every tick showed `SL=— PT=—`. Log: `⏭️ Skipping external position IBKR_LIVE_WOK_stock — auto-import disabled`
+- **Root cause (PRIMARY)**: TWS auto-adjusted TIF to DAY (error 10349), causing a transient `Cancelled→Submitted` status within ~1s. `_wait_for_fill()` treated `Cancelled` as final and returned immediately. `place_stock_order()` checked status='Cancelled' and returned `OrderResult(success=False)`. **Trade was never saved to DB.** Risk engine found no matching trade → classified as "external" → SL/PT skipped.
+- **Root cause (SECONDARY)**: `get_open_trade_id_for_position()` normalized position broker `IBKR_LIVE` → `IBKR` for DB lookup, but trades could be stored as `IBKR_LIVE` (from multi-broker execution). The SQL `LOWER(broker) = LOWER('IBKR')` wouldn't match `IBKR_LIVE` in the DB.
+- **Fix 1**: `ibkr_broker.py` — `_wait_for_fill()`: When `Cancelled` status received, wait 3 additional seconds for TWS resubmission before treating as final. Also `place_stock_order()` and `place_option_order()`: After initial Cancelled check, sleep 2s and re-check status (defense-in-depth).
+- **Fix 2**: `position_monitor.py` — `get_open_trade_id_for_position()`: Added `brokers_to_check` list that includes both normalized name (`IBKR`) and original position broker (`IBKR_LIVE`). All stock and option trade lookup queries now iterate over broker variants.
+- **Files changed**: `src/brokers/ibkr_broker.py` (3 methods), `src/risk/position_monitor.py` (4 query blocks in `get_open_trade_id_for_position`)
+- **Log evidence**: bot.log lines 47397-47405 show PendingSubmit→Cancelled(10349)→Submitted→Filled sequence
+
+### Penny Stock Scanner Tab (In Progress)
+- New tab added to Trading→Trades with Webull real-time discovery
+- 7 scan presets: Active, Gainers, Losers, Pre-Mkt Gainers/Losers, AH Gainers, Manual
+- Files: `penny_scanner_service.py` (new), `routes.py` (4 endpoints), `trades.html` (~350 lines), `unified_price_hub.py` (open/close price propagation)
+
 ## Session: May 10, 2026 — AEHL Stop Loss Price Truncation Bug Fix
 
 ### Bug: AEHL SL Sent $1.00 Instead of $1.008

@@ -1229,7 +1229,7 @@ class WebullBroker(BrokerInterface):
         except Exception as e:
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"Webull error: {str(e)}",
                 symbol=symbol,
                 action=action
             )
@@ -1397,7 +1397,7 @@ class WebullBroker(BrokerInterface):
             
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"Webull error: {error_msg}",
                 symbol=symbol,
                 action=action
             )
@@ -1669,7 +1669,7 @@ class WebullBroker(BrokerInterface):
         except Exception as e:
             return OrderResult(
                 success=False,
-                message=f"Exception: {str(e)}",
+                message=f"Webull error: {str(e)}",
                 symbol=symbol,
                 action=action
             )

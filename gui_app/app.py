@@ -73,11 +73,19 @@ def create_app():
     from . import routes
     routes.register_routes(app)
 
+    @app.after_request
+    def add_no_cache_headers(response):
+        if response.content_type and 'text/html' in response.content_type:
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        return response
+
     @app.errorhandler(413)
     def request_entity_too_large(error):
         from flask import jsonify
         return jsonify({'success': False, 'error': 'File too large. Maximum upload size is 20MB.'}), 413
-    
+
     return app
 
 

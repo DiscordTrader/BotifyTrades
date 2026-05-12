@@ -380,7 +380,7 @@ class AlpacaBroker(BrokerInterface):
             
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"Alpaca rejected: {error_msg}",
                 symbol=symbol,
                 action=action
             )
@@ -520,7 +520,7 @@ class AlpacaBroker(BrokerInterface):
             
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"Alpaca rejected: {error_msg}",
                 symbol=symbol,
                 action=action
             )
@@ -1109,7 +1109,7 @@ class AlpacaBroker(BrokerInterface):
             print(f"[{self.name}] ❌ Close position failed for {symbol}: {error_msg}")
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"Alpaca rejected: {error_msg}",
                 symbol=symbol,
                 action='STC'
             )

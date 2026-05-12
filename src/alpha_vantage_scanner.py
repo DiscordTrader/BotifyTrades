@@ -203,6 +203,60 @@ class AlphaVantageScanner:
             f"└─ Unusual Score: {option['unusual_score']:.1f}"
         )
     
+    def scan_top_movers(self, min_price: float = 0.10, max_price: float = 5.00) -> List[Dict]:
+        try:
+            params = {
+                'function': 'TOP_GAINERS_LOSERS',
+                'apikey': self.api_key
+            }
+            print(f"[ALPHA VANTAGE] Fetching top movers (penny range ${min_price}-${max_price})...")
+            response = requests.get(self.base_url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            if 'Error Message' in data:
+                print(f"[ALPHA VANTAGE] API Error: {data['Error Message']}")
+                return []
+            if 'Note' in data or 'Information' in data:
+                print(f"[ALPHA VANTAGE] Rate limit hit: {data.get('Note') or data.get('Information')}")
+                return []
+
+            candidates = []
+            for section in ('top_gainers', 'top_losers', 'most_actively_traded'):
+                for item in data.get(section, []):
+                    try:
+                        price = float(item.get('price', 0))
+                        if price < min_price or price > max_price:
+                            continue
+                        candidates.append({
+                            'symbol': item.get('ticker', ''),
+                            'price': price,
+                            'change_amount': float(item.get('change_amount', 0)),
+                            'change_pct': float(item.get('change_percentage', '0').replace('%', '')),
+                            'volume': int(item.get('volume', 0)),
+                            'source_section': section,
+                        })
+                    except (ValueError, TypeError):
+                        continue
+
+            seen = set()
+            unique = []
+            for c in candidates:
+                if c['symbol'] and c['symbol'] not in seen:
+                    seen.add(c['symbol'])
+                    unique.append(c)
+
+            print(f"[ALPHA VANTAGE] ✓ Found {len(unique)} penny stock candidates in ${min_price}-${max_price} range")
+            return unique
+
+        except requests.exceptions.RequestException as e:
+            print(f"[ALPHA VANTAGE] Request error: {e}")
+            return []
+        except Exception as e:
+            print(f"[ALPHA VANTAGE] Error fetching top movers: {e}")
+            traceback.print_exc()
+            return []
+
     def test_connection(self) -> bool:
         """
         Test API connection with a simple query.

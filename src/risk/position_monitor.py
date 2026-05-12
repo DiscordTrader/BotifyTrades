@@ -1047,12 +1047,15 @@ class RiskDBAdapter:
         if not self._db:
             return None
         
-        broker = (broker or '').strip()
+        original_broker = (broker or '').strip()
         symbol = (symbol or '').strip().upper()
 
-        # Position labels use IBKR_LIVE/IBKR_PAPER etc, trade DB stores IBKR
+        # Position labels use IBKR_LIVE/IBKR_PAPER etc, trade DB may store IBKR or IBKR_LIVE
         import re
-        broker = re.sub(r'_(LIVE|PAPER)$', '', broker, flags=re.IGNORECASE)
+        broker = re.sub(r'_(LIVE|PAPER)$', '', original_broker, flags=re.IGNORECASE)
+        brokers_to_check = [broker]
+        if original_broker.upper() != broker.upper():
+            brokers_to_check.append(original_broker)
 
         SYMBOL_ALIASES = {
             'SPX': ['SPXW', 'SPX'],
@@ -1132,40 +1135,42 @@ class RiskDBAdapter:
                 
                 for sym_try in symbols_to_check:
                     for exp_try in expiry_variants:
-                        if cp_normalized:
-                            cursor.execute('''
-                                SELECT id FROM trades
-                                WHERE symbol = ? AND asset_type = 'option'
-                                AND strike = ? AND expiry = ? AND call_put = ?
-                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                                AND LOWER(broker) = LOWER(?)
-                                ORDER BY id DESC LIMIT 1
-                            ''', (sym_try, strike, exp_try, cp_normalized, broker))
-                        else:
-                            cursor.execute('''
-                                SELECT id FROM trades
-                                WHERE symbol = ? AND asset_type = 'option'
-                                AND strike = ? AND expiry = ?
-                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                                AND LOWER(broker) = LOWER(?)
-                                ORDER BY id DESC LIMIT 1
-                            ''', (sym_try, strike, exp_try, broker))
-                        
+                        for broker_try in brokers_to_check:
+                            if cp_normalized:
+                                cursor.execute('''
+                                    SELECT id FROM trades
+                                    WHERE symbol = ? AND asset_type = 'option'
+                                    AND strike = ? AND expiry = ? AND call_put = ?
+                                    AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                                    AND LOWER(broker) = LOWER(?)
+                                    ORDER BY id DESC LIMIT 1
+                                ''', (sym_try, strike, exp_try, cp_normalized, broker_try))
+                            else:
+                                cursor.execute('''
+                                    SELECT id FROM trades
+                                    WHERE symbol = ? AND asset_type = 'option'
+                                    AND strike = ? AND expiry = ?
+                                    AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                                    AND LOWER(broker) = LOWER(?)
+                                    ORDER BY id DESC LIMIT 1
+                                ''', (sym_try, strike, exp_try, broker_try))
+
+                            row = cursor.fetchone()
+                            if row:
+                                return row[0]
+
+                for sym_try in symbols_to_check:
+                    for broker_try in brokers_to_check:
+                        cursor.execute('''
+                            SELECT id FROM trades
+                            WHERE symbol = ? AND asset_type = 'option'
+                            AND strike = ? AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                            AND LOWER(broker) = LOWER(?)
+                            ORDER BY id DESC LIMIT 1
+                        ''', (sym_try, strike, broker_try))
                         row = cursor.fetchone()
                         if row:
                             return row[0]
-                
-                for sym_try in symbols_to_check:
-                    cursor.execute('''
-                        SELECT id FROM trades
-                        WHERE symbol = ? AND asset_type = 'option'
-                        AND strike = ? AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                        AND LOWER(broker) = LOWER(?)
-                        ORDER BY id DESC LIMIT 1
-                    ''', (sym_try, strike, broker))
-                    row = cursor.fetchone()
-                    if row:
-                        return row[0]
                 return None
             elif asset_type == 'option' and (not strike or strike == 0.0):
                 from datetime import datetime
@@ -1200,65 +1205,67 @@ class RiskDBAdapter:
 
                 for sym_try in symbols_to_check:
                     for exp_try in (expiry_variants or ['']):
-                        if exp_try and cp_normalized:
-                            cursor.execute('''
-                                SELECT id FROM trades
-                                WHERE symbol = ? AND asset_type = 'option'
-                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                                AND LOWER(broker) = LOWER(?) AND expiry = ? AND call_put = ?
-                                ORDER BY id DESC
-                            ''', (sym_try, broker, exp_try, cp_normalized))
-                        elif exp_try:
-                            cursor.execute('''
-                                SELECT id FROM trades
-                                WHERE symbol = ? AND asset_type = 'option'
-                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                                AND LOWER(broker) = LOWER(?) AND expiry = ?
-                                ORDER BY id DESC
-                            ''', (sym_try, broker, exp_try))
-                        else:
-                            cursor.execute('''
-                                SELECT id FROM trades
-                                WHERE symbol = ? AND asset_type = 'option'
-                                AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                                AND LOWER(broker) = LOWER(?)
-                                ORDER BY id DESC
-                            ''', (sym_try, broker))
-                        rows = cursor.fetchall()
-                        if len(rows) == 1:
-                            print(f"[RISK] ✓ Fuzzy trade lookup (strike=0.0): matched trade #{rows[0][0]} for {sym_try} on {broker}")
-                            return rows[0][0]
-                        elif len(rows) > 1:
-                            row_ids = [r[0] for r in rows]
-                            cursor.execute(f'''
-                                SELECT id, status FROM trades WHERE id IN ({",".join("?" * len(row_ids))})
-                            ''', row_ids)
-                            status_rows = cursor.fetchall()
-                            open_rows = [r for r in status_rows if r[1] == 'OPEN']
-                            if len(open_rows) == 1:
-                                print(f"[RISK] ✓ Fuzzy trade lookup (strike=0.0): {len(rows)} candidates, preferring OPEN trade #{open_rows[0][0]} for {sym_try} on {broker}")
-                                return open_rows[0][0]
-                            print(f"[RISK] ⚠️ Fuzzy trade lookup (strike=0.0): {len(rows)} ambiguous matches for {sym_try} on {broker} — skipping")
+                        for broker_try in brokers_to_check:
+                            if exp_try and cp_normalized:
+                                cursor.execute('''
+                                    SELECT id FROM trades
+                                    WHERE symbol = ? AND asset_type = 'option'
+                                    AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                                    AND LOWER(broker) = LOWER(?) AND expiry = ? AND call_put = ?
+                                    ORDER BY id DESC
+                                ''', (sym_try, broker_try, exp_try, cp_normalized))
+                            elif exp_try:
+                                cursor.execute('''
+                                    SELECT id FROM trades
+                                    WHERE symbol = ? AND asset_type = 'option'
+                                    AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                                    AND LOWER(broker) = LOWER(?) AND expiry = ?
+                                    ORDER BY id DESC
+                                ''', (sym_try, broker_try, exp_try))
+                            else:
+                                cursor.execute('''
+                                    SELECT id FROM trades
+                                    WHERE symbol = ? AND asset_type = 'option'
+                                    AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                                    AND LOWER(broker) = LOWER(?)
+                                    ORDER BY id DESC
+                                ''', (sym_try, broker_try))
+                            rows = cursor.fetchall()
+                            if len(rows) == 1:
+                                print(f"[RISK] ✓ Fuzzy trade lookup (strike=0.0): matched trade #{rows[0][0]} for {sym_try} on {broker_try}")
+                                return rows[0][0]
+                            elif len(rows) > 1:
+                                row_ids = [r[0] for r in rows]
+                                cursor.execute(f'''
+                                    SELECT id, status FROM trades WHERE id IN ({",".join("?" * len(row_ids))})
+                                ''', row_ids)
+                                status_rows = cursor.fetchall()
+                                open_rows = [r for r in status_rows if r[1] == 'OPEN']
+                                if len(open_rows) == 1:
+                                    print(f"[RISK] ✓ Fuzzy trade lookup (strike=0.0): {len(rows)} candidates, preferring OPEN trade #{open_rows[0][0]} for {sym_try} on {broker_try}")
+                                    return open_rows[0][0]
+                                print(f"[RISK] ⚠️ Fuzzy trade lookup (strike=0.0): {len(rows)} ambiguous matches for {sym_try} on {broker_try} — skipping")
                 return None
             else:
                 for sym_try in symbols_to_check:
-                    cursor.execute('''
-                        SELECT id, channel_id FROM trades
-                        WHERE symbol = ? AND asset_type = 'stock'
-                        AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
-                        AND LOWER(broker) = LOWER(?)
-                        ORDER BY id DESC LIMIT 5
-                    ''', (sym_try, broker))
-                    rows = cursor.fetchall()
-                    if len(rows) == 1:
-                        return rows[0][0]
-                    elif len(rows) > 1:
-                        unique_channels = set(r[1] for r in rows if r[1])
-                        if len(unique_channels) <= 1:
+                    for broker_try in brokers_to_check:
+                        cursor.execute('''
+                            SELECT id, channel_id FROM trades
+                            WHERE symbol = ? AND asset_type = 'stock'
+                            AND status IN ('OPEN', 'PENDING', 'PARTIAL') AND direction = 'BTO'
+                            AND LOWER(broker) = LOWER(?)
+                            ORDER BY id DESC LIMIT 5
+                        ''', (sym_try, broker_try))
+                        rows = cursor.fetchall()
+                        if len(rows) == 1:
                             return rows[0][0]
-                        print(f"[RISK] 🛡️ AMBIGUITY GUARD: {len(rows)} stock trades for {sym_try} on {broker} "
-                              f"across {len(unique_channels)} channels — returning newest to avoid cross-channel risk")
-                        return rows[0][0]
+                        elif len(rows) > 1:
+                            unique_channels = set(r[1] for r in rows if r[1])
+                            if len(unique_channels) <= 1:
+                                return rows[0][0]
+                            print(f"[RISK] 🛡️ AMBIGUITY GUARD: {len(rows)} stock trades for {sym_try} on {broker_try} "
+                                  f"across {len(unique_channels)} channels — returning newest to avoid cross-channel risk")
+                            return rows[0][0]
                 return None
         except Exception as e:
             print(f"[RISK] Warning: Could not lookup trade_id: {e}")
@@ -4376,6 +4383,18 @@ class RiskManager:
                 if channel_settings and channel_settings.escalation_only_mode and decision.risk_trigger == 'profit_target':
                     pass
                 elif _staleness_is_blocking and decision.risk_trigger in ('stop_loss', 'stop_loss_price'):
+                    _sl_ref = cache.stop_loss_price or (cache.entry_price * (1 - (channel_settings.stop_loss_pct / 100)) if channel_settings and channel_settings.stop_loss_pct > 0 else 0)
+                    _breach_pct = ((_sl_ref - position.current_price) / _sl_ref * 100) if _sl_ref and _sl_ref > 0 else 0
+                    if _breach_pct >= 1.0:
+                        if not hasattr(self, '_staleness_breach_bypass_logged'):
+                            self._staleness_breach_bypass_logged = {}
+                        _sbr_key = f"{_repair_key}_{int(_staleness_change_age)//60}"
+                        if _sbr_key not in self._staleness_breach_bypass_logged:
+                            self._staleness_breach_bypass_logged[_sbr_key] = True
+                            print(f"[RISK] ⚠️ STALENESS BREACH BYPASS: {position.symbol} price ${position.current_price:.2f} "
+                                  f"is {_breach_pct:.1f}% below SL ${_sl_ref:.2f} — allowing exit despite "
+                                  f"{_staleness_change_age:.0f}s stale price (significant breach overrides staleness)")
+                        return decision
                     if not hasattr(self, '_staleness_block_logged'):
                         self._staleness_block_logged = {}
                     _sbl_key = f"{_repair_key}_{int(_staleness_change_age)//30}"
@@ -4398,6 +4417,18 @@ class RiskManager:
                 _allow_csl = not _is_repair_cycle or _is_rest_confirmed
                 if _allow_csl:
                     if _staleness_is_blocking:
+                        _csl_price = cache.stop_loss_price or (cache.entry_price * (1 - (channel_settings.stop_loss_pct / 100)) if channel_settings.stop_loss_pct > 0 else 0)
+                        _csl_breach_pct = ((_csl_price - position.current_price) / _csl_price * 100) if _csl_price and _csl_price > 0 else 0
+                        if _csl_breach_pct >= 1.0:
+                            if not hasattr(self, '_staleness_breach_bypass_logged'):
+                                self._staleness_breach_bypass_logged = {}
+                            _sbr_key = f"{_repair_key}_csl_{int(_staleness_change_age)//60}"
+                            if _sbr_key not in self._staleness_breach_bypass_logged:
+                                self._staleness_breach_bypass_logged[_sbr_key] = True
+                                print(f"[RISK] ⚠️ STALENESS BREACH BYPASS: {position.symbol} price ${position.current_price:.2f} "
+                                      f"is {_csl_breach_pct:.1f}% below channel SL ${_csl_price:.2f} — allowing exit despite "
+                                      f"{_staleness_change_age:.0f}s stale price")
+                            return decision
                         if not hasattr(self, '_staleness_block_logged'):
                             self._staleness_block_logged = {}
                         _sbl_key = f"{_repair_key}_csl_{int(_staleness_change_age)//30}"
@@ -7711,6 +7742,7 @@ class RiskManager:
         if not position.current_price or position.current_price <= 0:
             print(f"[RISK] ⚠️ Cannot build STC signal for {position.position_key} — current_price is ${position.current_price} (no valid price)")
             return None
+        from datetime import datetime
         _exit_decision_at = datetime.now().isoformat()
         stc_signal = {
             'asset': position.asset,

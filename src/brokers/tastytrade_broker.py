@@ -730,7 +730,7 @@ class TastytradeBroker(BrokerInterface):
             traceback.print_exc()
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"Tastytrade rejected: {error_msg}",
                 symbol=symbol,
                 action=action
             )
@@ -889,7 +889,7 @@ class TastytradeBroker(BrokerInterface):
             traceback.print_exc()
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"Tastytrade rejected: {error_msg}",
                 symbol=symbol,
                 action=action
             )

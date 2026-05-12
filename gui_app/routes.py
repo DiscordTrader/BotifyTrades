@@ -940,6 +940,12 @@ def register_routes(app):
             return None
         if request.path == '/api/debug-risk-keys':
             return None
+        if request.path.startswith('/api/scanner/penny/'):
+            return None
+        if request.path.startswith('/api/watchlist'):
+            return None
+        if request.path.startswith('/api/broker/buying-power/'):
+            return None
         # Allow user dashboard routes (handled by user_login_required decorator)
         if request.path.startswith('/user/') or request.path.startswith('/api/user/'):
             return None
@@ -12059,6 +12065,370 @@ def register_routes(app):
                 client['symbol'] = symbol
                 return jsonify({'success': True, 'watching': len(watched)})
         return jsonify({'error': 'Client not found'}), 404
+
+    # ======================== PENNY STOCK SCANNER ========================
+
+    @app.route('/api/scanner/penny/scan', methods=['POST'])
+    def api_penny_scanner_scan():
+        try:
+            from src.services.penny_scanner_service import get_penny_scanner
+            scanner = get_penny_scanner()
+            data = request.json or {}
+            source = data.get('source', 'active')
+            min_price = float(data.get('min_price', 0.01))
+            max_price = float(data.get('max_price', 5.00))
+            min_volume = int(data.get('min_volume', 0))
+
+            if source == 'manual':
+                symbols_str = data.get('symbols', '')
+                if not symbols_str:
+                    return jsonify({'error': 'No symbols provided'}), 400
+                candidates = scanner.scan_manual(symbols_str)
+            else:
+                candidates = scanner.scan_webull(
+                    scan_type=source,
+                    min_price=min_price,
+                    max_price=max_price,
+                    min_volume=min_volume,
+                )
+
+            return jsonify({
+                'success': True,
+                'candidates': candidates,
+                'scan_count': len(candidates),
+                'source': source,
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/scanner/penny/quotes', methods=['GET'])
+    def api_penny_scanner_quotes():
+        try:
+            from src.services.penny_scanner_service import get_penny_scanner
+            scanner = get_penny_scanner()
+            quotes = scanner.get_enriched_quotes()
+            return jsonify({'success': True, 'quotes': quotes})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/scanner/penny/clear', methods=['POST'])
+    def api_penny_scanner_clear():
+        try:
+            from src.services.penny_scanner_service import get_penny_scanner
+            scanner = get_penny_scanner()
+            count = scanner.clear()
+            return jsonify({'success': True, 'unsubscribed': count})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    # ── Watchlist API ──────────────────────────────────────────
+
+    @app.route('/api/watchlist', methods=['GET'])
+    def api_watchlist_list():
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            rows = conn.execute('SELECT symbol, name, added_from, notes, created_at FROM watchlist ORDER BY created_at DESC').fetchall()
+            items = [{'symbol': r['symbol'], 'name': r['name'], 'added_from': r['added_from'], 'notes': r['notes'], 'created_at': r['created_at']} for r in rows]
+            return jsonify({'success': True, 'watchlist': items})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/watchlist/add', methods=['POST'])
+    def api_watchlist_add():
+        try:
+            from gui_app.database import get_connection
+            data = request.json or {}
+            symbol = (data.get('symbol') or '').strip().upper()
+            if not symbol or not symbol.isalpha() or len(symbol) > 6:
+                return jsonify({'error': 'Invalid symbol'}), 400
+            name = data.get('name', '')
+            added_from = data.get('added_from', 'manual')
+            conn = get_connection()
+            conn.execute('INSERT OR IGNORE INTO watchlist (symbol, name, added_from) VALUES (?, ?, ?)',
+                         (symbol, name, added_from))
+            conn.commit()
+            try:
+                from src.services.penny_scanner_service import get_penny_scanner
+                scanner = get_penny_scanner()
+                scanner.subscribe_symbols({symbol})
+            except Exception:
+                pass
+            return jsonify({'success': True, 'symbol': symbol})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/watchlist/remove', methods=['POST'])
+    def api_watchlist_remove():
+        try:
+            from gui_app.database import get_connection
+            data = request.json or {}
+            symbol = (data.get('symbol') or '').strip().upper()
+            if not symbol:
+                return jsonify({'error': 'No symbol'}), 400
+            conn = get_connection()
+            conn.execute('DELETE FROM watchlist WHERE symbol = ?', (symbol,))
+            conn.commit()
+            return jsonify({'success': True, 'symbol': symbol})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/watchlist/clear', methods=['POST'])
+    def api_watchlist_clear():
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            conn.execute('DELETE FROM watchlist')
+            conn.commit()
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/watchlist/quotes', methods=['GET'])
+    def api_watchlist_quotes():
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            rows = conn.execute('SELECT symbol, name FROM watchlist ORDER BY created_at DESC').fetchall()
+            symbols = [(r['symbol'], r['name']) for r in rows]
+            if not symbols:
+                return jsonify({'success': True, 'quotes': []})
+
+            scanner = None
+            uph = None
+            try:
+                from src.services.penny_scanner_service import get_penny_scanner
+                scanner = get_penny_scanner()
+                from src.services.unified_price_hub import UnifiedPriceHub
+                uph = UnifiedPriceHub.instance()
+                sym_set = {s for s, _ in symbols}
+                unsub = sym_set - set(scanner._candidates.keys()) if hasattr(scanner, '_candidates') else sym_set
+                if unsub:
+                    for s in unsub:
+                        scanner._candidates[s] = {'symbol': s, 'avg_vol_3m': 0, 'avg_vol_10d': 0, 'volume': 0}
+                    scanner.subscribe_symbols(unsub)
+                    scanner._fetch_avg_volumes_bg(list(unsub))
+            except Exception:
+                pass
+
+            quotes = []
+            for sym, name in symbols:
+                entry = {'symbol': sym, 'name': name, 'bid': 0, 'ask': 0, 'last': 0,
+                         'volume': 0, 'high': 0, 'low': 0, 'change_pct': 0, 'source': '',
+                         'rvol': None, 'avg_vol': 0}
+                if uph:
+                    q = uph.get_quote(sym)
+                    if q and (q.last > 0 or q.bid > 0):
+                        entry['bid'] = q.bid
+                        entry['ask'] = q.ask
+                        entry['last'] = q.last
+                        entry['volume'] = q.volume
+                        entry['high'] = q.high
+                        entry['low'] = q.low
+                        entry['source'] = q.source_hub
+                        if q.close_price and q.close_price > 0 and q.last > 0:
+                            entry['change_pct'] = round((q.last - q.close_price) / q.close_price * 100, 2)
+                if scanner and hasattr(scanner, '_candidates'):
+                    cand = scanner._candidates.get(sym, {})
+                    avg_vol = cand.get('avg_vol_10d') or cand.get('avg_vol_3m') or 0
+                    cur_vol = entry['volume'] or cand.get('volume', 0)
+                    if avg_vol > 0 and cur_vol > 0:
+                        entry['rvol'] = round(cur_vol / avg_vol, 1)
+                        entry['avg_vol'] = avg_vol
+                quotes.append(entry)
+
+            return jsonify({'success': True, 'quotes': quotes})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/stocks/order', methods=['POST'])
+    def api_place_stock_order():
+        try:
+            data = request.json
+            symbol = data.get('symbol', '').upper()
+            action = data.get('action', 'BUY').upper()
+            quantity = int(data.get('quantity', 0))
+            price = float(data.get('price', 0))
+            order_type = data.get('order_type', 'LIMIT').upper()
+            selected_broker = data.get('broker', 'WEBULL').upper()
+
+            if not symbol:
+                return jsonify({'error': 'Missing symbol'}), 400
+            if quantity <= 0:
+                return jsonify({'error': 'Quantity must be positive'}), 400
+            if action not in ('BUY', 'SELL', 'BTO', 'STC'):
+                return jsonify({'error': 'Action must be BUY/SELL/BTO/STC'}), 400
+
+            action_code = action
+            if action in ('BTO', 'BUY'):
+                action_code = 'BUY'
+            elif action in ('STC', 'SELL'):
+                action_code = 'SELL'
+
+            if not _bot_instance:
+                return jsonify({'error': 'Bot not initialized'}), 503
+
+            broker_to_use = None
+            broker_name = selected_broker
+
+            if selected_broker == 'WEBULL':
+                if hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                    broker_to_use = _bot_instance.broker
+                else:
+                    return jsonify({'error': 'Webull LIVE broker not connected'}), 503
+            elif selected_broker == 'ALPACA_PAPER':
+                if hasattr(_bot_instance, 'paper_broker') and _bot_instance.paper_broker:
+                    broker_to_use = _bot_instance.paper_broker
+                else:
+                    return jsonify({'error': 'Alpaca PAPER broker not connected'}), 503
+            elif selected_broker in ('TASTYTRADE_LIVE', 'TASTYTRADE'):
+                if hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
+                    broker_to_use = _bot_instance.tastytrade_broker
+                    broker_name = 'TASTYTRADE_LIVE'
+                else:
+                    return jsonify({'error': 'Tastytrade LIVE broker not connected'}), 503
+            elif selected_broker == 'TASTYTRADE_PAPER':
+                if hasattr(_bot_instance, 'tastytrade_paper_broker') and _bot_instance.tastytrade_paper_broker:
+                    broker_to_use = _bot_instance.tastytrade_paper_broker
+                    broker_name = 'TASTYTRADE_PAPER'
+                else:
+                    return jsonify({'error': 'Tastytrade PAPER broker not connected'}), 503
+            elif selected_broker == 'SCHWAB':
+                if hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                    broker_to_use = _bot_instance.schwab_broker
+                    broker_name = 'SCHWAB'
+                else:
+                    return jsonify({'error': 'Schwab broker not connected'}), 503
+            elif selected_broker == 'ROBINHOOD':
+                if hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                    broker_to_use = _bot_instance.robinhood_broker
+                    broker_name = 'ROBINHOOD'
+                else:
+                    return jsonify({'error': 'Robinhood broker not connected'}), 503
+            elif selected_broker == 'IBKR':
+                if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+                    broker_to_use = _bot_instance.ibkr_broker
+                    broker_name = 'IBKR'
+                else:
+                    return jsonify({'error': 'IBKR broker not connected. Ensure TWS is running.'}), 503
+            elif selected_broker == 'TRADING212':
+                if hasattr(_bot_instance, 'trading212_broker') and _bot_instance.trading212_broker:
+                    broker_to_use = _bot_instance.trading212_broker
+                    broker_name = 'TRADING212'
+                else:
+                    return jsonify({'error': 'Trading 212 broker not connected'}), 503
+            else:
+                return jsonify({'error': f'Unknown broker: {selected_broker}'}), 400
+
+            print(f"[STOCK API] Routing order to {broker_name}: {action_code} {quantity} {symbol} @ ${price} ({order_type})")
+
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    broker_to_use.place_stock_order(
+                        symbol=symbol,
+                        quantity=quantity,
+                        action=action_code,
+                        order_type=order_type,
+                        price=price if order_type == 'LIMIT' and price > 0 else None,
+                    )
+                )
+            finally:
+                loop.close()
+
+            from broker_interface import OrderResult
+            if isinstance(result, OrderResult):
+                if result.success:
+                    return jsonify({
+                        'success': True,
+                        'order_id': result.order_id or 'PENDING',
+                        'message': result.message or f'Stock order placed: {action_code} {quantity} {symbol}',
+                        'broker': broker_name,
+                    })
+                else:
+                    return jsonify({'success': False, 'error': result.message or 'Order rejected'}), 400
+
+            if isinstance(result, dict):
+                is_success = result.get('success', False)
+                if not is_success and 'success' not in result:
+                    is_success = bool(result.get('orderId') or result.get('order_id'))
+                if is_success:
+                    return jsonify({
+                        'success': True,
+                        'order_id': result.get('orderId') or result.get('order_id', 'PENDING'),
+                        'message': f'Stock order placed: {action_code} {quantity} {symbol} @ ${price}',
+                        'broker': broker_name,
+                    })
+                else:
+                    err = result.get('error') or result.get('msg') or result.get('message') or 'Order rejected'
+                    return jsonify({'success': False, 'error': err}), 400
+
+            return jsonify({'success': True, 'message': f'Stock order submitted: {action_code} {quantity} {symbol}', 'broker': broker_name})
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Stock order error: {str(e)}'}), 500
+
+    @app.route('/api/broker/buying-power/<broker_id>', methods=['GET'])
+    def api_broker_buying_power(broker_id):
+        try:
+            import asyncio
+            bp = 0
+
+            broker_map = {
+                'schwab_live': 'schwab_broker', 'schwab': 'schwab_broker',
+                'webull_live': 'broker', 'webull': 'broker',
+                'alpaca_paper': 'paper_broker', 'alpaca_live': 'live_broker',
+                'ibkr_live': 'ibkr_broker', 'ibkr': 'ibkr_broker',
+                'tastytrade_live': 'tastytrade_broker', 'tastytrade': 'tastytrade_broker',
+                'tastytrade_paper': 'tastytrade_paper_broker',
+                'robinhood': 'robinhood_broker',
+                'trading212': 'trading212_broker',
+                'webull_official_live': 'webull_official_broker',
+            }
+
+            attr = broker_map.get(broker_id)
+            if _bot_instance and attr:
+                broker_obj = getattr(_bot_instance, attr, None)
+                if broker_obj:
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            info = loop.run_until_complete(broker_obj.get_account_info())
+                        finally:
+                            loop.close()
+                        if isinstance(info, dict):
+                            bp = float(info.get('buying_power', 0) or
+                                       info.get('dayBuyingPower', 0) or
+                                       info.get('usableCash', 0) or 0)
+                    except Exception as e:
+                        print(f"[BP] Error from {broker_id} broker: {e}")
+
+            if bp <= 0:
+                try:
+                    from .broker_live_analytics import get_analytics_service
+                    service = get_analytics_service()
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        info = loop.run_until_complete(service.get_account_info(broker_id))
+                    finally:
+                        loop.close()
+                    bp = float(info.get('buying_power', 0)) if info else 0
+                except Exception as e:
+                    print(f"[BP] Analytics fallback error for {broker_id}: {e}")
+
+            return jsonify({'success': True, 'buying_power': round(bp, 2), 'broker': broker_id})
+        except Exception as e:
+            return jsonify({'success': False, 'buying_power': 0, 'error': str(e)})
+
+    # ======================== END PENNY STOCK SCANNER ========================
 
     @app.route('/api/options/order', methods=['POST'])
     def api_place_option_order():

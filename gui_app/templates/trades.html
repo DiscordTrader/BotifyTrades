@@ -149,6 +149,44 @@
 .qt-loading .spinner { width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.1); border-top: 2px solid #0FF0B3; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .qt-empty { text-align: center; padding: 24px; color: #6E7681; font-size: 13px; }
+/* Scanner Styles */
+.scanner-preset { background:rgba(255,255,255,0.04); color:#8B949E; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:5px 12px; font-size:0.72rem; cursor:pointer; font-weight:500; transition:all 0.15s; white-space:nowrap; }
+.scanner-preset:hover { background:rgba(255,255,255,0.08); color:#E6EDF3; border-color:rgba(255,255,255,0.12); }
+.scanner-preset.active { background:rgba(56,139,253,0.15); color:#58A6FF; border-color:rgba(56,139,253,0.3); font-weight:600; }
+.scanner-input { padding:5px 8px; background:#1C2128; border:1px solid rgba(255,255,255,0.08); border-radius:6px; color:#E6EDF3; font-size:0.78rem; }
+.scanner-input:focus { border-color:rgba(56,139,253,0.4); outline:none; background:#21262D; }
+select.scanner-input option { background:#1C2128; color:#E6EDF3; }
+select.scanner-input option:checked { background:#238636; color:#fff; }
+.scanner-scan-btn { background:linear-gradient(135deg, #238636 0%, #2ea043 100%); color:#fff; border:none; border-radius:6px; padding:6px 18px; font-size:0.78rem; cursor:pointer; font-weight:600; letter-spacing:0.3px; transition:all 0.15s; }
+.scanner-scan-btn:hover { background:linear-gradient(135deg, #2ea043 0%, #3fb950 100%); box-shadow:0 0 12px rgba(46,160,67,0.3); }
+.scanner-scan-btn:disabled { opacity:0.5; cursor:wait; }
+.scanner-clear-btn { background:transparent; color:#6E7681; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:5px 12px; font-size:0.75rem; cursor:pointer; }
+.scanner-clear-btn:hover { color:#E6EDF3; border-color:rgba(255,255,255,0.15); }
+@keyframes scannerPulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+.scanner-tbl { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.scanner-tbl thead th { padding:10px 8px; text-align:right; font-size:0.65rem; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:#484F58; border-bottom:1px solid rgba(255,255,255,0.06); position:sticky; top:0; background:#0D1117; cursor:pointer; user-select:none; white-space:nowrap; }
+.scanner-tbl thead th:first-child { text-align:left; }
+.scanner-tbl thead th:hover { color:#8B949E; }
+.scanner-tbl tbody tr { border-bottom:1px solid rgba(255,255,255,0.03); transition:background 0.1s; }
+.scanner-tbl tbody tr:hover { background:rgba(56,139,253,0.04); }
+.scanner-tbl td { padding:7px 8px; text-align:right; white-space:nowrap; }
+.scanner-tbl td:first-child { text-align:left; }
+.scanner-sym { font-weight:700; color:#E6EDF3; font-size:0.82rem; }
+.scanner-name { font-size:0.65rem; color:#484F58; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
+.scanner-pos { color:#3FB950; }
+.scanner-neg { color:#F85149; }
+.scanner-muted { color:#484F58; }
+.scanner-btn { border:none; border-radius:4px; padding:4px 12px; font-size:0.68rem; cursor:pointer; font-weight:700; letter-spacing:0.3px; transition:all 0.12s; }
+.scanner-btn:hover { transform:scale(1.05); }
+.scanner-btn.bto { background:rgba(35,134,54,0.85); color:#fff; }
+.scanner-btn.bto:hover { background:#238636; box-shadow:0 0 8px rgba(35,134,54,0.4); }
+.scanner-btn.stc { background:rgba(218,54,51,0.85); color:#fff; }
+.scanner-btn.stc:hover { background:#da3633; box-shadow:0 0 8px rgba(218,54,51,0.4); }
+.scanner-badge { font-size:0.6rem; padding:1px 6px; border-radius:3px; font-weight:600; letter-spacing:0.3px; }
+.scanner-flash-up { animation:scanFlashUp 0.6s; }
+.scanner-flash-down { animation:scanFlashDown 0.6s; }
+@keyframes scanFlashUp { 0% { color:#3FB950; text-shadow:0 0 8px rgba(63,185,80,0.5); } 100% { color:#E6EDF3; text-shadow:none; } }
+@keyframes scanFlashDown { 0% { color:#F85149; text-shadow:0 0 8px rgba(248,81,73,0.5); } 100% { color:#E6EDF3; text-shadow:none; } }
 .qt-source { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
 .qt-source.webull { background: rgba(0,200,83,0.12); color: #00c853; }
 .qt-source.alpaca { background: rgba(88,166,255,0.12); color: #58A6FF; }
@@ -286,6 +324,12 @@
         <button id="tab-events" class="tab" onclick="switchTab('events')">
             📋 Event Log
         </button>
+        <button id="tab-scanner" class="tab" onclick="switchTab('scanner')">
+            🔍 Penny Scanner
+        </button>
+        <button id="tab-watchlist" class="tab" onclick="switchTab('watchlist')">
+            ⭐ Watchlist
+        </button>
     </div>
     
     <!-- Event Log Filter Bar (hidden by default) -->
@@ -363,13 +407,190 @@
             🔄 Refresh
         </button>
     </div>
-    
+
+    <!-- Penny Scanner Controls -->
+    <div id="scanner-filter-bar" style="display:none; flex-direction:column; gap:0; background:linear-gradient(180deg, rgba(13,17,23,0.95) 0%, rgba(22,27,34,0.9) 100%); border-bottom:1px solid rgba(255,255,255,0.06);">
+        <!-- Row 1: Scan Presets -->
+        <div style="display:flex; gap:6px; align-items:center; padding:12px 16px 8px; flex-wrap:wrap;">
+            <div id="scanner-presets" style="display:flex; gap:4px; flex-wrap:wrap;">
+                <button class="scanner-preset active" data-scan="active" onclick="scannerSetPreset(this)">🔥 Most Active</button>
+                <button class="scanner-preset" data-scan="gainers" onclick="scannerSetPreset(this)">📈 Gainers</button>
+                <button class="scanner-preset" data-scan="losers" onclick="scannerSetPreset(this)">📉 Losers</button>
+                <button class="scanner-preset" data-scan="premarket_gainers" onclick="scannerSetPreset(this)">🌅 Pre-Mkt Gainers</button>
+                <button class="scanner-preset" data-scan="premarket_losers" onclick="scannerSetPreset(this)">🌅 Pre-Mkt Losers</button>
+                <button class="scanner-preset" data-scan="afterhours_gainers" onclick="scannerSetPreset(this)">🌙 AH Gainers</button>
+                <button class="scanner-preset" data-scan="manual" onclick="scannerSetPreset(this)">⌨️ Manual</button>
+            </div>
+            <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                <span id="scanner-status" style="font-size:0.7rem; color:#6E7681;"></span>
+                <span id="scanner-live-dot" style="display:none; width:6px; height:6px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e; animation:scannerPulse 2s infinite;"></span>
+            </div>
+        </div>
+        <!-- Row 2: Filters + Trade Controls -->
+        <div style="display:flex; gap:10px; align-items:center; padding:6px 16px 12px; flex-wrap:wrap;">
+            <div id="scanner-manual-wrap" style="display:none;">
+                <input type="text" id="scanner-manual-symbols" placeholder="MULN, FFIE, SNDL, CLOV..." style="padding:6px 10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#E6EDF3; font-size:0.8rem; min-width:240px; font-family:monospace;">
+            </div>
+            <div style="display:flex; gap:5px; align-items:center;">
+                <span style="font-size:0.7rem; color:#6E7681; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Price</span>
+                <input type="number" id="scanner-min-price" value="0.01" step="0.01" min="0" class="scanner-input" style="width:60px;">
+                <span style="color:#484F58; font-size:0.75rem;">—</span>
+                <input type="number" id="scanner-max-price" value="5.00" step="0.10" min="0" class="scanner-input" style="width:60px;">
+            </div>
+            <div style="display:flex; gap:5px; align-items:center;">
+                <span style="font-size:0.7rem; color:#6E7681; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Min Vol</span>
+                <select id="scanner-min-volume" class="scanner-input" style="width:90px;">
+                    <option value="0">Any</option>
+                    <option value="100000">100K+</option>
+                    <option value="500000">500K+</option>
+                    <option value="1000000" selected>1M+</option>
+                    <option value="5000000">5M+</option>
+                    <option value="10000000">10M+</option>
+                    <option value="50000000">50M+</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:5px; align-items:center;">
+                <span style="font-size:0.7rem; color:#6E7681; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Gap</span>
+                <select id="scanner-gap-filter" class="scanner-input" style="width:85px;">
+                    <option value="any">Any</option>
+                    <option value="up">Up &gt;2%</option>
+                    <option value="down">Down &lt;-2%</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:5px; align-items:center;">
+                <span style="font-size:0.7rem; color:#6E7681; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">RVOL</span>
+                <select id="scanner-rvol-filter" class="scanner-input" style="width:85px;">
+                    <option value="0">Any</option>
+                    <option value="2">2x+</option>
+                    <option value="5">5x+</option>
+                    <option value="10">10x+</option>
+                    <option value="50">50x+</option>
+                    <option value="100">100x+</option>
+                    <option value="200">200x+</option>
+                    <option value="500">500x+</option>
+                </select>
+            </div>
+            <button onclick="scannerRunScan()" class="scanner-scan-btn" id="scanner-scan-btn">Scan</button>
+            <button onclick="scannerClear()" class="scanner-clear-btn">Clear</button>
+
+            <div style="margin-left:auto; display:flex; gap:8px; align-items:center; border-left:1px solid rgba(255,255,255,0.06); padding-left:12px;">
+                <select id="scanner-broker" class="scanner-input" style="min-width:125px;" onchange="if(getSizingMode('scanner')==='pct')showBPBadge('scanner')">
+                    <option value="WEBULL">Webull LIVE</option>
+                    <option value="ALPACA_PAPER" selected>Alpaca PAPER</option>
+                    <option value="TASTYTRADE_LIVE">Tastytrade LIVE</option>
+                    <option value="TASTYTRADE_PAPER">Tastytrade PAPER</option>
+                    <option value="SCHWAB">Charles Schwab</option>
+                    <option value="ROBINHOOD">Robinhood</option>
+                    <option value="IBKR">IBKR</option>
+                    <option value="TRADING212">Trading 212</option>
+                </select>
+                <div style="display:flex; align-items:center; gap:1px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:2px;">
+                    <label style="display:flex; align-items:center; gap:3px; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:0.65rem; color:#E6EDF3; font-weight:600;" id="scanner-sizing-qty-label">
+                        <input type="radio" name="scanner-sizing" value="qty" checked onchange="sizingChanged('scanner')" style="accent-color:#238636; margin:0; width:12px; height:12px;">QTY
+                    </label>
+                    <label style="display:flex; align-items:center; gap:3px; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:0.65rem; color:#8B949E; font-weight:600;" id="scanner-sizing-pct-label">
+                        <input type="radio" name="scanner-sizing" value="pct" onchange="sizingChanged('scanner')" style="accent-color:#238636; margin:0; width:12px; height:12px;">%
+                    </label>
+                    <label style="display:flex; align-items:center; gap:3px; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:0.65rem; color:#8B949E; font-weight:600;" id="scanner-sizing-off-label">
+                        <input type="radio" name="scanner-sizing" value="off" onchange="sizingChanged('scanner')" style="accent-color:#238636; margin:0; width:12px; height:12px;">OFF
+                    </label>
+                </div>
+                <input type="number" id="scanner-qty" value="100" min="1" max="99999" class="scanner-input" style="width:65px; font-family:monospace;">
+                <input type="number" id="scanner-pct" value="10" min="1" max="100" step="1" class="scanner-input" style="width:55px; font-family:monospace; display:none;" placeholder="%">
+                <span id="scanner-bp-badge" style="display:none; font-size:0.6rem; color:#58A6FF; white-space:nowrap;"></span>
+                <div id="scanner-channel-picker" style="position:relative; display:inline-block;">
+                    <button type="button" id="scanner-channel-btn" onclick="scannerToggleChannelPicker()" style="background:rgba(255,255,255,0.04); color:#8B949E; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:5px 10px; font-size:0.7rem; cursor:pointer; min-width:110px; text-align:left; display:flex; align-items:center; gap:4px;">
+                        <span id="scanner-channel-label">📡 Channels</span>
+                        <span style="margin-left:auto; font-size:8px; opacity:0.5;">▼</span>
+                    </button>
+                    <div id="scanner-channel-dropdown" style="display:none; position:absolute; top:100%; right:0; z-index:1000; background:#161B22; border:1px solid rgba(255,255,255,0.1); border-radius:8px; min-width:280px; max-height:320px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6); margin-top:4px;">
+                        <div style="padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; gap:6px;">
+                            <button onclick="scannerSelectAllChannels()" style="flex:1; background:#238636; color:#fff; border:none; border-radius:4px; padding:4px 8px; font-size:0.7rem; cursor:pointer; font-weight:600;">All</button>
+                            <button onclick="scannerDeselectAllChannels()" style="flex:1; background:rgba(255,255,255,0.06); color:#8B949E; border:none; border-radius:4px; padding:4px 8px; font-size:0.7rem; cursor:pointer;">None</button>
+                        </div>
+                        <div id="scanner-channel-list" style="padding:4px 0;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Watchlist Controls -->
+    <div id="watchlist-filter-bar" style="display:none; flex-direction:column; gap:0; background:linear-gradient(180deg, rgba(13,17,23,0.95) 0%, rgba(22,27,34,0.9) 100%); border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex; gap:10px; align-items:center; padding:12px 16px 8px; flex-wrap:wrap;">
+            <span style="font-size:0.8rem; color:#E6EDF3; font-weight:600;">⭐ Watchlist</span>
+            <input type="text" id="watchlist-add-symbol" placeholder="AAPL, MSFT..." onkeydown="if(event.key==='Enter')watchlistAddManual()" style="padding:6px 10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#E6EDF3; font-size:0.8rem; width:140px; font-family:monospace; text-transform:uppercase;">
+            <button onclick="watchlistAddManual()" style="background:#238636; color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:0.75rem; cursor:pointer; font-weight:600;">+ Add</button>
+            <div style="display:flex; gap:8px; align-items:center; margin-left:8px;">
+                <span id="watchlist-status" style="font-size:0.7rem; color:#6E7681;"></span>
+                <span id="watchlist-live-dot" style="display:none; width:6px; height:6px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e; animation:scannerPulse 2s infinite;"></span>
+            </div>
+            <div style="margin-left:auto;">
+                <button onclick="watchlistClearAll()" style="background:rgba(248,81,73,0.1); color:#F85149; border:1px solid rgba(248,81,73,0.2); border-radius:6px; padding:5px 12px; font-size:0.7rem; cursor:pointer;">Clear All</button>
+            </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; padding:6px 16px 12px; flex-wrap:wrap; border-top:1px solid rgba(255,255,255,0.04);">
+            <div style="display:flex; gap:5px; align-items:center;">
+                <span style="font-size:0.7rem; color:#6E7681; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Mode</span>
+                <select id="watchlist-mode" class="scanner-input" style="min-width:120px;">
+                    <option value="both">Signal + Execute</option>
+                    <option value="signal">Signal Only</option>
+                    <option value="execute">Execute Only</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:5px; align-items:center;">
+                <span style="font-size:0.7rem; color:#6E7681; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Broker</span>
+                <select id="watchlist-broker" class="scanner-input" style="min-width:125px;" onchange="if(getSizingMode('watchlist')==='pct')showBPBadge('watchlist')">
+                    <option value="WEBULL">Webull LIVE</option>
+                    <option value="ALPACA_PAPER" selected>Alpaca PAPER</option>
+                    <option value="TASTYTRADE_LIVE">Tastytrade LIVE</option>
+                    <option value="TASTYTRADE_PAPER">Tastytrade PAPER</option>
+                    <option value="SCHWAB">Charles Schwab</option>
+                    <option value="ROBINHOOD">Robinhood</option>
+                    <option value="IBKR">IBKR</option>
+                    <option value="TRADING212">Trading 212</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:5px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:1px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:2px;">
+                    <label style="display:flex; align-items:center; gap:3px; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:0.65rem; color:#E6EDF3; font-weight:600;" id="watchlist-sizing-qty-label">
+                        <input type="radio" name="watchlist-sizing" value="qty" checked onchange="sizingChanged('watchlist')" style="accent-color:#238636; margin:0; width:12px; height:12px;">QTY
+                    </label>
+                    <label style="display:flex; align-items:center; gap:3px; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:0.65rem; color:#8B949E; font-weight:600;" id="watchlist-sizing-pct-label">
+                        <input type="radio" name="watchlist-sizing" value="pct" onchange="sizingChanged('watchlist')" style="accent-color:#238636; margin:0; width:12px; height:12px;">%
+                    </label>
+                    <label style="display:flex; align-items:center; gap:3px; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:0.65rem; color:#8B949E; font-weight:600;" id="watchlist-sizing-off-label">
+                        <input type="radio" name="watchlist-sizing" value="off" onchange="sizingChanged('watchlist')" style="accent-color:#238636; margin:0; width:12px; height:12px;">OFF
+                    </label>
+                </div>
+                <input type="number" id="watchlist-qty" value="100" min="1" max="99999" class="scanner-input" style="width:65px; font-family:monospace;">
+                <input type="number" id="watchlist-pct" value="10" min="1" max="100" step="1" class="scanner-input" style="width:55px; font-family:monospace; display:none;" placeholder="%">
+                <span id="watchlist-bp-badge" style="display:none; font-size:0.6rem; color:#58A6FF; white-space:nowrap;"></span>
+            </div>
+            <div id="watchlist-channel-picker" style="position:relative; display:inline-block;">
+                <button type="button" id="watchlist-channel-btn" onclick="watchlistToggleChannelPicker()" style="background:rgba(255,255,255,0.04); color:#8B949E; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:5px 10px; font-size:0.7rem; cursor:pointer; min-width:110px; text-align:left; display:flex; align-items:center; gap:4px;">
+                    <span id="watchlist-channel-label">📡 Channels</span>
+                    <span style="margin-left:auto; font-size:8px; opacity:0.5;">▼</span>
+                </button>
+                <div id="watchlist-channel-dropdown" style="display:none; position:absolute; top:100%; right:0; z-index:1000; background:#161B22; border:1px solid rgba(255,255,255,0.1); border-radius:8px; min-width:280px; max-height:320px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6); margin-top:4px;">
+                    <div style="padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; gap:6px;">
+                        <button onclick="document.querySelectorAll('.wl-ch-cb').forEach(c=>c.checked=true);watchlistUpdateChannelLabel()" style="flex:1; background:#238636; color:#fff; border:none; border-radius:4px; padding:4px 8px; font-size:0.7rem; cursor:pointer; font-weight:600;">All</button>
+                        <button onclick="document.querySelectorAll('.wl-ch-cb').forEach(c=>c.checked=false);watchlistUpdateChannelLabel()" style="flex:1; background:rgba(255,255,255,0.06); color:#8B949E; border:none; border-radius:4px; padding:4px 8px; font-size:0.7rem; cursor:pointer;">None</button>
+                    </div>
+                    <div id="watchlist-channel-list" style="padding:4px 0;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="trades-table-container">
         <div style="text-align: center; padding: 60px 20px;">
             <div class="spinner" style="margin: 0 auto 20px;"></div>
             <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading trades...</div>
         </div>
     </div>
+    <div id="scanner-table-container" style="display:none;"></div>
+    <div id="watchlist-table-container" style="display:none;"></div>
 </div>
 
 {% endblock %}
@@ -380,6 +601,8 @@ let currentTab = 'live';
 let currentBroker = '';
 let allTrades = [];
 let currentTrades = [];
+
+
 let priceRefreshInterval = null;
 let isClosingPosition = false;
 let initialLoadDone = false;
@@ -393,36 +616,65 @@ function onBrokerChange(value) {
 }
 
 async function switchTab(tab) {
-    console.log('[DEBUG] switchTab called with tab:', tab);
     currentTab = tab;
-    
+
     document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
-    
+
     const signalsFilterBar = document.getElementById('signals-filter-bar');
     const eventsFilterBar = document.getElementById('events-filter-bar');
+    const scannerFilterBar = document.getElementById('scanner-filter-bar');
+    const watchlistFilterBar = document.getElementById('watchlist-filter-bar');
+    const tradesContainer = document.getElementById('trades-table-container');
+    const scannerContainer = document.getElementById('scanner-table-container');
+    const watchlistContainer = document.getElementById('watchlist-table-container');
     signalsFilterBar.style.display = 'none';
     eventsFilterBar.style.display = 'none';
+    scannerFilterBar.style.display = 'none';
+    watchlistFilterBar.style.display = 'none';
+    scannerStopPolling();
+    watchlistStopPolling();
 
-    if (tab === 'signals') {
-        signalsFilterBar.style.display = 'flex';
-        await loadRetentionSettings();
-        await loadSignalMessages();
-    } else if (tab === 'events') {
-        eventsFilterBar.style.display = 'flex';
-        await loadOrderEvents();
-    } else if (tab === 'filled') {
-        console.log('[DEBUG] Loading filled orders from API...');
-        await loadFilledOrders();
-    } else if (tab === 'pending') {
-        initialLoadDone = false;
-        await loadTrades();
-        await loadConditionalOrders();
-        startConditionalPricePolling();
+    tradesContainer.style.display = 'none';
+    scannerContainer.style.display = 'none';
+    watchlistContainer.style.display = 'none';
+
+    if (tab === 'scanner') {
+        scannerContainer.style.display = '';
+        scannerFilterBar.style.display = 'flex';
+        scannerLoadChannels();
+        if (scannerData.length > 0) {
+            scannerDisplayTable(scannerData);
+            scannerStartPolling();
+        } else {
+            scannerContainer.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#6E7681;"><div style="font-size:1.8rem; margin-bottom:10px; opacity:0.4;">🔍</div><div style="font-size:0.85rem;">Select a scan type and click <b>Scan</b> to discover stocks.</div><div style="font-size:0.75rem; margin-top:6px; opacity:0.5;">Real-time data from connected broker WebSocket feeds.</div></div>';
+        }
+    } else if (tab === 'watchlist') {
+        watchlistContainer.style.display = '';
+        watchlistFilterBar.style.display = 'flex';
+        watchlistLoadChannels();
+        await watchlistLoadAndDisplay();
     } else {
-        initialLoadDone = false;
-        await loadTrades();
-        stopConditionalPricePolling();
+        tradesContainer.style.display = '';
+        if (tab === 'signals') {
+            signalsFilterBar.style.display = 'flex';
+            await loadRetentionSettings();
+            await loadSignalMessages();
+        } else if (tab === 'events') {
+            eventsFilterBar.style.display = 'flex';
+            await loadOrderEvents();
+        } else if (tab === 'filled') {
+            await loadFilledOrders();
+        } else if (tab === 'pending') {
+            initialLoadDone = false;
+            await loadTrades();
+            await loadConditionalOrders();
+            startConditionalPricePolling();
+        } else {
+            initialLoadDone = false;
+            await loadTrades();
+            stopConditionalPricePolling();
+        }
     }
 }
 
@@ -476,6 +728,7 @@ function filterAndDisplayTrades() {
 }
 
 async function loadTrades() {
+    if (currentTab === 'scanner') return;
     const container = document.getElementById('trades-table-container');
     if (!initialLoadDone) {
         container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
@@ -2222,23 +2475,7 @@ function showToast(message, type = 'info') {
     }, 4000);
 }
 
-// ============ CODE VERSION AUTO-RELOAD ============
-(function() {
-    let _loadedVersion = null;
-    async function _checkVersion() {
-        try {
-            const r = await fetch('/api/code-version', {cache:'no-store'});
-            const d = await r.json();
-            if (!_loadedVersion) { _loadedVersion = d.version; return; }
-            if (d.version !== _loadedVersion) {
-                console.log('[VERSION] Code updated, reloading page...');
-                window.location.reload(true);
-            }
-        } catch(e) {}
-    }
-    _checkVersion();
-    setInterval(_checkVersion, 30000);
-})();
+// ============ CODE VERSION AUTO-RELOAD (disabled during scanner dev) ============
 
 // ============ QUICK TRADE PANEL ============
 let qtChainData = null;
@@ -3135,5 +3372,880 @@ function qtDeselectAllChannels() {
 }
 
 qtLoadSendChannels();
+
+// ======================== PENNY SCANNER ========================
+let scannerData = [];
+let scannerPollTimer = null;
+let scannerPrevPrices = {};
+let scannerAllChannels = [];
+let scannerScanType = 'active';
+let scannerSortCol = 'volume';
+let scannerSortDesc = true;
+
+function scannerSetPreset(btn) {
+    document.querySelectorAll('.scanner-preset').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    scannerScanType = btn.dataset.scan;
+    document.getElementById('scanner-manual-wrap').style.display = scannerScanType === 'manual' ? 'inline-block' : 'none';
+}
+
+function scannerFmtVol(v) {
+    if (!v || v <= 0) return '-';
+    if (v >= 1e9) return (v/1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+    return v.toString();
+}
+
+function scannerFmtPrice(p) {
+    if (!p || p <= 0) return '-';
+    return p < 1 ? '$' + p.toFixed(4) : '$' + p.toFixed(2);
+}
+
+function scannerFmtPct(v, showPlus) {
+    if (v === null || v === undefined) return '-';
+    return (showPlus && v > 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+
+function scannerFmtMcap(v) {
+    if (!v || v <= 0) return '-';
+    if (v >= 1e9) return '$' + (v/1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K';
+    return '$' + v;
+}
+
+async function scannerRunScan() {
+    const btn = document.getElementById('scanner-scan-btn');
+    const status = document.getElementById('scanner-status');
+    const liveDot = document.getElementById('scanner-live-dot');
+    const container = document.getElementById('scanner-table-container');
+    const minPrice = parseFloat(document.getElementById('scanner-min-price').value) || 0.01;
+    const maxPrice = parseFloat(document.getElementById('scanner-max-price').value) || 5.00;
+    const minVolume = parseInt(document.getElementById('scanner-min-volume').value) || 0;
+
+    btn.disabled = true;
+    btn.textContent = 'Scanning...';
+    liveDot.style.display = 'none';
+    container.innerHTML = '<div style="text-align:center; padding:50px;"><div class="spinner" style="margin:0 auto 16px;"></div><div style="color:#6E7681; font-size:0.85rem;">Scanning real-time broker data...</div></div>';
+
+    const body = { source: scannerScanType, min_price: minPrice, max_price: maxPrice, min_volume: minVolume };
+    if (scannerScanType === 'manual') {
+        body.symbols = document.getElementById('scanner-manual-symbols').value;
+        if (!body.symbols.trim()) {
+            showToast('Enter comma-separated symbols', 'warning');
+            btn.disabled = false; btn.textContent = 'Scan'; return;
+        }
+    }
+
+    try {
+        const r = await fetch('/api/scanner/penny/scan', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', body: JSON.stringify(body)
+        });
+        const data = await r.json();
+        if (data.success && data.candidates && data.candidates.length > 0) {
+            scannerData = data.candidates;
+            scannerPrevPrices = {};
+            status.textContent = `${data.scan_count} stocks · Real-time WebSocket`;
+            status.style.color = '#3FB950';
+            liveDot.style.display = 'inline-block';
+            scannerDisplayTable(scannerData);
+            scannerStartPolling();
+        } else if (data.error) {
+            container.innerHTML = `<div style="text-align:center; padding:50px; color:#F85149;">${data.error}</div>`;
+            showToast(data.error, 'error');
+        } else {
+            container.innerHTML = '<div style="text-align:center; padding:50px; color:#6E7681;">No stocks found matching filters. Try adjusting price range or volume.</div>';
+        }
+    } catch (e) {
+        container.innerHTML = `<div style="text-align:center; padding:50px; color:#F85149;">Scan failed: ${e.message}</div>`;
+    }
+    btn.disabled = false; btn.textContent = 'Scan';
+}
+
+function scannerStartPolling() {
+    scannerStopPolling();
+    if (scannerData.length === 0) return;
+    scannerRefreshQuotes();
+    scannerPollTimer = setInterval(scannerRefreshQuotes, 1500);
+}
+
+function scannerStopPolling() {
+    if (scannerPollTimer) { clearInterval(scannerPollTimer); scannerPollTimer = null; }
+}
+
+async function scannerRefreshQuotes() {
+    if (currentTab !== 'scanner') { scannerStopPolling(); return; }
+    try {
+        const r = await fetch('/api/scanner/penny/quotes', { credentials: 'include' });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (currentTab !== 'scanner') return;
+        if (data.success && data.quotes && data.quotes.length > 0) {
+            scannerData = data.quotes;
+            scannerUpdateTable(data.quotes);
+            const statusEl = document.getElementById('scanner-status');
+            if (statusEl) statusEl.textContent = `${data.quotes.length} stocks · Real-time WebSocket`;
+        }
+    } catch (e) { }
+}
+
+function scannerApplyFilters(quotes) {
+    const minPrice = parseFloat(document.getElementById('scanner-min-price').value) || 0;
+    const maxPrice = parseFloat(document.getElementById('scanner-max-price').value) || 999;
+    const gapFilter = document.getElementById('scanner-gap-filter').value;
+    const minRvol = parseFloat(document.getElementById('scanner-rvol-filter').value) || 0;
+    let filtered = quotes.filter(q => {
+        const p = q.last || q.price || 0;
+        if (p > 0 && (p < minPrice || p > maxPrice)) return false;
+        if (gapFilter === 'up' && (q.gap_pct === null || q.gap_pct < 2)) return false;
+        if (gapFilter === 'down' && (q.gap_pct === null || q.gap_pct > -2)) return false;
+        if (minRvol > 0 && (q.rvol == null || q.rvol < minRvol)) return false;
+        return true;
+    });
+    filtered.sort((a, b) => {
+        let va = a[scannerSortCol] ?? 0, vb = b[scannerSortCol] ?? 0;
+        if (typeof va === 'string') va = va.toLowerCase();
+        if (typeof vb === 'string') vb = vb.toLowerCase();
+        return scannerSortDesc ? (vb > va ? 1 : vb < va ? -1 : 0) : (va > vb ? 1 : va < vb ? -1 : 0);
+    });
+    return filtered;
+}
+
+function scannerSortBy(col) {
+    if (scannerSortCol === col) { scannerSortDesc = !scannerSortDesc; }
+    else { scannerSortCol = col; scannerSortDesc = true; }
+    if (scannerData.length > 0) {
+        scannerStopPolling();
+        scannerDisplayTable(scannerData);
+        scannerStartPolling();
+    }
+}
+
+function scannerDisplayTable(candidates) {
+    const container = document.getElementById('scanner-table-container');
+    if (!candidates || candidates.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:50px; color:#6E7681;">No scanner data. Click <b>Scan</b> to discover stocks.</div>';
+        return;
+    }
+    const filtered = scannerApplyFilters(candidates);
+    if (filtered.length === 0) {
+        const rvol = document.getElementById('scanner-rvol-filter').value;
+        const gap = document.getElementById('scanner-gap-filter').value;
+        const maxP = document.getElementById('scanner-max-price').value;
+        let hint = `${candidates.length} stocks scanned but 0 match filters`;
+        if (rvol !== '0') hint += ` (RVOL ≥ ${rvol}x)`;
+        if (gap !== 'any') hint += ` (Gap: ${gap})`;
+        hint += `. Try relaxing filters.`;
+        container.innerHTML = `<div style="text-align:center; padding:50px; color:#D29922;">${hint}</div>`;
+        return;
+    }
+    const sortIcon = (col) => scannerSortCol === col ? (scannerSortDesc ? ' ▾' : ' ▴') : '';
+    let html = `<div style="overflow-x:auto;"><table class="scanner-tbl">
+        <thead><tr>
+            <th style="text-align:left; min-width:110px;" onclick="scannerSortBy('symbol')">Symbol${sortIcon('symbol')}</th>
+            <th onclick="scannerSortBy('last')">Last${sortIcon('last')}</th>
+            <th onclick="scannerSortBy('change_pct')">Chg%${sortIcon('change_pct')}</th>
+            <th onclick="scannerSortBy('bid')">Bid${sortIcon('bid')}</th>
+            <th onclick="scannerSortBy('ask')">Ask${sortIcon('ask')}</th>
+            <th onclick="scannerSortBy('volume')">Volume${sortIcon('volume')}</th>
+            <th onclick="scannerSortBy('gap_pct')">Gap%${sortIcon('gap_pct')}</th>
+            <th onclick="scannerSortBy('high')">High${sortIcon('high')}</th>
+            <th onclick="scannerSortBy('low')">Low${sortIcon('low')}</th>
+            <th onclick="scannerSortBy('turnover_rate')">Turn%${sortIcon('turnover_rate')}</th>
+            <th onclick="scannerSortBy('rvol')">RVOL${sortIcon('rvol')}</th>
+            <th onclick="scannerSortBy('market_cap')">MktCap${sortIcon('market_cap')}</th>
+            <th style="text-align:center; cursor:default;">Trade</th>
+        </tr></thead><tbody>`;
+
+    for (const q of filtered) {
+        const chgCls = (q.change_pct||0) > 0 ? 'scanner-pos' : (q.change_pct||0) < 0 ? 'scanner-neg' : 'scanner-muted';
+        const gapCls = q.gap_pct !== null ? (q.gap_pct > 0 ? 'scanner-pos' : q.gap_pct < 0 ? 'scanner-neg' : 'scanner-muted') : 'scanner-muted';
+        const srcColor = q.source === 'schwab' ? '#0078d7' : q.source === 'webull' ? '#00c853' : q.source === 'ibkr' ? '#ff6d00' : '#58A6FF';
+        const srcBadge = q.source && q.source !== 'webull_api' ? `<span class="scanner-badge" style="background:${srcColor}22; color:${srcColor};">${q.source}</span>` : '';
+        html += `<tr id="scanner-row-${q.symbol}">
+            <td><div class="scanner-sym">${q.symbol} ${srcBadge}</div><div class="scanner-name">${q.name||''}</div></td>
+            <td style="font-weight:600; font-family:monospace;" id="scanner-last-${q.symbol}">${scannerFmtPrice(q.last||q.price)}</td>
+            <td class="${chgCls}" style="font-weight:600;" id="scanner-chg-${q.symbol}">${scannerFmtPct(q.change_pct, true)}</td>
+            <td class="scanner-muted" id="scanner-bid-${q.symbol}">${scannerFmtPrice(q.bid)}</td>
+            <td class="scanner-muted" id="scanner-ask-${q.symbol}">${scannerFmtPrice(q.ask)}</td>
+            <td style="font-family:monospace;" id="scanner-vol-${q.symbol}">${scannerFmtVol(q.volume)}</td>
+            <td class="${gapCls}" id="scanner-gap-${q.symbol}">${scannerFmtPct(q.gap_pct, true)}</td>
+            <td class="scanner-muted" id="scanner-high-${q.symbol}">${scannerFmtPrice(q.high)}</td>
+            <td class="scanner-muted" id="scanner-low-${q.symbol}">${scannerFmtPrice(q.low)}</td>
+            <td class="scanner-muted" id="scanner-turn-${q.symbol}">${q.turnover_rate ? q.turnover_rate.toFixed(1)+'%' : '-'}</td>
+            <td id="scanner-rvol-${q.symbol}" style="font-weight:600; color:${q.rvol >= 10 ? '#3FB950' : q.rvol >= 2 ? '#D29922' : '#8B949E'};">${q.rvol != null ? q.rvol.toFixed(1)+'x' : '-'}</td>
+            <td class="scanner-muted" id="scanner-mcap-${q.symbol}">${scannerFmtMcap(q.market_cap)}</td>
+            <td style="text-align:center; white-space:nowrap;">
+                <button class="scanner-btn bto" onclick="scannerExecuteOrder('${q.symbol}','BUY')">BTO</button>
+                <button class="scanner-btn stc" onclick="scannerExecuteOrder('${q.symbol}','SELL')">STC</button>
+                <button class="scanner-btn" onclick="watchlistAddFromScanner('${q.symbol}',\`${(q.name||'').replace(/`/g,'')}\`)" title="Add to Watchlist" style="background:rgba(255,215,0,0.1); color:#ffd700; border-color:rgba(255,215,0,0.2); min-width:24px;">+W</button>
+            </td>
+        </tr>`;
+    }
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function scannerUpdateTable(quotes) {
+    const filtered = scannerApplyFilters(quotes);
+    const tbody = document.querySelector('#scanner-table-container .scanner-tbl tbody');
+    if (!tbody || tbody.children.length === 0) {
+        scannerDisplayTable(quotes);
+        return;
+    }
+    const visibleSyms = new Set();
+    for (const row of tbody.children) visibleSyms.add(row.id.replace('scanner-row-', ''));
+    const filteredSyms = new Set(filtered.map(q => q.symbol));
+    if (visibleSyms.size !== filteredSyms.size || ![...filteredSyms].every(s => visibleSyms.has(s))) {
+        scannerDisplayTable(quotes);
+        return;
+    }
+    for (const q of filtered) {
+        const curLast = q.last || q.price || 0;
+        const lastEl = document.getElementById(`scanner-last-${q.symbol}`);
+        if (lastEl && curLast > 0) {
+            const prevLast = scannerPrevPrices[q.symbol] || 0;
+            lastEl.textContent = scannerFmtPrice(curLast);
+            if (prevLast > 0 && Math.abs(curLast - prevLast) > 0.0001) {
+                lastEl.classList.remove('scanner-flash-up', 'scanner-flash-down');
+                void lastEl.offsetWidth;
+                lastEl.classList.add(curLast > prevLast ? 'scanner-flash-up' : 'scanner-flash-down');
+            }
+        }
+        if (curLast > 0) scannerPrevPrices[q.symbol] = curLast;
+        const bidEl = document.getElementById(`scanner-bid-${q.symbol}`);
+        if (bidEl) bidEl.textContent = scannerFmtPrice(q.bid);
+        const askEl = document.getElementById(`scanner-ask-${q.symbol}`);
+        if (askEl) askEl.textContent = scannerFmtPrice(q.ask);
+        const chgEl = document.getElementById(`scanner-chg-${q.symbol}`);
+        if (chgEl) {
+            chgEl.textContent = scannerFmtPct(q.change_pct, true);
+            chgEl.className = (q.change_pct||0) > 0 ? 'scanner-pos' : (q.change_pct||0) < 0 ? 'scanner-neg' : 'scanner-muted';
+        }
+        const volEl = document.getElementById(`scanner-vol-${q.symbol}`);
+        if (volEl) volEl.textContent = scannerFmtVol(q.volume);
+        const gapEl = document.getElementById(`scanner-gap-${q.symbol}`);
+        if (gapEl) {
+            gapEl.textContent = scannerFmtPct(q.gap_pct, true);
+            gapEl.className = q.gap_pct !== null ? (q.gap_pct > 0 ? 'scanner-pos' : q.gap_pct < 0 ? 'scanner-neg' : 'scanner-muted') : 'scanner-muted';
+        }
+        const highEl = document.getElementById(`scanner-high-${q.symbol}`);
+        if (highEl) highEl.textContent = scannerFmtPrice(q.high);
+        const lowEl = document.getElementById(`scanner-low-${q.symbol}`);
+        if (lowEl) lowEl.textContent = scannerFmtPrice(q.low);
+        const turnEl = document.getElementById(`scanner-turn-${q.symbol}`);
+        if (turnEl) turnEl.textContent = q.turnover_rate ? q.turnover_rate.toFixed(1)+'%' : '-';
+        const rvolEl = document.getElementById(`scanner-rvol-${q.symbol}`);
+        if (rvolEl) {
+            rvolEl.textContent = q.rvol != null ? q.rvol.toFixed(1)+'x' : '-';
+            rvolEl.style.color = q.rvol >= 10 ? '#3FB950' : q.rvol >= 2 ? '#D29922' : '#8B949E';
+        }
+    }
+}
+
+// ── Position Sizing (QTY vs %) ──
+let _bpCache = {};
+const _brokerIdMap = {
+    'WEBULL': 'webull_live', 'ALPACA_PAPER': 'alpaca_paper', 'SCHWAB': 'schwab_live',
+    'IBKR': 'ibkr_live', 'TASTYTRADE_LIVE': 'tastytrade_live', 'TASTYTRADE_PAPER': 'tastytrade_paper',
+    'ROBINHOOD': 'robinhood', 'TRADING212': 'trading212', 'WEBULL_OFFICIAL': 'webull_official_live'
+};
+async function fetchBuyingPower(broker) {
+    const cached = _bpCache[broker];
+    if (cached && Date.now() - cached.ts < 30000) return cached.bp;
+    try {
+        const id = _brokerIdMap[broker] || broker.toLowerCase();
+        const r = await fetch(`/api/broker/buying-power/${id}`, { credentials: 'include' });
+        const data = await r.json();
+        const bp = data.buying_power || 0;
+        _bpCache[broker] = { bp, ts: Date.now() };
+        return bp;
+    } catch (e) { return 0; }
+}
+
+function sizingChanged(prefix) {
+    const mode = document.querySelector(`input[name="${prefix}-sizing"]:checked`).value;
+    const qtyEl = document.getElementById(`${prefix}-qty`);
+    const pctEl = document.getElementById(`${prefix}-pct`);
+    const bpBadge = document.getElementById(`${prefix}-bp-badge`);
+    const qtyLabel = document.getElementById(`${prefix}-sizing-qty-label`);
+    const pctLabel = document.getElementById(`${prefix}-sizing-pct-label`);
+    const offLabel = document.getElementById(`${prefix}-sizing-off-label`);
+    qtyLabel.style.color = '#8B949E';
+    pctLabel.style.color = '#8B949E';
+    offLabel.style.color = '#8B949E';
+    qtyEl.style.display = 'none';
+    pctEl.style.display = 'none';
+    bpBadge.style.display = 'none';
+    if (mode === 'qty') {
+        qtyEl.style.display = '';
+        qtyLabel.style.color = '#E6EDF3';
+    } else if (mode === 'pct') {
+        pctEl.style.display = '';
+        pctLabel.style.color = '#E6EDF3';
+        showBPBadge(prefix);
+    } else {
+        offLabel.style.color = '#E6EDF3';
+    }
+}
+
+async function showBPBadge(prefix) {
+    const broker = document.getElementById(`${prefix}-broker`).value;
+    const badge = document.getElementById(`${prefix}-bp-badge`);
+    badge.style.display = 'inline'; badge.textContent = 'BP: ...';
+    const bp = await fetchBuyingPower(broker);
+    badge.textContent = bp > 0 ? `BP: $${bp.toLocaleString(undefined,{maximumFractionDigits:0})}` : 'BP: N/A';
+}
+
+function getSizingMode(prefix) {
+    return document.querySelector(`input[name="${prefix}-sizing"]:checked`).value;
+}
+
+function buildSignalText(actionLabel, symbol, price, prefix) {
+    const mode = getSizingMode(prefix);
+    const priceStr = price.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    if (mode === 'off') return `${actionLabel} ${symbol} @ ${priceStr}`;
+    if (mode === 'pct') {
+        const pct = document.getElementById(`${prefix}-pct`).value;
+        return `${actionLabel} ${pct}% ${symbol} @ ${priceStr}`;
+    }
+    const qty = document.getElementById(`${prefix}-qty`).value;
+    return `${actionLabel} ${qty} ${symbol} @ ${priceStr}`;
+}
+
+async function resolveQuantityForExecution(prefix, price) {
+    const mode = getSizingMode(prefix);
+    if (mode === 'off') {
+        showToast('Sizing is OFF — select QTY or % to execute orders', 'warning');
+        return 0;
+    }
+    if (mode === 'qty') {
+        const q = parseInt(document.getElementById(`${prefix}-qty`).value) || 0;
+        if (q <= 0) { showToast('Enter a valid quantity', 'warning'); }
+        return q;
+    }
+    const pct = parseFloat(document.getElementById(`${prefix}-pct`).value) || 0;
+    if (pct <= 0) { showToast('Enter a valid position %', 'warning'); return 0; }
+    const broker = document.getElementById(`${prefix}-broker`).value;
+    const bp = await fetchBuyingPower(broker);
+    if (bp <= 0) { showToast('Could not fetch buying power from broker', 'error'); return 0; }
+    const qty = Math.floor((bp * pct / 100) / price);
+    if (qty <= 0) { showToast(`${pct}% of $${bp.toFixed(0)} BP = $${(bp*pct/100).toFixed(2)} — not enough for 1 share @ $${price.toFixed(2)}`, 'warning'); return 0; }
+    return qty;
+}
+
+let scannerOrderInFlight = false;
+async function scannerExecuteOrder(symbol, action) {
+    if (scannerOrderInFlight) return;
+    const broker = document.getElementById('scanner-broker').value;
+    const quote = scannerData.find(q => q.symbol === symbol) || {};
+    const price = quote.last || quote.price || 0;
+    const actionLabel = action === 'BUY' ? 'BTO' : 'STC';
+
+    if (price <= 0) { showToast(`No price for ${symbol}`, 'error'); return; }
+
+    const signalText = buildSignalText(actionLabel, symbol, price, 'scanner');
+    const qty = await resolveQuantityForExecution('scanner', price);
+    if (qty <= 0) return;
+
+    const total = (price * qty).toFixed(2);
+    if (!confirm(`Execute: ${qty} ${symbol} @ ${scannerFmtPrice(price)} ($${total}) via ${broker}\nSignal: ${signalText}`)) return;
+
+    scannerOrderInFlight = true;
+    document.querySelectorAll('.scanner-btn').forEach(b => b.disabled = true);
+    showToast(`${actionLabel} ${qty}x ${symbol} @ ${scannerFmtPrice(price)} via ${broker}...`, 'info');
+
+    try {
+        const r = await fetch('/api/stocks/order', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ symbol, action, quantity: qty, price, order_type: 'LIMIT', broker })
+        });
+        const result = await r.json();
+        if (result.success) {
+            showToast(`${actionLabel} filled: ${qty}x ${symbol} @ ${scannerFmtPrice(price)}`, 'success');
+            scannerSendSignal(signalText);
+        } else {
+            showToast(result.error || 'Order rejected', 'error');
+        }
+    } catch (e) { showToast('Order error: ' + e.message, 'error'); }
+    finally {
+        scannerOrderInFlight = false;
+        document.querySelectorAll('.scanner-btn').forEach(b => b.disabled = false);
+    }
+}
+
+async function scannerSendSignal(signalText) {
+    const targets = scannerGetSelectedChannels();
+    if (targets.length === 0) return;
+    try {
+        const r = await fetch('/api/discord/send-signal-multi', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', body: JSON.stringify({ signal: signalText, targets })
+        });
+        const result = await r.json();
+        if (result.success) showToast(`Signal sent to ${result.sent} channel(s)`, 'success');
+    } catch (e) { /* silent */ }
+}
+
+async function scannerClear() {
+    scannerStopPolling();
+    scannerData = []; scannerPrevPrices = {};
+    document.getElementById('scanner-status').textContent = '';
+    document.getElementById('scanner-live-dot').style.display = 'none';
+    document.getElementById('scanner-table-container').innerHTML = '<div style="text-align:center; padding:60px 20px; color:#6E7681;"><div style="font-size:1.8rem; margin-bottom:10px; opacity:0.4;">🔍</div><div style="font-size:0.85rem;">Select a scan type and click <b>Scan</b> to discover stocks.</div><div style="font-size:0.75rem; margin-top:6px; opacity:0.5;">Real-time data from connected broker WebSocket feeds.</div></div>';
+    try { await fetch('/api/scanner/penny/clear', { method: 'POST', credentials: 'include' }); } catch(e) {}
+}
+
+async function scannerLoadChannels() {
+    if (scannerAllChannels.length > 0) return;
+    try {
+        const [dcResp, whResp] = await Promise.all([
+            fetch('/api/channels', { credentials: 'include' }),
+            fetch('/api/webhook/channels', { credentials: 'include' })
+        ]);
+        const dcChannels = await dcResp.json();
+        const whData = await whResp.json();
+        scannerAllChannels = [];
+        if (Array.isArray(dcChannels)) {
+            for (const ch of dcChannels) {
+                if (ch.discord_channel_id) scannerAllChannels.push({
+                    id: 'dc_' + ch.discord_channel_id,
+                    name: ch.name || ch.discord_channel_id,
+                    type: 'discord'
+                });
+            }
+        }
+        if (whData.success && Array.isArray(whData.channels)) {
+            for (const ch of whData.channels) {
+                scannerAllChannels.push({
+                    id: 'wh_' + ch.id,
+                    name: ch.name || ('Webhook #' + ch.id),
+                    type: 'webhook'
+                });
+            }
+        }
+        const list = document.getElementById('scanner-channel-list');
+        list.innerHTML = '';
+        if (scannerAllChannels.filter(c => c.type === 'discord').length > 0) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'padding:4px 10px; font-size:0.65rem; color:#8B949E; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid rgba(255,255,255,0.04);';
+            hdr.textContent = 'Discord Channels';
+            list.appendChild(hdr);
+        }
+        for (const ch of scannerAllChannels.filter(c => c.type === 'discord')) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:5px 10px; display:flex; align-items:center; gap:6px; cursor:pointer;';
+            div.innerHTML = `<input type="checkbox" class="scanner-ch-cb" value="${ch.id}" style="cursor:pointer; accent-color:#238636;"><span style="font-size:0.75rem; color:#E6EDF3;">${ch.name}</span>`;
+            div.querySelector('input').addEventListener('change', scannerUpdateChannelLabel);
+            list.appendChild(div);
+        }
+        if (scannerAllChannels.filter(c => c.type === 'webhook').length > 0) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'padding:4px 10px; font-size:0.65rem; color:#8B949E; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid rgba(255,255,255,0.06); border-bottom:1px solid rgba(255,255,255,0.04); margin-top:4px;';
+            hdr.textContent = 'Webhook Channels';
+            list.appendChild(hdr);
+        }
+        for (const ch of scannerAllChannels.filter(c => c.type === 'webhook')) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:5px 10px; display:flex; align-items:center; gap:6px; cursor:pointer;';
+            div.innerHTML = `<input type="checkbox" class="scanner-ch-cb" value="${ch.id}" style="cursor:pointer; accent-color:#238636;"><span style="font-size:0.75rem; color:#E6EDF3;">🔗 ${ch.name}</span>`;
+            div.querySelector('input').addEventListener('change', scannerUpdateChannelLabel);
+            list.appendChild(div);
+        }
+    } catch (e) {}
+}
+
+function scannerToggleChannelPicker() {
+    const dd = document.getElementById('scanner-channel-dropdown');
+    dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', function(e) {
+    const picker = document.getElementById('scanner-channel-picker');
+    const dd = document.getElementById('scanner-channel-dropdown');
+    if (picker && dd && !picker.contains(e.target)) dd.style.display = 'none';
+});
+function scannerSelectAllChannels() {
+    document.querySelectorAll('.scanner-ch-cb').forEach(cb => cb.checked = true); scannerUpdateChannelLabel();
+}
+function scannerDeselectAllChannels() {
+    document.querySelectorAll('.scanner-ch-cb').forEach(cb => cb.checked = false); scannerUpdateChannelLabel();
+}
+function scannerUpdateChannelLabel() {
+    const n = document.querySelectorAll('.scanner-ch-cb:checked').length;
+    document.getElementById('scanner-channel-label').textContent = n === 0 ? '📡 Channels' : `📡 ${n} ch`;
+}
+function scannerGetSelectedChannels() {
+    const targets = [];
+    document.querySelectorAll('.scanner-ch-cb:checked').forEach(cb => {
+        targets.push(cb.value);
+    });
+    return targets;
+}
+
+// ── Watchlist ────────────────────────────────────────────────
+let watchlistData = [];
+let watchlistPollTimer = null;
+let watchlistPrevPrices = {};
+let watchlistAllChannels = [];
+let watchlistOrderInFlight = false;
+
+function watchlistStartPolling() {
+    watchlistStopPolling();
+    watchlistRefreshQuotes();
+    watchlistPollTimer = setInterval(watchlistRefreshQuotes, 2000);
+}
+function watchlistStopPolling() {
+    if (watchlistPollTimer) { clearInterval(watchlistPollTimer); watchlistPollTimer = null; }
+}
+
+async function watchlistRefreshQuotes() {
+    if (currentTab !== 'watchlist') { watchlistStopPolling(); return; }
+    try {
+        const r = await fetch('/api/watchlist/quotes', { credentials: 'include' });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (currentTab !== 'watchlist') return;
+        if (data.success && data.quotes) {
+            watchlistData = data.quotes;
+            watchlistUpdateTable(data.quotes);
+            const statusEl = document.getElementById('watchlist-status');
+            const dotEl = document.getElementById('watchlist-live-dot');
+            if (statusEl) statusEl.textContent = `${data.quotes.length} symbols`;
+            if (dotEl && data.quotes.length > 0) dotEl.style.display = 'inline-block';
+        }
+    } catch (e) { }
+}
+
+async function watchlistLoadAndDisplay() {
+    const container = document.getElementById('watchlist-table-container');
+    try {
+        const r = await fetch('/api/watchlist/quotes', { credentials: 'include' });
+        const data = await r.json();
+        if (data.success && data.quotes && data.quotes.length > 0) {
+            watchlistData = data.quotes;
+            watchlistDisplayTable(watchlistData);
+            watchlistStartPolling();
+        } else {
+            watchlistData = [];
+            container.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#6E7681;"><div style="font-size:1.8rem; margin-bottom:10px; opacity:0.4;">⭐</div><div style="font-size:0.85rem;">Watchlist is empty. Add symbols above or click <b>+W</b> in scanner results.</div></div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div style="text-align:center; padding:50px; color:#F85149;">Failed to load watchlist</div>';
+    }
+}
+
+function watchlistDisplayTable(quotes) {
+    const container = document.getElementById('watchlist-table-container');
+    if (!quotes || quotes.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#6E7681;"><div style="font-size:1.8rem; margin-bottom:10px; opacity:0.4;">⭐</div><div style="font-size:0.85rem;">Watchlist is empty. Add symbols above or click <b>+W</b> in scanner results.</div></div>';
+        return;
+    }
+    let html = `<div style="overflow-x:auto;"><table class="scanner-tbl watchlist-tbl">
+        <thead><tr>
+            <th style="text-align:left; min-width:100px;">Symbol</th>
+            <th>Last</th>
+            <th>Chg%</th>
+            <th>Bid</th>
+            <th>Ask</th>
+            <th>Volume</th>
+            <th>RVOL</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Source</th>
+            <th style="text-align:center; min-width:120px;">Trade</th>
+        </tr></thead><tbody>`;
+    for (const q of quotes) {
+        html += watchlistBuildRow(q);
+    }
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function watchlistBuildRow(q) {
+    const chgCls = (q.change_pct||0) > 0 ? 'scanner-pos' : (q.change_pct||0) < 0 ? 'scanner-neg' : 'scanner-muted';
+    const srcColor = q.source === 'schwab' ? '#0078d7' : q.source === 'webull' ? '#00c853' : q.source === 'ibkr' ? '#ff6d00' : '#58A6FF';
+    const srcBadge = q.source ? `<span class="scanner-badge" style="background:${srcColor}22; color:${srcColor};">${q.source}</span>` : '<span class="scanner-muted">-</span>';
+    const rvolText = q.rvol != null ? `${q.rvol}x` : '-';
+    const rvolCls = q.rvol != null && q.rvol >= 5 ? 'scanner-pos' : q.rvol != null && q.rvol >= 2 ? '' : 'scanner-muted';
+    return `<tr id="wl-row-${q.symbol}">
+        <td><div class="scanner-sym">${q.symbol}</div><div class="scanner-name">${q.name||''}</div></td>
+        <td style="font-weight:600; font-family:monospace;" id="wl-last-${q.symbol}">${scannerFmtPrice(q.last)}</td>
+        <td class="${chgCls}" style="font-weight:600;" id="wl-chg-${q.symbol}">${scannerFmtPct(q.change_pct, true)}</td>
+        <td class="scanner-muted" id="wl-bid-${q.symbol}">${scannerFmtPrice(q.bid)}</td>
+        <td class="scanner-muted" id="wl-ask-${q.symbol}">${scannerFmtPrice(q.ask)}</td>
+        <td style="font-family:monospace;" id="wl-vol-${q.symbol}">${scannerFmtVol(q.volume)}</td>
+        <td class="${rvolCls}" style="font-weight:600; font-family:monospace;" id="wl-rvol-${q.symbol}">${rvolText}</td>
+        <td class="scanner-muted" id="wl-high-${q.symbol}">${scannerFmtPrice(q.high)}</td>
+        <td class="scanner-muted" id="wl-low-${q.symbol}">${scannerFmtPrice(q.low)}</td>
+        <td>${srcBadge}</td>
+        <td style="text-align:center; white-space:nowrap;">
+            <button class="scanner-btn wl-trade-btn" onclick="watchlistExecuteOrder('${q.symbol}','BUY')" style="background:rgba(35,134,54,0.15); color:#2ea043; border-color:rgba(35,134,54,0.3); font-weight:700; min-width:36px;">BTO</button>
+            <button class="scanner-btn wl-trade-btn" onclick="watchlistExecuteOrder('${q.symbol}','SELL')" style="background:rgba(248,81,73,0.1); color:#F85149; border-color:rgba(248,81,73,0.2); font-weight:700; min-width:36px;">STC</button>
+            <button class="scanner-btn" onclick="watchlistRemove('${q.symbol}')" title="Remove" style="background:rgba(255,255,255,0.03); color:#6E7681; border-color:rgba(255,255,255,0.06); min-width:24px;">✕</button>
+        </td>
+    </tr>`;
+}
+
+function watchlistUpdateTable(quotes) {
+    const tbody = document.querySelector('#watchlist-table-container .watchlist-tbl tbody');
+    if (!tbody || tbody.children.length === 0) {
+        watchlistDisplayTable(quotes);
+        return;
+    }
+    const visibleSyms = new Set();
+    for (const row of tbody.children) visibleSyms.add(row.id.replace('wl-row-', ''));
+    const newSyms = new Set(quotes.map(q => q.symbol));
+    if (visibleSyms.size !== newSyms.size || ![...newSyms].every(s => visibleSyms.has(s))) {
+        watchlistDisplayTable(quotes);
+        return;
+    }
+    for (const q of quotes) {
+        const curLast = q.last || 0;
+        const lastEl = document.getElementById(`wl-last-${q.symbol}`);
+        if (lastEl && curLast > 0) {
+            const prev = watchlistPrevPrices[q.symbol] || 0;
+            lastEl.textContent = scannerFmtPrice(curLast);
+            if (prev > 0 && Math.abs(curLast - prev) > 0.0001) {
+                lastEl.classList.remove('scanner-flash-up', 'scanner-flash-down');
+                void lastEl.offsetWidth;
+                lastEl.classList.add(curLast > prev ? 'scanner-flash-up' : 'scanner-flash-down');
+            }
+        }
+        if (curLast > 0) watchlistPrevPrices[q.symbol] = curLast;
+        const bidEl = document.getElementById(`wl-bid-${q.symbol}`);
+        if (bidEl) bidEl.textContent = scannerFmtPrice(q.bid);
+        const askEl = document.getElementById(`wl-ask-${q.symbol}`);
+        if (askEl) askEl.textContent = scannerFmtPrice(q.ask);
+        const chgEl = document.getElementById(`wl-chg-${q.symbol}`);
+        if (chgEl) {
+            chgEl.textContent = scannerFmtPct(q.change_pct, true);
+            chgEl.className = (q.change_pct||0) > 0 ? 'scanner-pos' : (q.change_pct||0) < 0 ? 'scanner-neg' : 'scanner-muted';
+        }
+        const volEl = document.getElementById(`wl-vol-${q.symbol}`);
+        if (volEl) volEl.textContent = scannerFmtVol(q.volume);
+        const rvolEl = document.getElementById(`wl-rvol-${q.symbol}`);
+        if (rvolEl) {
+            const rvolText = q.rvol != null ? `${q.rvol}x` : '-';
+            rvolEl.textContent = rvolText;
+            rvolEl.className = q.rvol != null && q.rvol >= 5 ? 'scanner-pos' : q.rvol != null && q.rvol >= 2 ? '' : 'scanner-muted';
+        }
+        const highEl = document.getElementById(`wl-high-${q.symbol}`);
+        if (highEl) highEl.textContent = scannerFmtPrice(q.high);
+        const lowEl = document.getElementById(`wl-low-${q.symbol}`);
+        if (lowEl) lowEl.textContent = scannerFmtPrice(q.low);
+    }
+}
+
+async function watchlistAddManual() {
+    const input = document.getElementById('watchlist-add-symbol');
+    const symbols = input.value.trim().toUpperCase().split(/[,;\s]+/).filter(s => s && s.match(/^[A-Z]{1,6}$/));
+    if (symbols.length === 0) { showToast('Enter a valid symbol', 'warning'); return; }
+    let added = 0;
+    for (const sym of symbols) {
+        try {
+            const r = await fetch('/api/watchlist/add', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', body: JSON.stringify({ symbol: sym, added_from: 'manual' })
+            });
+            const data = await r.json();
+            if (data.success) added++;
+        } catch (e) { }
+    }
+    input.value = '';
+    if (added > 0) {
+        showToast(`Added ${added} symbol(s) to watchlist`, 'success');
+        watchlistLoadAndDisplay();
+    }
+}
+
+async function watchlistAddFromScanner(symbol, name) {
+    try {
+        const r = await fetch('/api/watchlist/add', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', body: JSON.stringify({ symbol, name, added_from: 'scanner' })
+        });
+        const data = await r.json();
+        if (data.success) showToast(`${symbol} added to watchlist`, 'success');
+    } catch (e) {
+        showToast('Failed to add to watchlist', 'error');
+    }
+}
+
+async function watchlistRemove(symbol) {
+    try {
+        const r = await fetch('/api/watchlist/remove', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', body: JSON.stringify({ symbol })
+        });
+        const data = await r.json();
+        if (data.success) {
+            showToast(`${symbol} removed`, 'info');
+            watchlistLoadAndDisplay();
+        }
+    } catch (e) { showToast('Failed to remove', 'error'); }
+}
+
+async function watchlistClearAll() {
+    if (!confirm('Clear entire watchlist?')) return;
+    try {
+        await fetch('/api/watchlist/clear', { method: 'POST', credentials: 'include' });
+        showToast('Watchlist cleared', 'info');
+        watchlistStopPolling();
+        watchlistData = [];
+        watchlistLoadAndDisplay();
+    } catch (e) { }
+}
+
+// ── Watchlist Channel Picker ──
+async function watchlistLoadChannels() {
+    if (watchlistAllChannels.length > 0) return;
+    try {
+        const [dcResp, whResp] = await Promise.all([
+            fetch('/api/channels', { credentials: 'include' }),
+            fetch('/api/webhook/channels', { credentials: 'include' })
+        ]);
+        const dcChannels = await dcResp.json();
+        const whData = await whResp.json();
+        watchlistAllChannels = [];
+        if (Array.isArray(dcChannels)) {
+            for (const ch of dcChannels) {
+                if (ch.discord_channel_id) watchlistAllChannels.push({
+                    id: 'dc_' + ch.discord_channel_id, name: ch.name || ch.discord_channel_id, type: 'discord'
+                });
+            }
+        }
+        if (whData.success && Array.isArray(whData.channels)) {
+            for (const ch of whData.channels) {
+                watchlistAllChannels.push({
+                    id: 'wh_' + ch.id, name: ch.name || ('Webhook #' + ch.id), type: 'webhook'
+                });
+            }
+        }
+        const list = document.getElementById('watchlist-channel-list');
+        list.innerHTML = '';
+        const dcList = watchlistAllChannels.filter(c => c.type === 'discord');
+        const whList = watchlistAllChannels.filter(c => c.type === 'webhook');
+        if (dcList.length > 0) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'padding:4px 10px; font-size:0.65rem; color:#8B949E; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid rgba(255,255,255,0.04);';
+            hdr.textContent = 'Discord Channels';
+            list.appendChild(hdr);
+        }
+        for (const ch of dcList) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:5px 10px; display:flex; align-items:center; gap:6px; cursor:pointer;';
+            div.innerHTML = `<input type="checkbox" class="wl-ch-cb" value="${ch.id}" style="cursor:pointer; accent-color:#238636;"><span style="font-size:0.75rem; color:#E6EDF3;">${ch.name}</span>`;
+            div.querySelector('input').addEventListener('change', watchlistUpdateChannelLabel);
+            list.appendChild(div);
+        }
+        if (whList.length > 0) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'padding:4px 10px; font-size:0.65rem; color:#8B949E; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid rgba(255,255,255,0.06); border-bottom:1px solid rgba(255,255,255,0.04); margin-top:4px;';
+            hdr.textContent = 'Webhook Channels';
+            list.appendChild(hdr);
+        }
+        for (const ch of whList) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:5px 10px; display:flex; align-items:center; gap:6px; cursor:pointer;';
+            div.innerHTML = `<input type="checkbox" class="wl-ch-cb" value="${ch.id}" style="cursor:pointer; accent-color:#238636;"><span style="font-size:0.75rem; color:#E6EDF3;">🔗 ${ch.name}</span>`;
+            div.querySelector('input').addEventListener('change', watchlistUpdateChannelLabel);
+            list.appendChild(div);
+        }
+    } catch (e) {}
+}
+
+function watchlistToggleChannelPicker() {
+    const dd = document.getElementById('watchlist-channel-dropdown');
+    dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', function(e) {
+    const picker = document.getElementById('watchlist-channel-picker');
+    const dd = document.getElementById('watchlist-channel-dropdown');
+    if (picker && dd && !picker.contains(e.target)) dd.style.display = 'none';
+});
+function watchlistUpdateChannelLabel() {
+    const n = document.querySelectorAll('.wl-ch-cb:checked').length;
+    document.getElementById('watchlist-channel-label').textContent = n === 0 ? '📡 Channels' : `📡 ${n} ch`;
+}
+function watchlistGetSelectedChannels() {
+    const targets = [];
+    document.querySelectorAll('.wl-ch-cb:checked').forEach(cb => targets.push(cb.value));
+    return targets;
+}
+
+// ── Watchlist Trade Execution ──
+async function watchlistExecuteOrder(symbol, action) {
+    if (watchlistOrderInFlight) return;
+    const mode = document.getElementById('watchlist-mode').value;
+    const broker = document.getElementById('watchlist-broker').value;
+    const quote = watchlistData.find(q => q.symbol === symbol) || {};
+    const price = quote.last || 0;
+    const actionLabel = action === 'BUY' ? 'BTO' : 'STC';
+
+    if (price <= 0) { showToast(`No price for ${symbol}`, 'error'); return; }
+
+    const doSignal = mode === 'signal' || mode === 'both';
+    const doExecute = mode === 'execute' || mode === 'both';
+    const signalText = buildSignalText(actionLabel, symbol, price, 'watchlist');
+
+    let qty = 0;
+    if (doExecute) {
+        qty = await resolveQuantityForExecution('watchlist', price);
+        if (qty <= 0) return;
+    }
+
+    const modeLabel = mode === 'signal' ? 'Signal Only' : mode === 'execute' ? 'Execute Only' : 'Signal+Execute';
+    let confirmMsg = `Mode: ${modeLabel}`;
+    if (doSignal) confirmMsg += `\nSignal: ${signalText}`;
+    if (doExecute) confirmMsg += `\nExecute: ${qty} ${symbol} @ ${scannerFmtPrice(price)} ($${(price*qty).toFixed(2)}) via ${broker}`;
+    if (!confirm(confirmMsg)) return;
+
+    watchlistOrderInFlight = true;
+    document.querySelectorAll('.wl-trade-btn').forEach(b => b.disabled = true);
+
+    try {
+        if (doExecute) {
+            showToast(`${actionLabel} ${qty}x ${symbol} @ ${scannerFmtPrice(price)} via ${broker}...`, 'info');
+            const r = await fetch('/api/stocks/order', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ symbol, action, quantity: qty, price, order_type: 'LIMIT', broker })
+            });
+            const result = await r.json();
+            if (result.success) {
+                showToast(`${actionLabel} filled: ${qty}x ${symbol} @ ${scannerFmtPrice(price)}`, 'success');
+            } else {
+                showToast(result.error || 'Order rejected', 'error');
+            }
+        }
+        if (doSignal) {
+            await watchlistSendSignal(signalText);
+        }
+    } catch (e) { showToast('Order error: ' + e.message, 'error'); }
+    finally {
+        watchlistOrderInFlight = false;
+        document.querySelectorAll('.wl-trade-btn').forEach(b => b.disabled = false);
+    }
+}
+
+async function watchlistSendSignal(signalText) {
+    const targets = watchlistGetSelectedChannels();
+    if (targets.length === 0) {
+        showToast('No channels selected for signal', 'warning');
+        return;
+    }
+    try {
+        const r = await fetch('/api/discord/send-signal-multi', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', body: JSON.stringify({ signal: signalText, targets })
+        });
+        const result = await r.json();
+        if (result.success) showToast(`Signal sent to ${result.sent} channel(s)`, 'success');
+    } catch (e) { }
+}
+
 </script>
 {% endblock %}

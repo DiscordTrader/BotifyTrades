@@ -820,6 +820,83 @@
             opacity: 1;
         }
     }
+
+    .webhook-section { margin-top: 50px; }
+    .webhook-section h2 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.5rem;
+        color: var(--text-primary);
+        margin-bottom: 25px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .webhook-section h2 .count {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 20px;
+        padding: 4px 14px;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+    .wh-add-card {
+        background: var(--card-bg);
+        backdrop-filter: blur(20px);
+        border: 2px dashed rgba(255, 107, 53, 0.3);
+        border-radius: 20px;
+        padding: 24px 30px;
+        margin-bottom: 24px;
+        transition: all 0.3s ease;
+    }
+    .wh-add-card:hover { border-color: #FF6B35; box-shadow: 0 0 30px rgba(255, 107, 53, 0.1); }
+    .wh-add-card h3 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.2rem;
+        color: #FF6B35;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .wh-form-row {
+        display: grid;
+        grid-template-columns: 1.5fr 2.5fr 1fr auto auto;
+        gap: 16px;
+        align-items: end;
+    }
+    @media (max-width: 992px) { .wh-form-row { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 576px) { .wh-form-row { grid-template-columns: 1fr; } }
+    .wh-card {
+        background: var(--card-bg);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        padding: 20px;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    .wh-card:hover { border-color: rgba(255, 107, 53, 0.4); transform: translateY(-2px); box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+    .wh-card-color { width: 6px; height: 48px; border-radius: 3px; flex-shrink: 0; }
+    .wh-card-info { flex: 1; min-width: 0; }
+    .wh-card-name { font-weight: 600; color: var(--text-primary); font-size: 1rem; margin-bottom: 4px; }
+    .wh-card-url { color: var(--text-muted); font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+    .wh-card-bot { color: var(--text-secondary); font-size: 0.8rem; margin-top: 2px; }
+    .wh-card-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .wh-btn {
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+    .wh-btn-test { background: rgba(15, 240, 179, 0.1); color: var(--mint); border-color: rgba(15, 240, 179, 0.2); }
+    .wh-btn-test:hover { background: rgba(15, 240, 179, 0.2); }
+    .wh-btn-del { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+    .wh-btn-del:hover { background: rgba(239, 68, 68, 0.2); }
 </style>
 {% endblock %}
 
@@ -922,6 +999,52 @@
         </div>
     </div>
 
+    <!-- ── Webhook Channels Section ── -->
+    <div class="webhook-section">
+        <h2>
+            <span>🔗</span> Webhook Channels
+            <span class="count" id="webhookChannelCount">0</span>
+        </h2>
+
+        <div class="wh-add-card">
+            <h3><span>➕</span> Add Webhook Channel</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">
+                Create a webhook in Discord: <b>Server Settings → Integrations → Webhooks → New Webhook → Copy URL</b>
+            </p>
+            <div class="wh-form-row">
+                <div class="form-group">
+                    <label>Channel Name</label>
+                    <input type="text" class="form-input" id="whNewName" placeholder="e.g. My Alerts">
+                </div>
+                <div class="form-group">
+                    <label>Webhook URL</label>
+                    <input type="text" class="form-input" id="whNewUrl" placeholder="https://discord.com/api/webhooks/...">
+                </div>
+                <div class="form-group">
+                    <label>Bot Name</label>
+                    <input type="text" class="form-input" id="whNewBot" placeholder="Trade Echo Bot" value="Trade Echo Bot">
+                </div>
+                <div class="form-group">
+                    <label>Color</label>
+                    <input type="color" id="whNewColor" value="#FF6B35" style="width:44px; height:44px; border:none; border-radius:10px; cursor:pointer; background:transparent;">
+                </div>
+                <div class="form-group">
+                    <button class="btn-add" onclick="whAddChannel()" style="background:linear-gradient(135deg, #FF6B35, #F7931E);">
+                        <span>✓</span> Add
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="channels-grid" id="webhookGrid" style="grid-template-columns: 1fr;">
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="icon">🔗</div>
+                <h3>No Webhook Channels</h3>
+                <p>Add a webhook channel to post signals from Penny Scanner and Watchlist.</p>
+            </div>
+        </div>
+    </div>
+
     <div class="help-card">
         <h4><span>💡</span> Quick Guide</h4>
         <div class="help-grid">
@@ -940,6 +1063,10 @@
             <div class="help-item">
                 <span class="badge percent">Position %</span>
                 <p>Set per-channel position sizing as percentage of buying power</p>
+            </div>
+            <div class="help-item">
+                <span class="badge" style="background:linear-gradient(135deg,#FF6B35,#F7931E); color:#000;">Webhook</span>
+                <p>Webhook channels let you post BTO/STC signals to any Discord channel from Penny Scanner & Watchlist</p>
             </div>
         </div>
     </div>
@@ -1359,7 +1486,8 @@ let currentSettingsChannelId = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadChannels();
-    
+    whLoadChannels();
+
     document.getElementById('addChannelForm').addEventListener('submit', function(e) {
         e.preventDefault();
         addChannel();
@@ -3736,6 +3864,123 @@ function showSettingsHelp(topic) {
         </div>
     `;
     document.body.appendChild(overlay);
+}
+
+// ========== WEBHOOK CHANNELS ==========
+let whChannels = [];
+
+async function whLoadChannels() {
+    try {
+        const r = await fetch('/api/webhook/channels');
+        const data = await r.json();
+        if (data.success && Array.isArray(data.channels)) {
+            whChannels = data.channels;
+        } else {
+            whChannels = [];
+        }
+        whRender();
+    } catch (e) {
+        console.error('Error loading webhook channels:', e);
+    }
+}
+
+function whRender() {
+    const grid = document.getElementById('webhookGrid');
+    const countEl = document.getElementById('webhookChannelCount');
+    countEl.textContent = whChannels.length;
+
+    if (whChannels.length === 0) {
+        grid.innerHTML = `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="icon">🔗</div>
+                <h3>No Webhook Channels</h3>
+                <p>Add a webhook channel to post signals from Penny Scanner and Watchlist.</p>
+            </div>`;
+        return;
+    }
+
+    grid.innerHTML = whChannels.map(ch => {
+        const color = ch.color || '#FF6B35';
+        const urlShort = (ch.webhook_url || '').length > 60
+            ? ch.webhook_url.substring(0, 60) + '...'
+            : (ch.webhook_url || '');
+        return `
+        <div class="wh-card">
+            <div class="wh-card-color" style="background:${color};"></div>
+            <div class="wh-card-info">
+                <div class="wh-card-name">${ch.name || 'Unnamed'}</div>
+                <div class="wh-card-url" title="${ch.webhook_url || ''}">${urlShort}</div>
+                <div class="wh-card-bot">Bot: ${ch.bot_name || 'Trade Echo Bot'}</div>
+            </div>
+            <div class="wh-card-actions">
+                <button class="wh-btn wh-btn-test" onclick="whTestChannel(${ch.id})">Test</button>
+                <button class="wh-btn wh-btn-del" onclick="whDeleteChannel(${ch.id}, '${(ch.name||'').replace(/'/g,"\\'")}')">Delete</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function whAddChannel() {
+    const name = document.getElementById('whNewName').value.trim();
+    const url = document.getElementById('whNewUrl').value.trim();
+    const botName = document.getElementById('whNewBot').value.trim() || 'Trade Echo Bot';
+    const color = document.getElementById('whNewColor').value;
+
+    if (!name) { showNotification('Enter a channel name', 'error'); return; }
+    if (!url || !(url.startsWith('https://discord.com/api/webhooks/') || url.startsWith('https://discordapp.com/api/webhooks/'))) {
+        showNotification('Enter a valid Discord webhook URL', 'error'); return;
+    }
+
+    try {
+        const r = await fetch('/api/webhook/channels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, webhook_url: url, bot_name: botName, color })
+        });
+        const data = await r.json();
+        if (data.success) {
+            showNotification('Webhook channel added!');
+            document.getElementById('whNewName').value = '';
+            document.getElementById('whNewUrl').value = '';
+            document.getElementById('whNewBot').value = 'Trade Echo Bot';
+            await whLoadChannels();
+        } else {
+            showNotification(data.error || 'Failed to add webhook channel', 'error');
+        }
+    } catch (e) {
+        showNotification('Error adding webhook channel: ' + e.message, 'error');
+    }
+}
+
+async function whTestChannel(id) {
+    try {
+        showNotification('Sending test message...');
+        const r = await fetch(`/api/webhook/channels/${id}/test`, { method: 'POST' });
+        const data = await r.json();
+        if (data.success) {
+            showNotification('Test message sent! Check your Discord channel.');
+        } else {
+            showNotification(data.error || 'Test failed', 'error');
+        }
+    } catch (e) {
+        showNotification('Test error: ' + e.message, 'error');
+    }
+}
+
+async function whDeleteChannel(id, name) {
+    if (!confirm(`Delete webhook channel "${name}"? This cannot be undone.`)) return;
+    try {
+        const r = await fetch(`/api/webhook/channels/${id}`, { method: 'DELETE' });
+        const data = await r.json();
+        if (data.success) {
+            showNotification('Webhook channel deleted');
+            await whLoadChannels();
+        } else {
+            showNotification(data.error || 'Failed to delete', 'error');
+        }
+    } catch (e) {
+        showNotification('Error: ' + e.message, 'error');
+    }
 }
 </script>
 {% endblock %}
