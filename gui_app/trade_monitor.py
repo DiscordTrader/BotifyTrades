@@ -78,48 +78,41 @@ def is_recent_fill(filled_time_str: str, max_seconds: int = 120) -> bool:
     
     now_et = datetime.now(et_tz)
     
-    parsed_time = None
-    is_utc = False
-    
-    # Check if this is a UTC timestamp (ends with Z)
-    if filled_time_str.endswith('Z'):
-        is_utc = True
-        clean_time_str = filled_time_str[:-1]  # Remove trailing Z
-    else:
-        # Check for ET timezone suffixes
-        clean_time_str = filled_time_str.replace(' EST', '').replace(' EDT', '').replace(' ET', '')
-    
-    # Formats to try (without timezone suffix)
-    formats = [
-        '%Y-%m-%dT%H:%M:%S.%f',  # ISO8601 with microseconds
-        '%Y-%m-%dT%H:%M:%S',     # ISO8601 without microseconds
-        '%Y-%m-%d %H:%M:%S',     # Standard datetime
-        '%m/%d/%Y %H:%M:%S',     # US format
-    ]
-    
-    for fmt in formats:
-        try:
-            parsed_time = datetime.strptime(clean_time_str, fmt)
-            break
-        except ValueError:
-            continue
-    
-    if not parsed_time:
-        # Log unparseable timestamp for debugging
-        print(f"[TRADE MONITOR] Could not parse timestamp: {filled_time_str}", flush=True)
-        return False
-    
-    # Apply correct timezone
+    parsed_time_et = None
+
+    # Try fromisoformat first — handles Z, +00:00, +0000, and offset-aware timestamps natively
     try:
-        if is_utc:
-            # Timestamp was UTC - attach UTC timezone then convert to ET
-            parsed_time = parsed_time.replace(tzinfo=utc_tz)
-            parsed_time_et = parsed_time.astimezone(et_tz)
+        raw = filled_time_str.replace('Z', '+00:00')
+        # fromisoformat in 3.11+ handles +0000 but not all edge cases — normalize
+        import re
+        raw = re.sub(r'([+-]\d{2})(\d{2})$', r'\1:\2', raw)
+        dt_parsed = datetime.fromisoformat(raw)
+        if dt_parsed.tzinfo is not None:
+            parsed_time_et = dt_parsed.astimezone(et_tz)
         else:
-            # Timestamp was ET or naive (assume ET)
-            parsed_time_et = parsed_time.replace(tzinfo=et_tz)
-    except Exception as e:
-        print(f"[TRADE MONITOR] Timezone conversion error: {e}", flush=True)
+            parsed_time_et = dt_parsed.replace(tzinfo=et_tz)
+    except (ValueError, TypeError):
+        pass
+
+    # Fallback: strip timezone suffixes and try strptime formats
+    if not parsed_time_et:
+        clean_time_str = filled_time_str.replace(' EST', '').replace(' EDT', '').replace(' ET', '')
+        formats = [
+            '%Y-%m-%dT%H:%M:%S.%f',
+            '%Y-%m-%dT%H:%M:%S',
+            '%Y-%m-%d %H:%M:%S',
+            '%m/%d/%Y %H:%M:%S',
+        ]
+        for fmt in formats:
+            try:
+                parsed_time = datetime.strptime(clean_time_str, fmt)
+                parsed_time_et = parsed_time.replace(tzinfo=et_tz)
+                break
+            except ValueError:
+                continue
+
+    if not parsed_time_et:
+        print(f"[TRADE MONITOR] Could not parse timestamp: {filled_time_str}", flush=True)
         return False
     
     # Check if same day
@@ -166,6 +159,7 @@ class TradeMonitor:
     
     def __init__(self, broker=None):
         self.broker = broker
+        self._broker_manager = None
         self.running = False
         self._task = None
         self._last_poll_time = None
@@ -173,6 +167,7 @@ class TradeMonitor:
         self._http_session = None
         self._poll_count = 0
         self._last_status_log = None
+        self._seeded = False
         self._stop_event = asyncio.Event()
         self._standby_mode = False
     
@@ -209,31 +204,241 @@ class TradeMonitor:
             return False
         
     def set_broker(self, broker):
-        """Set the broker instance to monitor"""
+        """Set the broker instance to monitor (legacy single-broker)"""
         self.broker = broker
         broker_name = getattr(broker, 'name', type(broker).__name__)
         print(f"[TRADE MONITOR] Broker connected: {broker_name}", flush=True)
-        
+
+    def set_broker_manager(self, broker_manager):
+        """Set broker manager for multi-broker monitoring"""
+        self._broker_manager = broker_manager
+        print(f"[TRADE MONITOR] ✓ Broker manager connected — multi-broker monitoring enabled", flush=True)
+
+    def _get_brokers_to_monitor(self) -> list:
+        """Get all connected US brokers as (name, instance) pairs"""
+        brokers = []
+        bm = self._broker_manager
+
+        if not bm:
+            if self.broker:
+                name = getattr(self.broker, 'name', 'WEBULL')
+                brokers.append((name, self.broker))
+            return brokers
+
+        if getattr(bm, 'webull_broker', None):
+            brokers.append(('Webull', bm.webull_broker))
+
+        schwab = getattr(bm, 'schwab_broker', None)
+        if schwab:
+            try:
+                if schwab.is_authenticated() or getattr(schwab, 'connected', False):
+                    brokers.append(('SCHWAB', schwab))
+            except Exception:
+                pass
+
+        ibkr = getattr(bm, 'ibkr_broker', None)
+        if ibkr and getattr(ibkr, 'connected', False):
+            label = 'IBKR_LIVE' if not getattr(ibkr, 'paper_trade', True) else 'IBKR_PAPER'
+            brokers.append((label, ibkr))
+
+        tt = getattr(bm, 'tastytrade_broker', None)
+        if tt and getattr(tt, 'session', None):
+            label = 'TASTYTRADE_LIVE' if getattr(tt, 'is_live', False) else 'TASTYTRADE_PAPER'
+            brokers.append((label, tt))
+
+        alpaca = getattr(bm, 'alpaca_paper_broker', None)
+        if alpaca:
+            brokers.append(('ALPACA_PAPER', alpaca))
+
+        wo = getattr(bm, 'webull_official_broker', None)
+        if wo and getattr(wo, 'connected', False):
+            label = 'WEBULL_OFFICIAL_LIVE' if not getattr(wo, 'paper_trade', True) else 'WEBULL_OFFICIAL_PAPER'
+            brokers.append((label, wo))
+
+        rh = getattr(bm, 'robinhood_broker', None)
+        if rh and getattr(rh, 'connected', False):
+            brokers.append(('ROBINHOOD', rh))
+
+        return brokers
+
+    async def _fetch_filled_orders(self, broker_name: str, broker_instance) -> list:
+        """Fetch filled orders from any US broker, normalize to common format.
+        Returns list of dicts with: order_id, symbol, quantity, filled_price,
+        action, filled_time, asset_type, strike?, expiry?, direction?"""
+
+        if broker_name in ('Webull', 'WEBULL_PAPER'):
+            if hasattr(broker_instance, 'get_order_history'):
+                return await broker_instance.get_order_history(count=20) or []
+
+        elif broker_name == 'SCHWAB':
+            if hasattr(broker_instance, 'get_order_history'):
+                return await broker_instance.get_order_history(count=20) or []
+
+        elif broker_name.startswith('IBKR'):
+            if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
+                orders = []
+                for trade in broker_instance.ib.trades():
+                    if not trade.orderStatus or trade.orderStatus.status != 'Filled':
+                        continue
+                    order = trade.order
+                    contract = trade.contract
+                    if not contract:
+                        continue
+                    filled_qty = int(trade.orderStatus.filled) if trade.orderStatus.filled else 0
+                    avg_price = float(trade.orderStatus.avgFillPrice) if trade.orderStatus.avgFillPrice else 0
+                    if filled_qty <= 0 or avg_price <= 0:
+                        continue
+                    action = getattr(order, 'action', '')
+                    side = 'BUY' if action == 'BUY' else 'SELL'
+                    asset_type = 'option' if contract.secType == 'OPT' else 'stock'
+                    filled_time = None
+                    if trade.fills:
+                        filled_time = trade.fills[-1].time.isoformat() if trade.fills[-1].time else None
+                    entry = {
+                        'order_id': str(order.orderId),
+                        'symbol': contract.symbol,
+                        'quantity': filled_qty,
+                        'filled_price': avg_price,
+                        'action': side,
+                        'filled_time': filled_time or datetime.now().isoformat(),
+                        'asset_type': asset_type,
+                    }
+                    if asset_type == 'option':
+                        expiry_raw = contract.lastTradeDateOrContractMonth or ''
+                        if len(expiry_raw) == 8:
+                            entry['expiry'] = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
+                        else:
+                            entry['expiry'] = expiry_raw
+                        entry['strike'] = contract.strike
+                        entry['direction'] = contract.right
+                    orders.append(entry)
+                return orders
+
+        elif broker_name.startswith('TASTYTRADE'):
+            if hasattr(broker_instance, 'get_filled_orders'):
+                return await asyncio.to_thread(broker_instance.get_filled_orders, 20) or []
+
+        elif 'ALPACA' in broker_name.upper():
+            if hasattr(broker_instance, 'get_orders'):
+                orders = []
+                try:
+                    from src.services.broker_sync_service import parse_occ_symbol
+                except ImportError:
+                    parse_occ_symbol = None
+                try:
+                    raw = broker_instance.get_orders(status='closed') or []
+                    for o in raw:
+                        if not (hasattr(o, 'status') and 'FILLED' in str(o.status).upper()):
+                            continue
+                        filled_time = o.filled_at.isoformat() if o.filled_at else None
+                        if not filled_time:
+                            continue
+                        parsed = parse_occ_symbol(o.symbol) if parse_occ_symbol else None
+                        entry = {
+                            'order_id': str(o.id),
+                            'symbol': parsed['symbol'] if parsed else o.symbol,
+                            'quantity': int(float(o.filled_qty or o.qty)),
+                            'filled_price': float(o.filled_avg_price or 0),
+                            'action': 'BUY' if 'BUY' in str(o.side).upper() else 'SELL',
+                            'filled_time': filled_time,
+                            'asset_type': 'option' if parsed else 'stock',
+                        }
+                        if parsed:
+                            entry['strike'] = parsed.get('strike')
+                            entry['expiry'] = parsed.get('expiry')
+                            entry['direction'] = parsed.get('call_put')
+                        orders.append(entry)
+                except Exception as e:
+                    print(f"[TRADE MONITOR] Alpaca orders error: {e}", flush=True)
+                return orders
+
+        elif broker_name.startswith('WEBULL_OFFICIAL'):
+            if hasattr(broker_instance, 'get_order_history'):
+                orders = []
+                raw = await broker_instance.get_order_history() or []
+                for o in raw:
+                    status = (o.get('status') or '').upper()
+                    if status != 'FILLED':
+                        continue
+                    inst_type = o.get('instrument_type', 'EQUITY')
+                    asset_type = 'option' if inst_type == 'OPTION' else 'stock'
+                    side = (o.get('action') or '').upper()
+                    orders.append({
+                        'order_id': o.get('order_id') or o.get('broker_order_id'),
+                        'symbol': o.get('symbol'),
+                        'quantity': int(float(o.get('filled_quantity') or o.get('quantity', 0))),
+                        'filled_price': float(o.get('filled_price', 0) or 0),
+                        'action': side,
+                        'filled_time': o.get('filled_time') or o.get('place_time', ''),
+                        'asset_type': asset_type,
+                    })
+                return orders
+
+        elif broker_name == 'ROBINHOOD':
+            if hasattr(broker_instance, 'get_orders'):
+                orders = []
+                try:
+                    raw = await asyncio.to_thread(broker_instance.get_orders, 'closed')
+                    for o in (raw or []):
+                        state = (o.get('state') or '').lower()
+                        if state != 'filled':
+                            continue
+                        symbol = o.get('symbol') or o.get('chain_symbol', '')
+                        if not symbol:
+                            continue
+                        is_option = bool(o.get('chain_symbol') and o.get('legs'))
+                        side = (o.get('side') or 'buy').upper()
+                        if is_option:
+                            direction = (o.get('direction') or '').upper()
+                            action = 'BUY' if 'DEBIT' in direction else 'SELL'
+                        else:
+                            action = 'BUY' if side == 'BUY' else 'SELL'
+                        qty = float(o.get('cumulative_quantity', 0) or o.get('processed_quantity', 0) or o.get('quantity', 0))
+                        price = float(o.get('average_price', 0) or o.get('price', 0) or 0)
+                        filled_time = o.get('last_transaction_at') or o.get('updated_at', '')
+                        entry = {
+                            'order_id': o.get('id'),
+                            'symbol': symbol,
+                            'quantity': int(qty) if qty else 0,
+                            'filled_price': price,
+                            'action': action,
+                            'filled_time': filled_time,
+                            'asset_type': 'option' if is_option else 'stock',
+                        }
+                        if is_option and o.get('legs'):
+                            leg = o['legs'][0]
+                            entry['strike'] = float(leg.get('strike_price', 0) or 0) or None
+                            entry['expiry'] = leg.get('expiration_date')
+                            opt_type = (leg.get('option_type') or '').lower()
+                            entry['direction'] = 'C' if opt_type == 'call' else ('P' if opt_type == 'put' else None)
+                        orders.append(entry)
+                except Exception as e:
+                    print(f"[TRADE MONITOR] Robinhood orders error: {e}", flush=True)
+                return orders
+
+        return []
+
     async def start(self):
         """Start the trade monitor loop with enable gate"""
         if self.running:
             return
-            
+
         settings = db.get_trade_monitor_settings()
         if not settings.get('enabled'):
             print("[TRADE MONITOR] Disabled in settings", flush=True)
             return
-            
-        if not self.broker:
+
+        if not self.broker and not self._broker_manager:
             print("[TRADE MONITOR] No broker connected", flush=True)
             return
-        
-        broker_name = getattr(self.broker, 'name', type(self.broker).__name__)
+
+        brokers = self._get_brokers_to_monitor()
+        broker_names = [b[0] for b in brokers] if brokers else ['(none yet)']
         self.running = True
         self._stop_event.clear()
         self._standby_mode = False
         self._task = asyncio.create_task(self._poll_loop())
-        print(f"[TRADE MONITOR] ✓ Started - monitoring {broker_name}", flush=True)
+        print(f"[TRADE MONITOR] ✓ Started — monitoring {len(brokers)} broker(s): {broker_names}", flush=True)
         
     async def stop(self):
         """Stop the trade monitor with cooperative cancellation"""
@@ -307,119 +512,124 @@ class TradeMonitor:
         print("[TRADE MONITOR] Poll loop ended", flush=True)
                 
     async def _check_for_new_orders(self, settings: Dict[str, Any]):
-        """Check broker for new filled orders with rate limit enforcement"""
-        if not self.broker:
+        """Check ALL connected brokers for new filled orders"""
+        brokers = self._get_brokers_to_monitor()
+        if not brokers:
             return
-            
-        broker_name = getattr(self.broker, 'name', 'UNKNOWN').lower()
+
         test_mode_setting = db.get_setting('trade_monitor_test_mode', 'false')
         test_mode = test_mode_setting.lower() == 'true'
-        
+        include_stocks = settings.get('include_stocks', True)
+        include_options = settings.get('include_options', True)
+        post_bto = settings.get('post_bto_signals', True)
+        post_stc = settings.get('post_stc_signals', True)
+        target_channel = settings.get('target_webhook_channel_id')
         rate_manager = get_rate_limit_manager() if RATE_LIMIT_AVAILABLE else None
-        if rate_manager:
-            can_proceed, wait_time = rate_manager.can_make_request(broker_name)
-            if not can_proceed:
-                print(f"[TRADE MONITOR] {broker_name.title()} rate limit - skipping cycle (wait {wait_time:.1f}s)", flush=True)
-                return
-        
-        try:
-            orders = []
-            
-            if hasattr(self.broker, 'get_order_history'):
+
+        for b_name, b_instance in brokers:
+            b_key = b_name.lower()
+            try:
                 if rate_manager:
-                    rate_manager.record_request(broker_name)
-                filled_orders = await self.broker.get_order_history(count=20)
+                    can_proceed, wait_time = rate_manager.can_make_request(b_key)
+                    if not can_proceed:
+                        continue
+                    rate_manager.record_request(b_key)
+
+                filled_orders = await self._fetch_filled_orders(b_name, b_instance)
+                orders = []
                 if filled_orders:
                     for order in filled_orders:
                         order['_status'] = 'FILLED'
                     orders.extend(filled_orders)
-            
-            if test_mode and hasattr(self.broker, 'get_pending_orders'):
-                if rate_manager:
-                    can_proceed2, wait_time2 = rate_manager.can_make_request(broker_name)
-                    if can_proceed2:
-                        rate_manager.record_request(broker_name)
-                        pending_orders = await self.broker.get_pending_orders()
-                        if pending_orders:
-                            for order in pending_orders:
-                                order['_status'] = 'PENDING'
-                            orders.extend(pending_orders)
-                    else:
-                        print(f"[TRADE MONITOR] {broker_name.title()} rate limit - skipping pending orders (wait {wait_time2:.1f}s)", flush=True)
-                else:
-                    pending_orders = await self.broker.get_pending_orders()
-                    if pending_orders:
-                        for order in pending_orders:
+
+                if test_mode and hasattr(b_instance, 'get_pending_orders'):
+                    try:
+                        if asyncio.iscoroutinefunction(getattr(b_instance, 'get_pending_orders', None)):
+                            pending = await b_instance.get_pending_orders() or []
+                        else:
+                            pending = await asyncio.to_thread(b_instance.get_pending_orders) or []
+                        for order in pending:
                             order['_status'] = 'PENDING'
-                        orders.extend(pending_orders)
-            
-            if test_mode:
-                current_order_ids = {o.get('order_id') for o in orders if o.get('order_id')}
-                canceled_order_ids = set(self._tracked_pending_orders.keys()) - current_order_ids
-                
-                target_channel = settings.get('target_webhook_channel_id')
-                for canceled_id in canceled_order_ids:
-                    canceled_order = self._tracked_pending_orders.pop(canceled_id, None)
-                    if canceled_order:
-                        print(f"[TRADE MONITOR] Order canceled: {canceled_id}", flush=True)
-                        await self._post_canceled_order(canceled_order, broker_name, target_channel)
-                
+                        orders.extend(pending)
+                    except Exception:
+                        pass
+
+                if test_mode:
+                    current_ids = {o.get('order_id') for o in orders if o.get('order_id')}
+                    canceled_ids = {k for k in self._tracked_pending_orders if self._tracked_pending_orders[k].get('_broker') == b_key} - current_ids
+                    for cid in canceled_ids:
+                        canceled_order = self._tracked_pending_orders.pop(cid, None)
+                        if canceled_order:
+                            await self._post_canceled_order(canceled_order, b_key, target_channel)
+                    for order in orders:
+                        oid = order.get('order_id')
+                        if oid and order.get('_status') == 'PENDING':
+                            order['_broker'] = b_key
+                            self._tracked_pending_orders[oid] = order
+
+                if not orders:
+                    continue
+
+                # First poll: seed all existing orders into synced_orders without posting
+                if not self._seeded:
+                    seeded = 0
+                    for order in orders:
+                        oid = order.get('order_id')
+                        if oid and not db.is_order_synced(b_key, oid):
+                            filled_time = order.get('filled_time', '')
+                            if is_recent_fill(filled_time, max_seconds=86400):
+                                db.add_synced_order(
+                                    broker=b_key, order_id=oid,
+                                    symbol=order.get('symbol', ''),
+                                    action=order.get('action', ''),
+                                    quantity=order.get('quantity', 0),
+                                    filled_price=order.get('filled_price', 0),
+                                    asset_type=order.get('asset_type', 'stock'),
+                                )
+                                seeded += 1
+                    if seeded:
+                        print(f"[TRADE MONITOR] Seeded {seeded} existing order(s) from {b_name} (no webhook)", flush=True)
+                    continue
+
+                new_orders = []
                 for order in orders:
                     order_id = order.get('order_id')
-                    if order_id and order.get('_status') == 'PENDING':
-                        self._tracked_pending_orders[order_id] = order
-                
-            if not orders:
-                return
-                
-            include_stocks = settings.get('include_stocks', True)
-            include_options = settings.get('include_options', True)
-            post_bto = settings.get('post_bto_signals', True)
-            post_stc = settings.get('post_stc_signals', True)
-            target_channel = settings.get('target_webhook_channel_id')
-            
-            new_orders = []
-            for order in orders:
-                order_id = order.get('order_id')
-                
-                if not order_id:
-                    continue
-                
-                if db.is_order_synced(broker_name, order_id):
-                    continue
-                
-                filled_time = order.get('filled_time', '')
-                if not is_recent_fill(filled_time, max_seconds=10):
-                    continue
-                    
-                asset_type = order.get('asset_type', 'stock')
-                if asset_type == 'stock' and not include_stocks:
-                    continue
-                if asset_type == 'option' and not include_options:
-                    continue
-                    
-                action = order.get('action', '').upper()
-                is_buy = action in ['BUY', 'BTO']
-                is_sell = action in ['SELL', 'STC']
-                
-                if is_buy and not post_bto:
-                    continue
-                if is_sell and not post_stc:
-                    continue
-                
-                new_orders.append(order)
-            
-            if new_orders:
-                print(f"[TRADE MONITOR] Found {len(new_orders)} new order(s) to post", flush=True)
-            
-            for order in new_orders:
-                if target_channel:
-                    await self._post_order_to_discord(order, broker_name, target_channel)
-                else:
-                    print(f"[TRADE MONITOR] ⚠️  No target webhook channel configured in Trade Monitor settings", flush=True)
-                
-        except Exception as e:
-            print(f"[TRADE MONITOR] Error checking orders: {e}", flush=True)
+                    if not order_id:
+                        continue
+                    if db.is_order_synced(b_key, order_id):
+                        continue
+                    filled_time = order.get('filled_time', '')
+                    if not is_recent_fill(filled_time, max_seconds=86400):
+                        continue
+                    asset_type = order.get('asset_type', 'stock')
+                    if asset_type == 'stock' and not include_stocks:
+                        continue
+                    if asset_type == 'option' and not include_options:
+                        continue
+                    action = order.get('action', '').upper()
+                    is_buy = action in ['BUY', 'BTO', 'BUY_TO_OPEN']
+                    is_sell = action in ['SELL', 'STC', 'SELL_TO_CLOSE']
+                    if is_buy and not post_bto:
+                        continue
+                    if is_sell and not post_stc:
+                        continue
+                    new_orders.append(order)
+
+                if new_orders:
+                    print(f"[TRADE MONITOR] Found {len(new_orders)} new order(s) from {b_name}", flush=True)
+
+                for order in new_orders:
+                    if target_channel:
+                        await self._post_order_to_discord(order, b_key, target_channel)
+                    else:
+                        print(f"[TRADE MONITOR] ⚠️ No target webhook channel configured", flush=True)
+
+            except Exception as e:
+                print(f"[TRADE MONITOR] Error checking {b_name}: {e}", flush=True)
+
+        if not self._seeded:
+            self._seeded = True
+            print("[TRADE MONITOR] ✓ Seed complete — now detecting new fills only", flush=True)
             
     def _format_signal(self, order: Dict, signal_type: str, is_canceled: bool = False) -> str:
         """Format order as signal message: BTO 3 ORCL 200C 12/26 @ 2.61 @everyone"""
@@ -492,6 +702,9 @@ class TradeMonitor:
             else:
                 print(f"[TRADE MONITOR] STC recorded: {quantity} {symbol} @ ${filled_price:.2f}", flush=True)
         
+        if not webhook_url:
+            print(f"[TRADE MONITOR] ⚠️ No webhook URL found for channel_id={target_channel}", flush=True)
+
         if webhook_url:
             if asset_type == 'option':
                 if is_buy:
@@ -668,19 +881,19 @@ class TradeMonitor:
             print(f"[TRADE MONITOR] Posted canceled: {order_id}", flush=True)
     
     def _get_webhook_url(self, channel_id: str) -> Optional[str]:
-        """Get webhook URL for a channel"""
+        """Get webhook URL for a webhook channel (from webhook_channels table)"""
         if not channel_id:
             return None
-        
+
         try:
             channel_id_int = int(channel_id)
         except (ValueError, TypeError):
             return None
-            
-        channel = db.get_channel_by_id(channel_id_int)
+
+        channel = webhook_service.get_webhook_channel(channel_id_int)
         if not channel:
             return None
-            
+
         return channel.get('webhook_url')
     
     def _add_bto_to_trades_table(self, broker_name: str, symbol: str, strike: float,
@@ -701,7 +914,7 @@ class TradeMonitor:
                 'broker': broker_name,
                 'channel_id': None,
                 'message_id': None,
-                'status': 'executed',
+                'status': 'OPEN',
                 'order_id': order_id,
                 'source': 'trade_monitor'
             }

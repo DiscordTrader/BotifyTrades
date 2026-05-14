@@ -6750,7 +6750,7 @@ def register_routes(app):
             
             # ========== IBKR BROKER CLOSE ==========
             if 'IBKR' in broker or 'INTERACTIVE' in broker:
-                print(f"[API] Routing to IBKR broker for close (isolated loop)...")
+                print(f"[API] Routing to IBKR broker for close...")
                 ibkr_broker = None
                 if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
                     ibkr_broker = _bot_instance.ibkr_broker
@@ -6768,19 +6768,18 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         pass
                 
-                def _ibkr_close_direct():
-                    loop = asyncio.new_event_loop()
-                    try:
-                        if asset_type == 'option':
-                            return loop.run_until_complete(ibkr_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price))
-                        else:
-                            return loop.run_until_complete(ibkr_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price))
-                    finally:
-                        loop.close()
-                
                 try:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        result = executor.submit(_ibkr_close_direct).result(timeout=15)
+                    if asset_type == 'option':
+                        future = asyncio.run_coroutine_threadsafe(
+                            ibkr_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            ibkr_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    result = future.result(timeout=15)
                     
                     if result and result.success:
                         if is_db_trade:
@@ -6814,19 +6813,18 @@ def register_routes(app):
                     except (ValueError, TypeError):
                         pass
                 
-                def _tt_close_direct():
-                    loop = asyncio.new_event_loop()
-                    try:
-                        if asset_type == 'option':
-                            return loop.run_until_complete(tt_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price))
-                        else:
-                            return loop.run_until_complete(tt_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price))
-                    finally:
-                        loop.close()
-                
                 try:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        result = executor.submit(_tt_close_direct).result(timeout=15)
+                    if asset_type == 'option':
+                        future = asyncio.run_coroutine_threadsafe(
+                            tt_broker.place_option_order(symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            tt_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    result = future.result(timeout=15)
                     
                     if result and result.success:
                         if is_db_trade:
@@ -7618,6 +7616,8 @@ def register_routes(app):
             wb_streaming = False
             sch_hub = None
             sch_streaming = False
+            ibkr_hub = None
+            ibkr_streaming = False
             try:
                 from src.services.webull_data_hub import get_webull_data_hub
                 wb_hub = get_webull_data_hub()
@@ -7628,6 +7628,12 @@ def register_routes(app):
                 from src.services.schwab_data_hub import get_schwab_data_hub
                 sch_hub = get_schwab_data_hub()
                 sch_streaming = sch_hub.is_streaming()
+            except Exception:
+                pass
+            try:
+                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                ibkr_hub = get_ibkr_data_hub()
+                ibkr_streaming = ibkr_hub.is_streaming()
             except Exception:
                 pass
 
@@ -7661,6 +7667,10 @@ def register_routes(app):
                         fresh_quote = sch_hub.get_quote_detailed(symbol)
                         if fresh_quote and fresh_quote.get('last', 0) > 0:
                             source = 'stream'
+                    elif 'IBKR' in broker and ibkr_hub and ibkr_streaming:
+                        fresh_quote = ibkr_hub.get_quote_detailed(symbol)
+                        if fresh_quote and fresh_quote.get('last', 0) > 0:
+                            source = 'stream'
                     else:
                         if wb_hub and wb_streaming:
                             fresh_quote = wb_hub.get_quote_detailed(symbol)
@@ -7668,6 +7678,10 @@ def register_routes(app):
                                 source = 'stream_cross'
                         if (not fresh_quote or fresh_quote.get('last', 0) <= 0) and sch_hub and sch_streaming:
                             fresh_quote = sch_hub.get_quote_detailed(symbol)
+                            if fresh_quote and fresh_quote.get('last', 0) > 0:
+                                source = 'stream_cross'
+                        if (not fresh_quote or fresh_quote.get('last', 0) <= 0) and ibkr_hub and ibkr_streaming:
+                            fresh_quote = ibkr_hub.get_quote_detailed(symbol)
                             if fresh_quote and fresh_quote.get('last', 0) > 0:
                                 source = 'stream_cross'
 
@@ -7701,6 +7715,7 @@ def register_routes(app):
                 'streaming_status': {
                     'webull': wb_streaming,
                     'schwab': sch_streaming,
+                    'ibkr': ibkr_streaming,
                 },
                 'snapshot_age': round(now - snapshot.get('last_updated', 0), 1),
             })
@@ -12849,7 +12864,43 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
     
     # ============ ENHANCED PNL TRACKING & LEADERBOARD ============
-    
+
+    def _compute_exec_speed(row):
+        """Compute execution speed as signal_detected → order_submitted (bot reaction time).
+        Falls back to pending_order_metadata timestamps when execution_lots is missing.
+        Only falls back to latency_total_ms - latency_broker_ms as last resort.
+        Caps at 30s — anything higher is corrupted data, not real bot latency."""
+        _MAX_SPEED_MS = 30000
+        from datetime import datetime as _dt
+        def _get(key):
+            try:
+                return row[key]
+            except (IndexError, KeyError):
+                return None
+        detected = _get('el_detected_at') or _get('pm_detected_at')
+        submitted = _get('el_submitted_at') or _get('pm_submitted_at')
+        if detected and submitted:
+            try:
+                d = _dt.fromisoformat(str(detected).replace('Z', '+00:00'))
+                s = _dt.fromisoformat(str(submitted).replace('Z', '+00:00'))
+                ms = int((s - d).total_seconds() * 1000)
+                if 0 <= ms <= _MAX_SPEED_MS:
+                    return ms
+            except Exception:
+                pass
+        total = _get('latency_total_ms')
+        broker = _get('latency_broker_ms')
+        if total and broker and total > broker:
+            val = total - broker
+            if 0 < val <= _MAX_SPEED_MS:
+                return val
+        parse = _get('latency_parse_ms')
+        if parse and 0 < parse <= _MAX_SPEED_MS:
+            return parse
+        if total and 0 < total <= _MAX_SPEED_MS:
+            return total
+        return None
+
     @app.route('/api/pnl/detailed', methods=['GET'])
     def api_get_detailed_pnl():
         """
@@ -12923,7 +12974,13 @@ def register_routes(app):
                     -- Latency (from first execution_lot for this signal)
                     (SELECT el2.latency_total_ms FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as latency_total_ms,
                     (SELECT el2.latency_parse_ms FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as latency_parse_ms,
-                    (SELECT el2.latency_broker_ms FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as latency_broker_ms
+                    (SELECT el2.latency_broker_ms FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as latency_broker_ms,
+                    -- Execution speed: signal_detected → order_submitted (from execution_lots or pending_order_metadata fallback)
+                    (SELECT el2.signal_detected_at FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as el_detected_at,
+                    (SELECT el2.order_submitted_at FROM execution_lots el2 WHERE el2.signal_lot_id = sl.id ORDER BY el2.order_filled_at ASC LIMIT 1) as el_submitted_at,
+                    -- Fallback timestamps from pending_order_metadata when no execution_lot exists
+                    (SELECT pm.signal_detected_at FROM pending_order_metadata pm WHERE pm.signal_lot_id = sl.id AND pm.action IN ('BTO','BUY') ORDER BY pm.id ASC LIMIT 1) as pm_detected_at,
+                    (SELECT pm.order_submitted_at FROM pending_order_metadata pm WHERE pm.signal_lot_id = sl.id AND pm.action IN ('BTO','BUY') ORDER BY pm.id ASC LIMIT 1) as pm_submitted_at
 
                 FROM signal_lots sl
                 LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
@@ -12999,7 +13056,8 @@ def register_routes(app):
                         'author': row['author_name'] or 'Unknown',
                         'status': row['status'],
                         'channel_name': row['channel_name'],
-                        'latency_ms': row['latency_total_ms'],
+                        'latency_ms': _compute_exec_speed(row),
+                        'latency_total_ms': row['latency_total_ms'],
                         'latency_parse_ms': row['latency_parse_ms'],
                         'latency_broker_ms': row['latency_broker_ms'],
                         'closures': [],

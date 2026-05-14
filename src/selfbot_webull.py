@@ -8685,7 +8685,20 @@ class SelfClient(discord.Client):
                 await self.sync_service.start()
                 await asyncio.sleep(0)  # Yield to event loop so sync task can start
                 _original_print("[SYNC] ✓ Trade synchronization service started (30s interval)", flush=True)
-                
+
+                try:
+                    from gui_app.trade_monitor import get_trade_monitor
+                    _tm = get_trade_monitor()
+                    _tm.set_broker_manager(broker_manager)
+                    if not _tm.running:
+                        _tm.set_broker(self.broker)
+                        await _tm.start()
+                    _original_print(f"[TRADE MONITOR] ✓ Wiring complete (running={_tm.running})")
+                except Exception as _tm_err:
+                    import traceback as _tb
+                    _original_print(f"[TRADE MONITOR] ⚠️ Post-broker init failed: {_tm_err}")
+                    _tb.print_exc()
+
                 # Initialize Unfilled Order Chaser for mid-price replacement of stale exit orders
                 try:
                     from gui_app.database import get_order_chase_settings
@@ -8720,6 +8733,16 @@ class SelfClient(discord.Client):
             # Set sync_ready immediately so worker doesn't wait forever
             if not self.sync_ready.is_set():
                 self.sync_ready.set()
+
+        # Run PNL data repair on startup (fixes broken lot_closures, metadata, trades)
+        try:
+            from gui_app.database import repair_pnl_data
+            _repair_result = repair_pnl_data()
+            _repair_total = sum(_repair_result.values()) if _repair_result else 0
+            if _repair_total > 0:
+                _original_print(f"[STARTUP] ✓ PNL data repair: {_repair_total} records fixed", flush=True)
+        except Exception as _repair_err:
+            _original_print(f"[STARTUP] ⚠️ PNL repair skipped: {_repair_err}", flush=True)
 
         worker_task = asyncio.create_task(self.worker())
         await asyncio.sleep(0)  # Yield to event loop so worker can start
@@ -10541,34 +10564,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         except Exception as e:
             print(f"[STARTUP] Warning: Could not run settings validation: {e}")
         
-        # Start Trade Monitor if enabled (monitors broker for new trades)
+        # Trade Monitor starts after broker init (in _init_brokers) — just log settings here
         try:
-            from gui_app.trade_monitor import get_trade_monitor
-            from gui_app import database as db
-            
-            monitor_settings = db.get_trade_monitor_settings()
-            print(f"[STARTUP] Trade Monitor settings: {monitor_settings}", flush=True)
-            if monitor_settings.get('enabled'):
-                trade_monitor = get_trade_monitor()
-                print(f"[STARTUP] Trade Monitor instance: {trade_monitor}, broker: {self.broker is not None}", flush=True)
-                if self.broker:
-                    trade_monitor.set_broker(self.broker)
-                    print(f"[STARTUP] Broker set, calling trade_monitor.start()...", flush=True)
-                    try:
-                        await trade_monitor.start()
-                        print("[STARTUP] ✓ Trade Monitor start() completed", flush=True)
-                    except Exception as start_err:
-                        print(f"[STARTUP] ❌ Trade Monitor start() failed: {start_err}", flush=True)
-                        import traceback
-                        traceback.print_exc()
-                    print("[STARTUP] ✓ Trade Monitor started - syncing broker trades to Discord", flush=True)
-                else:
-                    print("[STARTUP] ⚠️  Trade Monitor enabled but no broker connected", flush=True)
+            from gui_app import database as _tm_db
+            _tm_settings = _tm_db.get_trade_monitor_settings()
+            if _tm_settings.get('enabled'):
+                print(f"[STARTUP] Trade Monitor enabled (poll={_tm_settings.get('poll_interval_seconds', 10)}s) — will start after broker init", flush=True)
             else:
                 print("[STARTUP] Trade Monitor disabled (enable in Settings)", flush=True)
-        except Exception as e:
-            import traceback
-            print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}", flush=True)
+        except Exception:
+            pass
             traceback.print_exc()
         
         # Start Signal Routing Engine risk monitor (for position_ledger price monitoring)
@@ -11056,6 +11061,35 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         signal['parsed_at'] = datetime.now().isoformat()
                         if order.get('_conditional_created_at'):
                             signal['_conditional_created_at'] = order['_conditional_created_at']
+
+                        # Recover lot_id: conditional orders create a new signal dict that
+                        # loses the lot_id set by _save_signal_to_db on the original signal.
+                        # Look up the most recent open lot for this symbol+channel.
+                        try:
+                            from gui_app.database import get_connection as _gc
+                            _lot_conn = _gc()
+                            _lot_cur = _lot_conn.cursor()
+                            _lot_ch_id = None
+                            if channel_id:
+                                _lot_cur.execute('SELECT id FROM channels WHERE discord_channel_id = ? OR telegram_chat_id = ?', (str(channel_id), str(channel_id)))
+                                _lot_ch_row = _lot_cur.fetchone()
+                                if _lot_ch_row:
+                                    _lot_ch_id = _lot_ch_row['id']
+                            if _lot_ch_id:
+                                _lot_cur.execute('''
+                                    SELECT id FROM signal_lots
+                                    WHERE channel_id = ? AND symbol = ? AND asset_type = ? AND status = 'OPEN'
+                                    ORDER BY id DESC LIMIT 1
+                                ''', (_lot_ch_id, symbol, signal.get('asset', 'stock')))
+                                _lot_row = _lot_cur.fetchone()
+                                if _lot_row:
+                                    signal['lot_id'] = _lot_row['id']
+                                    signal['db_channel_id'] = _lot_ch_id
+                                    print(f"[CONDITIONAL EXEC] ✓ Recovered lot_id={_lot_row['id']} for {symbol} (channel db_id={_lot_ch_id})", flush=True)
+                                else:
+                                    print(f"[CONDITIONAL EXEC] ⚠️ No open lot found for {symbol} ch={_lot_ch_id}", flush=True)
+                        except Exception as _lot_err:
+                            print(f"[CONDITIONAL EXEC] ⚠️ lot_id recovery failed: {_lot_err}", flush=True)
 
                         # Use sync signal queue (thread-safe, same as Telegram)
                         if _telegram_signal_queue is not None:
@@ -16262,6 +16296,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except Exception as cb_err:
                         print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
 
+                if stk.get('action', '').upper() == 'BTO' and stk.get('symbol'):
+                    try:
+                        from gui_app.database import get_connection as _bto_get_conn
+                        _bto_conn = _bto_get_conn()
+                        _bto_cursor = _bto_conn.cursor()
+                        _bto_sym = stk['symbol'].upper()
+                        _bto_ch = str(message.channel.id)
+                        _bto_cursor.execute('''
+                            SELECT id, broker, status FROM trades
+                            WHERE UPPER(symbol) = ? AND channel_id = ?
+                            AND status IN ('OPEN', 'PENDING')
+                            ORDER BY id DESC LIMIT 1
+                        ''', (_bto_sym, _bto_ch))
+                        _existing_bto = _bto_cursor.fetchone()
+                        if _existing_bto:
+                            print(f"[BTO GUARD] ⛔ BLOCKED duplicate BTO: {_bto_sym} already has {_existing_bto['status']} trade #{_existing_bto['id']} on {_existing_bto['broker']} from this channel")
+                            print(f"[BTO GUARD] Message was likely a performance update, not a new entry")
+                            return
+                    except Exception as _bto_guard_err:
+                        print(f"[BTO GUARD] ⚠️ Check failed (continuing): {_bto_guard_err}")
+
                 stk_entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
                 if stk_entry_confirmation_pct > 0 and stk.get('action', '').upper() == 'BTO':
                     if not execute_enabled:
@@ -16418,7 +16473,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if _stk_paper_exit_mode == 'risk':
                             print(f"[EXIT MODE] ⛔ BLOCKED: Stock paper STC for {stk.get('symbol')} — exit_strategy_mode='risk' (exits via risk engine only, trader signals ignored)")
                             return
-                    
+
+                    if _stk_paper_action in ('BTO', 'BTC') and stk.get('symbol'):
+                        try:
+                            from gui_app.database import get_connection as _bto_p_conn
+                            _bp_conn = _bto_p_conn()
+                            _bp_cursor = _bp_conn.cursor()
+                            _bp_sym = stk['symbol'].upper()
+                            _bp_ch = str(message.channel.id)
+                            _bp_cursor.execute('''
+                                SELECT id, broker, status FROM trades
+                                WHERE UPPER(symbol) = ? AND channel_id = ?
+                                AND status IN ('OPEN', 'PENDING')
+                                ORDER BY id DESC LIMIT 1
+                            ''', (_bp_sym, _bp_ch))
+                            _existing_paper = _bp_cursor.fetchone()
+                            if _existing_paper:
+                                print(f"[BTO GUARD] ⛔ BLOCKED duplicate paper BTO: {_bp_sym} already has {_existing_paper['status']} trade #{_existing_paper['id']} from this channel")
+                                return
+                        except Exception as _bp_guard_err:
+                            print(f"[BTO GUARD] ⚠️ Paper check failed (continuing): {_bp_guard_err}")
+
                     if _stk_paper_action in ('BTO', 'BTC'):
                         try:
                             from gui_app.database import is_circuit_breaker_tripped
@@ -17908,6 +17983,55 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     except Exception as meta_err:
                         _original_print(f"[EXEC] Warning: Could not save order metadata: {meta_err}")
+
+                    # Create execution_lot immediately so Speed/latency is available even if broker sync doesn't run
+                    try:
+                        from gui_app.database import insert_execution_lot
+                        _el_detected = signal.get('detected_at')
+                        _el_parsed = signal.get('parsed_at')
+                        _el_submitted = signal.get('_order_submitted_at')
+                        _el_parse_ms = None
+                        _el_speed_ms = None
+                        if _el_detected and _el_parsed:
+                            try:
+                                from datetime import datetime as _eldt
+                                _d = _eldt.fromisoformat(str(_el_detected))
+                                _p = _eldt.fromisoformat(str(_el_parsed))
+                                _el_parse_ms = max(0, int((_p - _d).total_seconds() * 1000))
+                            except Exception:
+                                pass
+                        if _el_detected and _el_submitted:
+                            try:
+                                from datetime import datetime as _eldt2
+                                _d2 = _eldt2.fromisoformat(str(_el_detected))
+                                _s2 = _eldt2.fromisoformat(str(_el_submitted))
+                                _el_speed_ms = max(0, int((_s2 - _d2).total_seconds() * 1000))
+                            except Exception:
+                                pass
+                        insert_execution_lot(
+                            signal_lot_id=signal.get('lot_id'),
+                            channel_id=str(signal.get('channel_id', 'UNKNOWN')),
+                            broker=broker_name,
+                            broker_order_id=str(order_id),
+                            symbol=signal.get('symbol', ''),
+                            asset_type=signal.get('asset') or signal.get('asset_type', 'stock'),
+                            original_qty=signal.get('qty', 1),
+                            remaining_qty=signal.get('qty', 1),
+                            fill_price=signal.get('price') or 0,
+                            signal_price=signal.get('price'),
+                            order_filled_at=_el_submitted or datetime.now().isoformat(),
+                            signal_detected_at=_el_detected,
+                            signal_parsed_at=_el_parsed,
+                            order_submitted_at=_el_submitted,
+                            latency_parse_ms=_el_parse_ms,
+                            latency_total_ms=_el_speed_ms,
+                            analyst_entry_qty=signal.get('original_qty') or signal.get('qty'),
+                            sizing_mode=signal.get('sizing_mode'),
+                            sizing_details=signal.get('sizing_details')
+                        )
+                    except Exception as _el_err:
+                        _original_print(f"[EXEC] Warning: Could not create execution_lot: {_el_err}")
+
                 elif order_id and signal.get('action', '').upper() in ('STC', 'SELL'):
                     try:
                         from gui_app.database import save_pending_order_metadata, map_risk_trigger_to_exit_source

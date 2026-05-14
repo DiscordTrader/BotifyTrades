@@ -763,7 +763,7 @@ function renderPNLData(positions) {
                         <div class="label">Hold Time</div>
                         <div class="value">${formatHoldTime(pos.total_holding_days)}</div>
                     </div>
-                    <div class="col">
+                    <div class="col" title="Signal detected → order submitted (bot reaction time)">
                         <div class="label">Speed</div>
                         <div class="value">${formatLatency(pos.latency_ms)}</div>
                     </div>

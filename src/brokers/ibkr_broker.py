@@ -391,6 +391,15 @@ class IBKRBroker(BrokerInterface):
         try:
             if not self.ib.isConnected():
                 return []
+
+            portfolio_prices = {}
+            try:
+                for item in self.ib.portfolio():
+                    if item.contract and item.marketPrice and item.marketPrice > 0:
+                        portfolio_prices[item.contract.conId] = float(item.marketPrice)
+            except Exception:
+                pass
+
             raw_positions = self.ib.positions()
             positions = []
             for pos in raw_positions:
@@ -413,6 +422,9 @@ class IBKRBroker(BrokerInterface):
                             break
                 except Exception:
                     pass
+
+                if current_price <= 0:
+                    current_price = portfolio_prices.get(contract.conId, 0.0)
 
                 if is_option:
                     avg_cost = avg_cost_raw / 100 if avg_cost_raw > 0 else 0

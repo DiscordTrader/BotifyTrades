@@ -2165,6 +2165,7 @@ class UnfilledOrderChaser:
             'ibkr': 'ibkr_broker',
             'IBKR': 'ibkr_broker',
             'ibkr_live': 'ibkr_broker',
+            'IBKR_LIVE': 'ibkr_broker',
             'ibkr_paper': 'ibkr_broker',
             'IBKR_PAPER': 'ibkr_broker',
             'trading212': 'trading212_broker',

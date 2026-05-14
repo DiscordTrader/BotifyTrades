@@ -1024,6 +1024,22 @@ class BrokerSyncService:
                         import traceback
                         traceback.print_exc()
 
+                if hasattr(broker_instance, 'get_pending_orders'):
+                    try:
+                        orders = await broker_instance.get_pending_orders() or []
+                        for order in orders:
+                            side = (order.get('action') or '').upper()
+                            result['pending_orders'].append({
+                                'broker_order_id': order.get('broker_order_id') or order.get('order_id'),
+                                'symbol': order.get('symbol'),
+                                'quantity': order.get('quantity'),
+                                'limit_price': order.get('limit_price'),
+                                'order_type': 'BTO' if side in ('BUY', 'BUY_TO_OPEN') else 'STC',
+                                'status': order.get('status', 'PENDING')
+                            })
+                    except Exception as e:
+                        print(f"[SYNC] Webull Official pending orders error: {e}")
+
             print(f"[SYNC] {broker_name}: {len(result['positions'])} positions, {len(result['pending_orders'])} pending orders")
             if result['positions']:
                 symbols = [p['symbol'] for p in result['positions']]
@@ -1454,7 +1470,30 @@ class BrokerSyncService:
                         quantity=fill_qty,
                         executed_at=datetime.now().isoformat()
                     )
-                    
+
+                    # Recalculate SL/PT prices using actual fill price instead of trigger price
+                    try:
+                        intended = float(trade.get('intended_price') or 0)
+                        old_sl = float(trade.get('stop_loss_price') or 0)
+                        old_pt = float(trade.get('profit_target_price') or 0)
+                        if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001:
+                            _recalc_dec = 4 if fill_price < 1.0 else 2
+                            recalc_updates = {}
+                            if old_sl > 0:
+                                sl_pct = (intended - old_sl) / intended
+                                new_sl = round(fill_price * (1 - sl_pct), _recalc_dec)
+                                recalc_updates['stop_loss_price'] = new_sl
+                                print(f"[SYNC] 🔧 Recalculated SL for #{trade_id}: ${old_sl} → ${new_sl} (fill ${fill_price} vs trigger ${intended})")
+                            if old_pt > 0:
+                                pt_pct = (old_pt - intended) / intended
+                                new_pt = round(fill_price * (1 + pt_pct), _recalc_dec)
+                                recalc_updates['profit_target_price'] = new_pt
+                                print(f"[SYNC] 🔧 Recalculated PT for #{trade_id}: ${old_pt} → ${new_pt}")
+                            if recalc_updates:
+                                self.db.update_trade(trade_id, **recalc_updates)
+                    except Exception as recalc_err:
+                        print(f"[SYNC] Warning: SL/PT recalculation failed: {recalc_err}")
+
                     try:
                         from gui_app.discord_notifier import notify_order_filled
                         notify_order_filled(
@@ -1744,6 +1783,27 @@ class BrokerSyncService:
                                             quantity=fill_qty,
                                             executed_at=datetime.now().isoformat()
                                         )
+                                        try:
+                                            intended = float(trade.get('intended_price') or 0)
+                                            old_sl = float(trade.get('stop_loss_price') or 0)
+                                            old_pt = float(trade.get('profit_target_price') or 0)
+                                            if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001:
+                                                _recalc_dec = 4 if fill_price < 1.0 else 2
+                                                recalc_updates = {}
+                                                if old_sl > 0:
+                                                    sl_pct = (intended - old_sl) / intended
+                                                    new_sl = round(fill_price * (1 - sl_pct), _recalc_dec)
+                                                    recalc_updates['stop_loss_price'] = new_sl
+                                                    print(f"[SYNC] 🔧 Recalculated SL for #{trade_id}: ${old_sl} → ${new_sl} (fill ${fill_price} vs trigger ${intended})")
+                                                if old_pt > 0:
+                                                    pt_pct = (old_pt - intended) / intended
+                                                    new_pt = round(fill_price * (1 + pt_pct), _recalc_dec)
+                                                    recalc_updates['profit_target_price'] = new_pt
+                                                    print(f"[SYNC] 🔧 Recalculated PT for #{trade_id}: ${old_pt} → ${new_pt}")
+                                                if recalc_updates:
+                                                    self.db.update_trade(trade_id, **recalc_updates)
+                                        except Exception as recalc_err:
+                                            print(f"[SYNC] Warning: SL/PT recalculation failed: {recalc_err}")
                                         try:
                                             from gui_app.discord_notifier import notify_order_filled
                                             notify_order_filled(
@@ -2796,7 +2856,27 @@ class BrokerSyncService:
                         quantity=position['quantity'],
                         executed_at=datetime.now().isoformat()
                     )
-                    # Remove from pending lookup to prevent re-promotion
+                    try:
+                        intended = float(pending_trade.get('intended_price') or 0)
+                        old_sl = float(pending_trade.get('stop_loss_price') or 0)
+                        old_pt = float(pending_trade.get('profit_target_price') or 0)
+                        if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001:
+                            _recalc_dec = 4 if fill_price < 1.0 else 2
+                            recalc_updates = {}
+                            if old_sl > 0:
+                                sl_pct = (intended - old_sl) / intended
+                                new_sl = round(fill_price * (1 - sl_pct), _recalc_dec)
+                                recalc_updates['stop_loss_price'] = new_sl
+                                print(f"[SYNC] 🔧 Recalculated SL for #{trade_id}: ${old_sl} → ${new_sl} (fill ${fill_price} vs trigger ${intended})")
+                            if old_pt > 0:
+                                pt_pct = (old_pt - intended) / intended
+                                new_pt = round(fill_price * (1 + pt_pct), _recalc_dec)
+                                recalc_updates['profit_target_price'] = new_pt
+                                print(f"[SYNC] 🔧 Recalculated PT for #{trade_id}: ${old_pt} → ${new_pt}")
+                            if recalc_updates:
+                                self.db.update_trade(trade_id, **recalc_updates)
+                    except Exception as recalc_err:
+                        print(f"[SYNC] Warning: SL/PT recalculation failed: {recalc_err}")
                     del pending_trades_by_key[pos_key]
 
     async def _sync_filled_orders(self, broker_name: str, broker_instance):
@@ -2904,6 +2984,75 @@ class BrokerSyncService:
                             filled_orders.append(order_entry)
                     except Exception as e:
                         print(f"[SYNC] IBKR filled orders error: {e}")
+
+            elif broker_name.startswith('WEBULL_OFFICIAL'):
+                if hasattr(broker_instance, 'get_order_history'):
+                    try:
+                        raw_orders = await broker_instance.get_order_history() or []
+                        for order in raw_orders:
+                            status = (order.get('status') or '').upper()
+                            if status != 'FILLED':
+                                continue
+                            side = (order.get('action') or '').upper()
+                            if side in ('BUY', 'BUY_TO_OPEN'):
+                                action = 'BTO'
+                            elif side in ('SELL', 'SELL_TO_CLOSE'):
+                                action = 'STC'
+                            else:
+                                action = side
+                            inst_type = order.get('instrument_type', 'EQUITY')
+                            asset_type = 'option' if inst_type == 'OPTION' else 'stock'
+                            filled_orders.append({
+                                'order_id': order.get('order_id') or order.get('broker_order_id'),
+                                'symbol': order.get('symbol'),
+                                'quantity': int(float(order.get('filled_quantity') or order.get('quantity', 0))),
+                                'filled_price': float(order.get('filled_price', 0) or 0),
+                                'action': action,
+                                'filled_time': order.get('filled_time') or order.get('place_time', ''),
+                                'asset_type': asset_type,
+                            })
+                    except Exception as e:
+                        print(f"[SYNC] Webull Official filled orders error: {e}")
+
+            elif broker_name == 'ROBINHOOD':
+                if hasattr(broker_instance, 'get_orders'):
+                    try:
+                        raw_orders = await asyncio.to_thread(broker_instance.get_orders, 'closed')
+                        for order in (raw_orders or []):
+                            state = (order.get('state') or '').lower()
+                            if state != 'filled':
+                                continue
+                            symbol = order.get('symbol') or order.get('chain_symbol', '')
+                            if not symbol:
+                                continue
+                            is_option = bool(order.get('chain_symbol') and order.get('legs'))
+                            side = (order.get('side') or 'buy').upper()
+                            if is_option:
+                                direction_raw = (order.get('direction') or '').upper()
+                                action = 'BTO' if 'DEBIT' in direction_raw else 'STC'
+                            else:
+                                action = 'BTO' if side == 'BUY' else 'STC'
+                            qty = float(order.get('cumulative_quantity', 0) or order.get('processed_quantity', 0) or order.get('quantity', 0))
+                            price = float(order.get('average_price', 0) or order.get('price', 0) or 0)
+                            filled_time = order.get('last_transaction_at') or order.get('updated_at', '')
+                            entry = {
+                                'order_id': order.get('id'),
+                                'symbol': symbol,
+                                'quantity': int(qty) if qty else 0,
+                                'filled_price': price,
+                                'action': action,
+                                'filled_time': filled_time,
+                                'asset_type': 'option' if is_option else 'stock',
+                            }
+                            if is_option and order.get('legs'):
+                                leg = order['legs'][0]
+                                entry['strike'] = float(leg.get('strike_price', 0) or 0) or None
+                                entry['expiry'] = leg.get('expiration_date')
+                                opt_type = (leg.get('option_type') or '').lower()
+                                entry['direction'] = 'C' if opt_type == 'call' else ('P' if opt_type == 'put' else None)
+                            filled_orders.append(entry)
+                    except Exception as e:
+                        print(f"[SYNC] Robinhood filled orders error: {e}")
 
             if not filled_orders:
                 print(f"[SYNC] No filled orders from {broker_name}")
@@ -3793,12 +3942,12 @@ class BrokerSyncService:
                     except:
                         pass
                 
-                if final_signal_detected and filled_at:
+                if final_signal_detected and final_order_submitted:
                     try:
                         from datetime import datetime
                         detected = datetime.fromisoformat(str(final_signal_detected).replace('Z', '+00:00'))
-                        filled = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
-                        latency_total_ms = int((filled - detected).total_seconds() * 1000)
+                        submitted = datetime.fromisoformat(str(final_order_submitted).replace('Z', '+00:00'))
+                        latency_total_ms = int((submitted - detected).total_seconds() * 1000)
                     except:
                         pass
                 
@@ -3828,6 +3977,32 @@ class BrokerSyncService:
                     sizing_mode=final_sizing_mode,
                     sizing_details=sizing_details
                 )
+                if not result and broker_order_id:
+                    # Execution lot already created at order time — update with actual fill data
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''UPDATE execution_lots SET
+                            fill_price = ?, order_filled_at = ?, slippage_pct = ?,
+                            latency_broker_ms = COALESCE(?, latency_broker_ms),
+                            latency_total_ms = COALESCE(?, latency_total_ms),
+                            signal_lot_id = COALESCE(?, signal_lot_id),
+                            signal_price = COALESCE(?, signal_price),
+                            signal_detected_at = COALESCE(?, signal_detected_at),
+                            signal_parsed_at = COALESCE(?, signal_parsed_at),
+                            order_submitted_at = COALESCE(?, order_submitted_at)
+                            WHERE broker = ? AND broker_order_id = ?''',
+                            (fill_price, filled_at, slippage_pct,
+                             latency_broker_ms, latency_total_ms,
+                             final_signal_lot_id, final_signal_price,
+                             final_signal_detected, final_signal_parsed, final_order_submitted,
+                             broker, broker_order_id))
+                        conn.commit()
+                        if cursor.rowcount > 0:
+                            result = True
+                            print(f"[EXEC] ✓ Updated execution lot with fill data: {symbol} @${fill_price:.2f}")
+                    except Exception as _upd_err:
+                        print(f"[EXEC] ⚠️ Could not update execution lot: {_upd_err}")
                 if result and meta:
                     update_pending_order_status(broker, broker_order_id, 'FILLED')
                 return result

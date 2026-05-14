@@ -2775,6 +2775,11 @@ class RiskManager:
                 continue
             _pnl_pct = ((pos.current_price - _cache.entry_price) / _cache.entry_price) * 100
             _sl_val = getattr(_cache, 'dynamic_sl_price', None) or getattr(_cache, 'stop_loss_price', None)
+            if (not _sl_val or _sl_val <= 0) and _cache.entry_price > 0:
+                _bcast_cs = getattr(_cache, 'channel_settings', None)
+                _bcast_sl_pct = getattr(_bcast_cs, 'stop_loss_pct', 0) if _bcast_cs else 0
+                if _bcast_sl_pct > 0:
+                    _sl_val = _cache.entry_price * (1 - _bcast_sl_pct / 100)
             _pt_val = getattr(_cache, 'profit_target_price', None)
             _sl_str = f"SL=${_sl_val:.2f}" if _sl_val and _sl_val > 0 else "SL=—"
             _pt_str = f"PT=${_pt_val:.2f}" if _pt_val and _pt_val > 0 else "PT=—"
@@ -4474,14 +4479,14 @@ class RiskManager:
                     decision.reason = format_tier_reason(decision, channel_settings.channel_name)
                     _tier_hit = getattr(decision, 'tier_hit', None) or getattr(decision, 'tier', None)
                     if cache.broker_oco_order_id and _tier_hit and cache.broker_pt_tier == _tier_hit:
-                        print(f"[RISK] 📋 OCO bracket managing T{_tier_hit} PT — suppressing software sell (OCO will handle at broker)")
-                        return ExitDecision.no_exit()
-                    _broker_manages_pt = _tier_hit and cache.broker_orders_placed and cache.broker_pt_order_id
-                    if _broker_manages_pt:
-                        decision._broker_pt_needs_cancel = True
-                        decision._broker_pt_order_id = cache.broker_pt_order_id
-                        decision._broker_pt_tier_hit = _tier_hit
-                    return decision
+                        print(f"[RISK] 📋 OCO bracket managing T{_tier_hit} PT — suppressing software sell (trailing stop + enhanced risk still evaluated)")
+                    else:
+                        _broker_manages_pt = _tier_hit and cache.broker_orders_placed and cache.broker_pt_order_id
+                        if _broker_manages_pt:
+                            decision._broker_pt_needs_cancel = True
+                            decision._broker_pt_order_id = cache.broker_pt_order_id
+                            decision._broker_pt_tier_hit = _tier_hit
+                        return decision
         
         if channel_settings and channel_settings.ema_risk_enabled and channel_settings.stop_loss_pct > 0:
             try:
@@ -7898,13 +7903,18 @@ class RiskManager:
                 return 0
             
             open_trade_symbols = set()
+            open_trade_fill_prices = {}
             try:
                 cursor.execute('''
-                    SELECT UPPER(symbol) as symbol, UPPER(broker) as broker, id as trade_id
+                    SELECT UPPER(symbol) as symbol, UPPER(broker) as broker, id as trade_id,
+                           executed_price
                     FROM trades WHERE status = 'OPEN'
                 ''')
                 for row in cursor.fetchall():
                     open_trade_symbols.add((row['symbol'], row['broker']))
+                    _otk = f"{row['broker']}_{row['symbol']}"
+                    if row['executed_price'] and row['executed_price'] > 0:
+                        open_trade_fill_prices[_otk] = row['executed_price']
             except Exception:
                 pass
             
@@ -7933,28 +7943,31 @@ class RiskManager:
                 symbol = order['symbol'].upper()
                 broker = order['broker_primary']
                 trigger_price = order['trigger_price']
-                
+
                 if not has_open_trade:
                     pos_key_stock = f"{broker}_{symbol}_stock"
                     if self.cache.get(pos_key_stock):
                         self.cache.remove(pos_key_stock)
                         print(f"[RISK] 🧹 Cleaned stale cache for {symbol} (no open trade, order #{order_id})")
                     continue
-                
+
+                fill_price = open_trade_fill_prices.get(f"{(broker or '').upper()}_{symbol}", trigger_price)
+                base_price = fill_price if fill_price and fill_price > 0 else trigger_price
+
                 sl_pct = order['stop_loss_pct'] or order['stop_loss_value']
                 sl_fixed = order['stop_loss_fixed']
                 sl_type = order['stop_loss_type'] or 'pct'
-                
+
                 profit_targets_raw = order['take_profit_targets'] or order['target_ranges']
-                
+
                 sl_price = None
                 if sl_fixed and sl_type == 'fixed':
                     sl_price = float(sl_fixed)
-                elif sl_pct and trigger_price:
-                    sl_price = trigger_price * (1 - float(sl_pct) / 100)
-                
+                elif sl_pct and base_price:
+                    sl_price = base_price * (1 - float(sl_pct) / 100)
+
                 pt_price = None
-                if profit_targets_raw and trigger_price:
+                if profit_targets_raw and base_price:
                     try:
                         if isinstance(profit_targets_raw, str):
                             pts = json.loads(profit_targets_raw)
@@ -7964,7 +7977,7 @@ class RiskManager:
                         if isinstance(pts, list) and pts:
                             first_pt = pts[0]
                             if isinstance(first_pt, (int, float)):
-                                pt_price = trigger_price * (1 + float(first_pt) / 100)
+                                pt_price = base_price * (1 + float(first_pt) / 100)
                             elif isinstance(first_pt, dict) and 'price' in first_pt:
                                 pt_price = float(first_pt['price'])
                     except (json.JSONDecodeError, TypeError):

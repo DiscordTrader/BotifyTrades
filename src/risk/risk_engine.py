@@ -638,17 +638,19 @@ def evaluate_exit_actions(
     
     # 6. Legacy Trailing Stop - SKIP if Early Trailing is enabled (mutually exclusive)
     if config.trailing_stop_pct > 0 and not config.enable_early_trailing:
+        _just_activated = False
         if not state.trailing_active and pnl_pct >= config.trailing_activation_pct:
             state.trailing_active = True
+            _just_activated = True
             actions.append(RiskAction(
                 action_type=ActionType.ACTIVATE_TRAIL,
                 reason=f"Trailing activated ({pnl_pct:.1f}% >= {config.trailing_activation_pct}%)",
                 priority=5
             ))
-        
+
         if state.trailing_active:
             new_trail_stop = state.highest_price * (1 - config.trailing_stop_pct / 100)
-            
+
             if state.trailing_stop_price is None or new_trail_stop > state.trailing_stop_price:
                 state.trailing_stop_price = new_trail_stop
                 actions.append(RiskAction(
@@ -657,8 +659,9 @@ def evaluate_exit_actions(
                     new_stop_price=new_trail_stop,
                     priority=5
                 ))
-            
-            if effective_low <= state.trailing_stop_price:
+
+            # Don't trigger on the same tick as activation — interval_low may predate the new high
+            if not _just_activated and effective_low <= state.trailing_stop_price:
                 actions.append(RiskAction(
                     action_type=ActionType.SELL_ALL,
                     reason=f"Trailing stop hit (${effective_low:.2f} <= ${state.trailing_stop_price:.2f})",

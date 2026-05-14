@@ -2380,7 +2380,7 @@ async function executeClose(tradeId, symbol, quantity, broker, limitPrice, order
             });
         }
         
-        const brokerLabel = isAlpaca ? 'ALPACA' : isSchwab ? 'SCHWAB' : 'WEBULL';
+        const brokerLabel = isAlpaca ? 'ALPACA' : isSchwab ? 'SCHWAB' : brokerLower.includes('ibkr') ? 'IBKR' : brokerLower.includes('tasty') ? 'TASTYTRADE' : effectiveBroker.toUpperCase() || 'WEBULL';
         console.log(`[CLOSE] ${brokerLabel} ${orderType.toUpperCase()}: ${quantity} ${symbol} @ ${limitPrice ? '$' + limitPrice : 'MKT'}`);
         
         const response = await fetch(url, {
@@ -3637,7 +3637,8 @@ async function streamingQuotePoll() {
             const broker = (currentBroker || '').toUpperCase();
             const showWebull = status.webull && (!broker || broker.includes('WEBULL'));
             const showSchwab = status.schwab && (!broker || broker === 'SCHWAB');
-            const anyRelevant = showWebull || showSchwab;
+            const showIbkr = status.ibkr && (!broker || broker.includes('IBKR'));
+            const anyRelevant = showWebull || showSchwab || showIbkr;
             _streamingIndicator.style.display = anyRelevant ? 'inline' : 'none';
             if (anyRelevant) {
                 if (broker) {
@@ -3647,6 +3648,7 @@ async function streamingQuotePoll() {
                     const parts = [];
                     if (showWebull) parts.push('Webull');
                     if (showSchwab) parts.push('Schwab');
+                    if (showIbkr) parts.push('IBKR');
                     _streamingIndicator.textContent = '\u26A1 LIVE \u2022 ' + parts.join(', ');
                 }
             }

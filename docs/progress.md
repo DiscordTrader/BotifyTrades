@@ -1,5 +1,162 @@
 # BotifyTrades Progress Log
 
+## Session: May 14, 2026 — Temple of Boom (ZZ) Parser: 2 Bugs Fixed
+
+### BUG 1: OCG missed — structured entry parser required ❌ stop loss line
+- **Root cause**: `temple_zz_structured_entry` regex required `❌ PRICE` line. OCG signal had no SL: `$OCG ✅ 2.25 🎯 5% 10% 15%`
+- **Fix**: Made ❌ line optional via `(?:❌...)?` in regex. Parser returns `stop_loss_value=None` when absent — channel risk settings provide SL as fallback
+- **Bonus**: Also fixed percentage target parsing. `🎯 5% 10% 15%` now converts to dollar targets using entry price (was silently discarding % targets)
+- **Files**: `src/signals/temple_parser.py` (regex + `_parse_zz_targets` + `parse_temple_zz_structured_entry`), `src/services/signal_format_registry.py` (pattern update)
+
+### BUG 2: Performance updates triggering duplicate BTO orders
+- **Root cause**: `temple_zz_range_entry` pattern (`SYMBOL LOW-HIGH`) matched both new entries and performance updates (`AIIO 1.45-1.88🔥` = "went from 1.45 to 1.88"). Result: AIIO bought 4x (1 legitimate + 3 duplicates), YMAT 2x, QUCY 1 extra
+- **Fix**: Added position-aware BTO duplicate guard in `selfbot_webull.py` at both LIVE and PAPER execution paths. Before queuing any stock BTO, checks trades DB for existing OPEN/PENDING trade with same (symbol, channel_id). If found → blocked with `[BTO GUARD] ⛔ BLOCKED duplicate BTO`
+- **Defense-in-depth**: Guard catches ALL duplicate BTOs from any parser, not just range_entry — protects against future pattern ambiguities too
+- **File**: `src/selfbot_webull.py` (2 insertion points: live execution path + paper trading path)
+- **Tests**: 154/154 temple parser tests pass
+
+---
+
+## Session: May 13, 2026 — QUCY SL Bug: Architect Review & Fix
+
+### BUG: Schwab SL triggered at 13.3% instead of configured 10% (QUCY)
+- **Root cause**: SL price calculated from conditional order's `trigger_price` ($0.82) instead of actual `fill_price` ($0.8344). This widened effective SL from 10% to 11.6%, which combined with penny stock price gap, triggered at -13.3%.
+- **Pipeline gap**: Signal builder in `selfbot_webull.py` computes SL/PT dollar prices using `triggered_price` (the only price available before fill). These wrong prices flow into the trades DB and position cache.
+
+### Fix 1: `position_monitor.py` — `_reconcile_conditional_orders` (applied)
+- Changed SL/PT recalculation in reconciliation to use `executed_price` from trades DB instead of conditional order's `trigger_price`
+- Queries `executed_price` alongside symbol/broker in the open trades lookup
+- Uses `base_price = fill_price if fill_price > 0 else trigger_price` for all SL/PT calculations
+
+### Fix 2: `broker_sync_service.py` — Post-fill SL/PT recalculation (applied)
+- Added recalculation block at all 3 PENDING → OPEN transition points:
+  1. Main position-match fill (line ~1465)
+  2. Schwab re-verify fill (line ~1779)
+  3. Manual trades import promotion (line ~2851)
+- When `fill_price != intended_price` (trigger price), back-derives the SL/PT percentage from the original values and recomputes using actual fill price
+- Formula: `sl_pct = (intended - old_sl) / intended`, then `new_sl = fill_price * (1 - sl_pct)`
+- Updates trade record in DB immediately after fill confirmation
+- **Files**: `src/services/broker_sync_service.py`, `src/risk/position_monitor.py`
+
+---
+
+## Session: May 13, 2026 — Customer Bug: Trailing Stop Sells Full Position Before PT1
+
+### BUG: Trailing stop activates AND triggers on same tick — sells 100% instead of PT1 partial (80%)
+- **Customer report**: TDIC 15 shares, PT1=10% (sell 80%), but entire position sold. User expected 12 shares sold at PT1, 3 remaining.
+- **Symptom**: `SELL 15 TDIC @ $3.88` — all 15 shares sold. Stock then rallied to $4.29 (+20.8%).
+- **Root cause**: Exit was NOT PT1 — it was a **trailing stop** (full position exit). Three factors:
+  1. **Config gap**: Trail activation (8%) < PT1 (10%). Trail always activates before PT1 can fire a partial exit.
+  2. **Price spike**: TDIC jumped from $3.74 to $3.90 in 3 seconds. `interval_low` = $3.75 (pre-spike), `highest_price` updated to $3.90 (spike).
+  3. **Same-tick activation + trigger bug**: Trail activated at +9.86% (>8% threshold), computed trail stop = $3.90 × 0.98 = $3.82, then `effective_low` ($3.75 from interval_low) <= $3.82 → triggered immediately. The interval_low predated the new high, creating a temporal mismatch.
+- **Why PT1 didn't fire**: Price was +9.86%, PT1 threshold was 10.0% — **0.14% short**. PT evaluation uses `current_price` (not `interval_high`), so brief spikes above PT1 threshold are missed.
+- **Fix**: Added `_just_activated` guard in `risk_engine.py` trailing stop evaluation. When trailing stop activates on a tick, it skips the trigger check on that same tick — prevents interval_low (from before the high was set) from immediately triggering the exit.
+- **File**: `src/risk/risk_engine.py` (lines 639-668, step 6 "Legacy Trailing Stop")
+- **User guidance**: Trail activation should be >= PT1 threshold to allow partial exits before trail takes over.
+
+---
+
+## Session: May 12, 2026 — Trade Monitor Multi-Broker Fix
+
+### Trade Monitor was single-broker (Webull only) — now multi-broker
+- **Symptom**: Trade Monitor Settings page configures fill detection + Discord webhook posting, but only Webull (unofficial) was monitored. Schwab, IBKR, Tastytrade, Alpaca, Webull Official, Robinhood fills were never posted.
+- **Root cause**: `trade_monitor.set_broker(self.broker)` at startup hardcoded to `self.broker` = WebullBroker. The entire TradeMonitor class was single-broker architecture.
+- **Fix**: Added `set_broker_manager()`, `_get_brokers_to_monitor()`, and `_fetch_filled_orders()` with per-broker normalization for all 7 US brokers. `_check_for_new_orders()` now iterates all connected brokers.
+- **Files**: `gui_app/trade_monitor.py`, `src/selfbot_webull.py` (startup wiring)
+
+### `_sync_filled_orders` missing Webull Official + Robinhood handlers
+- **Symptom**: Broker Sync Service synced positions for these brokers but NOT filled orders — no fill propagation to execution_lots/lot_closures.
+- **Fix**: Added filled order handlers using `get_order_history()` (Webull Official) and `get_orders('closed')` (Robinhood) with proper normalization. Also added Webull Official pending orders sync in `_fetch_and_normalize`.
+- **File**: `src/services/broker_sync_service.py`
+
+### `is_recent_fill` window too tight (10s → dynamic)
+- **Symptom**: Fill detection window was hardcoded to 10 seconds. With 5-10s poll intervals + network latency, fills silently dropped.
+- **Fix**: Changed to `max(poll_interval * 3, 30)` — 30s minimum, scales with poll interval.
+- **File**: `gui_app/trade_monitor.py`
+
+---
+
+## Session: May 12, 2026 — ERNA Bot Log Investigation (v10.2.0)
+
+### BUG #1 (CRITICAL): Trailing stop never activates when OCO bracket active
+- **Symptom**: ERNA at +15.64% gain (above 11% activation threshold) but trailing stop permanently shows "Ready to activate" and never transitions
+- **Root cause**: In `position_monitor.py:4476-4478`, when `evaluate_tiered_targets()` detects T1 PT hit AND an OCO bracket manages that tier, it returns `ExitDecision.no_exit()` immediately. This early return SKIPS the trailing stop evaluation at line 4544 entirely. The trail never gets evaluated, never activates, never exits.
+- **Fix**: Changed OCO case to fall through (print message but don't return) so trailing stop + enhanced risk features still evaluate after OCO suppresses the PT sell.
+- **File**: `src/risk/position_monitor.py` (line 4481-4482)
+
+### BUG #2: Dashboard manual close fails for IBKR LIVE
+- **Symptom**: User tried to close ERNA from Dashboard manually — failed silently
+- **Root cause**: In `routes.py:6772`, the IBKR close path created `asyncio.new_event_loop()` — completely isolated from the bot's TWS WebSocket connection. IBKR's ib_insync is bound to the bot's event loop; calling it from a new loop fails. The dedicated IBKR endpoint at line 4566 correctly used `run_coroutine_threadsafe(... _bot_instance.loop)`.
+- **Fix**: Replaced isolated loop with `asyncio.run_coroutine_threadsafe(..., _bot_instance.loop)` matching the dedicated endpoint pattern. Also fixed same issue for Tastytrade close.
+- **File**: `gui_app/routes.py` (lines 6771-6782)
+
+### BUG #3: ORDER_CHASER can't resolve IBKR_LIVE broker
+- **Symptom**: `[ORDER_CHASER] ❌ Broker IBKR_LIVE not available` repeated in log
+- **Root cause**: `_get_broker()` broker map had `ibkr_live` (lowercase) but broker_id comes as `IBKR_LIVE` (uppercase). Fallback attr name `ibkr_live_broker` doesn't exist on broker_manager.
+- **Fix**: Added `'IBKR_LIVE': 'ibkr_broker'` to the broker map.
+- **File**: `src/services/unfilled_order_chaser.py` (line 2168)
+
+### DISPLAY FIX: SL=— in broadcast for percentage-based SL
+- **Symptom**: `[RISK] 📡 ERNA $14.14 (+15.6%) | entry=$12.23 | SL=— PT=—` despite channel having SL=10%
+- **Root cause**: Broadcast only checked `stop_loss_price` (dollar-value), but channel uses percentage-based SL.
+- **Fix**: Computes SL dollar price from entry * (1 - sl_pct/100) when no dollar-value SL is set.
+- **File**: `src/risk/position_monitor.py` (line 2778)
+
+### BUG #4: Dashboard shows stale IBKR prices — TWO root causes
+- **Symptom**: ERNA price frozen on Dashboard despite risk engine seeing live prices every second
+- **Root cause A — IBKR broker returns 0 for current_price**: `get_positions_detailed()` in `ibkr_broker.py:404-415` gets prices from `self.ib.tickers()`, which requires explicit `reqMktData()` subscriptions. Most IBKR symbols only have `updatePortfolio` callbacks (sporadic). When `tickers()` returns no match, `current_price=0`, SYNC skips writing it to DB, and Dashboard reads stale DB value.
+- **Fix A**: Added `self.ib.portfolio()` fallback — `portfolio()` returns `marketPrice` from TWS callbacks. When `tickers()` returns 0, use `portfolio_prices[conId]`.
+- **File**: `src/brokers/ibkr_broker.py` (lines 393-416)
+- **Root cause B — Streaming quotes endpoint ignores IBKR hub**: `/api/streaming/quotes` in `routes.py` only checked Webull and Schwab data hubs for 1-second streaming overlay. IBKR positions fell through to cross-broker lookup only.
+- **Fix B**: Added IBKR data hub to streaming quotes — direct lookup for IBKR positions + cross-broker fallback for others. Added `ibkr` to streaming_status response and Dashboard indicator.
+- **Files**: `gui_app/routes.py` (lines 7619-7670, 7715-7718), `gui_app/templates/index.html` (streaming indicator)
+
+### BUG #5: AVG SPEED in PNL Tracker showing ~1423.6s instead of real execution speed
+- **Symptom**: PNL Tracker "AVG SPEED" KPI shows 1423.6s — should be sub-second bot reaction time
+- **Root cause**: `broker_sync_service.py:3796-3801` computed `latency_total_ms = signal_detected → order_filled` (includes broker queue + market fill delay, potentially hours). This overwrote the correct `signal_detected → order_submitted` value saved by `selfbot_webull.py` at order time. When `_compute_exec_speed()` fell back to `latency_total_ms` for rows missing timestamps, it returned inflated values.
+- **Fix 1**: Changed `broker_sync_service.py` to compute `latency_total_ms = detected → submitted` (same as selfbot_webull.py). Also used COALESCE on UPDATE to prevent overwriting good values with NULL.
+- **Fix 2**: Added 30s sanity cap in `_compute_exec_speed()` — bot reaction time >30s is corrupted data, excluded from average. Returns `None` instead of inflated values.
+- **Files**: `src/services/broker_sync_service.py` (lines 3796-3803, 3836-3846), `gui_app/routes.py` (lines 12868-12891)
+
+### ERNA Qty Mismatch (not a bug — multi-trade position)
+- DB shows qty=16 across multiple trades, but IBKR portfolio shows qty=3 — previous partial fills/closes reduced the broker position. SYNC correctly skips qty sync for multi-trade positions. This is expected behavior.
+
+---
+
+## Session: May 12, 2026 (cont.) — Root Cause Found & Fixed: Schwab PNL Accuracy (v10.2.0)
+
+### ROOT CAUSE #1: lot_id lost through conditional order path
+- **Symptom**: `pending_order_metadata.signal_lot_id` is NULL for all Schwab trades from channels with entry confirmation enabled (e.g., phoenix/ERNA). MEHA worked because its channel had no entry confirmation.
+- **Root cause**: When entry confirmation is enabled, `_save_signal_to_db(stk)` creates the lot and sets `stk['lot_id']`, but the code immediately creates a conditional order and `return`s — `stk` never reaches the order queue. When the conditional order fires later, `execute_conditional_order()` builds a NEW signal dict from scratch (line 10662) that has NO `lot_id`. This new signal goes via telegram bridge → worker → `save_pending_order_metadata(signal_lot_id=None)`.
+- **Fix**: Added lot_id recovery in `execute_conditional_order()` — queries `signal_lots` by symbol + channel to recover the lot_id before queuing the fired signal.
+- **File**: `src/selfbot_webull.py` (after line 11058)
+
+### ROOT CAUSE #2: channel_id mismatch breaks fill propagation
+- **Symptom**: `lot_closures.exit_fill_price` is NULL for ALL recent Schwab closures. `process_filled_order_event()` silently returned 0 matches.
+- **Root cause**: `pending_order_metadata.channel_id` stores Discord channel IDs (e.g., `1293555678111072347`), but `signal_lots.channel_id` stores DB internal IDs (e.g., `2`). The query `WHERE sl.channel_id = ?` using the Discord ID never matches.
+- **Fix**: Added Discord→DB channel_id resolution at the top of `process_filled_order_event()`. All signal_lots queries now use `db_channel_id` instead of the raw Discord `channel_id`.
+- **File**: `gui_app/database.py` (lines 5202-5215, 5242-5245, 5299)
+
+### Data Repair: `repair_pnl_data()` function
+- New function in `gui_app/database.py` that fixes three categories of broken data:
+  1. `lot_closures.exit_fill_price` NULL → backfills from STC trades (matched by trade_id + closure order)
+  2. `pending_order_metadata.signal_lot_id` NULL → backfills from signal_lots (matched by symbol + channel + time proximity)
+  3. STC trades with `executed_price=0` → backfills from lot_closures or filled_orders
+- First run repaired **61 records**: 16 closures, 43 metadata, 2 zero-price trades
+- Runs automatically on startup (idempotent)
+
+### Previous fixes in this session (earlier context)
+
+#### Bot Trades PNL priority fix
+- **Root cause**: `get_bot_trades()` processed STC trades FIRST, then lot_closures for remaining qty. STC trade with `executed_price=0.0` consumed all qty with wrong PNL, so correct lot_closures were skipped.
+- **Fix**: Flipped priority — lot_closures processed FIRST, STC trades only fill gaps.
+- **File**: `gui_app/database.py` — `get_bot_trades()`
+
+#### Speed column in PNL Tracker
+- **Fix 1**: Create `execution_lots` immediately at BTO order placement with signal timestamps.
+- **Fix 2**: Speed metric changed to signal_detected → order_submitted (bot reaction time).
+- **Files**: `gui_app/routes.py`, `src/selfbot_webull.py`, `src/services/broker_sync_service.py`
+
 ## Session: May 11, 2026 — IBKR Risk Engine SL/PT Not Applied (Root Cause: TWS TIF Auto-Adjustment)
 
 ### Bug: Risk Engine Skips IBKR Positions as "External" — SL/PT Never Applied

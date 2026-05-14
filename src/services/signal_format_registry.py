@@ -1325,14 +1325,15 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_zz_structured_entry",
-            description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL / 🎯 targets",
+            description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL (optional) / 🎯 targets",
             priority=50,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[ \t]*\n❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n🎯[ \t]*([\d.,\s]+(?:\.{2,3}[\d.,\s]+)*)',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[ \t]*\n(?:❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?🎯[ \t]*([\d.,\s%+]+(?:\.{2,3}[\d.,\s%+]+)*)',
             parser=parse_temple_zz_structured_entry,
             examples=[
                 "$AREB <@&1330929339134640179> \n✅ 0.30\n❌ 0.28\n🎯 0.33...0.37...0.40",
                 "$BIYA\n✅ 1.55\n❌ 1.45\n🎯 1.64...1.74...1.88...2.00",
                 "$FBLG <@&1330915546513805463>\n✅ 1.30-1.50\n❌ 1.25\n🎯 1.80...3.60...4.50",
+                "$OCG\n✅ 2.25\n🎯 5% 10% 15%",
             ],
             flags=re.IGNORECASE
         )

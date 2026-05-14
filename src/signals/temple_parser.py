@@ -130,12 +130,12 @@ TEMPLE_ZZ_SL_UPDATE_MOVE = re.compile(
 ZZ_ROLE_MOMENTUM = '1330929339134640179'
 ZZ_ROLE_SWING = '1330915546513805463'
 
-# Structured entry: "$TICKER <@&role>\n✅ PRICE\n❌ PRICE\n🎯 T1...T2...T3"
+# Structured entry: "$TICKER <@&role>\n✅ PRICE\n❌ PRICE (optional)\n🎯 T1...T2...T3"
 TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
     r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n'
     r'✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[ \t]*\n'
-    r'❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n'
-    r'🎯[ \t]*([\d.,\s]+(?:\.{2,3}[\d.,\s]+)*)',
+    r'(?:❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?'
+    r'🎯[ \t]*([\d.,\s%+]+(?:\.{2,3}[\d.,\s%+]+)*)',
     re.IGNORECASE
 )
 
@@ -800,13 +800,16 @@ def parse_temple_options_exit(match: re.Match, text: str) -> Optional[Dict[str, 
 # ZZ STRUCTURED EMOJI PARSER FUNCTIONS
 # =============================================================================
 
-def _parse_zz_targets(targets_str: str) -> list:
-    """Parse targets from '0.33...0.37...0.40' or '2.60-3.00' format."""
-    targets_str = targets_str.strip().rstrip('​')
+def _parse_zz_targets(targets_str: str, entry_price: float = None) -> list:
+    """Parse targets from '0.33...0.37...0.40', '2.60-3.00', or '5% 10% 15%' format."""
+    targets_str = targets_str.strip().rstrip('​').rstrip('+')
+    pct_parts = re.findall(r'(\d+(?:\.\d+)?)\s*%', targets_str)
+    if pct_parts and entry_price and entry_price > 0:
+        return [round(entry_price * (1 + float(p) / 100), 4) for p in pct_parts]
     parts = re.split(r'\.{2,3}|/|,', targets_str)
     targets = []
     for part in parts:
-        part = part.strip()
+        part = part.strip().rstrip('%+')
         if not part:
             continue
         range_match = re.match(r'(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)', part)
@@ -833,19 +836,19 @@ def _detect_zz_trade_type(text: str) -> str:
 
 
 def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
-    """Parse structured ZZ entry: $TICKER @role / ✅ entry / ❌ stoploss / 🎯 targets."""
+    """Parse structured ZZ entry: $TICKER @role / ✅ entry / ❌ stoploss (optional) / 🎯 targets."""
     symbol = match.group(1).upper()
     entry_price = float(match.group(2))
     entry_low = float(match.group(3)) if match.group(3) else None
-    stop_loss = float(match.group(4))
-    targets = _parse_zz_targets(match.group(5))
+    stop_loss = float(match.group(4)) if match.group(4) else None
+    targets = _parse_zz_targets(match.group(5), entry_price=entry_price)
 
     trade_type = _detect_zz_trade_type(text)
     entry_high = entry_price
     if entry_low and entry_low > entry_high:
         entry_high, entry_low = entry_low, entry_high
 
-    return {
+    result = {
         'format': 'TEMPLE_ZZ_STRUCTURED',
         'is_conditional': True,
         '_conditional_order': True,
@@ -859,7 +862,7 @@ def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dic
         'trigger_price': entry_low if entry_low else entry_high,
         'entry_high': entry_high,
         'entry_low': entry_low,
-        'stop_loss_type': 'fixed',
+        'stop_loss_type': 'fixed' if stop_loss else None,
         'stop_loss_value': stop_loss,
         'stop_loss_fixed': stop_loss,
         'stop_loss_pct': None,
@@ -874,6 +877,7 @@ def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dic
         'confidence': 1.0,
         '_trade_type': trade_type,
     }
+    return result
 
 
 def parse_temple_zz_inline_role_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:

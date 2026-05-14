@@ -3837,56 +3837,7 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
             'closures': []
         }
     
-    for stc in stc_trades:
-        origin_id = stc.get('origin_trade_id')
-        matched_bto_id = None
-        
-        if origin_id and origin_id in positions:
-            matched_bto_id = origin_id
-        else:
-            candidates = []
-            for tid, pos in positions.items():
-                if (pos['symbol'] == stc['symbol'] and 
-                    pos['channel_id'] == stc['channel_id'] and
-                    pos.get('strike') == stc.get('strike') and
-                    pos.get('expiry') == stc.get('expiry') and
-                    pos.get('call_put') == stc.get('call_put') and
-                    pos.get('broker') == stc.get('broker')):
-                    remaining = pos['bto_qty'] - pos['total_closed_qty']
-                    if remaining > 0:
-                        candidates.append((tid, pos.get('open_time') or ''))
-            if candidates:
-                candidates.sort(key=lambda x: x[1])
-                matched_bto_id = candidates[0][0]
-        
-        if matched_bto_id:
-            pos = positions[matched_bto_id]
-            broker_fill = stc.get('broker_fill_price')
-            exit_price = float(broker_fill) if broker_fill and float(broker_fill) > 0 else float(stc.get('executed_price') or stc.get('intended_price') or 0)
-            stc_qty = int(stc.get('quantity') or 0)
-            remaining = pos['bto_qty'] - pos['total_closed_qty']
-            stc_qty = min(stc_qty, remaining)
-            if stc_qty <= 0:
-                continue
-            entry_price = pos['entry_price']
-            
-            multiplier = 100 if pos['asset_type'] == 'option' else 1
-            closure_pnl = (exit_price - entry_price) * stc_qty * multiplier
-            closure_pnl_pct = ((exit_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
-            
-            exit_reason = stc.get('risk_trigger') or stc.get('source') or 'SIGNAL'
-            
-            pos['closures'].append({
-                'stc_id': stc['id'],
-                'stc_qty': stc_qty,
-                'exit_price': exit_price,
-                'pnl': closure_pnl,
-                'pnl_percent': closure_pnl_pct,
-                'exit_reason': exit_reason,
-                'closed_at': stc.get('executed_at') or stc.get('closed_at') or ''
-            })
-            pos['total_closed_qty'] += stc_qty
-
+    # --- PHASE 1: lot_closures (fill-based PNL, authoritative source) ---
     try:
         cursor.execute('''
             SELECT lc.id, lc.closed_qty, lc.close_price, lc.exit_fill_price, lc.pnl, lc.pnl_percent,
@@ -3945,6 +3896,61 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
             'closed_at': lc.get('closed_at') or ''
         })
         pos['total_closed_qty'] += lc_qty
+
+    # --- PHASE 2: STC trades (fill gaps not covered by lot_closures) ---
+    for stc in stc_trades:
+        origin_id = stc.get('origin_trade_id')
+        matched_bto_id = None
+
+        if origin_id and origin_id in positions:
+            matched_bto_id = origin_id
+        else:
+            candidates = []
+            for tid, pos in positions.items():
+                if (pos['symbol'] == stc['symbol'] and
+                    pos['channel_id'] == stc['channel_id'] and
+                    pos.get('strike') == stc.get('strike') and
+                    pos.get('expiry') == stc.get('expiry') and
+                    pos.get('call_put') == stc.get('call_put') and
+                    pos.get('broker') == stc.get('broker')):
+                    remaining = pos['bto_qty'] - pos['total_closed_qty']
+                    if remaining > 0:
+                        candidates.append((tid, pos.get('open_time') or ''))
+            if candidates:
+                candidates.sort(key=lambda x: x[1])
+                matched_bto_id = candidates[0][0]
+
+        if matched_bto_id:
+            pos = positions[matched_bto_id]
+            remaining = pos['bto_qty'] - pos['total_closed_qty']
+            if remaining <= 0:
+                continue
+            broker_fill = stc.get('broker_fill_price')
+            exit_price = float(broker_fill) if broker_fill and float(broker_fill) > 0 else float(stc.get('executed_price') or stc.get('intended_price') or 0)
+            if exit_price <= 0:
+                continue
+            stc_qty = int(stc.get('quantity') or 0)
+            stc_qty = min(stc_qty, remaining)
+            if stc_qty <= 0:
+                continue
+            entry_price = pos['entry_price']
+
+            multiplier = 100 if pos['asset_type'] == 'option' else 1
+            closure_pnl = (exit_price - entry_price) * stc_qty * multiplier
+            closure_pnl_pct = ((exit_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+
+            exit_reason = stc.get('risk_trigger') or stc.get('source') or 'SIGNAL'
+
+            pos['closures'].append({
+                'stc_id': stc['id'],
+                'stc_qty': stc_qty,
+                'exit_price': exit_price,
+                'pnl': closure_pnl,
+                'pnl_percent': closure_pnl_pct,
+                'exit_reason': exit_reason,
+                'closed_at': stc.get('executed_at') or stc.get('closed_at') or ''
+            })
+            pos['total_closed_qty'] += stc_qty
 
     for tid, pos in positions.items():
         bto_qty = pos['bto_qty']
@@ -5198,6 +5204,16 @@ def process_filled_order_event(broker: str, broker_order_id: str, symbol: str,
             channel_id = None
         signal_lot_id = metadata['signal_lot_id'] if metadata else None
         result['channel_id'] = channel_id
+
+        # Resolve Discord channel ID → DB internal channel_id for signal_lots matching.
+        # pending_order_metadata stores Discord IDs, signal_lots stores DB internal IDs.
+        db_channel_id = None
+        if channel_id:
+            cursor.execute('SELECT id FROM channels WHERE discord_channel_id = ? OR telegram_chat_id = ?',
+                          (str(channel_id), str(channel_id)))
+            _ch_row = cursor.fetchone()
+            if _ch_row:
+                db_channel_id = _ch_row['id']
         
         if is_entry:
             trade_row = None
@@ -5232,11 +5248,11 @@ def process_filled_order_event(broker: str, broker_order_id: str, symbol: str,
                 if updated:
                     result['lots_updated'] = True
                     print(f"[FILL_EVENT] ✓ signal_lot #{signal_lot_id} entry fill: ${fill_price:.4f}")
-            elif channel_id:
-                cursor.execute('''SELECT id FROM signal_lots 
+            elif db_channel_id:
+                cursor.execute('''SELECT id FROM signal_lots
                                  WHERE UPPER(symbol) = UPPER(?) AND entry_fill_price IS NULL
                                  AND channel_id = ? AND status IN ('OPEN', 'PARTIAL')
-                                 ORDER BY id DESC LIMIT 1''', (symbol, channel_id))
+                                 ORDER BY id DESC LIMIT 1''', (symbol, db_channel_id))
                 lot_row = cursor.fetchone()
                 if lot_row:
                     updated = update_lot_entry_fill(lot_row['id'], fill_price, broker, broker_order_id, filled_at)
@@ -5282,8 +5298,8 @@ def process_filled_order_event(broker: str, broker_order_id: str, symbol: str,
                         cursor.execute('UPDATE trades SET pnl = ?, pnl_percent = ? WHERE id = ?',
                                       (round(pnl, 2), round(pnl_pct, 2), trade_row['id']))
             
-            if not channel_id:
-                print(f"[FILL_EVENT] ⚠️ Skipping lot_closure fill for {symbol}: no channel_id (deterministic match only)")
+            if not db_channel_id:
+                print(f"[FILL_EVENT] ⚠️ Skipping lot_closure fill for {symbol}: no db_channel_id (deterministic match only)")
             else:
                 closure_query = '''SELECT lc.id FROM lot_closures lc
                                   JOIN signal_lots sl ON lc.lot_id = sl.id
@@ -5291,7 +5307,7 @@ def process_filled_order_event(broker: str, broker_order_id: str, symbol: str,
                                   WHERE UPPER(sl.symbol) = UPPER(?)
                                   AND (UPPER(COALESCE(lc.exit_fill_broker, '')) = UPPER(?) OR UPPER(COALESCE(t.broker, '')) = UPPER(?) OR lc.exit_fill_broker IS NULL)
                                   AND lc.exit_fill_price IS NULL AND sl.channel_id = ?'''
-                closure_params = [symbol, broker, broker, channel_id]
+                closure_params = [symbol, broker, broker, db_channel_id]
                 if strike:
                     closure_query += ' AND sl.strike = ?'
                     closure_params.append(str(strike))
@@ -5549,7 +5565,7 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
 
         conn.commit()
         return True
-        
+
     except Exception as e:
         print(f"[FILL-RECONCILE] ⚠️ Error reconciling trade fill: {e}")
         import traceback
@@ -5559,6 +5575,189 @@ def reconcile_trade_fill_price(broker: str, symbol: str, asset_type: str,
         except Exception:
             pass
         return False
+
+
+def repair_pnl_data():
+    """One-shot repair for broken PNL tracking data.
+
+    Fixes three categories of broken data:
+    1. lot_closures with NULL exit_fill_price — backfills from STC trades
+    2. pending_order_metadata with NULL signal_lot_id — backfills from signal_lots
+    3. STC trades with executed_price=0 — backfills from lot_closures or filled_orders
+
+    Safe to call multiple times (idempotent).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    fixed = {'closures': 0, 'metadata': 0, 'trades': 0}
+
+    try:
+        # 1. Backfill lot_closures.exit_fill_price from STC trades
+        cursor.execute('''
+            SELECT lc.id AS lc_id, lc.lot_id, lc.close_price,
+                   sl.symbol, sl.asset_type, sl.channel_id AS db_ch_id, sl.trade_id,
+                   t.executed_price, t.broker, t.order_id, t.executed_at
+            FROM lot_closures lc
+            JOIN signal_lots sl ON lc.lot_id = sl.id
+            LEFT JOIN trades t ON sl.trade_id = t.id AND t.direction = 'BTO'
+            WHERE lc.exit_fill_price IS NULL
+        ''')
+        broken_closures = cursor.fetchall()
+
+        for lc in broken_closures:
+            lc_id = lc['lc_id']
+            symbol = lc['symbol']
+            bto_trade_id = lc['trade_id']
+            entry_price = float(lc['executed_price'] or 0) if lc['executed_price'] else 0
+
+            stc_trade = None
+            if bto_trade_id:
+                cursor.execute('''
+                    SELECT executed_price, broker, order_id, executed_at, quantity
+                    FROM trades WHERE origin_trade_id = ? AND direction = 'STC'
+                    AND executed_price IS NOT NULL AND executed_price > 0
+                    ORDER BY executed_at ASC
+                ''', (bto_trade_id,))
+                stc_trades = cursor.fetchall()
+
+                cursor.execute('''
+                    SELECT id FROM lot_closures WHERE lot_id = ?
+                    ORDER BY closed_at ASC
+                ''', (lc['lot_id'],))
+                all_closures_for_lot = [r['id'] for r in cursor.fetchall()]
+                closure_idx = all_closures_for_lot.index(lc_id) if lc_id in all_closures_for_lot else -1
+
+                if 0 <= closure_idx < len(stc_trades):
+                    stc_trade = stc_trades[closure_idx]
+
+            if stc_trade and float(stc_trade['executed_price'] or 0) > 0:
+                fill_price = float(stc_trade['executed_price'])
+                cursor.execute('''
+                    UPDATE lot_closures SET exit_fill_price = ?, close_price = ?,
+                    exit_fill_broker = ?, exit_fill_order_id = ?, exit_filled_at = ?
+                    WHERE id = ?
+                ''', (fill_price, fill_price,
+                      stc_trade['broker'], stc_trade['order_id'], stc_trade['executed_at'],
+                      lc_id))
+
+                if entry_price > 0:
+                    asset_type = lc['asset_type'] or 'stock'
+                    mult = 100 if asset_type == 'option' else 1
+                    cursor.execute('SELECT closed_qty FROM lot_closures WHERE id = ?', (lc_id,))
+                    qty_row = cursor.fetchone()
+                    qty = int(qty_row['closed_qty'] or 0) if qty_row and qty_row['closed_qty'] else 0
+                    if qty > 0:
+                        pnl = round((fill_price - entry_price) * qty * mult, 2)
+                        pnl_pct = round(((fill_price - entry_price) / entry_price) * 100, 4)
+                        cursor.execute('UPDATE lot_closures SET pnl = ?, pnl_percent = ? WHERE id = ?',
+                                      (pnl, pnl_pct, lc_id))
+                fixed['closures'] += 1
+                print(f"[PNL-REPAIR] ✓ Closure #{lc_id}: exit_fill=${fill_price:.4f} (from STC trade)")
+
+        # 2. Backfill pending_order_metadata.signal_lot_id from signal_lots
+        cursor.execute('''
+            SELECT pm.id, pm.broker, pm.broker_order_id, pm.channel_id, pm.symbol,
+                   pm.asset_type, pm.action, pm.created_at
+            FROM pending_order_metadata pm
+            WHERE pm.signal_lot_id IS NULL AND pm.action IN ('BTO', 'BUY')
+        ''')
+        broken_metadata = cursor.fetchall()
+
+        for pm in broken_metadata:
+            discord_ch = pm['channel_id']
+            cursor.execute('SELECT id FROM channels WHERE discord_channel_id = ? OR telegram_chat_id = ?',
+                          (str(discord_ch), str(discord_ch)))
+            ch_row = cursor.fetchone()
+            if not ch_row:
+                continue
+            db_ch = ch_row['id']
+
+            cursor.execute('''
+                SELECT sl.id FROM signal_lots sl
+                WHERE sl.channel_id = ? AND UPPER(sl.symbol) = UPPER(?)
+                AND sl.asset_type = ?
+                ORDER BY ABS(julianday(sl.opened_at) - julianday(?)) ASC
+                LIMIT 1
+            ''', (db_ch, pm['symbol'], pm['asset_type'], pm['created_at']))
+            lot_row = cursor.fetchone()
+
+            if lot_row:
+                cursor.execute('UPDATE pending_order_metadata SET signal_lot_id = ? WHERE id = ?',
+                              (lot_row['id'], pm['id']))
+                fixed['metadata'] += 1
+                print(f"[PNL-REPAIR] ✓ PM#{pm['id']} ({pm['symbol']}): signal_lot_id={lot_row['id']}")
+
+        # 3. Fix STC trades with executed_price=0 from lot_closures
+        cursor.execute('''
+            SELECT t.id, t.symbol, t.origin_trade_id, t.broker, t.order_id
+            FROM trades t
+            WHERE t.direction = 'STC' AND (t.executed_price IS NULL OR t.executed_price = 0)
+        ''')
+        zero_stcs = cursor.fetchall()
+
+        for stc in zero_stcs:
+            fill_price = None
+            if stc['origin_trade_id']:
+                cursor.execute('''
+                    SELECT lc.close_price, lc.exit_fill_price
+                    FROM lot_closures lc
+                    JOIN signal_lots sl ON lc.lot_id = sl.id
+                    WHERE sl.trade_id = ?
+                    AND (lc.exit_fill_price IS NOT NULL OR lc.close_price > 0)
+                    ORDER BY lc.closed_at DESC LIMIT 1
+                ''', (stc['origin_trade_id'],))
+                lc_row = cursor.fetchone()
+                if lc_row:
+                    fill_price = float(lc_row['exit_fill_price'] or lc_row['close_price'] or 0)
+
+            if not fill_price and stc['order_id']:
+                cursor.execute('''
+                    SELECT filled_price FROM filled_orders
+                    WHERE broker_order_id = ? AND UPPER(broker) = UPPER(?)
+                    AND filled_price > 0 LIMIT 1
+                ''', (stc['order_id'], stc['broker']))
+                fo_row = cursor.fetchone()
+                if fo_row:
+                    fill_price = float(fo_row['filled_price'])
+
+            if fill_price and fill_price > 0:
+                cursor.execute('UPDATE trades SET executed_price = ? WHERE id = ?',
+                              (fill_price, stc['id']))
+
+                if stc['origin_trade_id']:
+                    cursor.execute('SELECT executed_price FROM trades WHERE id = ?', (stc['origin_trade_id'],))
+                    bto = cursor.fetchone()
+                    if bto and bto['executed_price']:
+                        entry = float(bto['executed_price'])
+                        cursor.execute('SELECT quantity FROM trades WHERE id = ?', (stc['id'],))
+                        qty_row = cursor.fetchone()
+                        qty = int(qty_row['quantity'] or 0) if qty_row else 0
+                        if entry > 0 and qty > 0:
+                            pnl = round((fill_price - entry) * qty, 2)
+                            pnl_pct = round(((fill_price - entry) / entry) * 100, 4)
+                            cursor.execute('UPDATE trades SET pnl = ?, pnl_percent = ? WHERE id = ?',
+                                          (pnl, pnl_pct, stc['id']))
+
+                fixed['trades'] += 1
+                print(f"[PNL-REPAIR] ✓ Trade #{stc['id']} ({stc['symbol']} STC): fill=${fill_price:.4f}")
+
+        conn.commit()
+        total = sum(fixed.values())
+        if total > 0:
+            print(f"[PNL-REPAIR] ✅ Repaired {total} records: {fixed['closures']} closures, {fixed['metadata']} metadata, {fixed['trades']} trades")
+        else:
+            print(f"[PNL-REPAIR] ✓ No broken records found")
+        return fixed
+
+    except Exception as e:
+        print(f"[PNL-REPAIR] ❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return fixed
 
 
 def backfill_trade_fill_prices():
@@ -11200,15 +11399,16 @@ def add_synced_order(broker: str, order_id: str, symbol: str, action: str,
     """Add a synced order to prevent duplicate posts."""
     conn = get_connection()
     cursor = conn.cursor()
-    
+    posted = 1 if discord_channel_id else 0
+
     try:
         cursor.execute('''
-            INSERT OR IGNORE INTO synced_orders 
-            (broker, order_id, symbol, action, quantity, filled_price, 
+            INSERT OR IGNORE INTO synced_orders
+            (broker, order_id, symbol, action, quantity, filled_price,
              asset_type, strike, expiry, direction, posted_to_discord, discord_channel_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (broker, order_id, symbol, action, quantity, filled_price,
-              asset_type, strike, expiry, direction, discord_channel_id))
+              asset_type, strike, expiry, direction, posted, discord_channel_id))
         conn.commit()
         return cursor.rowcount > 0
     except Exception as e:
