@@ -133,9 +133,9 @@ ZZ_ROLE_SWING = '1330915546513805463'
 # Structured entry: "$TICKER <@&role>\n✅ PRICE\n❌ PRICE (optional)\n🎯 T1...T2...T3"
 TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
     r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n'
-    r'✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[ \t]*\n'
+    r'✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n'
     r'(?:❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?'
-    r'🎯[ \t]*([\d.,\s%+]+(?:\.{2,3}[\d.,\s%+]+)*)',
+    r'🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
     re.IGNORECASE
 )
 
