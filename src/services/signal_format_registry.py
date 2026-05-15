@@ -1442,6 +1442,189 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
 
+        # =====================================================================
+        # ASHLEY OPTIONS FORMAT (RedAlert emoji)
+        # =====================================================================
+
+        self.register(
+            name="ashley_option_entry",
+            description="Ashley options: RedAlert SYMBOL - $STRIKE CALLS/PUTS EXPIRY $PRICE",
+            priority=18,
+            pattern=r'<a:[^>]+>\s*([A-Z]{1,5})\s*-\s*\$?(\d+(?:\.\d+)?)\s+(CALLS?|PUTS?)\s+(EXPIRATION\s+(?:THIS|NEXT)\s+WEEK|EXPIRATION\s+\d{1,2}/\d{1,2}(?:/\d{2,4})?|0DTE|\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+\$?(\.?\d+(?:\.\d+)?)',
+            parser=self._parse_ashley_entry,
+            examples=[
+                '<a:RedAlert:759583962237763595> SEDG - $60 CALLS 5/29 $1.15 @everyone',
+                '<a:RedAlert:759583962237763595> GS - $985 CALLS EXPIRATION THIS WEEK $2.50',
+                '<a:RedAlert:759583962237763595> SPY - $735 PUTS 0DTE $2.40 @everyone',
+                '<a:RedAlert:759583962237763595> CSCO - $125 CALLS 6/18 .97',
+            ]
+        )
+
+        self.register(
+            name="ashley_trim",
+            description="Ashley trim: TRIMMED/TRIM/TRIMMING with optional pct/price",
+            priority=72,
+            pattern=r'(?:([A-Z]{1,5})\s+)?(?:CALLS?\s+)?(?:TRIMM(?:ED|ING)|TRIM\s+PARTIAL)\b[^$\d]*(?:\$?([\d.]+)\b)?[^%\d]*(\d+%)?',
+            parser=self._parse_ashley_trim,
+            examples=[
+                'TRIM PARTIAL HERE AT $1.65 @everyone',
+                'GS CALLS TRIMMING LITTLE MORE @everyone',
+                'AVGO TRIMMED MORE @everyone',
+                'UP $100 PER CONTRACT, TRIMMED 50% HERE @everyone',
+                'WMT TRIMMED PARTIAL AT $1.85 @everyone',
+            ]
+        )
+
+        self.register(
+            name="ashley_all_out",
+            description="Ashley full exit: [SYMBOL] ALL OUT",
+            priority=71,
+            pattern=r'(?:([A-Z]{1,5})\s+(?:\S+\s+)?)?ALL\s+OUT',
+            parser=self._parse_ashley_all_out,
+            examples=[
+                'FCEL ALL OUT @everyone',
+                'PANW 217.5 CALLS ALL OUT @everyone',
+                'ALL OUT @everyone',
+                'SPX LOTTOS ALL OUT @everyone',
+            ]
+        )
+
+        # =====================================================================
+        # ANGELA OPTIONS FORMAT (siren_blue emoji)
+        # =====================================================================
+
+        self.register(
+            name="angela_option_entry",
+            description="Angela options: SYMBOL [lotto] calls/puts $STRIKE $PRICE EXPIRY added",
+            priority=19,
+            pattern=r'(?:<a:[^>]+>\s*)?([A-Z]{1,5})\s+(?:lotto\s+)?(?:calls?|puts?)\s+\$?(\d+(?:\.\d+)?)\s+\$?(\.?\d+(?:\.\d+)?)\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+(?:added|aDDDED|lotto)',
+            parser=self._parse_angela_entry,
+            examples=[
+                '<a:8375_siren_blue:785286170904625152> ENPH calls $50 $1.83 5/22 added SL 1.6',
+                '<a:8375_siren_blue:785286170904625152> TSLA lotto calls $452.5 $1.14 5/13 added SL 0.8',
+                'META calls $635 $2.26 5/15 added SL 1.9',
+                '<a:8375_siren_blue:785286170904625152> F calls $14 $0.22 5/15 lotto',
+            ]
+        )
+
+        self.register(
+            name="angela_trim",
+            description="Angela trim: SYMBOL [calls] [at $X] taking N%",
+            priority=73,
+            pattern=r'([A-Z]{1,5})\s+(?:calls?\s+|puts?\s+|swings?\s+)?(?:at\s*\$?[\d.]+\s*[.]?\s*)?(?:closing\s+|taking\s+(?:more\s+)?|down\s+to\s+)(\d+)%',
+            parser=self._parse_angela_trim,
+            examples=[
+                'TSLA taking 40% at $2.84',
+                'GOOGL calls at $2.30 taking more 20%',
+                'MRVL calls at $2.75 taking 50%',
+                'RKLB taking 50% at $3.20',
+            ]
+        )
+
+        self.register(
+            name="angela_trim_at_price",
+            description="Angela trim: SYMBOL taking N% at $PRICE",
+            priority=73,
+            pattern=r'([A-Z]{1,5})\s+taking\s+(?:more\s+)?(\d+)%\s+at\s+\$?([\d.]+)',
+            parser=self._parse_angela_trim,
+            examples=[
+                'AVGO taking 50% at $2.9',
+                'TSLA taking 40% at $2.84',
+            ]
+        )
+
+        self.register(
+            name="angela_closed",
+            description="Angela exit: CLOSED REST SYMBOL or SYMBOL closed",
+            priority=72,
+            pattern=r'(?:CLOSED\s+(?:REST\s+)?([A-Z]{1,5})|([A-Z]{1,5})\s+(?:clotto\s+)?closed)',
+            parser=self._parse_angela_closed,
+            examples=[
+                'CLOSED REST TSLA',
+                'SPX closed',
+                'TSLA clotto closed',
+            ]
+        )
+
+        self.register(
+            name="angela_stop_hit",
+            description="Angela stop: SYMBOL hit stop / SYMBOL stop hit",
+            priority=72,
+            pattern=r'([A-Z]{1,5})\s+(?:hit\s+stop|stop\s+hit)',
+            parser=self._parse_angela_stop_hit,
+            examples=[
+                'TSLA hit stop',
+                'TSLA stop hit. $448.40 support.',
+            ]
+        )
+
+        # =====================================================================
+        # ROCKY OPTIONS FORMAT (🚨 emoji)
+        # =====================================================================
+
+        self.register(
+            name="rocky_flow_alert_reject",
+            description="Rocky flow alert rejection: multi-line flow/sweep alerts",
+            priority=5,
+            pattern=r'(?:flow\s+(?:spotted|alert|sentiment)|massive\s+(?:bullish|bearish|call|put)\s+flow|call\s+buyer\s+(?:still\s+)?hold|sweep\s+activity|Put/Call\s+Ratio)',
+            parser=self._parse_rocky_flow_reject,
+            examples=[
+                '$COIN massive bullish flow spotted',
+                '$OKLO FLOW ALERT',
+            ]
+        )
+
+        self.register(
+            name="rocky_option_entry",
+            description="Rocky options: 🚨 SYMBOL calls $STRIKE $PRICE EXPIRY expiry added",
+            priority=17,
+            pattern=r'🚨\s*([A-Z]{1,5})\s+(?:calls?|puts?)\s+\$?(\d+(?:\.\d+)?)\s+\$?(\d+(?:\.\d*)?)\s+(?:(\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+expiry|(?:tomorrow|today|this\s+week|next\s+week)\s+expiry)\s+(?:added|aDDDED)',
+            parser=self._parse_rocky_entry_std,
+            examples=[
+                '🚨 MU calls $850 $3.45 tomorrow expiry added only 3',
+                '🚨 COIN calls $225 $2.45 this week expiry added here. Stop at $2',
+                '🚨 NBIS calls $230 $2.88 5/15 expiry added SL 2.4',
+                '🚨 TSLA calls $440 $2.  5/13 expiry added for swing. Stop at 1.6',
+            ]
+        )
+
+        self.register(
+            name="rocky_option_entry_strike_first",
+            description="Rocky options: 🚨 SYMBOL $STRIKE calls $PRICE EXPIRY expiry added",
+            priority=17,
+            pattern=r'🚨\s*([A-Z]{1,5})\s+\$?(\d+(?:\.\d+)?)\s+(?:calls?|puts?)\s+\$?(\d+(?:\.\d*)?)\s+(?:(\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+expiry|(?:tomorrow|today|this\s+week|next\s+week)\s+expiry)\s+(?:added|aDDDED)',
+            parser=self._parse_rocky_entry_std,
+            examples=[
+                '🚨 MU $600 calls $3.35 this week expiry added 5 stop at 2.8',
+            ]
+        )
+
+        self.register(
+            name="rocky_option_entry_price_after",
+            description="Rocky options: 🚨 SYMBOL calls $STRIKE EXPIRY expiry added at $PRICE",
+            priority=17,
+            pattern=r'🚨\s*([A-Z]{1,5})\s+(?:\$?(\d+(?:\.\d+)?)\s+)?(?:calls?|puts?)\s+(?:\$?(\d+(?:\.\d+)?)\s+)?(?:(\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+expiry|(?:tomorrow|today|this\s+week|next\s+week)\s+expiry)\s+(?:added)\s+(?:\d+\s+)?(?:at\s+)?\$?(\d+(?:\.\d*)?)',
+            parser=self._parse_rocky_entry_price_after,
+            examples=[
+                '🚨 BABA $150 calls 5/15 expiry added at $2.9 stop at $2.4',
+                '🚨 AMZN calls $277.5 this week expiry added at $1.76 stop at $1.3',
+            ]
+        )
+
+        self.register(
+            name="rocky_trim",
+            description="Rocky trim: taking 1/3rd/half/some at $PRICE",
+            priority=73,
+            pattern=r'([A-Z]{1,5})\s+(?:calls?\s+|puts?\s+|swings?\s+)?(?:at\s+\$?[\d.]+\s+|[\d.]+%[.]?\s+)?(?:heree?\s+)?(?:taking|took)\s+(1/3(?:rd)?|half|some|profits?)(?:\s+(?:at|here|out)?\s*\$?([\d.]+))?',
+            parser=self._parse_rocky_trim,
+            examples=[
+                'COIN taking 1/3rd at $2.94',
+                'QUBT calls at $1.05 heree taking 1/3rd',
+                'NBIS took half at $4.60',
+                'TSLA calls at $3.15 taking half. nice run',
+            ]
+        )
+
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
@@ -3391,6 +3574,271 @@ class SignalFormatRegistry:
             '_protrader_exit': True,
             'is_market_order': True,
             'confidence': 0.9,
+        }
+
+    # =========================================================================
+    # ASHLEY / ANGELA / ROCKY PARSER IMPLEMENTATIONS
+    # =========================================================================
+
+    def _resolve_relative_expiry(self, expiry_text: str) -> str:
+        from datetime import timedelta
+        now = datetime.now()
+        lower = expiry_text.lower().strip()
+        if '0dte' in lower or 'today' in lower:
+            return now.strftime("%m/%d")
+        if 'tomorrow' in lower:
+            return (now + timedelta(days=1)).strftime("%m/%d")
+        if 'next week' in lower:
+            days_to_monday = (7 - now.weekday()) % 7
+            if days_to_monday == 0:
+                days_to_monday = 7
+            friday = now + timedelta(days=days_to_monday + 4)
+            return friday.strftime("%m/%d")
+        if 'this week' in lower:
+            days_to_friday = (4 - now.weekday()) % 7
+            if days_to_friday == 0:
+                days_to_friday = 0
+            friday = now + timedelta(days=days_to_friday)
+            return friday.strftime("%m/%d")
+        return expiry_text
+
+    def _extract_stop_loss(self, text: str) -> float:
+        m = re.search(r'(?:STOP\s+LOSS\s+AT|stop\s+at|SL|Stop)\s+\$?([\d.]+)', text, re.IGNORECASE)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                pass
+        return None
+
+    def _parse_ashley_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, strike, opt_type_raw, expiry_raw, price = match.groups()
+        opt_type = 'C' if 'CALL' in opt_type_raw.upper() else 'P'
+        expiry = self._resolve_relative_expiry(expiry_raw)
+        if '/' not in expiry:
+            expiry = expiry_raw
+        stop_loss = self._extract_stop_loss(text)
+        try:
+            price_f = float(price)
+        except ValueError:
+            return None
+        return {
+            "asset": "option",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type,
+            "expiry": expiry,
+            "price": price_f,
+            "is_market_order": False,
+            "stop_loss": stop_loss,
+            "_ashley_format": True,
+        }
+
+    def _parse_ashley_trim(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, price, pct = match.groups()
+        trim_pct = None
+        if pct:
+            try:
+                trim_pct = int(pct.replace('%', ''))
+            except ValueError:
+                pass
+        text_upper = text.upper()
+        if 'MOST' in text_upper:
+            trim_pct = trim_pct or 80
+        elif 'LITTLE' in text_upper:
+            trim_pct = trim_pct or 25
+        elif 'PARTIAL' in text_upper:
+            trim_pct = trim_pct or 50
+        else:
+            trim_pct = trim_pct or 50
+        return {
+            "asset": "option",
+            "action": "STC",
+            "symbol": symbol.upper() if symbol else None,
+            "sell_pct": trim_pct,
+            "trim_price": float(price) if price else None,
+            "is_market_order": price is None,
+            "_ashley_trim": True,
+            "_tracking_only": symbol is None,
+        }
+
+    def _parse_ashley_all_out(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol = match.group(1) or match.group(2) if match.lastindex and match.lastindex >= 2 else match.group(1)
+        return {
+            "asset": "option",
+            "action": "STC",
+            "symbol": symbol.upper() if symbol else None,
+            "sell_pct": 100,
+            "is_market_order": True,
+            "_ashley_exit": True,
+            "_tracking_only": symbol is None,
+        }
+
+    def _parse_angela_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, strike, price, expiry = match.groups()
+        text_lower = text.lower()
+        opt_type = 'P' if 'put' in text_lower else 'C'
+        stop_loss = self._extract_stop_loss(text)
+        try:
+            price_f = float(price)
+        except ValueError:
+            return None
+        return {
+            "asset": "option",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type,
+            "expiry": expiry,
+            "price": price_f,
+            "is_market_order": False,
+            "stop_loss": stop_loss,
+            "_angela_format": True,
+        }
+
+    def _parse_angela_trim(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, pct = match.group(1), match.group(2)
+        trim_pct = int(pct) if pct else 50
+        price_m = re.search(r'at\s+\$?([\d.]+)', text, re.IGNORECASE)
+        trim_price = None
+        if price_m:
+            price_str = price_m.group(1).rstrip('.')
+            try:
+                trim_price = float(price_str)
+            except ValueError:
+                pass
+        return {
+            "asset": "option",
+            "action": "STC",
+            "symbol": symbol.upper(),
+            "sell_pct": trim_pct,
+            "trim_price": trim_price,
+            "is_market_order": trim_price is None,
+            "_angela_trim": True,
+        }
+
+    def _parse_angela_closed(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol = match.group(1) or match.group(2)
+        if not symbol:
+            return None
+        return {
+            "asset": "option",
+            "action": "STC",
+            "symbol": symbol.upper(),
+            "sell_pct": 100,
+            "is_market_order": True,
+            "_angela_exit": True,
+        }
+
+    def _parse_angela_stop_hit(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol = match.group(1)
+        return {
+            "asset": "option",
+            "action": "STC",
+            "symbol": symbol.upper(),
+            "sell_pct": 100,
+            "is_market_order": True,
+            "_angela_stop": True,
+        }
+
+    def _parse_rocky_flow_reject(self, match: re.Match, text: str) -> Optional[Dict]:
+        return {
+            "asset": "option",
+            "action": "SKIP",
+            "symbol": None,
+            "_flow_alert": True,
+            "_tracking_only": True,
+        }
+
+    def _parse_rocky_entry_std(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, strike, price_raw, date_expiry = match.groups()
+        text_lower = text.lower()
+        opt_type = 'P' if 'put' in text_lower else 'C'
+        price_clean = price_raw.rstrip('.')
+        actual_price = float(price_clean) if price_clean else 0
+
+        if date_expiry:
+            expiry = date_expiry
+        else:
+            expiry_m = re.search(r'(tomorrow|today|this\s+week|next\s+week)\s+expiry', text, re.IGNORECASE)
+            expiry = self._resolve_relative_expiry(expiry_m.group(1)) if expiry_m else datetime.now().strftime("%m/%d")
+
+        stop_loss = self._extract_stop_loss(text)
+        return {
+            "asset": "option",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type,
+            "expiry": expiry,
+            "price": actual_price,
+            "is_market_order": False,
+            "stop_loss": stop_loss,
+            "_rocky_format": True,
+        }
+
+    def _parse_rocky_entry_price_after(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol = match.group(1)
+        num_before_calls = match.group(2)
+        num_after_calls = match.group(3)
+        date_expiry = match.group(4)
+        price_raw = match.group(5)
+
+        strike = float(num_before_calls or num_after_calls or '0')
+        price_clean = price_raw.rstrip('.') if price_raw else '0'
+        actual_price = float(price_clean)
+
+        text_lower = text.lower()
+        opt_type = 'P' if 'put' in text_lower else 'C'
+
+        if date_expiry:
+            expiry = date_expiry
+        else:
+            expiry_m = re.search(r'(tomorrow|today|this\s+week|next\s+week)\s+expiry', text, re.IGNORECASE)
+            expiry = self._resolve_relative_expiry(expiry_m.group(1)) if expiry_m else datetime.now().strftime("%m/%d")
+
+        stop_loss = self._extract_stop_loss(text)
+        return {
+            "asset": "option",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol.upper(),
+            "strike": strike,
+            "opt_type": opt_type,
+            "expiry": expiry,
+            "price": actual_price,
+            "is_market_order": False,
+            "stop_loss": stop_loss,
+            "_rocky_format": True,
+        }
+
+    def _parse_rocky_trim(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, fraction, price = match.groups()
+        fraction_lower = fraction.lower()
+        if '1/3' in fraction_lower:
+            trim_pct = 33
+        elif 'half' in fraction_lower:
+            trim_pct = 50
+        elif 'profit' in fraction_lower:
+            trim_pct = 50
+        else:
+            trim_pct = 50
+        return {
+            "asset": "option",
+            "action": "STC",
+            "symbol": symbol.upper(),
+            "sell_pct": trim_pct,
+            "trim_price": float(price) if price else None,
+            "is_market_order": price is None,
+            "_rocky_trim": True,
         }
 
     def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
