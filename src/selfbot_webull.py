@@ -14649,14 +14649,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'price': reg_price,
                         'asset': 'stock',
                         'stop_loss_price': registry_result.get('stop_loss'),
-                        'profit_targets': registry_result.get('profit_targets'),
+                        'profit_targets': registry_result.get('profit_targets') or ([registry_result['take_profit']] if registry_result.get('take_profit') else None),
                         'is_market_order': registry_result.get('is_market_order', reg_price is None),
                         '_bracket_order': bool(registry_result.get('stop_loss')),
                         '_registry_parsed': True,
                         'parsed_by': fmt_name,
                     }
-                    if registry_result.get('profit_targets'):
-                        india_stock_signal['profit_target_price'] = registry_result['profit_targets'][0]
+                    if india_stock_signal.get('profit_targets'):
+                        india_stock_signal['profit_target_price'] = india_stock_signal['profit_targets'][0]
                     print(f"[{fmt_name}] ✓ Registry stock BTO: {reg_symbol} @ ${reg_price} SL=${registry_result.get('stop_loss')} (bracket={india_stock_signal['_bracket_order']})")
                 elif reg_action == 'STC':
                     india_stock_signal = {

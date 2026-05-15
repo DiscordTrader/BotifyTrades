@@ -577,6 +577,8 @@ def parse_temple_zz_range_entry(match: re.Match, text: str) -> Optional[Dict[str
         "is_market_order": False,
         "confidence": 0.85,
         "take_profit": high,
+        "profit_targets": [high],
+        "profit_target_price": high,
         "_temple_entry": True,
     }
     return result
