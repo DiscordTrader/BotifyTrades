@@ -32,8 +32,8 @@ class EmailService:
         """Check if email service is properly configured"""
         return bool(self.sender_email and self.sender_password)
     
-    def send_password_reset_email(self, to_email: str, username: str, reset_token: str, 
-                                  base_url: str = 'http://localhost:5000') -> Dict:
+    def send_password_reset_email(self, to_email: str, username: str, reset_token: str,
+                                  base_url: str = None) -> Dict:
         """
         Send password reset email with recovery link
         
@@ -48,7 +48,12 @@ class EmailService:
         """
         if not self.is_configured():
             return {'success': False, 'error': 'Email service not configured'}
-        
+
+        if base_url is None:
+            import os as _os
+            _port = _os.environ.get('GUI_PORT', '5000')
+            base_url = f'http://localhost:{_port}'
+
         try:
             reset_link = f"{base_url}/reset-password/{reset_token}"
             

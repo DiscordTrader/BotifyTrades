@@ -46,7 +46,9 @@ def show_console_setup():
     print("  or")
     print("  pip install PyQt5")
     print("\nAlternatively, configure the bot manually via:")
-    print("  - The web control panel at http://localhost:5000")
+    import os as _os
+    _port = _os.environ.get('GUI_PORT', '5000')
+    print(f"  - The web control panel at http://localhost:{_port}")
     print("  - Edit config.ini directly")
     print("=" * 60)
 

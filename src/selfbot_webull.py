@@ -21578,7 +21578,7 @@ def _run_bot_startup_inner(progress_callback=None):
     
     report_progress(1, "Starting web control panel...")
     
-    gui_port = 5000
+    gui_port = int(os.environ.get('GUI_PORT', 5000))
     try:
         import sys
         from pathlib import Path
@@ -21963,7 +21963,7 @@ Environment Variables:
             startup_state = {
                 'discord_thread': None,
                 'telegram_thread': None,
-                'gui_port': 5000,
+                'gui_port': int(os.environ.get('GUI_PORT', 5000)),
                 'error': None,
                 'license_ready': license_bypass,
                 'startup_thread': None

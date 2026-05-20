@@ -93,25 +93,54 @@ def get_gui_port():
     """Get GUI port from environment variable or default to 5000"""
     return int(os.environ.get('GUI_PORT', 5000))
 
+
+def _find_available_port(start_port, max_attempts=10):
+    """Find an available port starting from start_port, incrementing on conflict."""
+    import socket
+    for offset in range(max_attempts):
+        port = start_port + offset
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('0.0.0.0', port))
+                return port
+        except OSError:
+            if offset == 0:
+                print(f"[GUI] ⚠️ Port {port} is in use (macOS AirPlay, another app, etc.)")
+            else:
+                print(f"[GUI] ⚠️ Port {port} also in use, trying next...")
+    return None
+
+
 def start_gui_server(host='0.0.0.0', port=None):
     """Start Flask server in a separate thread
-    
+
     Args:
         host: Host to bind to (default: 0.0.0.0)
         port: Port to bind to (default: GUI_PORT env var or 5000)
     """
     if port is None:
         port = get_gui_port()
-    
+
+    available_port = _find_available_port(port)
+    if available_port is None:
+        print(f"[GUI] ❌ No available port found in range {port}-{port + 9}")
+        available_port = port
+    elif available_port != port:
+        print(f"[GUI] ✓ Using port {available_port} instead of {port}")
+    port = available_port
+
+    # Update env so get_gui_port() and any downstream code sees the actual port
+    os.environ['GUI_PORT'] = str(port)
+
     app = create_app()
-    
+
     def run():
         print(f"[GUI] Starting web control panel on http://{host}:{port}")
         print(f"[GUI] Open your browser to access the control panel")
         app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
-    
+
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
     print(f"[GUI] Web server thread started")
-    
+
     return thread, port

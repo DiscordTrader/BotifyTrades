@@ -18888,7 +18888,7 @@ def register_routes(app):
                 },
                 'web_panel': {
                     'status': 'running',
-                    'port': 5000,
+                    'port': int(os.environ.get('GUI_PORT', 5000)),
                     'ok': True
                 },
                 'order_worker': {
