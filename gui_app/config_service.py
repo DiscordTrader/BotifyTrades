@@ -211,7 +211,7 @@ def get_discord_notifications() -> dict:
 
 
 # AI Provider settings
-AI_PROVIDERS = ['replit_ai', 'openai', 'disabled']
+AI_PROVIDERS = ['replit_ai', 'openai', 'claude', 'disabled']
 
 def save_ai_provider(provider: str):
     """Save AI provider preference.

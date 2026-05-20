@@ -1503,12 +1503,14 @@ class BaseConditionalOrderService(ABC):
         """Create a new conditional order."""
         if not self.is_enabled():
             self._log("Service disabled")
+            print(f"[CONDITIONAL] ⚠️ create_order BLOCKED: service globally disabled", flush=True)
             return None
 
         try:
             from gui_app.database import get_global_risk_settings
             if get_global_risk_settings().get('trading_paused'):
                 self._log("⏸️ BLOCKED: Trading is paused")
+                print(f"[CONDITIONAL] ⚠️ create_order BLOCKED: trading is paused", flush=True)
                 return None
         except Exception:
             pass
@@ -1520,10 +1522,11 @@ class BaseConditionalOrderService(ABC):
                 ch_exec = get_channel_by_telegram_id(str(channel_id))
             if ch_exec and not ch_exec.get('execute_enabled', 0):
                 self._log(f"⛔ BLOCKED create_order for channel {channel_id}: execute is OFF")
+                print(f"[CONDITIONAL] ⚠️ create_order BLOCKED: execute OFF for channel {channel_id}", flush=True)
                 return None
         except Exception as exec_check_err:
             self._log(f"Execute-enabled check error in create_order (proceeding): {exec_check_err}")
-        
+
         channel_settings = get_channel_conditional_settings(channel_id)
         self._log(f"Channel settings for {channel_id}: "
                   f"timeout={channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes') or channel_settings.get('conditional_order_expiry')}, "
@@ -1535,12 +1538,13 @@ class BaseConditionalOrderService(ABC):
         is_entry_confirmation = bool(parsed_signal.get('_entry_confirmation'))
         if not channel_settings.get('conditional_order_enabled', True) and not is_entry_confirmation:
             self._log(f"Disabled for channel {channel_id}")
+            print(f"[CONDITIONAL] ⚠️ create_order BLOCKED: conditional orders disabled for channel {channel_id} (conditional_order_enabled={channel_settings.get('conditional_order_enabled')})", flush=True)
             return None
         
-        # Priority: passed broker (from enabled_brokers) > legacy broker_override setting
         effective_broker = broker or channel_settings.get('broker_override')
         if not effective_broker:
             self._log(f"No broker for channel {channel_id}")
+            print(f"[CONDITIONAL] ⚠️ create_order BLOCKED: no broker for channel {channel_id}", flush=True)
             return None
         self._log(f"Using broker: {effective_broker} for channel {channel_id}")
         
@@ -1730,48 +1734,54 @@ class BaseConditionalOrderService(ABC):
         self._log(f"Channel settings applied: exit_mode={exit_strategy_mode}, slippage={slippage_protection_enabled}/{slippage_max_pct}, "
                   f"limit_cap={limit_cap_enabled}/{limit_cap_pct}%, trailing={trailing_stop_pct}/{trailing_activation_pct}")
         
-        order_id = create_conditional_order(
-            channel_id=channel_id,
-            symbol=parsed_signal.get('symbol'),
-            trigger_type=trigger_type,
-            trigger_price=adjusted_price,
-            adjusted_trigger_price=adjusted_price,
-            broker_primary=effective_broker,
-            stop_loss_type=stop_loss_type,
-            stop_loss_value=stop_loss_value,
-            stop_loss_fixed=stop_loss_fixed,
-            stop_loss_pct=stop_loss_pct,
-            take_profit_targets=json.dumps(profit_targets) if profit_targets else None,
-            target_ranges=target_ranges_json,
-            size_mode=size_mode,
-            qty_value=qty_value,
-            calculated_qty=parsed_signal.get('qty') or parsed_signal.get('quantity'),
-            expires_at=expires_at,
-            original_message=parsed_signal.get('original_message'),
-            asset_type='option' if parsed_signal.get('strike') else 'stock',
-            strike=parsed_signal.get('strike'),
-            opt_type=parsed_signal.get('opt_type'),
-            market=self.MARKET,
-            expiry=parsed_signal.get('expiry'),
-            lot_size=parsed_signal.get('lot_size'),
-            lots=parsed_signal.get('lots'),
-            exit_strategy_mode=exit_strategy_mode,
-            slippage_protection_enabled=slippage_protection_enabled,
-            slippage_max_pct=slippage_max_pct,
-            trailing_stop_enabled=trailing_stop_enabled,
-            trailing_stop_pct=trailing_stop_pct,
-            trailing_activation_pct=trailing_activation_pct,
-            settings_source=settings_source,
-            author_name=parsed_signal.get('author_name'),
-            limit_cap_enabled=limit_cap_enabled,
-            limit_cap_pct=limit_cap_pct,
-            limit_price=limit_price,
-            message_id=parsed_signal.get('message_id'),
-            breakout_reset_enabled=breakout_reset_enabled,
-            original_signal_price=parsed_signal.get('trigger_price', 0),
-            all_brokers=json.dumps(parsed_signal['_all_brokers']) if parsed_signal.get('_all_brokers') else None,
-        )
-        
+        try:
+            order_id = create_conditional_order(
+                channel_id=channel_id,
+                symbol=parsed_signal.get('symbol'),
+                trigger_type=trigger_type,
+                trigger_price=adjusted_price,
+                adjusted_trigger_price=adjusted_price,
+                broker_primary=effective_broker,
+                stop_loss_type=stop_loss_type,
+                stop_loss_value=stop_loss_value,
+                stop_loss_fixed=stop_loss_fixed,
+                stop_loss_pct=stop_loss_pct,
+                take_profit_targets=json.dumps(profit_targets) if profit_targets else None,
+                target_ranges=target_ranges_json,
+                size_mode=size_mode,
+                qty_value=qty_value,
+                calculated_qty=parsed_signal.get('qty') or parsed_signal.get('quantity'),
+                expires_at=expires_at,
+                original_message=parsed_signal.get('original_message'),
+                asset_type='option' if parsed_signal.get('strike') else 'stock',
+                strike=parsed_signal.get('strike'),
+                opt_type=parsed_signal.get('opt_type'),
+                market=self.MARKET,
+                expiry=parsed_signal.get('expiry'),
+                lot_size=parsed_signal.get('lot_size'),
+                lots=parsed_signal.get('lots'),
+                exit_strategy_mode=exit_strategy_mode,
+                slippage_protection_enabled=slippage_protection_enabled,
+                slippage_max_pct=slippage_max_pct,
+                trailing_stop_enabled=trailing_stop_enabled,
+                trailing_stop_pct=trailing_stop_pct,
+                trailing_activation_pct=trailing_activation_pct,
+                settings_source=settings_source,
+                author_name=parsed_signal.get('author_name'),
+                limit_cap_enabled=limit_cap_enabled,
+                limit_cap_pct=limit_cap_pct,
+                limit_price=limit_price,
+                message_id=parsed_signal.get('message_id'),
+                breakout_reset_enabled=breakout_reset_enabled,
+                original_signal_price=parsed_signal.get('trigger_price', 0),
+                all_brokers=json.dumps(parsed_signal['_all_brokers']) if parsed_signal.get('_all_brokers') else None,
+            )
+        except Exception as db_err:
+            print(f"[CONDITIONAL] ❌ DB error creating conditional order: {db_err}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return None
+
         if order_id:
             self._log(f"Created order #{order_id} for {parsed_signal.get('symbol')}")
             self._schedule_monitoring(order_id)

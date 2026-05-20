@@ -1,0 +1,1794 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BotifyTrades &mdash; Public Filing Portfolio Tracker &mdash; Architecture Document</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#0f172a; --ink-2:#1e293b; --ink-3:#334155;
+  --muted:#64748b; --muted-2:#94a3b8; --muted-3:#cbd5e1;
+  --line:#e2e8f0; --line-2:#f1f5f9;
+  --bg:#fafbfd; --bg-soft:#f8fafc; --bg-card:#ffffff;
+  --brand:#1e40af; --brand-light:#dbeafe; --brand-dark:#1e3a8a;
+  --accent:#7c3aed; --accent-light:#ede9fe;
+  --teal:#0d9488; --teal-light:#ccfbf1;
+  --good:#15803d; --good-bg:#dcfce7; --good-border:#86efac;
+  --warn:#a16207; --warn-bg:#fef3c7; --warn-border:#fcd34d;
+  --bad:#b91c1c; --bad-bg:#fee2e2; --bad-border:#fca5a5;
+  --info:#1d4ed8; --info-bg:#dbeafe; --info-border:#93c5fd;
+  --gold:#b45309; --gold-bg:#fffbeb; --gold-border:#fbbf24;
+  --shadow-xs: 0 1px 2px rgba(15,23,42,.04);
+  --shadow-sm: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  --shadow-md: 0 4px 6px -1px rgba(15,23,42,.07), 0 2px 4px -2px rgba(15,23,42,.05);
+  --shadow-lg: 0 10px 25px -3px rgba(15,23,42,.08), 0 4px 6px -4px rgba(15,23,42,.04);
+  --shadow-xl: 0 20px 40px -5px rgba(15,23,42,.1), 0 8px 10px -6px rgba(15,23,42,.05);
+  --radius: 12px; --radius-lg: 16px; --radius-xl: 20px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--ink); background: var(--bg);
+  font-size: 15px; line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+.serif { font-family: 'Source Serif 4', Georgia, serif; }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
+
+/* HERO */
+.hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1a0a3b 40%, #312e81 100%);
+  color: #fff; padding: 60px 0 50px;
+}
+.hero .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+.hero h1 { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; }
+.hero .subtitle { font-size: 1.15rem; color: #c7d2fe; font-weight: 400; margin-bottom: 24px; }
+.hero .meta { display: flex; gap: 24px; flex-wrap: wrap; font-size: 0.85rem; color: #a5b4fc; }
+.hero .meta span { display: flex; align-items: center; gap: 6px; }
+
+/* LAYOUT */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+.content { padding: 48px 0 80px; }
+
+/* NAV */
+.toc {
+  background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  padding: 28px 32px; margin-bottom: 48px; box-shadow: var(--shadow-sm);
+}
+.toc h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 16px; }
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px 32px; }
+.toc a {
+  color: var(--brand); text-decoration: none; font-size: 0.9rem; padding: 4px 0;
+  display: block; transition: color 0.15s;
+}
+.toc a:hover { color: var(--accent); }
+.toc a .num { color: var(--muted-2); font-weight: 600; margin-right: 6px; }
+
+/* SECTIONS */
+.section { margin-bottom: 56px; }
+.section-header {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 24px;
+  padding-bottom: 16px; border-bottom: 2px solid var(--line);
+}
+.section-num {
+  background: var(--brand); color: #fff; font-weight: 700; font-size: 0.85rem;
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.section-header h2 { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; }
+
+/* CARDS */
+.card {
+  background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 24px 28px; margin-bottom: 20px; box-shadow: var(--shadow-xs);
+}
+.card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; color: var(--ink); }
+.card h4 { font-size: 0.95rem; font-weight: 600; margin: 16px 0 8px; color: var(--ink-2); }
+.card p { margin-bottom: 10px; color: var(--ink-2); }
+.card-accent { border-left: 4px solid var(--brand); }
+.card-teal { border-left: 4px solid var(--teal); }
+.card-gold { border-left: 4px solid var(--gold); background: var(--gold-bg); }
+.card-good { border-left: 4px solid var(--good); background: var(--good-bg); }
+.card-warn { border-left: 4px solid var(--warn); background: var(--warn-bg); }
+.card-info { border-left: 4px solid var(--info); background: var(--info-bg); }
+
+/* TABLES */
+.table-wrap {
+  overflow-x: auto; margin: 16px 0 20px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th {
+  background: var(--line-2); color: var(--ink-2); font-weight: 600;
+  text-align: left; padding: 12px 16px; font-size: 0.8rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 2px solid var(--line); white-space: nowrap;
+}
+td { padding: 11px 16px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(30,64,175,0.02); }
+.badge {
+  display: inline-block; padding: 2px 10px; border-radius: 6px;
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+}
+.badge-good { background: var(--good-bg); color: var(--good); border: 1px solid var(--good-border); }
+.badge-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+.badge-bad { background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad-border); }
+.badge-info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
+.badge-gold { background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border); }
+.badge-accent { background: var(--accent-light); color: var(--accent); border: 1px solid #c4b5fd; }
+
+/* CODE */
+pre {
+  background: #1e293b; color: #e2e8f0; border-radius: var(--radius);
+  padding: 20px 24px; overflow-x: auto; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem; line-height: 1.65; margin: 16px 0;
+  box-shadow: var(--shadow-md);
+}
+code {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.88em;
+  background: var(--line-2); color: var(--brand); padding: 2px 6px;
+  border-radius: 4px;
+}
+pre code { background: none; color: inherit; padding: 0; font-size: 1em; }
+.kw { color: #c084fc; } .str { color: #86efac; } .num { color: #fcd34d; }
+.cmt { color: #64748b; font-style: italic; } .fn { color: #67e8f9; }
+.type { color: #f9a8d4; }
+
+/* FLOW DIAGRAM */
+.flow {
+  display: flex; align-items: stretch; gap: 0; margin: 24px 0; flex-wrap: wrap;
+  justify-content: center;
+}
+.flow-step {
+  background: var(--bg-card); border: 2px solid var(--line);
+  border-radius: var(--radius); padding: 16px 20px; text-align: center;
+  min-width: 140px; flex: 1; max-width: 200px; position: relative;
+}
+.flow-step .step-num {
+  background: var(--brand); color: #fff; font-weight: 700; font-size: 0.7rem;
+  width: 24px; height: 24px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center;
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+}
+.flow-step .step-icon { font-size: 1.5rem; margin: 8px 0 4px; }
+.flow-step .step-label { font-weight: 700; font-size: 0.82rem; color: var(--ink); }
+.flow-step .step-desc { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+.flow-arrow {
+  display: flex; align-items: center; font-size: 1.4rem; color: var(--muted-2);
+  padding: 0 4px; flex-shrink: 0;
+}
+
+/* GRID */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+@media (max-width: 768px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .flow { flex-direction: column; align-items: center; }
+  .flow-arrow { transform: rotate(90deg); padding: 4px 0; }
+}
+
+/* LISTS */
+ul, ol { padding-left: 24px; margin: 8px 0 16px; }
+li { margin-bottom: 6px; color: var(--ink-2); }
+li strong { color: var(--ink); }
+
+/* CALLOUT */
+.callout {
+  border-radius: var(--radius); padding: 20px 24px; margin: 20px 0;
+  display: flex; gap: 14px; align-items: flex-start;
+}
+.callout-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 2px; }
+.callout-body { flex: 1; }
+.callout-body strong { display: block; margin-bottom: 4px; }
+.callout-info { background: var(--info-bg); border: 1px solid var(--info-border); }
+.callout-warn { background: var(--warn-bg); border: 1px solid var(--warn-border); }
+.callout-good { background: var(--good-bg); border: 1px solid var(--good-border); }
+.callout-bad { background: var(--bad-bg); border: 1px solid var(--bad-border); }
+
+/* TIMELINE */
+.timeline { position: relative; padding-left: 32px; margin: 20px 0; }
+.timeline::before {
+  content: ''; position: absolute; left: 12px; top: 0; bottom: 0;
+  width: 2px; background: var(--line);
+}
+.timeline-item { position: relative; margin-bottom: 24px; }
+.timeline-item::before {
+  content: ''; position: absolute; left: -24px; top: 6px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--brand); border: 3px solid var(--brand-light);
+}
+.timeline-item .phase { font-weight: 700; font-size: 0.9rem; color: var(--brand); }
+.timeline-item .desc { font-size: 0.88rem; color: var(--ink-2); margin-top: 2px; }
+.timeline-item .est { font-size: 0.78rem; color: var(--muted); }
+
+/* STAT CARDS */
+.stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+.stat {
+  background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 20px 24px; flex: 1; min-width: 150px; text-align: center;
+  box-shadow: var(--shadow-xs);
+}
+.stat .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--brand); letter-spacing: -0.03em; }
+.stat .stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+/* PRINT */
+@media print {
+  .hero { padding: 30px 0 20px; }
+  .section { page-break-inside: avoid; }
+  pre { white-space: pre-wrap; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="container">
+    <h1>Public Filing Portfolio Tracker</h1>
+    <p class="subtitle">Architecture Document &mdash; Congressional, Insider &amp; Institutional Trade Monitoring</p>
+    <div class="meta">
+      <span>&#128203; Version 1.0</span>
+      <span>&#128197; May 14, 2026</span>
+      <span>&#127919; BotifyTrades v10.1.10</span>
+      <span>&#128736; Architect Review</span>
+    </div>
+  </div>
+</div>
+
+<div class="container content">
+
+<!-- TABLE OF CONTENTS -->
+<nav class="toc">
+  <h2>Contents</h2>
+  <div class="toc-grid">
+    <a href="#s1"><span class="num">01</span> Executive Summary</a>
+    <a href="#s2"><span class="num">02</span> Regulatory Landscape &amp; Filing Types</a>
+    <a href="#s3"><span class="num">03</span> Data Source Deep Dive</a>
+    <a href="#s4"><span class="num">04</span> API Comparison Matrix</a>
+    <a href="#s5"><span class="num">05</span> Recommended Architecture</a>
+    <a href="#s6"><span class="num">06</span> Data Pipeline &amp; Flow</a>
+    <a href="#s7"><span class="num">07</span> Data Models &amp; Schema</a>
+    <a href="#s8"><span class="num">08</span> Signal Generation Engine</a>
+    <a href="#s9"><span class="num">09</span> GUI Integration</a>
+    <a href="#s10"><span class="num">10</span> Implementation Roadmap</a>
+    <a href="#s11"><span class="num">11</span> Cost Analysis</a>
+    <a href="#s12"><span class="num">12</span> Risk &amp; Compliance</a>
+    <a href="#s13"><span class="num">13</span> Appendix: API Reference</a>
+  </div>
+</nav>
+
+<!-- ================================================================== -->
+<!-- SECTION 1: EXECUTIVE SUMMARY -->
+<!-- ================================================================== -->
+<div class="section" id="s1">
+  <div class="section-header">
+    <span class="section-num">1</span>
+    <h2>Executive Summary</h2>
+  </div>
+
+  <div class="card card-accent">
+    <h3>Objective</h3>
+    <p>Build an integrated public filing tracker that monitors portfolio changes from <strong>U.S. Congress members</strong>, <strong>corporate insiders</strong> (CEO, CFO, board members), and <strong>institutional investors</strong> (hedge funds, pension funds, sovereign wealth funds). Surface actionable trade signals based on filing patterns, conviction scoring, and historical performance attribution.</p>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat">
+      <div class="stat-value">535</div>
+      <div class="stat-label">Congress Members</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">~80K</div>
+      <div class="stat-label">Form 4 Filings / Year</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">~5,500</div>
+      <div class="stat-label">13F Filers (Institutions)</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">Data Source Tiers</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Key Capabilities</h3>
+      <ul>
+        <li>Real-time congressional trade alerts (House + Senate)</li>
+        <li>Insider transaction tracking with sentiment scoring (MSPR)</li>
+        <li>Quarterly 13F portfolio diffing for whale investors</li>
+        <li>Conviction scoring &amp; historical win-rate per filer</li>
+        <li>Automated signal generation through existing pipeline</li>
+        <li>Web GUI dashboard with filtering and drill-down</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Design Principles</h3>
+      <ul>
+        <li><strong>Free-first:</strong> Finnhub (free) + SEC EDGAR (free) as primary sources</li>
+        <li><strong>Layered enrichment:</strong> Add FMP/Quiver only when needed</li>
+        <li><strong>Existing integration:</strong> Uses current bot infrastructure (DB, signals, GUI)</li>
+        <li><strong>Rate-limit safe:</strong> Scheduled polling with exponential backoff</li>
+        <li><strong>Compliance-aware:</strong> Respects SEC User-Agent policy &amp; data usage terms</li>
+        <li><strong>Auditable:</strong> Every filing stored with source link and raw JSON</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 2: REGULATORY LANDSCAPE -->
+<!-- ================================================================== -->
+<div class="section" id="s2">
+  <div class="section-header">
+    <span class="section-num">2</span>
+    <h2>Regulatory Landscape &amp; Filing Types</h2>
+  </div>
+
+  <div class="card">
+    <h3>SEC Filing Types Relevant to Portfolio Tracking</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Form</th>
+            <th>Who Files</th>
+            <th>Contains</th>
+            <th>Frequency</th>
+            <th>Disclosure Lag</th>
+            <th>Signal Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Form 4</strong></td>
+            <td>Officers, directors, 10%+ owners</td>
+            <td>Buy/sell transactions, shares, price, post-transaction holdings</td>
+            <td>Per transaction</td>
+            <td><span class="badge badge-good">2 business days</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+          </tr>
+          <tr>
+            <td><strong>Form 3</strong></td>
+            <td>New insiders (upon becoming)</td>
+            <td>Initial statement of beneficial ownership</td>
+            <td>One-time</td>
+            <td><span class="badge badge-info">10 days</span></td>
+            <td><span class="badge badge-warn">LOW</span></td>
+          </tr>
+          <tr>
+            <td><strong>Form 5</strong></td>
+            <td>Insiders (annual catch-up)</td>
+            <td>Unreported transactions, small gifts</td>
+            <td>Annual</td>
+            <td><span class="badge badge-warn">45 days</span></td>
+            <td><span class="badge badge-warn">LOW</span></td>
+          </tr>
+          <tr>
+            <td><strong>13F-HR</strong></td>
+            <td>Institutions with $100M+ AUM</td>
+            <td>All equity holdings (CUSIP, value, shares, voting auth)</td>
+            <td>Quarterly</td>
+            <td><span class="badge badge-warn">45 days</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+          </tr>
+          <tr>
+            <td><strong>13F/A</strong></td>
+            <td>Same as 13F-HR</td>
+            <td>Amendments / corrections to previous 13F</td>
+            <td>As needed</td>
+            <td><span class="badge badge-info">Varies</span></td>
+            <td><span class="badge badge-info">MEDIUM</span></td>
+          </tr>
+          <tr>
+            <td><strong>SC 13D</strong></td>
+            <td>Activist investors (5%+ ownership)</td>
+            <td>Identity, funding source, intentions, plans for company</td>
+            <td>Per event</td>
+            <td><span class="badge badge-info">10 days</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+          </tr>
+          <tr>
+            <td><strong>SC 13G</strong></td>
+            <td>Passive investors (5%+ ownership)</td>
+            <td>Abbreviated 13D for passive holders</td>
+            <td>Annual / event</td>
+            <td><span class="badge badge-warn">45 days</span></td>
+            <td><span class="badge badge-info">MEDIUM</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Congressional Disclosure (STOCK Act of 2012)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Coverage</th>
+            <th>Filed At</th>
+            <th>Disclosure Deadline</th>
+            <th>API Available</th>
+            <th>Format</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>House Financial Disclosures</strong></td>
+            <td>435 Representatives + delegates</td>
+            <td>disclosures-clerk.house.gov</td>
+            <td>Within 45 days of trade</td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td>PDF / HTML scrape</td>
+          </tr>
+          <tr>
+            <td><strong>Senate Financial Disclosures</strong></td>
+            <td>100 Senators</td>
+            <td>efdsearch.senate.gov</td>
+            <td>Within 45 days of trade</td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td>PDF / HTML scrape</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-icon">&#9888;&#65039;</span>
+      <div class="callout-body">
+        <strong>No Official API Exists</strong>
+        Neither the House nor Senate provides structured API access to financial disclosures. All third-party services (Quiver, Capitol Trades, Unusual Whales) rely on scraping and manually parsing PDFs. This is why aggregator APIs are essential.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 3: DATA SOURCE DEEP DIVE -->
+<!-- ================================================================== -->
+<div class="section" id="s3">
+  <div class="section-header">
+    <span class="section-num">3</span>
+    <h2>Data Source Deep Dive</h2>
+  </div>
+
+  <!-- FINNHUB -->
+  <div class="card card-accent">
+    <h3>&#127775; Tier 1: Finnhub (Primary &mdash; Already Integrated)</h3>
+    <p>Finnhub covers all three data categories in a single API with a generous free tier. Since BotifyTrades already supports Finnhub for news, this is the lowest-friction integration.</p>
+
+    <h4>Congressional Trading</h4>
+    <pre><code><span class="cmt">// Endpoint</span>
+<span class="kw">GET</span> <span class="str">https://finnhub.io/api/v1/stock/congressional-trading</span>
+    <span class="cmt">?symbol={AAPL}</span>
+    <span class="cmt">&from={2024-01-01}</span>
+    <span class="cmt">&to={2026-05-14}</span>
+    <span class="cmt">&token={FINNHUB_API_KEY}</span>
+
+<span class="cmt">// Response</span>
+{
+  <span class="str">"data"</span>: [
+    {
+      <span class="str">"symbol"</span>: <span class="str">"AAPL"</span>,
+      <span class="str">"name"</span>: <span class="str">"Nancy Pelosi"</span>,
+      <span class="str">"transactionDate"</span>: <span class="str">"2024-07-01"</span>,
+      <span class="str">"filingDate"</span>: <span class="str">"2024-07-18"</span>,
+      <span class="str">"transactionCode"</span>: <span class="str">"P"</span>,      <span class="cmt">// P=Purchase, S=Sale</span>
+      <span class="str">"transactionPrice"</span>: <span class="num">null</span>,     <span class="cmt">// Often null (range-based)</span>
+      <span class="str">"share"</span>: <span class="num">5000</span>,
+      <span class="str">"change"</span>: <span class="num">5000</span>
+    }
+  ]
+}</code></pre>
+    <p><strong>Limitations:</strong> No party/state/committee fields. No filtering by politician name (must query by symbol then filter client-side). Transaction amounts sometimes reported as ranges ($1K-$15K, $15K-$50K), not exact values. Data latency: 1-3 business days after disclosure.</p>
+
+    <h4>Insider Transactions (Form 3/4/5)</h4>
+    <pre><code><span class="kw">GET</span> <span class="str">https://finnhub.io/api/v1/stock/insider-transactions</span>
+    <span class="cmt">?symbol={AAPL}&from=2024-01-01&to=2026-05-14&token={key}</span>
+
+<span class="cmt">// Response — up to 100 transactions per call</span>
+{
+  <span class="str">"data"</span>: [
+    {
+      <span class="str">"name"</span>: <span class="str">"Tim Cook"</span>,
+      <span class="str">"share"</span>: <span class="num">511000</span>,
+      <span class="str">"change"</span>: <span class="num">-511000</span>,        <span class="cmt">// Negative = sale</span>
+      <span class="str">"filingDate"</span>: <span class="str">"2024-11-02"</span>,
+      <span class="str">"transactionDate"</span>: <span class="str">"2024-10-31"</span>,
+      <span class="str">"transactionCode"</span>: <span class="str">"S"</span>,
+      <span class="str">"transactionPrice"</span>: <span class="num">222.64</span>
+    }
+  ]
+}</code></pre>
+
+    <h4>Insider Sentiment (MSPR)</h4>
+    <pre><code><span class="kw">GET</span> <span class="str">https://finnhub.io/api/v1/stock/insider-sentiment</span>
+    <span class="cmt">?symbol={AAPL}&from=2024-01-01&to=2026-05-14&token={key}</span>
+
+<span class="cmt">// MSPR = Management Sentiment Purchase Ratio (-100 to +100)</span>
+{
+  <span class="str">"data"</span>: [
+    {
+      <span class="str">"symbol"</span>: <span class="str">"AAPL"</span>,
+      <span class="str">"year"</span>: <span class="num">2024</span>,
+      <span class="str">"month"</span>: <span class="num">11</span>,
+      <span class="str">"change"</span>: <span class="num">-511000</span>,
+      <span class="str">"mspr"</span>: <span class="num">-85.3</span>     <span class="cmt">// Strong sell sentiment</span>
+    }
+  ]
+}</code></pre>
+
+    <h4>Institutional Holdings (13F)</h4>
+    <pre><code><span class="cmt">// List all institutional filers</span>
+<span class="kw">GET</span> <span class="str">https://finnhub.io/api/v1/institutional/list?token={key}</span>
+
+<span class="cmt">// Get portfolio for specific institution</span>
+<span class="kw">GET</span> <span class="str">https://finnhub.io/api/v1/institutional/portfolio</span>
+    <span class="cmt">?cik={CIK}&from=2024-01-01&to=2026-05-14&token={key}</span>
+
+<span class="cmt">// Get all institutions owning a specific stock</span>
+<span class="kw">GET</span> <span class="str">https://finnhub.io/api/v1/institutional/ownership</span>
+    <span class="cmt">?symbol={AAPL}&cusip={037833100}&token={key}</span></code></pre>
+
+    <div class="callout callout-info">
+      <span class="callout-icon">&#128161;</span>
+      <div class="callout-body">
+        <strong>Free Tier: 60 calls/minute, no daily cap</strong>
+        Congressional trading, insider transactions, MSPR sentiment, and 13F holdings are all included in the free tier. This alone covers the entire MVP.
+      </div>
+    </div>
+  </div>
+
+  <!-- FMP -->
+  <div class="card card-teal">
+    <h3>Tier 2: Financial Modeling Prep (FMP) &mdash; Congressional Enrichment</h3>
+    <p>FMP provides the richest congressional trading schema with politician name search, party affiliation, state, and direct links to original disclosures. Separate House and Senate endpoints.</p>
+
+    <h4>Senate Trading</h4>
+    <pre><code><span class="kw">GET</span> <span class="str">https://financialmodelingprep.com/stable/senate-trading?apikey={key}</span>
+<span class="kw">GET</span> <span class="str">https://financialmodelingprep.com/stable/senate-trading-by-name?name=Pelosi&apikey={key}</span>
+<span class="kw">GET</span> <span class="str">https://financialmodelingprep.com/stable/senate-latest?apikey={key}</span>
+
+<span class="cmt">// Response</span>
+{
+  <span class="str">"symbol"</span>: <span class="str">"LRN"</span>,
+  <span class="str">"disclosureDate"</span>: <span class="str">"2025-01-31"</span>,
+  <span class="str">"transactionDate"</span>: <span class="str">"2025-01-02"</span>,
+  <span class="str">"firstName"</span>: <span class="str">"Markwayne"</span>,
+  <span class="str">"lastName"</span>: <span class="str">"Mullin"</span>,
+  <span class="str">"office"</span>: <span class="str">"Markwayne Mullin"</span>,
+  <span class="str">"district"</span>: <span class="str">"OK"</span>,
+  <span class="str">"owner"</span>: <span class="str">"Self"</span>,
+  <span class="str">"assetDescription"</span>: <span class="str">"Stride Inc"</span>,
+  <span class="str">"assetType"</span>: <span class="str">"Stock"</span>,
+  <span class="str">"type"</span>: <span class="str">"Purchase"</span>,
+  <span class="str">"amount"</span>: <span class="str">"$15,001 - $50,000"</span>,
+  <span class="str">"comment"</span>: <span class="str">""</span>,
+  <span class="str">"link"</span>: <span class="str">"https://efdsearch.senate.gov/..."</span>
+}</code></pre>
+
+    <h4>House Trading</h4>
+    <pre><code><span class="kw">GET</span> <span class="str">https://financialmodelingprep.com/stable/house-trading?apikey={key}</span>
+<span class="kw">GET</span> <span class="str">https://financialmodelingprep.com/stable/house-trading-by-name?name=Pelosi&apikey={key}</span>
+<span class="kw">GET</span> <span class="str">https://financialmodelingprep.com/stable/house-latest?apikey={key}</span></code></pre>
+    <p><strong>Free tier:</strong> 250 calls/day. Congressional data may require Starter plan ($14/mo+).</p>
+  </div>
+
+  <!-- SEC EDGAR -->
+  <div class="card">
+    <h3>Tier 3: SEC EDGAR Direct (Supplemental &mdash; Free, Unlimited)</h3>
+    <p>Official SEC database. Free with no API key. Best for real-time Form 4 feeds and quarterly 13F bulk snapshots. Raw XML/JSON requires parsing.</p>
+
+    <h4>Key Endpoints</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Endpoint</th><th>Purpose</th><th>Format</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>data.sec.gov/submissions/CIK{10-digit}.json</code></td>
+            <td>All filings for a company/person</td>
+            <td>JSON</td>
+          </tr>
+          <tr>
+            <td><code>efts.sec.gov/LATEST/search-index?q=...&forms=4</code></td>
+            <td>Full-text search across all filings</td>
+            <td>JSON</td>
+          </tr>
+          <tr>
+            <td><code>sec.gov/cgi-bin/browse-edgar?type=4&output=atom</code></td>
+            <td>RSS feed for real-time Form 4 filings</td>
+            <td>Atom/XML</td>
+          </tr>
+          <tr>
+            <td><code>sec.gov/Archives/edgar/full-index/{YYYY}/QTR{N}/</code></td>
+            <td>Quarterly bulk index for 13F data sets</td>
+            <td>CSV/TSV</td>
+          </tr>
+          <tr>
+            <td><code>sec.gov/data-research/sec-markets-data/form-13f-data-sets</code></td>
+            <td>Pre-parsed 13F quarterly snapshots</td>
+            <td>CSV/ZIP</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-warn">
+      <span class="callout-icon">&#128268;</span>
+      <div class="callout-body">
+        <strong>Rate Limit: 10 requests/second</strong>
+        Mandatory <code>User-Agent</code> header with your name and email. No API key required. Exceeding 10 req/s returns 403. RSS feeds update every 10 minutes during market hours (Mon-Fri 6am-10pm EST).
+      </div>
+    </div>
+  </div>
+
+  <!-- QUIVER -->
+  <div class="card">
+    <h3>Tier 4: Quiver Quantitative (Optional &mdash; Congress-Focused)</h3>
+    <p>Dedicated congressional trading analytics platform with structured API, Python SDK, and mobile push alerts.</p>
+
+    <pre><code><span class="cmt">// Base URL + Auth</span>
+<span class="kw">GET</span> <span class="str">https://api.quiverquant.com/beta/historical/congresstrading/{symbol}</span>
+    Headers: { <span class="str">"Authorization"</span>: <span class="str">"Bearer {api_key}"</span> }
+
+<span class="cmt">// Python SDK</span>
+<span class="kw">import</span> quiver
+client = quiver.Client(api_key=<span class="str">"..."</span>)
+trades = client.<span class="fn">congress_trading</span>(<span class="str">"TSLA"</span>)
+politician = client.<span class="fn">congress_trading</span>(<span class="str">"Nancy Pelosi"</span>, politician=<span class="kw">True</span>)
+
+<span class="cmt">// Bulk endpoints</span>
+<span class="kw">GET</span> <span class="str">/beta/bulk/congresstrading</span>           <span class="cmt">// All recent trades</span>
+<span class="kw">GET</span> <span class="str">/beta/bulk/congress/politicians?chamber=senate</span></code></pre>
+    <p><strong>Pricing:</strong> Hobbyist $30/mo, Trader $75/mo. Historical data back to 2012. No webhook/real-time alerts via API (mobile app only). 7-day free trial.</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 4: API COMPARISON MATRIX -->
+<!-- ================================================================== -->
+<div class="section" id="s4">
+  <div class="section-header">
+    <span class="section-num">4</span>
+    <h2>API Comparison Matrix</h2>
+  </div>
+
+  <div class="card">
+    <h3>Feature Coverage</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Finnhub</th>
+            <th>FMP</th>
+            <th>SEC EDGAR</th>
+            <th>Quiver</th>
+            <th>Unusual Whales</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Congressional Trades</strong></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+          </tr>
+          <tr>
+            <td><strong>Politician Name Search</strong></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+          </tr>
+          <tr>
+            <td><strong>Party / State / Committee</strong></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+          </tr>
+          <tr>
+            <td><strong>Insider Transactions (Form 4)</strong></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES (raw)</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+          </tr>
+          <tr>
+            <td><strong>MSPR Sentiment</strong></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+          </tr>
+          <tr>
+            <td><strong>13F Institutional Holdings</strong></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES (bulk)</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+          </tr>
+          <tr>
+            <td><strong>13D Activist Filings</strong></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Cost &amp; Rate Limits</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Free Tier</th>
+            <th>Rate Limit (Free)</th>
+            <th>Paid Plans</th>
+            <th>Auth Method</th>
+            <th>Response Format</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Finnhub</strong></td>
+            <td><span class="badge badge-good">Generous</span></td>
+            <td>60 calls/min</td>
+            <td>$12 - $100/mo</td>
+            <td>API key (query param)</td>
+            <td>JSON</td>
+          </tr>
+          <tr>
+            <td><strong>FMP</strong></td>
+            <td><span class="badge badge-warn">250/day</span></td>
+            <td>250 calls/day</td>
+            <td>$14 - $49/mo</td>
+            <td>API key (query param)</td>
+            <td>JSON</td>
+          </tr>
+          <tr>
+            <td><strong>SEC EDGAR</strong></td>
+            <td><span class="badge badge-good">Unlimited</span></td>
+            <td>10 req/sec</td>
+            <td>Free</td>
+            <td>User-Agent header</td>
+            <td>JSON / XML / CSV</td>
+          </tr>
+          <tr>
+            <td><strong>Quiver</strong></td>
+            <td><span class="badge badge-warn">7-day trial</span></td>
+            <td>Per plan</td>
+            <td>$30 - $75/mo</td>
+            <td>Bearer token</td>
+            <td>JSON</td>
+          </tr>
+          <tr>
+            <td><strong>Unusual Whales</strong></td>
+            <td><span class="badge badge-bad">None</span></td>
+            <td>N/A</td>
+            <td>~$40/mo</td>
+            <td>API key</td>
+            <td>JSON</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Data Latency &amp; Quality</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Criterion</th>
+            <th>Best Provider</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Lowest latency (filing &#8594; API)</strong></td>
+            <td><span class="badge badge-good">SEC EDGAR</span></td>
+            <td>Zero intermediary. RSS updates every 10 min. Finnhub: 1-3 days. FMP/Quiver: hours.</td>
+          </tr>
+          <tr>
+            <td><strong>Most complete history</strong></td>
+            <td><span class="badge badge-good">SEC EDGAR + Quiver</span></td>
+            <td>EDGAR: all filings since 1993 (raw). Quiver: structured congressional data to 2012.</td>
+          </tr>
+          <tr>
+            <td><strong>Amendments / corrections</strong></td>
+            <td><span class="badge badge-good">SEC EDGAR</span></td>
+            <td>Amendments filed as Form 4/A, 13F/A. FMP includes links. Finnhub doesn't flag.</td>
+          </tr>
+          <tr>
+            <td><strong>Richest congressional schema</strong></td>
+            <td><span class="badge badge-good">FMP</span></td>
+            <td>Name, party, state, amount range, asset type, owner, disclosure link.</td>
+          </tr>
+          <tr>
+            <td><strong>Unique analytics</strong></td>
+            <td><span class="badge badge-good">Finnhub</span></td>
+            <td>MSPR sentiment scoring (-100 to +100) is exclusive to Finnhub.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 5: RECOMMENDED ARCHITECTURE -->
+<!-- ================================================================== -->
+<div class="section" id="s5">
+  <div class="section-header">
+    <span class="section-num">5</span>
+    <h2>Recommended Architecture</h2>
+  </div>
+
+  <div class="card card-good">
+    <h3>&#127919; Recommended: Hybrid Multi-Source Strategy</h3>
+    <p>Use <strong>Finnhub</strong> as the primary data backbone (covers all 3 categories, free), enriched by <strong>FMP</strong> for congressional metadata (politician names, party) and <strong>SEC EDGAR</strong> for real-time Form 4 feeds and 13F bulk snapshots.</p>
+
+    <div class="grid-3">
+      <div class="card" style="text-align:center">
+        <div style="font-size:2rem">&#127775;</div>
+        <h4>Finnhub (Primary)</h4>
+        <ul style="text-align:left; font-size:0.85rem">
+          <li>Congressional trades</li>
+          <li>Insider transactions</li>
+          <li>MSPR sentiment</li>
+          <li>13F institutional</li>
+        </ul>
+        <span class="badge badge-good">FREE</span>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:2rem">&#128200;</div>
+        <h4>FMP (Enrichment)</h4>
+        <ul style="text-align:left; font-size:0.85rem">
+          <li>Politician name search</li>
+          <li>Party / state / district</li>
+          <li>Disclosure PDF links</li>
+          <li>House + Senate separate</li>
+        </ul>
+        <span class="badge badge-warn">$14/mo</span>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:2rem">&#127963;&#65039;</div>
+        <h4>SEC EDGAR (Authority)</h4>
+        <ul style="text-align:left; font-size:0.85rem">
+          <li>Real-time Form 4 RSS</li>
+          <li>13F quarterly bulk CSV</li>
+          <li>13D activist filings</li>
+          <li>Amendment tracking</li>
+        </ul>
+        <span class="badge badge-good">FREE</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>System Components</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>File</th>
+            <th>Responsibility</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Filing Tracker Service</strong></td>
+            <td><code>src/services/filing_tracker_service.py</code></td>
+            <td>Core service: polling, normalization, dedup, storage, signal generation</td>
+          </tr>
+          <tr>
+            <td><strong>Finnhub Filing Client</strong></td>
+            <td><code>src/services/filing_clients/finnhub_client.py</code></td>
+            <td>Finnhub API wrapper: congressional, insider, MSPR, 13F endpoints</td>
+          </tr>
+          <tr>
+            <td><strong>FMP Filing Client</strong></td>
+            <td><code>src/services/filing_clients/fmp_client.py</code></td>
+            <td>FMP API wrapper: Senate/House by-name, latest trades</td>
+          </tr>
+          <tr>
+            <td><strong>SEC EDGAR Client</strong></td>
+            <td><code>src/services/filing_clients/edgar_client.py</code></td>
+            <td>EDGAR direct: Form 4 RSS, 13F bulk download, submissions lookup</td>
+          </tr>
+          <tr>
+            <td><strong>Conviction Scorer</strong></td>
+            <td><code>src/services/filing_conviction_scorer.py</code></td>
+            <td>Score filings by filer track record, trade size, cluster detection</td>
+          </tr>
+          <tr>
+            <td><strong>Database Tables</strong></td>
+            <td><code>gui_app/database.py</code></td>
+            <td>New tables: filing_trades, filing_filers, filing_13f_snapshots</td>
+          </tr>
+          <tr>
+            <td><strong>API Routes</strong></td>
+            <td><code>gui_app/routes.py</code></td>
+            <td>REST endpoints for GUI: /api/filings/*, /api/filings/signal</td>
+          </tr>
+          <tr>
+            <td><strong>GUI Tab</strong></td>
+            <td><code>gui_app/templates/trades.html</code></td>
+            <td>New "Filing Tracker" tab with tables, filters, and signal controls</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 6: DATA PIPELINE & FLOW -->
+<!-- ================================================================== -->
+<div class="section" id="s6">
+  <div class="section-header">
+    <span class="section-num">6</span>
+    <h2>Data Pipeline &amp; Flow</h2>
+  </div>
+
+  <div class="card">
+    <h3>High-Level Data Flow</h3>
+    <div class="flow">
+      <div class="flow-step">
+        <span class="step-num">1</span>
+        <div class="step-icon">&#128225;</div>
+        <div class="step-label">POLL</div>
+        <div class="step-desc">Scheduled fetch from Finnhub + FMP + EDGAR</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step">
+        <span class="step-num">2</span>
+        <div class="step-icon">&#128257;</div>
+        <div class="step-label">NORMALIZE</div>
+        <div class="step-desc">Map API schemas to unified FilingTrade model</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step">
+        <span class="step-num">3</span>
+        <div class="step-icon">&#128451;</div>
+        <div class="step-label">DEDUP + STORE</div>
+        <div class="step-desc">Hash-based dedup, SQLite persistence</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step">
+        <span class="step-num">4</span>
+        <div class="step-icon">&#127919;</div>
+        <div class="step-label">SCORE</div>
+        <div class="step-desc">Conviction scoring, cluster detection</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step">
+        <span class="step-num">5</span>
+        <div class="step-icon">&#128276;</div>
+        <div class="step-label">SIGNAL</div>
+        <div class="step-desc">Alert generation, GUI push, Discord webhook</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Polling Schedule</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data Type</th>
+            <th>Source</th>
+            <th>Poll Interval</th>
+            <th>API Calls / Day</th>
+            <th>Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Congressional Trades</strong></td>
+            <td>Finnhub + FMP</td>
+            <td>Every 4 hours</td>
+            <td>~12</td>
+            <td>Disclosures posted in batches, 45-day lag makes hourly unnecessary</td>
+          </tr>
+          <tr>
+            <td><strong>Insider Transactions</strong></td>
+            <td>Finnhub</td>
+            <td>Every 2 hours</td>
+            <td>~50 (per watchlist)</td>
+            <td>Form 4 filed within 2 days of trade, faster signal value</td>
+          </tr>
+          <tr>
+            <td><strong>MSPR Sentiment</strong></td>
+            <td>Finnhub</td>
+            <td>Daily (6:00 AM)</td>
+            <td>~50</td>
+            <td>Monthly aggregation, once-daily is sufficient</td>
+          </tr>
+          <tr>
+            <td><strong>13F Snapshots</strong></td>
+            <td>SEC EDGAR bulk</td>
+            <td>Quarterly + weekly check</td>
+            <td>~2-5</td>
+            <td>Filed quarterly with 45-day delay, check weekly for new filings</td>
+          </tr>
+          <tr>
+            <td><strong>Form 4 RSS Feed</strong></td>
+            <td>SEC EDGAR</td>
+            <td>Every 15 minutes (market hours)</td>
+            <td>~100</td>
+            <td>Real-time insider activity, EDGAR RSS updates every 10 min</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-info">
+      <span class="callout-icon">&#129518;</span>
+      <div class="callout-body">
+        <strong>Total API budget: ~220 calls/day</strong>
+        Well within Finnhub free tier (60/min = 86,400/day) and FMP free tier (250/day). No paid subscription required for MVP.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Deduplication Strategy</h3>
+    <p>Multiple sources may report the same filing. Dedup uses a composite hash key:</p>
+    <pre><code><span class="cmt"># Congressional trades</span>
+dedup_key = <span class="fn">hash</span>(f<span class="str">"{filer_name}|{symbol}|{transaction_date}|{amount}|{type}"</span>)
+
+<span class="cmt"># Insider transactions (Form 4)</span>
+dedup_key = <span class="fn">hash</span>(f<span class="str">"{filer_name}|{symbol}|{transaction_date}|{shares}|{price}|{code}"</span>)
+
+<span class="cmt"># 13F holdings (per quarter)</span>
+dedup_key = <span class="fn">hash</span>(f<span class="str">"{cik}|{cusip}|{quarter}|{shares}"</span>)</code></pre>
+    <p>On collision, prefer the source with richer metadata (FMP &gt; Finnhub &gt; EDGAR for congressional; Finnhub &gt; EDGAR for insider).</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 7: DATA MODELS -->
+<!-- ================================================================== -->
+<div class="section" id="s7">
+  <div class="section-header">
+    <span class="section-num">7</span>
+    <h2>Data Models &amp; Schema</h2>
+  </div>
+
+  <div class="card">
+    <h3>SQLite Table: <code>filing_trades</code></h3>
+    <pre><code><span class="kw">CREATE TABLE IF NOT EXISTS</span> filing_trades (
+    id              <span class="type">INTEGER PRIMARY KEY AUTOINCREMENT</span>,
+    dedup_hash      <span class="type">TEXT UNIQUE NOT NULL</span>,        <span class="cmt">-- Composite hash for dedup</span>
+    filing_type     <span class="type">TEXT NOT NULL</span>,                <span class="cmt">-- 'CONGRESS', 'INSIDER', '13D'</span>
+    source          <span class="type">TEXT NOT NULL</span>,                <span class="cmt">-- 'finnhub', 'fmp', 'edgar'</span>
+
+    <span class="cmt">-- Filer info</span>
+    filer_name      <span class="type">TEXT NOT NULL</span>,                <span class="cmt">-- 'Nancy Pelosi', 'Tim Cook'</span>
+    filer_title     <span class="type">TEXT</span>,                         <span class="cmt">-- 'Representative', 'CEO', 'Director'</span>
+    filer_party     <span class="type">TEXT</span>,                         <span class="cmt">-- 'D', 'R', NULL (insiders)</span>
+    filer_state     <span class="type">TEXT</span>,                         <span class="cmt">-- 'CA', 'OK', NULL</span>
+    filer_chamber   <span class="type">TEXT</span>,                         <span class="cmt">-- 'house', 'senate', NULL</span>
+
+    <span class="cmt">-- Trade info</span>
+    symbol          <span class="type">TEXT NOT NULL</span>,
+    asset_type      <span class="type">TEXT</span>,                         <span class="cmt">-- 'Stock', 'Option', 'ETF'</span>
+    transaction_type <span class="type">TEXT NOT NULL</span>,               <span class="cmt">-- 'Purchase', 'Sale', 'Exchange'</span>
+    transaction_date <span class="type">TEXT NOT NULL</span>,               <span class="cmt">-- YYYY-MM-DD</span>
+    disclosure_date <span class="type">TEXT NOT NULL</span>,                <span class="cmt">-- YYYY-MM-DD</span>
+    shares          <span class="type">REAL</span>,                         <span class="cmt">-- Exact share count (Form 4)</span>
+    price           <span class="type">REAL</span>,                         <span class="cmt">-- Exact price (Form 4, often NULL for congress)</span>
+    amount_range    <span class="type">TEXT</span>,                         <span class="cmt">-- '$15,001 - $50,000' (congress)</span>
+    amount_low      <span class="type">REAL</span>,                         <span class="cmt">-- Parsed lower bound</span>
+    amount_high     <span class="type">REAL</span>,                         <span class="cmt">-- Parsed upper bound</span>
+    owner           <span class="type">TEXT</span>,                         <span class="cmt">-- 'Self', 'Spouse', 'Child'</span>
+
+    <span class="cmt">-- Scoring</span>
+    conviction_score <span class="type">REAL DEFAULT 0</span>,              <span class="cmt">-- 0-100 composite score</span>
+    mspr            <span class="type">REAL</span>,                         <span class="cmt">-- Insider sentiment (-100 to +100)</span>
+    disclosure_lag  <span class="type">INTEGER</span>,                     <span class="cmt">-- Days between trade and disclosure</span>
+    cluster_id      <span class="type">TEXT</span>,                         <span class="cmt">-- Group ID for clustered trades</span>
+
+    <span class="cmt">-- Metadata</span>
+    filing_url      <span class="type">TEXT</span>,                         <span class="cmt">-- Link to original SEC/Senate/House filing</span>
+    raw_json        <span class="type">TEXT</span>,                         <span class="cmt">-- Full API response preserved</span>
+    signal_sent     <span class="type">INTEGER DEFAULT 0</span>,            <span class="cmt">-- 1 if alert was generated</span>
+    created_at      <span class="type">TEXT DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="type">TEXT DEFAULT CURRENT_TIMESTAMP</span>
+);</code></pre>
+  </div>
+
+  <div class="card">
+    <h3>SQLite Table: <code>filing_filers</code></h3>
+    <pre><code><span class="kw">CREATE TABLE IF NOT EXISTS</span> filing_filers (
+    id              <span class="type">INTEGER PRIMARY KEY AUTOINCREMENT</span>,
+    name            <span class="type">TEXT UNIQUE NOT NULL</span>,
+    filer_type      <span class="type">TEXT NOT NULL</span>,               <span class="cmt">-- 'politician', 'insider', 'institution'</span>
+    party           <span class="type">TEXT</span>,
+    state           <span class="type">TEXT</span>,
+    chamber         <span class="type">TEXT</span>,
+    company         <span class="type">TEXT</span>,                        <span class="cmt">-- For insiders: company they're officer of</span>
+    cik             <span class="type">TEXT</span>,                        <span class="cmt">-- SEC CIK for institutions</span>
+
+    <span class="cmt">-- Performance tracking</span>
+    total_trades    <span class="type">INTEGER DEFAULT 0</span>,
+    win_rate        <span class="type">REAL</span>,                        <span class="cmt">-- % of trades profitable after 30/90 days</span>
+    avg_return_30d  <span class="type">REAL</span>,                        <span class="cmt">-- Average 30-day return post-disclosure</span>
+    avg_return_90d  <span class="type">REAL</span>,                        <span class="cmt">-- Average 90-day return post-disclosure</span>
+    last_trade_date <span class="type">TEXT</span>,
+    watchlist       <span class="type">INTEGER DEFAULT 0</span>,            <span class="cmt">-- User-flagged for alerts</span>
+
+    created_at      <span class="type">TEXT DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="type">TEXT DEFAULT CURRENT_TIMESTAMP</span>
+);</code></pre>
+  </div>
+
+  <div class="card">
+    <h3>SQLite Table: <code>filing_13f_snapshots</code></h3>
+    <pre><code><span class="kw">CREATE TABLE IF NOT EXISTS</span> filing_13f_snapshots (
+    id              <span class="type">INTEGER PRIMARY KEY AUTOINCREMENT</span>,
+    cik             <span class="type">TEXT NOT NULL</span>,               <span class="cmt">-- Institution CIK</span>
+    fund_name       <span class="type">TEXT NOT NULL</span>,
+    quarter         <span class="type">TEXT NOT NULL</span>,               <span class="cmt">-- '2026-Q1'</span>
+    filing_date     <span class="type">TEXT NOT NULL</span>,
+    symbol          <span class="type">TEXT NOT NULL</span>,
+    cusip           <span class="type">TEXT</span>,
+    shares          <span class="type">INTEGER NOT NULL</span>,
+    value_usd       <span class="type">REAL NOT NULL</span>,              <span class="cmt">-- In thousands (as reported)</span>
+    shares_change   <span class="type">INTEGER</span>,                    <span class="cmt">-- Delta from previous quarter</span>
+    pct_change      <span class="type">REAL</span>,                        <span class="cmt">-- % change in shares</span>
+    is_new          <span class="type">INTEGER DEFAULT 0</span>,            <span class="cmt">-- 1 if new position</span>
+    is_exit         <span class="type">INTEGER DEFAULT 0</span>,            <span class="cmt">-- 1 if position fully closed</span>
+
+    <span class="kw">UNIQUE</span>(cik, quarter, cusip)
+);</code></pre>
+  </div>
+
+  <div class="card">
+    <h3>Unified FilingTrade Dataclass</h3>
+    <pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass, field
+<span class="kw">from</span> typing <span class="kw">import</span> Optional
+<span class="kw">from</span> datetime <span class="kw">import</span> date
+
+<span class="kw">@dataclass</span>
+<span class="kw">class</span> <span class="type">FilingTrade</span>:
+    filing_type: <span class="type">str</span>               <span class="cmt"># 'CONGRESS', 'INSIDER', '13D'</span>
+    source: <span class="type">str</span>                    <span class="cmt"># 'finnhub', 'fmp', 'edgar'</span>
+    filer_name: <span class="type">str</span>
+    symbol: <span class="type">str</span>
+    transaction_type: <span class="type">str</span>         <span class="cmt"># 'Purchase', 'Sale'</span>
+    transaction_date: <span class="type">date</span>
+    disclosure_date: <span class="type">date</span>
+
+    <span class="cmt"># Optional enrichment</span>
+    filer_title: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    filer_party: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    filer_state: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    filer_chamber: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    asset_type: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    shares: <span class="type">Optional[float]</span> = <span class="kw">None</span>
+    price: <span class="type">Optional[float]</span> = <span class="kw">None</span>
+    amount_range: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    amount_low: <span class="type">Optional[float]</span> = <span class="kw">None</span>
+    amount_high: <span class="type">Optional[float]</span> = <span class="kw">None</span>
+    owner: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    mspr: <span class="type">Optional[float]</span> = <span class="kw">None</span>
+    filing_url: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+    raw_json: <span class="type">Optional[str]</span> = <span class="kw">None</span>
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">dedup_hash</span>(self) -> <span class="type">str</span>:
+        <span class="kw">import</span> hashlib
+        key = f<span class="str">"{self.filer_name}|{self.symbol}|{self.transaction_date}|"</span> \
+              f<span class="str">"{self.shares or self.amount_range}|{self.transaction_type}"</span>
+        <span class="kw">return</span> hashlib.<span class="fn">sha256</span>(key.encode()).<span class="fn">hexdigest</span>()[:16]
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">disclosure_lag_days</span>(self) -> <span class="type">int</span>:
+        <span class="kw">return</span> (self.disclosure_date - self.transaction_date).days</code></pre>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 8: SIGNAL GENERATION ENGINE -->
+<!-- ================================================================== -->
+<div class="section" id="s8">
+  <div class="section-header">
+    <span class="section-num">8</span>
+    <h2>Signal Generation Engine</h2>
+  </div>
+
+  <div class="card card-accent">
+    <h3>Conviction Scoring Algorithm</h3>
+    <p>Each filing is scored 0-100 based on multiple weighted factors. Scores above the user-configurable threshold (default: 65) generate an alert.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Factor</th>
+            <th>Weight</th>
+            <th>Logic</th>
+            <th>Max Points</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Trade Size</strong></td>
+            <td>25%</td>
+            <td>Larger amounts = higher conviction. $1M+ = max score. For congress: parse amount range midpoint.</td>
+            <td>25</td>
+          </tr>
+          <tr>
+            <td><strong>Filer Track Record</strong></td>
+            <td>25%</td>
+            <td>Historical win rate (30-day forward return > 0). Pelosi 65%+ win rate = high. New filer = neutral (12.5).</td>
+            <td>25</td>
+          </tr>
+          <tr>
+            <td><strong>Cluster Detection</strong></td>
+            <td>20%</td>
+            <td>Multiple filers buying same symbol within 14-day window. 3+ filers = max. Indicates institutional consensus.</td>
+            <td>20</td>
+          </tr>
+          <tr>
+            <td><strong>MSPR Alignment</strong></td>
+            <td>15%</td>
+            <td>For insiders: MSPR > 50 on a purchase = strong. MSPR < -50 on a sale = strong. N/A for congress.</td>
+            <td>15</td>
+          </tr>
+          <tr>
+            <td><strong>Disclosure Timing</strong></td>
+            <td>10%</td>
+            <td>Faster disclosure (< 7 days) = urgency signal. Congress max is 45 days; < 10 days is unusual.</td>
+            <td>10</td>
+          </tr>
+          <tr>
+            <td><strong>Committee Relevance</strong></td>
+            <td>5%</td>
+            <td>Politician on relevant committee (e.g. Finance committee member trading bank stocks). Requires enrichment.</td>
+            <td>5</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Signal Types Generated</h3>
+    <div class="grid-2">
+      <div class="card card-good">
+        <h4>&#128308; High-Conviction Alert (Score &ge; 75)</h4>
+        <ul>
+          <li>Push notification to GUI dashboard</li>
+          <li>Discord webhook via existing <code>/api/discord/send-signal-multi</code></li>
+          <li>Optional: auto-queue as trade signal for review</li>
+        </ul>
+      </div>
+      <div class="card card-info">
+        <h4>&#128309; Standard Alert (Score 50-74)</h4>
+        <ul>
+          <li>Display in Filing Tracker tab</li>
+          <li>Optional Discord notification</li>
+          <li>Added to watchlist for monitoring</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>Cluster Alert</h4>
+    <p>When 3+ distinct filers (politicians or insiders) buy the same symbol within a 14-day window, generate a <strong>cluster alert</strong> regardless of individual conviction scores. This is the strongest signal type historically.</p>
+    <pre><code><span class="cmt"># Cluster detection query</span>
+<span class="kw">SELECT</span> symbol, <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> filer_name) <span class="kw">as</span> filer_count,
+       <span class="fn">GROUP_CONCAT</span>(<span class="kw">DISTINCT</span> filer_name) <span class="kw">as</span> filers,
+       <span class="fn">MIN</span>(transaction_date) <span class="kw">as</span> first_trade,
+       <span class="fn">MAX</span>(transaction_date) <span class="kw">as</span> last_trade
+<span class="kw">FROM</span> filing_trades
+<span class="kw">WHERE</span> transaction_type = <span class="str">'Purchase'</span>
+  <span class="kw">AND</span> transaction_date >= <span class="fn">date</span>(<span class="str">'now'</span>, <span class="str">'-14 days'</span>)
+  <span class="kw">AND</span> signal_sent = <span class="num">0</span>
+<span class="kw">GROUP BY</span> symbol
+<span class="kw">HAVING</span> filer_count >= <span class="num">3</span></code></pre>
+  </div>
+
+  <div class="card">
+    <h3>13F Portfolio Diffing</h3>
+    <p>Quarterly 13F analysis compares consecutive snapshots to identify:</p>
+    <ul>
+      <li><strong>New Positions:</strong> Symbol appears in current quarter but not previous</li>
+      <li><strong>Increased Positions:</strong> Share count increased by &gt;25%</li>
+      <li><strong>Decreased Positions:</strong> Share count decreased by &gt;25%</li>
+      <li><strong>Exited Positions:</strong> Symbol in previous quarter but absent from current</li>
+    </ul>
+    <pre><code><span class="cmt"># Diff two quarters</span>
+<span class="kw">SELECT</span>
+    <span class="fn">COALESCE</span>(curr.symbol, prev.symbol) <span class="kw">as</span> symbol,
+    prev.shares <span class="kw">as</span> prev_shares,
+    curr.shares <span class="kw">as</span> curr_shares,
+    <span class="kw">CASE</span>
+        <span class="kw">WHEN</span> prev.shares <span class="kw">IS NULL THEN</span> <span class="str">'NEW'</span>
+        <span class="kw">WHEN</span> curr.shares <span class="kw">IS NULL THEN</span> <span class="str">'EXIT'</span>
+        <span class="kw">WHEN</span> curr.shares > prev.shares * <span class="num">1.25</span> <span class="kw">THEN</span> <span class="str">'INCREASE'</span>
+        <span class="kw">WHEN</span> curr.shares < prev.shares * <span class="num">0.75</span> <span class="kw">THEN</span> <span class="str">'DECREASE'</span>
+        <span class="kw">ELSE</span> <span class="str">'HOLD'</span>
+    <span class="kw">END as</span> action
+<span class="kw">FROM</span> filing_13f_snapshots curr
+<span class="kw">FULL OUTER JOIN</span> filing_13f_snapshots prev
+    <span class="kw">ON</span> curr.cik = prev.cik <span class="kw">AND</span> curr.cusip = prev.cusip
+<span class="kw">WHERE</span> curr.quarter = <span class="str">'2026-Q1'</span> <span class="kw">AND</span> prev.quarter = <span class="str">'2025-Q4'</span>
+    <span class="kw">AND</span> curr.cik = <span class="str">'{target_cik}'</span></code></pre>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 9: GUI INTEGRATION -->
+<!-- ================================================================== -->
+<div class="section" id="s9">
+  <div class="section-header">
+    <span class="section-num">9</span>
+    <h2>GUI Integration</h2>
+  </div>
+
+  <div class="card">
+    <h3>Filing Tracker Tab (Trading &#8594; Trades)</h3>
+    <p>New tab alongside Live Positions, Pending Orders, Penny Scanner:</p>
+
+    <h4>Filter Bar</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Filter</th><th>Options</th><th>Default</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Filing Type</td><td>All / Congress / Insider / 13F</td><td>All</td></tr>
+          <tr><td>Transaction</td><td>All / Purchase / Sale</td><td>Purchase</td></tr>
+          <tr><td>Chamber</td><td>All / House / Senate</td><td>All</td></tr>
+          <tr><td>Party</td><td>All / Democrat / Republican</td><td>All</td></tr>
+          <tr><td>Min Conviction</td><td>Slider 0-100</td><td>50</td></tr>
+          <tr><td>Date Range</td><td>7d / 30d / 90d / All</td><td>30d</td></tr>
+          <tr><td>Filer Search</td><td>Text input (autocomplete)</td><td>Empty</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Results Table Columns</h4>
+    <pre><code>Date | Filer | Type | Party | Symbol | Action | Amount | Price | Score | Lag | [Trade] [Alert]</code></pre>
+    <ul>
+      <li>Rows color-coded by conviction score (green &ge;75, blue 50-74, gray &lt;50)</li>
+      <li><strong>[Trade]</strong> button queues a BTO through existing stock order pipeline</li>
+      <li><strong>[Alert]</strong> button sends to selected Discord channels via webhook</li>
+      <li>Click filer name to drill down into their full trade history</li>
+      <li>Click symbol to see all filers who traded it recently</li>
+    </ul>
+
+    <h4>Filer Leaderboard Panel</h4>
+    <p>Sidebar showing top-performing filers by 30-day forward return, win rate, and total trades. Sortable columns. Click to add to watchlist.</p>
+  </div>
+
+  <div class="card">
+    <h3>API Endpoints</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/api/filings/trades</code></td>
+            <td>GET</td>
+            <td>List filing trades with filters (type, party, symbol, date, min_score)</td>
+          </tr>
+          <tr>
+            <td><code>/api/filings/poll</code></td>
+            <td>POST</td>
+            <td>Trigger immediate poll of all sources</td>
+          </tr>
+          <tr>
+            <td><code>/api/filings/filers</code></td>
+            <td>GET</td>
+            <td>Filer leaderboard with performance stats</td>
+          </tr>
+          <tr>
+            <td><code>/api/filings/filers/{name}/trades</code></td>
+            <td>GET</td>
+            <td>All trades by a specific filer</td>
+          </tr>
+          <tr>
+            <td><code>/api/filings/clusters</code></td>
+            <td>GET</td>
+            <td>Active cluster alerts (3+ filers on same symbol)</td>
+          </tr>
+          <tr>
+            <td><code>/api/filings/13f/{cik}/diff</code></td>
+            <td>GET</td>
+            <td>Quarter-over-quarter portfolio diff for an institution</td>
+          </tr>
+          <tr>
+            <td><code>/api/filings/watchlist</code></td>
+            <td>GET/POST/DELETE</td>
+            <td>Manage watched filers for priority alerts</td>
+          </tr>
+          <tr>
+            <td><code>/api/filings/settings</code></td>
+            <td>GET/POST</td>
+            <td>Configure poll intervals, alert thresholds, API keys</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 10: IMPLEMENTATION ROADMAP -->
+<!-- ================================================================== -->
+<div class="section" id="s10">
+  <div class="section-header">
+    <span class="section-num">10</span>
+    <h2>Implementation Roadmap</h2>
+  </div>
+
+  <div class="card">
+    <h3>Phased Delivery</h3>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="phase">Phase 1 &mdash; Foundation (MVP)</div>
+        <div class="desc">
+          Database tables, Finnhub client, congressional + insider polling, basic GUI tab with table display. No scoring, no 13F.
+        </div>
+        <div class="est">~600 lines | 1-2 sessions</div>
+      </div>
+      <div class="timeline-item">
+        <div class="phase">Phase 2 &mdash; Enrichment &amp; Alerts</div>
+        <div class="desc">
+          FMP client for politician metadata, conviction scoring engine, cluster detection, Discord webhook alerts, filer performance tracking.
+        </div>
+        <div class="est">~500 lines | 1-2 sessions</div>
+      </div>
+      <div class="timeline-item">
+        <div class="phase">Phase 3 &mdash; 13F Institutional</div>
+        <div class="desc">
+          SEC EDGAR 13F bulk download, quarterly portfolio snapshots, diff engine, whale tracker panel in GUI.
+        </div>
+        <div class="est">~400 lines | 1 session</div>
+      </div>
+      <div class="timeline-item">
+        <div class="phase">Phase 4 &mdash; Intelligence</div>
+        <div class="desc">
+          Historical performance attribution (30/90-day returns after disclosure), filer leaderboard, committee-relevance scoring, auto-trade integration.
+        </div>
+        <div class="est">~400 lines | 1 session</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Phase 1 File Changes (MVP)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>File</th><th>Action</th><th>Lines</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>src/services/filing_tracker_service.py</code></td>
+            <td><span class="badge badge-good">NEW</span></td>
+            <td>~300</td>
+          </tr>
+          <tr>
+            <td><code>src/services/filing_clients/finnhub_client.py</code></td>
+            <td><span class="badge badge-good">NEW</span></td>
+            <td>~150</td>
+          </tr>
+          <tr>
+            <td><code>gui_app/database.py</code></td>
+            <td><span class="badge badge-info">MODIFY</span></td>
+            <td>+80</td>
+          </tr>
+          <tr>
+            <td><code>gui_app/routes.py</code></td>
+            <td><span class="badge badge-info">MODIFY</span></td>
+            <td>+120</td>
+          </tr>
+          <tr>
+            <td><code>gui_app/templates/trades.html</code></td>
+            <td><span class="badge badge-info">MODIFY</span></td>
+            <td>+250</td>
+          </tr>
+          <tr>
+            <td><code>src/selfbot_webull.py</code></td>
+            <td><span class="badge badge-info">MODIFY</span></td>
+            <td>+20</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 11: COST ANALYSIS -->
+<!-- ================================================================== -->
+<div class="section" id="s11">
+  <div class="section-header">
+    <span class="section-num">11</span>
+    <h2>Cost Analysis</h2>
+  </div>
+
+  <div class="card">
+    <h3>Monthly Operating Cost by Tier</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Configuration</th>
+            <th>Monthly Cost</th>
+            <th>Covers</th>
+            <th>Limitations</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Free Only</strong> (Finnhub + EDGAR)</td>
+            <td><span class="badge badge-good">$0/mo</span></td>
+            <td>Congress trades, insider txns, MSPR, 13F, Form 4 RSS</td>
+            <td>No politician name search, no party/state metadata</td>
+          </tr>
+          <tr>
+            <td><strong>Recommended</strong> (+ FMP Starter)</td>
+            <td><span class="badge badge-warn">$14/mo</span></td>
+            <td>All of above + politician enrichment, name search, disclosure links</td>
+            <td>250 FMP calls/day limit</td>
+          </tr>
+          <tr>
+            <td><strong>Premium</strong> (+ Quiver Hobbyist)</td>
+            <td><span class="badge badge-gold">$44/mo</span></td>
+            <td>All of above + Quiver analytics, Python SDK, historical to 2012</td>
+            <td>Redundant with FMP for most use cases</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-good">
+      <span class="callout-icon">&#128176;</span>
+      <div class="callout-body">
+        <strong>Recommended: $14/month</strong>
+        Finnhub (free) handles 90% of the data. FMP Starter ($14/mo) adds the politician metadata that makes congressional alerts actually useful. EDGAR is always free. Total: $14/month for production-grade coverage across all 3 filing categories.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 12: RISK & COMPLIANCE -->
+<!-- ================================================================== -->
+<div class="section" id="s12">
+  <div class="section-header">
+    <span class="section-num">12</span>
+    <h2>Risk &amp; Compliance</h2>
+  </div>
+
+  <div class="grid-2">
+    <div class="card card-warn">
+      <h3>&#9888;&#65039; Legal Considerations</h3>
+      <ul>
+        <li><strong>SEC EDGAR:</strong> Free for any use. Must include User-Agent with contact info. No redistribution restrictions.</li>
+        <li><strong>Senate EFD:</strong> Terms prohibit "commercial use" of data scraped directly. Third-party APIs (FMP, Finnhub) that aggregate this data are fine.</li>
+        <li><strong>Finnhub:</strong> Free tier allows commercial use. Attribution not required but recommended.</li>
+        <li><strong>FMP:</strong> API data can be used in applications. Check terms for redistribution limits.</li>
+        <li><strong>Not financial advice:</strong> Filing data has disclosure lag (2-45 days). Prices may have moved significantly. Always display disclosure date prominently.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>&#128737;&#65039; Technical Risks &amp; Mitigations</h3>
+      <ul>
+        <li><strong>API downtime:</strong> Multi-source fallback (Finnhub fails &#8594; FMP &#8594; EDGAR). Circuit breaker pattern with backoff.</li>
+        <li><strong>Rate limiting:</strong> Token bucket per API. Finnhub: 60/min, FMP: 250/day, EDGAR: 10/sec. Scheduler enforces.</li>
+        <li><strong>Data staleness:</strong> Congressional filings have up to 45-day lag. Always show disclosure_lag_days in UI. Don't auto-trade stale filings (&gt;7 days old).</li>
+        <li><strong>Duplicate filings:</strong> Hash-based dedup across all sources. Prefer richer source on collision.</li>
+        <li><strong>Schema changes:</strong> API responses validated against expected fields. Log and skip malformed records.</li>
+        <li><strong>Amount ambiguity:</strong> Congressional amounts are ranges ($1K-$15K). Parse both bounds. Score uses midpoint.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 13: APPENDIX — API REFERENCE -->
+<!-- ================================================================== -->
+<div class="section" id="s13">
+  <div class="section-header">
+    <span class="section-num">13</span>
+    <h2>Appendix: API Quick Reference</h2>
+  </div>
+
+  <div class="card">
+    <h3>Finnhub Endpoints (Primary)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Endpoint</th><th>Purpose</th><th>Key Params</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GET /api/v1/stock/congressional-trading</code></td>
+            <td>Congressional trades by symbol</td>
+            <td><code>symbol, from, to, token</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /api/v1/stock/insider-transactions</code></td>
+            <td>Form 3/4/5 insider trades</td>
+            <td><code>symbol, from, to, token</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /api/v1/stock/insider-sentiment</code></td>
+            <td>MSPR sentiment score</td>
+            <td><code>symbol, from, to, token</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /api/v1/institutional/portfolio</code></td>
+            <td>13F holdings by institution</td>
+            <td><code>cik, from, to, token</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /api/v1/institutional/ownership</code></td>
+            <td>Institutions holding a stock</td>
+            <td><code>symbol, cusip, token</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /api/v1/institutional/list</code></td>
+            <td>All institutional filer CIKs</td>
+            <td><code>token</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>FMP Endpoints (Enrichment)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Endpoint</th><th>Purpose</th><th>Key Params</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GET /stable/senate-trading</code></td>
+            <td>All Senate trades</td>
+            <td><code>apikey</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /stable/senate-trading-by-name</code></td>
+            <td>Senate trades by politician name</td>
+            <td><code>name, apikey</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /stable/senate-latest</code></td>
+            <td>Most recent Senate disclosures</td>
+            <td><code>apikey</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /stable/house-trading</code></td>
+            <td>All House trades</td>
+            <td><code>apikey</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /stable/house-trading-by-name</code></td>
+            <td>House trades by politician name</td>
+            <td><code>name, apikey</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /stable/house-latest</code></td>
+            <td>Most recent House disclosures</td>
+            <td><code>apikey</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /stable/insider-trading/latest</code></td>
+            <td>Latest Form 4 filings</td>
+            <td><code>apikey</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /stable/institutional-ownership/extract</code></td>
+            <td>13F holdings for CIK + quarter</td>
+            <td><code>cik, year, quarter, apikey</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>SEC EDGAR Endpoints (Authority)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Endpoint</th><th>Purpose</th><th>Auth</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GET data.sec.gov/submissions/CIK{10-digit}.json</code></td>
+            <td>All filings for entity</td>
+            <td>User-Agent header</td>
+          </tr>
+          <tr>
+            <td><code>GET efts.sec.gov/LATEST/search-index?q=...&forms=4</code></td>
+            <td>Full-text search</td>
+            <td>User-Agent header</td>
+          </tr>
+          <tr>
+            <td><code>GET sec.gov/cgi-bin/browse-edgar?type=4&output=atom</code></td>
+            <td>Form 4 RSS feed (real-time)</td>
+            <td>User-Agent header</td>
+          </tr>
+          <tr>
+            <td><code>GET sec.gov/data-research/sec-markets-data/form-13f-data-sets</code></td>
+            <td>Quarterly 13F bulk CSV/ZIP</td>
+            <td>User-Agent header</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Congressional Amount Range Parsing</h3>
+    <p>STOCK Act disclosures report amounts in predefined ranges. Parse both bounds for scoring:</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Reported Range</th><th>amount_low</th><th>amount_high</th><th>Midpoint (for scoring)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>$1,001 - $15,000</td><td>1,001</td><td>15,000</td><td>8,000</td></tr>
+          <tr><td>$15,001 - $50,000</td><td>15,001</td><td>50,000</td><td>32,500</td></tr>
+          <tr><td>$50,001 - $100,000</td><td>50,001</td><td>100,000</td><td>75,000</td></tr>
+          <tr><td>$100,001 - $250,000</td><td>100,001</td><td>250,000</td><td>175,000</td></tr>
+          <tr><td>$250,001 - $500,000</td><td>250,001</td><td>500,000</td><td>375,000</td></tr>
+          <tr><td>$500,001 - $1,000,000</td><td>500,001</td><td>1,000,000</td><td>750,000</td></tr>
+          <tr><td>$1,000,001 - $5,000,000</td><td>1,000,001</td><td>5,000,000</td><td>3,000,000</td></tr>
+          <tr><td>$5,000,001 - $25,000,000</td><td>5,000,001</td><td>25,000,000</td><td>15,000,000</td></tr>
+          <tr><td>$25,000,001 - $50,000,000</td><td>25,000,001</td><td>50,000,000</td><td>37,500,000</td></tr>
+          <tr><td>Over $50,000,000</td><td>50,000,001</td><td>100,000,000</td><td>75,000,000</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div style="text-align:center; padding: 40px 0 60px; color: var(--muted); font-size: 0.85rem;">
+  <p><strong>BotifyTrades</strong> &mdash; Public Filing Portfolio Tracker Architecture</p>
+  <p>Document generated May 14, 2026 &bull; Architect Review &bull; v10.1.10</p>
+</div>
+
+</div><!-- .container.content -->
+</body>
+</html>

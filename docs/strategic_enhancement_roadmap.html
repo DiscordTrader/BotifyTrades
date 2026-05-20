@@ -1,0 +1,1297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BotifyTrades &mdash; Strategic Enhancement Roadmap &mdash; Industry Leadership Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#0f172a; --ink-2:#1e293b; --ink-3:#334155;
+  --muted:#64748b; --muted-2:#94a3b8; --muted-3:#cbd5e1;
+  --line:#e2e8f0; --line-2:#f1f5f9;
+  --bg:#fafbfd; --bg-soft:#f8fafc; --bg-card:#ffffff;
+  --brand:#1e40af; --brand-light:#dbeafe; --brand-dark:#1e3a8a;
+  --accent:#7c3aed; --accent-light:#ede9fe;
+  --teal:#0d9488; --teal-light:#ccfbf1;
+  --good:#15803d; --good-bg:#dcfce7; --good-border:#86efac;
+  --warn:#a16207; --warn-bg:#fef3c7; --warn-border:#fcd34d;
+  --bad:#b91c1c; --bad-bg:#fee2e2; --bad-border:#fca5a5;
+  --info:#1d4ed8; --info-bg:#dbeafe; --info-border:#93c5fd;
+  --gold:#b45309; --gold-bg:#fffbeb; --gold-border:#fbbf24;
+  --orange:#c2410c; --orange-bg:#fff7ed; --orange-border:#fb923c;
+  --shadow-xs: 0 1px 2px rgba(15,23,42,.04);
+  --shadow-sm: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  --shadow-md: 0 4px 6px -1px rgba(15,23,42,.07), 0 2px 4px -2px rgba(15,23,42,.05);
+  --shadow-lg: 0 10px 25px -3px rgba(15,23,42,.08), 0 4px 6px -4px rgba(15,23,42,.04);
+  --radius: 12px; --radius-lg: 16px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', system-ui, sans-serif; color: var(--ink); background: var(--bg); font-size: 15px; line-height: 1.7; -webkit-font-smoothing: antialiased; }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
+
+.hero { background: linear-gradient(135deg, #0f172a 0%, #1a0a3b 30%, #7c2d12 70%, #991b1b 100%); color: #fff; padding: 60px 0 50px; }
+.hero .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+.hero h1 { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; }
+.hero .subtitle { font-size: 1.15rem; color: #fbbf24; font-weight: 500; margin-bottom: 24px; }
+.hero .meta { display: flex; gap: 24px; flex-wrap: wrap; font-size: 0.85rem; color: #c7d2fe; }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+.content { padding: 48px 0 80px; }
+
+.toc { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 28px 32px; margin-bottom: 48px; box-shadow: var(--shadow-sm); }
+.toc h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 16px; }
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px 32px; }
+.toc a { color: var(--brand); text-decoration: none; font-size: 0.9rem; padding: 4px 0; display: block; }
+.toc a:hover { color: var(--accent); }
+.toc a .num { color: var(--muted-2); font-weight: 600; margin-right: 6px; }
+
+.section { margin-bottom: 56px; }
+.section-header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--line); }
+.section-num { background: var(--brand); color: #fff; font-weight: 700; font-size: 0.85rem; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.section-header h2 { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; }
+
+.card { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 20px; box-shadow: var(--shadow-xs); }
+.card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; }
+.card h4 { font-size: 0.95rem; font-weight: 600; margin: 16px 0 8px; color: var(--ink-2); }
+.card p { margin-bottom: 10px; color: var(--ink-2); }
+.card-accent { border-left: 4px solid var(--brand); }
+.card-teal { border-left: 4px solid var(--teal); }
+.card-gold { border-left: 4px solid var(--gold); background: var(--gold-bg); }
+.card-good { border-left: 4px solid var(--good); }
+.card-warn { border-left: 4px solid var(--warn); }
+.card-info { border-left: 4px solid var(--info); }
+.card-bad { border-left: 4px solid var(--bad); }
+.card-orange { border-left: 4px solid var(--orange); }
+
+.table-wrap { overflow-x: auto; margin: 16px 0 20px; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-xs); }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th { background: var(--line-2); color: var(--ink-2); font-weight: 600; text-align: left; padding: 12px 16px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--line); white-space: nowrap; }
+td { padding: 11px 16px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.badge-good { background: var(--good-bg); color: var(--good); border: 1px solid var(--good-border); }
+.badge-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+.badge-bad { background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad-border); }
+.badge-info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
+.badge-gold { background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border); }
+.badge-accent { background: var(--accent-light); color: var(--accent); border: 1px solid #c4b5fd; }
+.badge-orange { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-border); }
+
+pre { background: #1e293b; color: #e2e8f0; border-radius: var(--radius); padding: 20px 24px; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; line-height: 1.65; margin: 16px 0; }
+code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: var(--line-2); color: var(--brand); padding: 2px 6px; border-radius: 4px; }
+pre code { background: none; color: inherit; padding: 0; font-size: 1em; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+ul, ol { padding-left: 24px; margin: 8px 0 16px; }
+li { margin-bottom: 6px; color: var(--ink-2); }
+li strong { color: var(--ink); }
+
+.callout { border-radius: var(--radius); padding: 20px 24px; margin: 20px 0; display: flex; gap: 14px; align-items: flex-start; }
+.callout-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 2px; }
+.callout-body { flex: 1; }
+.callout-body strong { display: block; margin-bottom: 4px; }
+.callout-info { background: var(--info-bg); border: 1px solid var(--info-border); }
+.callout-warn { background: var(--warn-bg); border: 1px solid var(--warn-border); }
+.callout-good { background: var(--good-bg); border: 1px solid var(--good-border); }
+
+.stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+.stat { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 24px; flex: 1; min-width: 140px; text-align: center; box-shadow: var(--shadow-xs); }
+.stat .stat-value { font-size: 1.6rem; font-weight: 800; color: var(--brand); letter-spacing: -0.03em; }
+.stat .stat-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+.timeline { position: relative; padding-left: 32px; margin: 20px 0; }
+.timeline::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.timeline-item { position: relative; margin-bottom: 28px; }
+.timeline-item::before { content: ''; position: absolute; left: -24px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--brand); border: 3px solid var(--brand-light); }
+.timeline-item .phase { font-weight: 700; font-size: 0.95rem; color: var(--brand); }
+.timeline-item .desc { font-size: 0.88rem; color: var(--ink-2); margin-top: 2px; }
+.timeline-item .est { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+.timeline-item .features { margin-top: 8px; }
+.timeline-item .features span { display: inline-block; margin: 2px 4px 2px 0; }
+
+.moat-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin: 8px 0; }
+.moat-bar div { display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; color: #fff; }
+
+.feature-card { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; text-align: center; }
+.feature-card .icon { font-size: 2rem; margin-bottom: 8px; }
+.feature-card h4 { font-size: 0.9rem; margin-bottom: 6px; }
+.feature-card p { font-size: 0.8rem; color: var(--muted); }
+.feature-card .tier { margin-top: 8px; }
+
+.priority-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+.priority-row:last-child { border-bottom: none; }
+.priority-num { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem; color: #fff; flex-shrink: 0; }
+.priority-body { flex: 1; }
+.priority-body .title { font-weight: 700; font-size: 0.95rem; }
+.priority-body .detail { font-size: 0.82rem; color: var(--muted); }
+
+@media print { .hero { padding: 30px 0 20px; } .section { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="container">
+    <h1>BotifyTrades Strategic Enhancement Roadmap</h1>
+    <p class="subtitle">From Trading Bot to Industry-Leading Trading Platform</p>
+    <div class="meta">
+      <span>&#128640; Startup Growth Plan</span>
+      <span>&#128197; May 2026</span>
+      <span>&#127919; Target: #1 Signal-to-Execution Platform</span>
+      <span>&#128176; $50-200/mo pricing tier</span>
+    </div>
+  </div>
+</div>
+
+<div class="container content">
+
+<!-- TOC -->
+<nav class="toc">
+  <h2>Contents</h2>
+  <div class="toc-grid">
+    <a href="#s1"><span class="num">01</span> Competitive Landscape &amp; Position</a>
+    <a href="#s2"><span class="num">02</span> Current Moat &amp; Unique Advantages</a>
+    <a href="#s3"><span class="num">03</span> Gap Analysis &mdash; What's Missing</a>
+    <a href="#s4"><span class="num">04</span> Enhancement #1: AI Trade Intelligence</a>
+    <a href="#s5"><span class="num">05</span> Enhancement #2: Options Flow Scanner</a>
+    <a href="#s6"><span class="num">06</span> Enhancement #3: Backtesting Engine</a>
+    <a href="#s7"><span class="num">07</span> Enhancement #4: Public Filing Tracker</a>
+    <a href="#s8"><span class="num">08</span> Enhancement #5: TradingView Integration</a>
+    <a href="#s9"><span class="num">09</span> Enhancement #6: Copy Trading &amp; Signal Marketplace</a>
+    <a href="#s10"><span class="num">10</span> Enhancement #7: Advanced Risk Analytics</a>
+    <a href="#s11"><span class="num">11</span> Enhancement #8: Social Sentiment Engine</a>
+    <a href="#s12"><span class="num">12</span> Enhancement #9: Mobile App (Native)</a>
+    <a href="#s13"><span class="num">13</span> Enhancement #10: Multi-Asset Expansion</a>
+    <a href="#s14"><span class="num">14</span> Platform Architecture Evolution</a>
+    <a href="#s15"><span class="num">15</span> Implementation Roadmap &amp; Prioritization</a>
+    <a href="#s16"><span class="num">16</span> Revenue Model &amp; Pricing Strategy</a>
+  </div>
+</nav>
+
+<!-- ================================================================== -->
+<!-- SECTION 1: COMPETITIVE LANDSCAPE -->
+<!-- ================================================================== -->
+<div class="section" id="s1">
+  <div class="section-header">
+    <span class="section-num">1</span>
+    <h2>Competitive Landscape &amp; Position</h2>
+  </div>
+
+  <div class="card">
+    <h3>Market Map</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Competitor</th>
+            <th>Price/mo</th>
+            <th>Signal Parsing</th>
+            <th>Multi-Broker</th>
+            <th>AI/ML</th>
+            <th>Options Flow</th>
+            <th>Backtest</th>
+            <th>Risk Mgmt</th>
+            <th>Mobile</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Trade Ideas</strong></td>
+            <td>$118-228</td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-warn">3</span></td>
+            <td><span class="badge badge-good">Holly AI</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-warn">Basic</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+          </tr>
+          <tr>
+            <td><strong>TrendSpider</strong></td>
+            <td>$54-399</td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">ML Lab</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-warn">Basic</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+          </tr>
+          <tr>
+            <td><strong>SignalStack</strong></td>
+            <td>$0.59/sig</td>
+            <td><span class="badge badge-warn">TV only</span></td>
+            <td><span class="badge badge-good">33+</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+          </tr>
+          <tr>
+            <td><strong>Unusual Whales</strong></td>
+            <td>$29-110</td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-warn">Flow AI</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+          </tr>
+          <tr>
+            <td><strong>3Commas</strong></td>
+            <td>$15-90</td>
+            <td><span class="badge badge-good">TG+TV</span></td>
+            <td><span class="badge badge-good">15+</span></td>
+            <td><span class="badge badge-warn">Basic</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">DCA/Grid</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+          </tr>
+          <tr>
+            <td><strong>Cornix</strong></td>
+            <td>$50</td>
+            <td><span class="badge badge-good">TG+Discord</span></td>
+            <td><span class="badge badge-good">10+</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+            <td><span class="badge badge-good">YES</span></td>
+          </tr>
+          <tr style="background: var(--brand-light);">
+            <td><strong>BotifyTrades</strong></td>
+            <td>TBD</td>
+            <td><span class="badge badge-good">Discord</span></td>
+            <td><span class="badge badge-good">5 US</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-bad">NO</span></td>
+            <td><span class="badge badge-good">Advanced</span></td>
+            <td><span class="badge badge-warn">Relay</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="callout callout-good">
+    <span class="callout-icon">&#128161;</span>
+    <div class="callout-body">
+      <strong>Key Insight: No Single Platform Does Everything</strong>
+      Trade Ideas has AI but no signal parsing. SignalStack routes signals but has no risk management. Unusual Whales has flow data but no execution. Cornix parses Discord but only crypto. <strong>BotifyTrades is uniquely positioned to be the first all-in-one platform</strong> for US equity/options traders who follow Discord signals.
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 2: CURRENT MOAT -->
+<!-- ================================================================== -->
+<div class="section" id="s2">
+  <div class="section-header">
+    <span class="section-num">2</span>
+    <h2>Current Moat &amp; Unique Advantages</h2>
+  </div>
+
+  <div class="card card-good">
+    <h3>What No Competitor Can Match Today</h3>
+    <div class="grid-2">
+      <div>
+        <h4>&#128272; Core Moat</h4>
+        <ul>
+          <li><strong>Discord-to-Execution Pipeline:</strong> Real-time selfbot parsing of 15+ signal formats across multiple channels/servers</li>
+          <li><strong>5 US Broker Execution:</strong> Schwab, Webull, IBKR, Tastytrade, Alpaca &mdash; no other platform supports all 5</li>
+          <li><strong>Advanced Risk Brackets:</strong> Tiered PT/SL/trailing/OCO with per-channel risk settings &mdash; industry-leading granularity</li>
+          <li><strong>Multi-Format Signal Parser:</strong> Temple of Boom, options alerts, stock entries, conditional orders &mdash; learned patterns</li>
+        </ul>
+      </div>
+      <div>
+        <h4>&#128736; Technical Advantages</h4>
+        <ul>
+          <li><strong>Unified Price Hub:</strong> Cross-broker WebSocket streaming for real-time pricing</li>
+          <li><strong>Position Reconciliation:</strong> Broker sync service with fill tracking and lot-based PNL</li>
+          <li><strong>Conditional Order Engine:</strong> Trigger-based entries with price monitoring</li>
+          <li><strong>Self-Hosted:</strong> User owns their API keys, no cloud dependency, desktop app</li>
+          <li><strong>Signal-to-Fill Speed Tracking:</strong> Execution latency analytics (v10.1.8)</li>
+          <li><strong>Mobile Relay:</strong> Remote monitoring via WSS (v10.1.5)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 3: GAP ANALYSIS -->
+<!-- ================================================================== -->
+<div class="section" id="s3">
+  <div class="section-header">
+    <span class="section-num">3</span>
+    <h2>Gap Analysis &mdash; Feature Priority Matrix</h2>
+  </div>
+
+  <div class="card">
+    <h3>Ranked by Impact &times; Feasibility</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Enhancement</th>
+            <th>Impact</th>
+            <th>Effort</th>
+            <th>Revenue</th>
+            <th>Competitors Have</th>
+            <th>Priority</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>AI Trade Intelligence</strong></td>
+            <td><span class="badge badge-good">CRITICAL</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td>Trade Ideas (Holly), TrendSpider</td>
+            <td><span class="badge badge-good">P0</span></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>Options Flow Scanner</strong></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td>Unusual Whales, BlackBox</td>
+            <td><span class="badge badge-good">P0</span></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>Backtesting Engine</strong></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td><span class="badge badge-bad">HIGH</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td>TrendSpider, QuantConnect, 3Commas</td>
+            <td><span class="badge badge-info">P1</span></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>Public Filing Tracker</strong></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td>Unusual Whales (partial)</td>
+            <td><span class="badge badge-info">P1</span></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><strong>TradingView Integration</strong></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td><span class="badge badge-good">LOW</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td>SignalStack, 3Commas</td>
+            <td><span class="badge badge-info">P1</span></td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><strong>Copy Trading &amp; Marketplace</strong></td>
+            <td><span class="badge badge-good">CRITICAL</span></td>
+            <td><span class="badge badge-bad">HIGH</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td>3Commas, Composer</td>
+            <td><span class="badge badge-warn">P2</span></td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td><strong>Advanced Risk Analytics</strong></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td>Trade Ideas (partial)</td>
+            <td><span class="badge badge-warn">P2</span></td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td><strong>Social Sentiment Engine</strong></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td>TrendSpider, emerging</td>
+            <td><span class="badge badge-warn">P2</span></td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td><strong>Native Mobile App</strong></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td><span class="badge badge-bad">HIGH</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td>Most platforms</td>
+            <td><span class="badge badge-accent">P3</span></td>
+          </tr>
+          <tr>
+            <td>10</td>
+            <td><strong>Multi-Asset (Crypto + Futures)</strong></td>
+            <td><span class="badge badge-warn">MEDIUM</span></td>
+            <td><span class="badge badge-bad">HIGH</span></td>
+            <td><span class="badge badge-good">HIGH</span></td>
+            <td>3Commas, various</td>
+            <td><span class="badge badge-accent">P3</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 4: AI TRADE INTELLIGENCE -->
+<!-- ================================================================== -->
+<div class="section" id="s4">
+  <div class="section-header">
+    <span class="section-num">4</span>
+    <h2>Enhancement #1: AI Trade Intelligence</h2>
+  </div>
+
+  <div class="card card-accent">
+    <h3>&#129302; The Killer Feature &mdash; "Holly for Discord Signals"</h3>
+    <p>Every signal that enters BotifyTrades gets an AI quality score before execution. The AI evaluates the signal against technical indicators, market conditions, filer track record, and historical pattern performance. This transforms BotifyTrades from a <em>signal copier</em> into an <em>intelligent trading assistant</em>.</p>
+
+    <h4>AI Signal Quality Scoring</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Factor</th><th>Source</th><th>Weight</th><th>Logic</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Technical Alignment</strong></td>
+            <td>TradingView TA</td>
+            <td>25%</td>
+            <td>RSI, MACD, moving averages confirm signal direction</td>
+          </tr>
+          <tr>
+            <td><strong>Channel Track Record</strong></td>
+            <td>Internal DB</td>
+            <td>25%</td>
+            <td>Historical win rate, avg return, Sharpe ratio per channel/caller</td>
+          </tr>
+          <tr>
+            <td><strong>Market Regime</strong></td>
+            <td>VIX, SPY trend</td>
+            <td>15%</td>
+            <td>Bull/bear/sideways regime detection, risk-off days</td>
+          </tr>
+          <tr>
+            <td><strong>Volume Confirmation</strong></td>
+            <td>UPH / broker data</td>
+            <td>15%</td>
+            <td>Relative volume, bid/ask spread, liquidity check</td>
+          </tr>
+          <tr>
+            <td><strong>Options Flow Alignment</strong></td>
+            <td>Unusual Whales API</td>
+            <td>10%</td>
+            <td>Smart money flow direction matches signal</td>
+          </tr>
+          <tr>
+            <td><strong>Filing/Insider Activity</strong></td>
+            <td>Filing Tracker</td>
+            <td>10%</td>
+            <td>Recent insider buys or congressional purchases on same symbol</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Execution Modes</h4>
+    <ul>
+      <li><strong>Auto-Execute (Score &ge; 80):</strong> Signal goes straight to order queue with full position size</li>
+      <li><strong>Reduced Size (Score 60-79):</strong> Execute at 50% position size, tighter stops</li>
+      <li><strong>Alert Only (Score 40-59):</strong> Show in GUI, notify user, no auto-execution</li>
+      <li><strong>Block (Score &lt; 40):</strong> Log and skip, show as "AI Rejected" in dashboard</li>
+    </ul>
+
+    <h4>LLM-Powered Signal Analysis (Premium Feature)</h4>
+    <p>For premium tier users, send the signal context + technical data to Claude API for natural language analysis:</p>
+    <pre><code>"AAPL 185C 5/16 @ 3.20 - Signal from channel #momentum-plays
+AI Score: 72/100
+Technical: RSI 62 (neutral), above 20 SMA, MACD bullish crossover yesterday
+Flow: $2.1M in AAPL 185C bought today (unusual), put/call ratio 0.6
+Channel Win Rate: 64% (last 90 days), avg return +18%
+Market: VIX 14.2, SPY uptrend, no earnings within 5 days
+Recommendation: EXECUTE at 75% size. Set tighter SL at 2.80 (vs signal's 2.50)
+due to elevated IV rank."</code></pre>
+  </div>
+
+  <div class="card">
+    <h3>Implementation Architecture</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Component</th><th>File</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>AI Scoring Engine</td>
+            <td><code>src/services/ai_trade_scorer.py</code></td>
+            <td>Multi-factor scoring, regime detection, channel analytics</td>
+          </tr>
+          <tr>
+            <td>TradingView Client</td>
+            <td><code>src/services/tradingview_client.py</code></td>
+            <td>Technical analysis via tradingview_ta library</td>
+          </tr>
+          <tr>
+            <td>LLM Analysis</td>
+            <td><code>src/services/llm_trade_analyst.py</code></td>
+            <td>Claude API integration for premium natural language analysis</td>
+          </tr>
+          <tr>
+            <td>Channel Performance DB</td>
+            <td><code>gui_app/database.py</code></td>
+            <td>Track win rate, avg return per channel/caller/format</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Key data sources:</strong> <code>tradingview_ta</code> (free, no account), internal trades DB (channel/caller history), VIX via Yahoo Finance (free), options flow via Unusual Whales API ($40/mo) or Tradier ($0 for delayed).</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 5: OPTIONS FLOW -->
+<!-- ================================================================== -->
+<div class="section" id="s5">
+  <div class="section-header">
+    <span class="section-num">5</span>
+    <h2>Enhancement #2: Options Flow Scanner</h2>
+  </div>
+
+  <div class="card card-teal">
+    <h3>&#128202; Unusual Activity Detection</h3>
+    <p>Track large options trades ("sweeps"), dark pool prints, and unusual volume to identify smart money positioning. This data feeds into the AI scorer and provides standalone alerts.</p>
+
+    <h4>Data Sources</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Source</th><th>Data</th><th>Cost</th><th>Latency</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Unusual Whales API</strong></td>
+            <td>Options flow, dark pool, GEX, congress trades</td>
+            <td>~$40/mo</td>
+            <td>Near real-time</td>
+          </tr>
+          <tr>
+            <td><strong>Tradier API</strong></td>
+            <td>Options chains, greeks, historical</td>
+            <td>Free (delayed) / $10/mo (real-time)</td>
+            <td>15min delayed (free)</td>
+          </tr>
+          <tr>
+            <td><strong>CBOE LiveVol</strong></td>
+            <td>Options volume, open interest, IV</td>
+            <td>$50+/mo</td>
+            <td>Real-time</td>
+          </tr>
+          <tr>
+            <td><strong>Schwab/IBKR Streaming</strong></td>
+            <td>Options quotes for watched contracts</td>
+            <td>Free (existing broker)</td>
+            <td>Real-time via UPH</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Flow Scanner Features</h4>
+    <ul>
+      <li><strong>Sweep Detection:</strong> Multi-exchange aggressive fills &gt;$100K premium</li>
+      <li><strong>Dark Pool Prints:</strong> Large block trades off-exchange</li>
+      <li><strong>Put/Call Ratio Alerts:</strong> Extreme readings (&lt;0.5 or &gt;1.5)</li>
+      <li><strong>GEX (Gamma Exposure):</strong> Dealer hedging levels that act as support/resistance</li>
+      <li><strong>Unusual Volume:</strong> Options volume &gt;3x average daily, especially near-term OTM</li>
+      <li><strong>Sector Rotation:</strong> Aggregate flow by sector to detect rotation</li>
+    </ul>
+
+    <h4>GUI: Flow Scanner Tab</h4>
+    <pre><code>Time | Symbol | Type | Strike | Exp | Premium | Side | Volume/OI | Sentiment | [Trade]
+10:32 | NVDA  | Sweep | 140C | 5/23 | $2.1M  | BUY  | 15K/3K   | BULLISH   | [BTO]
+10:28 | TSLA  | Block | 180P | 6/20 | $890K  | SELL  | 8K/12K   | BEARISH   | [BTO]
+10:15 | SPY   | Dark  | 530P | 5/16 | $5.2M  | BUY  | 22K/1K   | BEARISH   | [BTO]</code></pre>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 6: BACKTESTING -->
+<!-- ================================================================== -->
+<div class="section" id="s6">
+  <div class="section-header">
+    <span class="section-num">6</span>
+    <h2>Enhancement #3: Backtesting Engine</h2>
+  </div>
+
+  <div class="card card-orange">
+    <h3>&#128200; "What Would Have Happened?"</h3>
+    <p>Users expect to validate strategies before risking real money. BotifyTrades has a unique angle: <strong>backtest signal channels</strong>. Replay historical Discord signals through the execution engine and measure performance.</p>
+
+    <h4>Two Backtesting Modes</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4>Mode A: Channel Replay</h4>
+        <p>Replay all historical signals from a Discord channel against historical prices. Answer: "If I had followed this channel's signals for the last 90 days with my risk settings, what would my PnL be?"</p>
+        <ul>
+          <li>Uses stored signals from <code>trades</code> table</li>
+          <li>Applies user's PT/SL/trailing settings</li>
+          <li>Historical prices via yfinance (free)</li>
+          <li>Calculates: total PnL, win rate, max drawdown, Sharpe, avg hold time</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Mode B: Strategy Backtest</h4>
+        <p>Test custom technical strategies against historical data. "Buy when RSI &lt; 30 and MACD crosses up, sell when RSI &gt; 70."</p>
+        <ul>
+          <li>No-code strategy builder in GUI</li>
+          <li>Technical indicators via <code>tradingview_ta</code></li>
+          <li>Walk-forward optimization</li>
+          <li>Monte Carlo simulation for confidence intervals</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>Backtest Results Dashboard</h4>
+    <pre><code>Channel: #momentum-plays | Period: Jan 1 - May 14, 2026
+Signals: 142 | Executed: 128 (AI score >= 60)
+Win Rate: 67.2% | Avg Win: +$340 | Avg Loss: -$180
+Total PnL: +$18,450 | Max Drawdown: -$3,200 (8.2%)
+Sharpe Ratio: 1.85 | Profit Factor: 2.14
+Best Trade: NVDA 140C +$2,800 | Worst: TSLA 200C -$1,100</code></pre>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 7: FILING TRACKER -->
+<!-- ================================================================== -->
+<div class="section" id="s7">
+  <div class="section-header">
+    <span class="section-num">7</span>
+    <h2>Enhancement #4: Public Filing Tracker</h2>
+  </div>
+
+  <div class="card">
+    <h3>Congressional + Insider + Institutional Portfolio Monitoring</h3>
+    <p>Full architecture document already created: <strong><code>docs/public_filing_tracker_architecture.html</code></strong></p>
+    <ul>
+      <li>Finnhub (free) + FMP ($14/mo) + SEC EDGAR (free)</li>
+      <li>Congressional trades, Form 4 insider transactions, 13F quarterly snapshots</li>
+      <li>Conviction scoring, cluster detection, filer leaderboard</li>
+      <li>Integrated into GUI as a new tab with signal generation</li>
+    </ul>
+    <p>See full document for data models, API endpoints, polling schedules, and implementation plan.</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 8: TRADINGVIEW -->
+<!-- ================================================================== -->
+<div class="section" id="s8">
+  <div class="section-header">
+    <span class="section-num">8</span>
+    <h2>Enhancement #5: TradingView Integration</h2>
+  </div>
+
+  <div class="card">
+    <h3>&#128200; Dual Integration: Data In + Alerts In</h3>
+
+    <h4>A. Technical Analysis Data (tradingview_ta)</h4>
+    <p>Already discussed &mdash; <code>pip install tradingview_ta</code> for 30+ technical indicators, screener, candlestick patterns. Powers the AI Trade Scorer.</p>
+
+    <h4>B. TradingView Alert Webhook Receiver</h4>
+    <p>Let users send TradingView alerts to BotifyTrades for execution. This opens the platform to users who build Pine Script strategies.</p>
+    <pre><code># New endpoint: /api/webhook/tradingview
+# TradingView sends JSON alert:
+{
+  "action": "BTO",
+  "symbol": "AAPL",
+  "price": 185.50,
+  "contracts": 5,
+  "strike": "185C",
+  "expiry": "2026-05-23",
+  "stop_loss": 2.50,
+  "take_profit": 5.00,
+  "broker": "SCHWAB",
+  "secret": "user_webhook_token"
+}</code></pre>
+    <p>Each user gets a unique webhook URL + secret token. Alerts are validated, scored by AI, and routed to the selected broker. This directly competes with SignalStack ($0.59/signal) but with risk management built in.</p>
+
+    <h4>C. TradingView Screener</h4>
+    <p>Run TradingView's powerful stock screener programmatically for the Penny Scanner, filing tracker enrichment, and AI scoring pre-flight checks.</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 9: COPY TRADING -->
+<!-- ================================================================== -->
+<div class="section" id="s9">
+  <div class="section-header">
+    <span class="section-num">9</span>
+    <h2>Enhancement #6: Copy Trading &amp; Signal Marketplace</h2>
+  </div>
+
+  <div class="card card-accent">
+    <h3>&#127970; The Network Effect Moat</h3>
+    <p>This is the feature that transforms BotifyTrades from a tool into a <strong>platform</strong>. Signal providers publish their strategies, followers subscribe. Revenue share on subscriptions creates a flywheel.</p>
+
+    <h4>Architecture</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4>Signal Providers (Publishers)</h4>
+        <ul>
+          <li>Publish trade signals through the BotifyTrades platform</li>
+          <li>Verified track record (backtested, then live-tracked)</li>
+          <li>Performance dashboards: win rate, drawdown, Sharpe, avg return</li>
+          <li>Set subscription price ($10-100/mo) or free</li>
+          <li>Get 70% of subscription revenue</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Followers (Subscribers)</h4>
+        <ul>
+          <li>Browse marketplace of verified signal providers</li>
+          <li>Filter by: asset type, win rate, style, price, risk level</li>
+          <li>One-click follow &mdash; signals auto-execute through their broker</li>
+          <li>Adjust position sizing, apply own risk rules</li>
+          <li>See real-time PnL attribution per provider</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <span class="callout-icon">&#128176;</span>
+      <div class="callout-body">
+        <strong>Revenue Model: 30% Platform Fee on Signal Subscriptions</strong>
+        If 100 providers average $30/mo with 20 subscribers each: $30 &times; 100 &times; 20 &times; 30% = $18,000/mo recurring platform revenue. This scales with zero marginal cost.
+      </div>
+    </div>
+
+    <h4>Cloud Component Required</h4>
+    <p>Copy trading needs a <strong>signal relay server</strong> (lightweight Flask/FastAPI) that receives signals from providers and fans them out to followers in real-time. The desktop bot connects as a WebSocket client (existing relay architecture from v10.1.5 can be extended).</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 10: RISK ANALYTICS -->
+<!-- ================================================================== -->
+<div class="section" id="s10">
+  <div class="section-header">
+    <span class="section-num">10</span>
+    <h2>Enhancement #7: Advanced Risk Analytics</h2>
+  </div>
+
+  <div class="card">
+    <h3>&#128202; Professional Risk Dashboard</h3>
+    <p>Current GUI shows positions and PnL. Upgrade to a full risk analytics dashboard that institutional traders expect.</p>
+
+    <h4>Metrics to Add</h4>
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="icon">&#128200;</div>
+        <h4>Portfolio Greeks</h4>
+        <p>Delta, gamma, theta, vega exposure across all open positions. Net portfolio delta/theta.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#128201;</div>
+        <h4>Equity Curve</h4>
+        <p>Daily PnL chart, drawdown visualization, high-water mark tracking.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#128202;</div>
+        <h4>Risk Metrics</h4>
+        <p>Sharpe, Sortino, max drawdown, profit factor, win rate, R-multiple distribution.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#127919;</div>
+        <h4>Channel Attribution</h4>
+        <p>PnL breakdown per signal channel. Identify winners vs losers at the source.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#128176;</div>
+        <h4>Exposure Heatmap</h4>
+        <p>Sector, ticker, and expiry concentration. Portfolio heat warnings.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#9888;&#65039;</div>
+        <h4>Risk Limits</h4>
+        <p>Daily loss limit, max drawdown kill switch, sector concentration caps, BP utilization alerts.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 11: SOCIAL SENTIMENT -->
+<!-- ================================================================== -->
+<div class="section" id="s11">
+  <div class="section-header">
+    <span class="section-num">11</span>
+    <h2>Enhancement #8: Social Sentiment Engine</h2>
+  </div>
+
+  <div class="card">
+    <h3>&#128243; Reddit, StockTwits, Twitter Sentiment</h3>
+    <p>Aggregate retail sentiment across social platforms and correlate with signal performance.</p>
+
+    <h4>Data Sources</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Platform</th><th>API</th><th>Cost</th><th>Data</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Reddit</strong> (r/wallstreetbets, r/options)</td>
+            <td>Reddit API (free for personal)</td>
+            <td>Free</td>
+            <td>Post volume, sentiment, ticker mentions</td>
+          </tr>
+          <tr>
+            <td><strong>StockTwits</strong></td>
+            <td>StockTwits API</td>
+            <td>Free</td>
+            <td>Bullish/bearish sentiment, message volume, trending</td>
+          </tr>
+          <tr>
+            <td><strong>Twitter/X</strong></td>
+            <td>X API v2</td>
+            <td>Free (limited) / $100/mo</td>
+            <td>Cashtag volume, sentiment, influencer posts</td>
+          </tr>
+          <tr>
+            <td><strong>Finnhub</strong></td>
+            <td>Social Sentiment endpoint</td>
+            <td>Included in free tier</td>
+            <td>Pre-aggregated Reddit + Twitter sentiment scores</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Feeds into AI Trade Scorer as a contrarian or confirmation signal. Extreme bullish sentiment on a BTO signal = potential fade. Rising mentions + institutional buying = high conviction.</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 12: MOBILE -->
+<!-- ================================================================== -->
+<div class="section" id="s12">
+  <div class="section-header">
+    <span class="section-num">12</span>
+    <h2>Enhancement #9: Native Mobile App</h2>
+  </div>
+
+  <div class="card">
+    <h3>&#128241; Beyond Relay &mdash; Full Mobile Experience</h3>
+    <p>Current relay client (v10.1.5) provides monitoring. A native app would provide full control.</p>
+
+    <h4>Technology Options</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Framework</th><th>Platforms</th><th>Effort</th><th>Recommendation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>React Native</strong></td>
+            <td>iOS + Android</td>
+            <td>Medium</td>
+            <td><span class="badge badge-good">Recommended</span></td>
+          </tr>
+          <tr>
+            <td><strong>Flutter</strong></td>
+            <td>iOS + Android + Web</td>
+            <td>Medium</td>
+            <td><span class="badge badge-info">Alternative</span></td>
+          </tr>
+          <tr>
+            <td><strong>PWA (Progressive Web App)</strong></td>
+            <td>All (browser-based)</td>
+            <td>Low</td>
+            <td><span class="badge badge-good">Quick Win (Phase 1)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Mobile Features</h4>
+    <ul>
+      <li><strong>Phase 1 (PWA):</strong> Responsive Flask GUI with push notifications, installable on phone home screen</li>
+      <li><strong>Phase 2 (Native):</strong> Real-time position monitoring, one-tap close/trim, AI score alerts</li>
+      <li><strong>Phase 3:</strong> Full trading from mobile, chart integration, flow scanner</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 13: MULTI-ASSET -->
+<!-- ================================================================== -->
+<div class="section" id="s13">
+  <div class="section-header">
+    <span class="section-num">13</span>
+    <h2>Enhancement #10: Multi-Asset Expansion</h2>
+  </div>
+
+  <div class="card">
+    <h3>&#127760; Beyond US Equities</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h4>Crypto</h4>
+        <ul>
+          <li>Binance, Coinbase, Bybit, KuCoin</li>
+          <li>Spot + futures + perpetuals</li>
+          <li>DCA bots, grid trading</li>
+          <li>Parse crypto Discord signals</li>
+        </ul>
+        <span class="badge badge-warn">High effort, huge market</span>
+      </div>
+      <div class="card">
+        <h4>Futures</h4>
+        <ul>
+          <li>ES, NQ, CL, GC mini/micro</li>
+          <li>Via IBKR, Schwab, Tastytrade</li>
+          <li>Extended hours trading</li>
+          <li>Futures-specific risk rules</li>
+        </ul>
+        <span class="badge badge-info">Medium effort (brokers exist)</span>
+      </div>
+      <div class="card">
+        <h4>Forex</h4>
+        <ul>
+          <li>Major pairs via IBKR, OANDA</li>
+          <li>24/5 market coverage</li>
+          <li>Pip-based risk calculations</li>
+          <li>Large Discord signal community</li>
+        </ul>
+        <span class="badge badge-info">Medium effort</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 14: PLATFORM ARCHITECTURE -->
+<!-- ================================================================== -->
+<div class="section" id="s14">
+  <div class="section-header">
+    <span class="section-num">14</span>
+    <h2>Platform Architecture Evolution</h2>
+  </div>
+
+  <div class="card card-accent">
+    <h3>From Desktop Bot to Cloud-Hybrid Platform</h3>
+    <p>BotifyTrades currently runs as a self-hosted desktop app. To support copy trading, mobile, and marketplace features, the architecture needs a cloud component while preserving the self-hosted execution advantage.</p>
+
+    <h4>Hybrid Architecture</h4>
+    <pre><code>
+    +--------------------------+          +---------------------------+
+    |   CLOUD (Your Server)    |          |   USER'S DESKTOP BOT      |
+    |                          |          |                           |
+    |  Signal Marketplace      | =======> |  Signal Parser            |
+    |  Copy Trading Relay      |   WSS    |  AI Trade Scorer          |
+    |  Filing Tracker Service  | <======= |  Broker Execution (5)     |
+    |  User Auth + Licensing   |          |  Risk Engine              |
+    |  Performance Leaderboard |          |  Position Monitor         |
+    |  Mobile API Gateway      |          |  Unified Price Hub        |
+    |  Webhook Receiver (TV)   |          |  Web GUI (Flask)          |
+    +--------------------------+          +---------------------------+
+              |                                       |
+              v                                       v
+    +------------------+                   +-------------------+
+    |  Mobile App      |                   |  Broker APIs      |
+    |  (PWA / Native)  |                   |  Schwab, IBKR,    |
+    +------------------+                   |  Webull, TT, Alp  |
+                                           +-------------------+
+    </code></pre>
+
+    <h4>Key Principle: API Keys Never Leave the User's Machine</h4>
+    <p>The cloud component handles signal relay, user management, and marketplace. The desktop bot handles all broker authentication and order execution. This preserves the self-hosted security model while adding cloud features.</p>
+  </div>
+
+  <div class="card">
+    <h3>Technology Stack for Cloud Component</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Component</th><th>Technology</th><th>Rationale</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>API Server</td>
+            <td>FastAPI (Python)</td>
+            <td>Same language as bot, async, WebSocket support</td>
+          </tr>
+          <tr>
+            <td>Database</td>
+            <td>PostgreSQL + Redis</td>
+            <td>Relational + real-time pub/sub for signal relay</td>
+          </tr>
+          <tr>
+            <td>Signal Relay</td>
+            <td>WebSocket (existing relay architecture)</td>
+            <td>Extend v10.1.5 relay for marketplace signals</td>
+          </tr>
+          <tr>
+            <td>Hosting</td>
+            <td>Railway / Render / AWS ECS</td>
+            <td>Start cheap ($10-50/mo), scale as needed</td>
+          </tr>
+          <tr>
+            <td>Auth</td>
+            <td>JWT + existing license system</td>
+            <td>Leverage current license_server infrastructure</td>
+          </tr>
+          <tr>
+            <td>Mobile</td>
+            <td>PWA first, React Native later</td>
+            <td>PWA is free, RN when user base justifies</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 15: ROADMAP -->
+<!-- ================================================================== -->
+<div class="section" id="s15">
+  <div class="section-header">
+    <span class="section-num">15</span>
+    <h2>Implementation Roadmap &amp; Prioritization</h2>
+  </div>
+
+  <div class="card">
+    <h3>6-Month Roadmap</h3>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="phase">Phase 1 &mdash; Foundation (Month 1-2): Intelligence Layer</div>
+        <div class="desc">Add the features that make every existing trade better. No new infrastructure needed.</div>
+        <div class="features">
+          <span class="badge badge-good">AI Trade Scorer</span>
+          <span class="badge badge-good">TradingView TA Integration</span>
+          <span class="badge badge-good">Channel Performance Tracking</span>
+          <span class="badge badge-info">TV Alert Webhook Receiver</span>
+          <span class="badge badge-info">Advanced Risk Dashboard</span>
+        </div>
+        <div class="est">~2,000 new lines | Self-contained in desktop bot | $0 infrastructure cost</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="phase">Phase 2 &mdash; Data Edge (Month 2-3): Market Intelligence</div>
+        <div class="desc">Add external data sources that give users an information advantage.</div>
+        <div class="features">
+          <span class="badge badge-good">Public Filing Tracker</span>
+          <span class="badge badge-good">Options Flow Scanner</span>
+          <span class="badge badge-info">Social Sentiment Engine</span>
+          <span class="badge badge-info">Screener Enhancements</span>
+        </div>
+        <div class="est">~2,500 new lines | $14-54/mo in API costs | Desktop-only</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="phase">Phase 3 &mdash; Validation (Month 3-4): Trust &amp; Confidence</div>
+        <div class="desc">Let users prove strategies work before risking money. The #1 requested feature class.</div>
+        <div class="features">
+          <span class="badge badge-warn">Channel Replay Backtest</span>
+          <span class="badge badge-warn">Strategy Backtest</span>
+          <span class="badge badge-warn">Paper Trading Mode Enhancements</span>
+          <span class="badge badge-info">Performance Reports</span>
+        </div>
+        <div class="est">~2,000 new lines | No infrastructure cost</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="phase">Phase 4 &mdash; Platform (Month 4-5): Network Effects</div>
+        <div class="desc">Launch cloud component. Transform from tool to platform. This is where revenue scales.</div>
+        <div class="features">
+          <span class="badge badge-accent">Cloud Signal Relay</span>
+          <span class="badge badge-accent">Copy Trading MVP</span>
+          <span class="badge badge-accent">Signal Marketplace</span>
+          <span class="badge badge-accent">PWA Mobile App</span>
+        </div>
+        <div class="est">~3,000 new lines + cloud setup | $50-100/mo hosting</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="phase">Phase 5 &mdash; Scale (Month 5-6): Premium &amp; Expansion</div>
+        <div class="desc">Premium features, multi-asset, native mobile, LLM analysis.</div>
+        <div class="features">
+          <span class="badge badge-gold">LLM Trade Analysis (Claude API)</span>
+          <span class="badge badge-gold">Native Mobile App</span>
+          <span class="badge badge-gold">Crypto Integration</span>
+          <span class="badge badge-gold">Futures Support</span>
+        </div>
+        <div class="est">Ongoing | Premium revenue enables infrastructure spend</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-good">
+    <span class="callout-icon">&#128161;</span>
+    <div class="callout-body">
+      <strong>Quick Wins First, Platform Later</strong>
+      Phases 1-3 require zero infrastructure changes &mdash; everything runs in the desktop bot. This means you can ship valuable features immediately while planning the cloud transition. Phase 4's cloud component is only needed for copy trading and mobile.
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 16: REVENUE MODEL -->
+<!-- ================================================================== -->
+<div class="section" id="s16">
+  <div class="section-header">
+    <span class="section-num">16</span>
+    <h2>Revenue Model &amp; Pricing Strategy</h2>
+  </div>
+
+  <div class="card card-gold">
+    <h3>&#128176; Tiered Pricing Strategy</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tier</th>
+            <th>Price/mo</th>
+            <th>Features</th>
+            <th>Target User</th>
+            <th>Competitor Benchmark</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Starter</strong></td>
+            <td>$49/mo</td>
+            <td>
+              Discord signal parsing (3 channels)<br>
+              2 brokers<br>
+              Basic risk brackets (PT/SL)<br>
+              Paper trading<br>
+              Web GUI
+            </td>
+            <td>New traders, testing the platform</td>
+            <td>Cornix $50, 3Commas $15</td>
+          </tr>
+          <tr>
+            <td><strong>Pro</strong></td>
+            <td>$99/mo</td>
+            <td>
+              Everything in Starter +<br>
+              Unlimited channels &amp; brokers<br>
+              AI Trade Scorer<br>
+              Options Flow Scanner<br>
+              Filing Tracker<br>
+              TradingView webhooks<br>
+              Channel backtesting<br>
+              Advanced risk dashboard<br>
+              Social sentiment
+            </td>
+            <td>Active traders, signal followers</td>
+            <td>Trade Ideas $118, Unusual Whales $110</td>
+          </tr>
+          <tr>
+            <td><strong>Elite</strong></td>
+            <td>$199/mo</td>
+            <td>
+              Everything in Pro +<br>
+              LLM trade analysis (Claude)<br>
+              Strategy backtesting<br>
+              Copy trading (follow)<br>
+              Priority support<br>
+              Multi-asset (crypto + futures)<br>
+              Native mobile app
+            </td>
+            <td>Professional traders, high-volume</td>
+            <td>Trade Ideas $228, TrendSpider $399</td>
+          </tr>
+          <tr>
+            <td><strong>Signal Provider</strong></td>
+            <td>$149/mo</td>
+            <td>
+              Everything in Pro +<br>
+              Publish signals to marketplace<br>
+              Verified track record badge<br>
+              70% revenue share on subscriptions<br>
+              Provider analytics dashboard
+            </td>
+            <td>Signal callers, educators, influencers</td>
+            <td>No direct competitor</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Revenue Streams</h3>
+    <div class="grid-2">
+      <div class="card card-good">
+        <h4>Primary: Subscriptions</h4>
+        <p>SaaS licensing at $49-199/mo. 100 Pro users = $9,900/mo MRR. Predictable, scalable.</p>
+      </div>
+      <div class="card card-info">
+        <h4>Secondary: Marketplace Commission</h4>
+        <p>30% cut on signal provider subscriptions. Zero marginal cost. Scales with network size.</p>
+      </div>
+      <div class="card card-teal">
+        <h4>Tertiary: API Access</h4>
+        <p>REST API for developers to build on the platform. Metered pricing. Enables ecosystem.</p>
+      </div>
+      <div class="card card-warn">
+        <h4>Future: Data Products</h4>
+        <p>Aggregated (anonymized) signal performance data. Channel rankings. Strategy benchmarks.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Growth Projections (Conservative)</h3>
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-value">$5K</div>
+        <div class="stat-label">Month 3 MRR</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">$15K</div>
+        <div class="stat-label">Month 6 MRR</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">$50K</div>
+        <div class="stat-label">Month 12 MRR</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">$150K</div>
+        <div class="stat-label">Month 18 MRR</div>
+      </div>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--muted);">Assumes: Month 3: 50 Starter + 25 Pro. Month 6: 80 Starter + 50 Pro + 10 Elite. Month 12: 150 Starter + 120 Pro + 30 Elite + marketplace revenue. Month 18: 300+ users + marketplace flywheel.</p>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div style="text-align:center; padding: 40px 0 60px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); margin-top: 40px;">
+  <p style="font-size: 1.1rem; font-weight: 700; color: var(--ink); margin-bottom: 8px;">BotifyTrades &mdash; The All-in-One Signal-to-Execution Platform</p>
+  <p>Strategic Enhancement Roadmap &bull; May 2026 &bull; Confidential</p>
+  <p style="margin-top: 16px; font-size: 0.8rem;">No competitor combines Discord signal parsing + multi-broker US equity execution + AI scoring + options flow + backtesting + copy trading marketplace. BotifyTrades can be first.</p>
+</div>
+
+</div><!-- .container.content -->
+</body>
+</html>

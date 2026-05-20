@@ -419,25 +419,32 @@ def save_api_keys_extended(
     openai: str = '',
     alpha_vantage: str = '',
     finnhub: str = '',
-    license_key: str = ''
+    license_key: str = '',
+    anthropic: str = ''
 ):
     """Save all API keys including license"""
     save_config('api_keys_extended', {
         'openai': openai,
         'alpha_vantage': alpha_vantage,
         'finnhub': finnhub,
-        'license_key': license_key
+        'license_key': license_key,
+        'anthropic': anthropic
     })
 
 
 def get_api_keys_extended() -> Dict[str, Any]:
     """Get all API keys"""
-    return load_config('api_keys_extended') or {
+    defaults = {
         'openai': '',
         'alpha_vantage': '',
         'finnhub': '',
-        'license_key': ''
+        'license_key': '',
+        'anthropic': ''
     }
+    stored = load_config('api_keys_extended')
+    if stored:
+        defaults.update(stored)
+    return defaults
 
 
 def get_all_credentials_for_startup() -> Dict[str, Any]:

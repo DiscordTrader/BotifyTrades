@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotifyTrades — Confidential Document Access Request</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+            background: #f4f5f7;
+            margin: 0; padding: 40px 20px;
+            color: #1a1a2e;
+            line-height: 1.7;
+        }
+        .email-container {
+            max-width: 640px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .email-header {
+            background: linear-gradient(135deg, #0a0e1a 0%, #131b2e 100%);
+            padding: 32px 40px;
+            text-align: center;
+        }
+        .email-header h1 {
+            color: #ffffff;
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 6px;
+            letter-spacing: -0.3px;
+        }
+        .email-header p {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+            margin: 0;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .dnd-banner {
+            background: #fff3f3;
+            border-bottom: 2px solid #ff3d71;
+            padding: 12px 40px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: #cc2244;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .email-body {
+            padding: 36px 40px;
+        }
+        .greeting {
+            font-size: 15px;
+            color: #1a1a2e;
+            margin-bottom: 20px;
+        }
+        .body-text {
+            font-size: 14px;
+            color: #444;
+            margin-bottom: 16px;
+        }
+        .doc-card {
+            background: #f8f9fb;
+            border: 1px solid #e2e5ea;
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin: 24px 0;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .doc-icon {
+            width: 48px; height: 48px;
+            background: linear-gradient(135deg, #00d4ff, #7c5cfc);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; flex-shrink: 0;
+        }
+        .doc-info h4 {
+            font-size: 14px; font-weight: 700; color: #1a1a2e; margin: 0 0 4px;
+        }
+        .doc-info p {
+            font-size: 12px; color: #888; margin: 0;
+        }
+        .terms-box {
+            background: #f8f9fb;
+            border: 1px solid #e2e5ea;
+            border-left: 3px solid #0a0e1a;
+            border-radius: 0 8px 8px 0;
+            padding: 24px;
+            margin: 28px 0;
+        }
+        .terms-box h3 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin: 0 0 14px;
+        }
+        .terms-box ol {
+            margin: 0; padding: 0 0 0 20px;
+        }
+        .terms-box ol li {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 10px;
+            line-height: 1.65;
+        }
+        .terms-box ol li strong {
+            color: #1a1a2e;
+        }
+        .ack-box {
+            background: #f0f9ff;
+            border: 2px solid #00a3cc;
+            border-radius: 8px;
+            padding: 24px;
+            margin: 28px 0;
+            text-align: center;
+        }
+        .ack-box h3 {
+            font-size: 15px;
+            font-weight: 700;
+            color: #006688;
+            margin: 0 0 10px;
+        }
+        .ack-box p {
+            font-size: 13px;
+            color: #555;
+            margin: 0 0 8px;
+            line-height: 1.65;
+        }
+        .ack-template {
+            background: #ffffff;
+            border: 1px dashed #00a3cc;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin-top: 16px;
+            text-align: left;
+            font-size: 13px;
+            color: #333;
+            line-height: 1.7;
+            font-style: italic;
+        }
+        .signature {
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 13px;
+            color: #888;
+        }
+        .signature strong {
+            color: #1a1a2e;
+            display: block;
+            font-size: 14px;
+        }
+        .email-footer {
+            background: #f8f9fb;
+            border-top: 1px solid #e2e5ea;
+            padding: 20px 40px;
+            text-align: center;
+            font-size: 11px;
+            color: #aaa;
+            line-height: 1.7;
+        }
+
+        /* ═══════ COPY TEXT VERSION (hidden, for plain-text copy) ═══════ */
+        .plain-text-version {
+            display: none;
+        }
+
+        @media print {
+            body { background: #fff; padding: 0; }
+            .email-container { box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="email-container">
+
+    <!-- Header -->
+    <div class="email-header">
+        <h1>BotifyTrades</h1>
+        <p>Confidential Document Access</p>
+    </div>
+
+    <!-- DND Banner -->
+    <div class="dnd-banner">&#x1F6AB; Do Not Distribute &mdash; Confidential</div>
+
+    <!-- Body -->
+    <div class="email-body">
+
+        <p class="greeting">Hi Rama,</p>
+
+        <p class="body-text">
+            Thank you for your interest in reviewing the BotifyTrades platform architecture. On behalf of the Atlantic team, we would like to share a confidential document with you for evaluation purposes.
+        </p>
+
+        <p class="body-text">
+            Before we can share this document, we require your written acknowledgment of the following confidentiality terms. This is standard practice to protect our proprietary technology and intellectual property.
+        </p>
+
+        <!-- Document preview card -->
+        <div class="doc-card">
+            <div class="doc-icon">&#x1F4C4;</div>
+            <div class="doc-info">
+                <h4>Data Compliance & Security Overview</h4>
+                <p>High-level platform architecture, data handling, encryption &amp; compliance framework</p>
+            </div>
+        </div>
+
+        <!-- Terms -->
+        <div class="terms-box">
+            <h3>Confidentiality Terms &mdash; Please Review</h3>
+            <ol>
+                <li><strong>Confidentiality.</strong> The document and all information contained within is proprietary and confidential. You agree not to disclose any portion of it to any third party.</li>
+                <li><strong>No Copying or Reproduction.</strong> You shall not copy, screenshot, record, transcribe, or extract any content from the document by any means.</li>
+                <li><strong>No Reverse Engineering.</strong> You shall not use any information from this document to design, develop, or build any software or system that replicates or is derived from the described architecture.</li>
+                <li><strong>No AI Submission.</strong> You shall not input or upload any content from the document into any AI tool, language model, or automated analysis service (including ChatGPT, Claude, Gemini, Copilot, or similar).</li>
+                <li><strong>Review Purpose Only.</strong> The document is shared solely for evaluation purposes. No intellectual property rights or licenses are granted.</li>
+                <li><strong>Return or Destroy.</strong> Upon request, you agree to permanently delete all copies of the document and confirm deletion in writing.</li>
+            </ol>
+        </div>
+
+        <!-- Acknowledgment action -->
+        <div class="ack-box">
+            <h3>&#x2705; Action Required &mdash; Reply to Acknowledge</h3>
+            <p>
+                To receive the document, please reply to this email with the following acknowledgment statement. The document will be shared once we receive your written confirmation.
+            </p>
+            <div class="ack-template">
+                "I, <strong>[Your Full Name]</strong>, acknowledge that I have read and agree to the confidentiality terms outlined above. I understand that the document being shared is proprietary and confidential, and I agree not to copy, distribute, reverse engineer, or submit any content to AI tools. I accept these terms as of <strong>[Date]</strong>."
+            </div>
+        </div>
+
+        <p class="body-text">
+            Once we receive your acknowledgment, we will promptly share the document with you. If you have any questions about the terms, please don't hesitate to reach out.
+        </p>
+
+        <p class="body-text">
+            We appreciate your understanding and look forward to your review.
+        </p>
+
+        <!-- Signature -->
+        <div class="signature">
+            <strong>Udaykumar D.</strong>
+            Architect &mdash; BotifyTrades<br>
+            admin@botifytrades.com
+        </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="email-footer">
+        This email and any attachments are confidential and intended solely for the named recipient.
+        If you received this in error, please delete it immediately and notify the sender.
+        Unauthorized use, disclosure, or distribution is prohibited and may result in legal action.<br><br>
+        &copy; 2026 BotifyTrades &mdash; All Rights Reserved
+    </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     PLAIN TEXT VERSION — Copy below for email clients
+     ═══════════════════════════════════════════════════ -->
+<!--
+
+SUBJECT: BotifyTrades — Confidential Document Access Request
+
+---
+
+Hi Rama,
+
+Thank you for your interest in reviewing the BotifyTrades platform architecture. On behalf of the Atlantic team, we would like to share a confidential document with you for evaluation purposes.
+
+Before we can share this document, we require your written acknowledgment of the following confidentiality terms.
+
+DOCUMENT: Data Compliance & Security Overview
+(High-level platform architecture, data handling, encryption & compliance framework)
+
+---
+
+CONFIDENTIALITY TERMS:
+
+1. CONFIDENTIALITY — The document is proprietary and confidential. You agree not to disclose any portion to any third party.
+
+2. NO COPYING — You shall not copy, screenshot, record, transcribe, or extract any content by any means.
+
+3. NO REVERSE ENGINEERING — You shall not use any information to design, develop, or build any software derived from the described architecture.
+
+4. NO AI SUBMISSION — You shall not input any content into any AI tool, language model, or automated analysis service (ChatGPT, Claude, Gemini, Copilot, or similar).
+
+5. REVIEW PURPOSE ONLY — Shared solely for evaluation. No IP rights or licenses granted.
+
+6. RETURN OR DESTROY — Upon request, you will permanently delete all copies and confirm in writing.
+
+---
+
+ACTION REQUIRED — REPLY TO ACKNOWLEDGE:
+
+To receive the document, please reply with:
+
+"I, [Your Full Name], acknowledge that I have read and agree to the confidentiality terms outlined above. I understand that the document being shared is proprietary and confidential, and I agree not to copy, distribute, reverse engineer, or submit any content to AI tools. I accept these terms as of [Date]."
+
+---
+
+Once we receive your acknowledgment, we will share the document promptly.
+
+Best regards,
+Udaykumar D.
+Architect — BotifyTrades
+admin@botifytrades.com
+
+---
+CONFIDENTIAL: This email is intended solely for the named recipient. Unauthorized use or distribution is prohibited.
+
+-->
+
+</body>
+</html>

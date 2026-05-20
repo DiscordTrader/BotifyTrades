@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotifyTrades — Data Compliance & Security Overview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* ═══════════════════════════════════════════════════
+           DESIGN SYSTEM — Premium Compliance Theme
+           ═══════════════════════════════════════════════════ */
+        :root {
+            --bg-void: #03060B;
+            --bg-primary: #070B16;
+            --bg-surface: #0C1220;
+            --bg-elevated: #111A2C;
+            --bg-card: rgba(17, 26, 44, 0.88);
+            --bg-card-hover: rgba(22, 34, 58, 0.92);
+            --bg-glass: rgba(255,255,255,0.025);
+
+            --accent-primary: #00D4FF;
+            --accent-secondary: #7C5CFC;
+            --accent-green: #00E68C;
+            --accent-gold: #FFB800;
+            --accent-rose: #FF3D71;
+            --accent-teal: #0AD4C1;
+            --accent-blue: #3B82F6;
+
+            --gradient-hero: linear-gradient(135deg, #00D4FF 0%, #7C5CFC 50%, #00E68C 100%);
+            --gradient-shield: linear-gradient(135deg, #00D4FF 0%, #0AD4C1 100%);
+            --gradient-card: linear-gradient(145deg, rgba(0,212,255,0.06) 0%, rgba(124,92,252,0.03) 100%);
+
+            --text-primary: #F0F4F8;
+            --text-secondary: #8899B4;
+            --text-muted: #506078;
+            --text-accent: #00D4FF;
+
+            --border-subtle: rgba(255,255,255,0.05);
+            --border-accent: rgba(0,212,255,0.2);
+            --border-green: rgba(0,230,140,0.25);
+
+            --shadow-glow: 0 0 40px rgba(0,212,255,0.12);
+            --shadow-card: 0 8px 32px rgba(0,0,0,0.45);
+            --shadow-elevated: 0 20px 80px rgba(0,0,0,0.5);
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            --radius-full: 9999px;
+
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; font-size: 16px; }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-void);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        /* ═══════ PRINT BLOCKED ═══════ */
+        @media print {
+            body { display: none !important; }
+            html::after {
+                content: "CONFIDENTIAL — Printing is disabled for this document.";
+                display: block; padding: 100px; font-size: 24px;
+                text-align: center; color: #666;
+            }
+        }
+
+        /* ═══════ NDA DISCLOSURE GATE ═══════ */
+        .nda-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 100000; background: var(--bg-void);
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+        }
+        .nda-overlay.accepted { display: none; }
+        .nda-container {
+            max-width: 720px; width: 100%;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-accent);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-elevated), 0 0 80px rgba(0,212,255,0.08);
+            overflow: hidden;
+        }
+        .nda-header {
+            padding: 36px 40px 20px; text-align: center;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .nda-header .nda-icon {
+            width: 56px; height: 56px; margin: 0 auto 18px;
+            background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(124,92,252,0.15));
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 26px; border: 1px solid rgba(0,212,255,0.2);
+        }
+        .nda-header h2 { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+        .nda-header p { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+        .nda-body {
+            padding: 28px 40px; max-height: 380px; overflow-y: auto;
+        }
+        .nda-body::-webkit-scrollbar { width: 6px; }
+        .nda-body::-webkit-scrollbar-track { background: transparent; }
+        .nda-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+        .nda-body ol { list-style: none; counter-reset: nda-clause; padding: 0; }
+        .nda-body ol li {
+            counter-increment: nda-clause; position: relative;
+            padding: 12px 0 12px 44px; font-size: 13.5px;
+            line-height: 1.75; color: var(--text-secondary);
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .nda-body ol li:last-child { border-bottom: none; }
+        .nda-body ol li::before {
+            content: counter(nda-clause) "."; position: absolute; left: 0; top: 12px;
+            font-weight: 700; font-size: 14px; color: var(--accent-primary);
+            font-family: var(--font-mono); width: 32px;
+        }
+        .nda-body ol li strong { color: var(--text-primary); font-weight: 600; }
+        .nda-footer {
+            padding: 20px 40px 32px; border-top: 1px solid var(--border-subtle); text-align: center;
+        }
+        .nda-checkbox-row {
+            display: flex; align-items: flex-start; gap: 12px;
+            margin-bottom: 20px; text-align: left; cursor: pointer;
+        }
+        .nda-checkbox-row input[type="checkbox"] {
+            width: 20px; height: 20px; margin-top: 2px;
+            accent-color: var(--accent-primary); cursor: pointer; flex-shrink: 0;
+        }
+        .nda-checkbox-row label {
+            font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; cursor: pointer;
+        }
+        .nda-checkbox-row label strong { color: var(--text-primary); }
+        .nda-btn-accept {
+            display: inline-block; padding: 14px 48px; font-size: 15px;
+            font-weight: 600; font-family: var(--font-body);
+            color: var(--bg-void); background: var(--accent-primary);
+            border: none; border-radius: var(--radius-md); cursor: pointer;
+            transition: all 0.2s; opacity: 0.35; pointer-events: none;
+        }
+        .nda-btn-accept.enabled { opacity: 1; pointer-events: auto; }
+        .nda-btn-accept.enabled:hover {
+            background: #33ddff; box-shadow: 0 0 24px rgba(0,212,255,0.35);
+            transform: translateY(-1px);
+        }
+        .nda-btn-decline {
+            display: inline-block; margin-left: 16px; padding: 14px 32px;
+            font-size: 14px; font-weight: 500; font-family: var(--font-body);
+            color: var(--text-muted); background: transparent;
+            border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+            cursor: pointer; transition: all 0.2s;
+        }
+        .nda-btn-decline:hover { color: var(--accent-rose); border-color: rgba(255,61,113,0.3); }
+        .nda-declined-msg { display: none; padding: 40px; text-align: center; }
+        .nda-declined-msg h3 { font-size: 18px; color: var(--accent-rose); margin-bottom: 12px; }
+        .nda-declined-msg p { color: var(--text-muted); font-size: 14px; }
+        .document-content { display: none; }
+        .document-content.visible { display: block; }
+
+        /* ═══════ NAVIGATION SIDEBAR ═══════ */
+        .nav-sidebar {
+            position: fixed; left: 0; top: 0; width: 260px; height: 100vh;
+            background: rgba(7,11,22,0.97); border-right: 1px solid var(--border-subtle);
+            z-index: 1000; padding: 28px 0; overflow-y: auto;
+            backdrop-filter: blur(20px);
+        }
+        .nav-logo { padding: 0 24px 24px; border-bottom: 1px solid var(--border-subtle); }
+        .nav-logo h1 {
+            font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+            background: var(--gradient-hero); -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .nav-logo span { font-size: 10px; color: var(--text-muted); display: block; margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; -webkit-text-fill-color: var(--text-muted); }
+        .nav-items { padding: 16px 0; }
+        .nav-item {
+            display: block; padding: 10px 24px; font-size: 13px;
+            color: var(--text-secondary); text-decoration: none;
+            transition: all 0.2s; border-left: 2px solid transparent;
+        }
+        .nav-item:hover { color: var(--text-primary); background: rgba(255,255,255,0.03); }
+        .nav-item.active { color: var(--accent-primary); border-left-color: var(--accent-primary); background: rgba(0,212,255,0.04); }
+        .nav-section { padding: 20px 24px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); font-weight: 600; }
+
+        /* ═══════ MAIN LAYOUT ═══════ */
+        .main-content { margin-left: 260px; }
+        .confidential-bar {
+            position: fixed; top: 0; left: 260px; right: 0;
+            height: 36px; background: rgba(255,61,113,0.08);
+            border-bottom: 1px solid rgba(255,61,113,0.2);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 999; backdrop-filter: blur(10px);
+        }
+        .confidential-bar span {
+            font-size: 11px; letter-spacing: 4px; text-transform: uppercase;
+            color: var(--accent-rose); font-weight: 600;
+        }
+
+        /* ═══════ SLIDES ═══════ */
+        .slide {
+            min-height: 100vh; padding: 80px 60px 60px;
+            position: relative; overflow: hidden;
+        }
+        .slide-inner { max-width: 1100px; margin: 0 auto; position: relative; z-index: 2; }
+        .slide-number {
+            font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+            color: var(--accent-primary); letter-spacing: 3px; text-transform: uppercase;
+            margin-bottom: 16px; opacity: 0.7;
+        }
+        .slide-title {
+            font-size: 40px; font-weight: 800; letter-spacing: -1px;
+            line-height: 1.15; margin-bottom: 16px;
+        }
+        .slide-subtitle {
+            font-size: 17px; color: var(--text-secondary);
+            max-width: 700px; line-height: 1.7; margin-bottom: 48px;
+        }
+        .gradient-text {
+            background: var(--gradient-hero); -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent; background-clip: text;
+        }
+
+        /* ═══════ HERO ═══════ */
+        .hero-slide { display: flex; align-items: center; justify-content: center; text-align: center; }
+        .hero-badge {
+            display: inline-block; padding: 8px 20px; font-size: 11px;
+            letter-spacing: 3px; text-transform: uppercase; font-weight: 600;
+            border: 1px solid var(--border-accent); border-radius: var(--radius-full);
+            color: var(--accent-primary); background: rgba(0,212,255,0.06);
+            margin-bottom: 28px;
+        }
+        .hero-title { font-size: 64px; font-weight: 900; letter-spacing: -2px; line-height: 1.08; margin-bottom: 24px; }
+        .hero-sub {
+            font-size: 19px; color: var(--text-secondary); max-width: 620px;
+            margin: 0 auto 40px; line-height: 1.7;
+        }
+        .hero-version {
+            font-family: var(--font-mono); font-size: 13px; color: var(--text-muted);
+            margin-top: 32px; letter-spacing: 1px;
+        }
+
+        /* ═══════ BG EFFECTS ═══════ */
+        .bg-mesh {
+            position: absolute; inset: 0; z-index: 0;
+            background: radial-gradient(ellipse 600px 400px at 20% 30%, rgba(0,212,255,0.04) 0%, transparent 70%),
+                        radial-gradient(ellipse 500px 500px at 80% 70%, rgba(124,92,252,0.03) 0%, transparent 70%);
+        }
+        .bg-grid {
+            position: absolute; inset: 0; z-index: 0;
+            background-image: linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+            background-size: 60px 60px;
+        }
+
+        /* ═══════ CARDS ═══════ */
+        .card-grid { display: grid; gap: 20px; margin-top: 32px; }
+        .card-grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .card-grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .card-grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg); padding: 28px;
+            transition: all 0.3s;
+        }
+        .card:hover { border-color: var(--border-accent); transform: translateY(-2px); box-shadow: var(--shadow-glow); }
+        .card-icon {
+            width: 48px; height: 48px; border-radius: var(--radius-md);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; margin-bottom: 16px;
+            background: rgba(0,212,255,0.08); border: 1px solid rgba(0,212,255,0.15);
+        }
+        .card-icon.green { background: rgba(0,230,140,0.08); border-color: rgba(0,230,140,0.15); }
+        .card-icon.purple { background: rgba(124,92,252,0.08); border-color: rgba(124,92,252,0.15); }
+        .card-icon.gold { background: rgba(255,184,0,0.08); border-color: rgba(255,184,0,0.15); }
+        .card-icon.rose { background: rgba(255,61,113,0.08); border-color: rgba(255,61,113,0.15); }
+        .card-icon.teal { background: rgba(10,212,193,0.08); border-color: rgba(10,212,193,0.15); }
+        .card h4 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+        .card p { font-size: 13px; color: var(--text-secondary); line-height: 1.65; }
+
+        /* ═══════ COMPLIANCE SHIELD BADGES ═══════ */
+        .shield-row {
+            display: flex; gap: 20px; flex-wrap: wrap;
+            justify-content: center; margin: 40px 0;
+        }
+        .shield {
+            width: 140px; text-align: center; padding: 24px 16px;
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg); transition: all 0.3s;
+        }
+        .shield:hover { border-color: var(--border-accent); box-shadow: var(--shadow-glow); }
+        .shield-icon {
+            width: 56px; height: 56px; margin: 0 auto 12px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 24px;
+        }
+        .shield-icon.blue { background: rgba(0,212,255,0.1); border: 2px solid rgba(0,212,255,0.3); }
+        .shield-icon.green { background: rgba(0,230,140,0.1); border: 2px solid rgba(0,230,140,0.3); }
+        .shield-icon.purple { background: rgba(124,92,252,0.1); border: 2px solid rgba(124,92,252,0.3); }
+        .shield-icon.gold { background: rgba(255,184,0,0.1); border: 2px solid rgba(255,184,0,0.3); }
+        .shield-icon.teal { background: rgba(10,212,193,0.1); border: 2px solid rgba(10,212,193,0.3); }
+        .shield-icon.rose { background: rgba(255,61,113,0.1); border: 2px solid rgba(255,61,113,0.3); }
+        .shield-label { font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+        .shield-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+        /* ═══════ DIAGRAM COMPONENTS ═══════ */
+        .diagram-box {
+            background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg); padding: 40px;
+            margin: 32px 0; position: relative;
+        }
+        .diagram-title {
+            font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+            color: var(--accent-primary); font-weight: 600; margin-bottom: 28px;
+            font-family: var(--font-mono);
+        }
+
+        /* Flow diagram */
+        .flow-horizontal {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0; flex-wrap: nowrap; padding: 16px 0;
+        }
+        .flow-node {
+            padding: 16px 24px; border-radius: var(--radius-md);
+            text-align: center; min-width: 130px; flex-shrink: 0;
+        }
+        .flow-node .fn-label { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+        .flow-node .fn-desc { font-size: 10px; opacity: 0.7; }
+        .flow-node.blue { background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.3); color: #00D4FF; }
+        .flow-node.green { background: rgba(0,230,140,0.1); border: 1px solid rgba(0,230,140,0.3); color: #00E68C; }
+        .flow-node.purple { background: rgba(124,92,252,0.1); border: 1px solid rgba(124,92,252,0.3); color: #B8A5FF; }
+        .flow-node.gold { background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.3); color: #FFD066; }
+        .flow-node.teal { background: rgba(10,212,193,0.1); border: 1px solid rgba(10,212,193,0.3); color: #0AD4C1; }
+        .flow-node.rose { background: rgba(255,61,113,0.1); border: 1px solid rgba(255,61,113,0.3); color: #FF6B8A; }
+        .flow-arrow {
+            font-size: 20px; color: var(--text-muted); padding: 0 8px;
+            flex-shrink: 0; display: flex; align-items: center;
+        }
+        .flow-arrow::after { content: "\2192"; }
+
+        /* Vertical flow */
+        .flow-vertical { display: flex; flex-direction: column; align-items: center; gap: 0; }
+        .flow-arrow-down { font-size: 20px; color: var(--text-muted); padding: 6px 0; }
+        .flow-arrow-down::after { content: "\2193"; }
+
+        /* Layer stack diagram */
+        .layer-stack { display: flex; flex-direction: column; gap: 4px; }
+        .layer {
+            padding: 20px 32px; border-radius: var(--radius-md);
+            display: flex; align-items: center; justify-content: space-between;
+            transition: all 0.3s;
+        }
+        .layer:hover { transform: scale(1.01); }
+        .layer-name { font-size: 14px; font-weight: 700; }
+        .layer-desc { font-size: 12px; opacity: 0.7; }
+        .layer-icon { font-size: 20px; }
+        .layer.l1 { background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.25); color: #00D4FF; }
+        .layer.l2 { background: rgba(124,92,252,0.12); border: 1px solid rgba(124,92,252,0.25); color: #B8A5FF; }
+        .layer.l3 { background: rgba(0,230,140,0.12); border: 1px solid rgba(0,230,140,0.25); color: #00E68C; }
+        .layer.l4 { background: rgba(255,184,0,0.12); border: 1px solid rgba(255,184,0,0.25); color: #FFD066; }
+        .layer.l5 { background: rgba(10,212,193,0.12); border: 1px solid rgba(10,212,193,0.25); color: #0AD4C1; }
+        .layer.l6 { background: rgba(255,61,113,0.12); border: 1px solid rgba(255,61,113,0.25); color: #FF6B8A; }
+
+        /* Compliance matrix table */
+        .matrix-table {
+            width: 100%; border-collapse: separate; border-spacing: 0;
+            font-size: 13px; margin-top: 24px;
+        }
+        .matrix-table thead th {
+            padding: 14px 20px; text-align: left; font-weight: 700;
+            font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--accent-primary); background: rgba(0,212,255,0.05);
+            border-bottom: 2px solid rgba(0,212,255,0.15);
+        }
+        .matrix-table tbody td {
+            padding: 14px 20px; border-bottom: 1px solid var(--border-subtle);
+            color: var(--text-secondary); vertical-align: top;
+        }
+        .matrix-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+        .matrix-table tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+
+        /* Status badges */
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: var(--radius-full);
+            font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+        }
+        .badge-active { background: rgba(0,230,140,0.12); color: #00E68C; border: 1px solid rgba(0,230,140,0.25); }
+        .badge-info { background: rgba(0,212,255,0.12); color: #00D4FF; border: 1px solid rgba(0,212,255,0.25); }
+        .badge-warn { background: rgba(255,184,0,0.12); color: #FFB800; border: 1px solid rgba(255,184,0,0.25); }
+
+        /* Two column */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 32px; }
+
+        /* Ring diagram */
+        .ring-diagram {
+            width: 320px; height: 320px; margin: 32px auto;
+            position: relative;
+        }
+        .ring {
+            position: absolute; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            text-align: center; transition: all 0.3s;
+        }
+        .ring:hover { transform: scale(1.03); }
+        .ring-outer {
+            width: 320px; height: 320px; top: 0; left: 0;
+            background: rgba(0,212,255,0.04); border: 2px solid rgba(0,212,255,0.15);
+        }
+        .ring-mid {
+            width: 220px; height: 220px; top: 50px; left: 50px;
+            background: rgba(124,92,252,0.06); border: 2px solid rgba(124,92,252,0.2);
+        }
+        .ring-inner {
+            width: 120px; height: 120px; top: 100px; left: 100px;
+            background: rgba(0,230,140,0.08); border: 2px solid rgba(0,230,140,0.25);
+        }
+        .ring-label {
+            font-size: 11px; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .ring-outer .ring-label { color: var(--accent-primary); position: absolute; top: 16px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+        .ring-mid .ring-label { color: #B8A5FF; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+        .ring-inner .ring-label { color: #00E68C; font-size: 10px; }
+
+        /* Data classification tags */
+        .class-tag {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 14px; border-radius: var(--radius-full);
+            font-size: 12px; font-weight: 600;
+        }
+        .class-tag.critical { background: rgba(255,61,113,0.1); color: #FF6B8A; border: 1px solid rgba(255,61,113,0.25); }
+        .class-tag.sensitive { background: rgba(255,184,0,0.1); color: #FFD066; border: 1px solid rgba(255,184,0,0.25); }
+        .class-tag.internal { background: rgba(0,212,255,0.1); color: #00D4FF; border: 1px solid rgba(0,212,255,0.25); }
+        .class-tag.public { background: rgba(0,230,140,0.1); color: #00E68C; border: 1px solid rgba(0,230,140,0.25); }
+        .class-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .class-tag.critical .class-dot { background: #FF3D71; }
+        .class-tag.sensitive .class-dot { background: #FFB800; }
+        .class-tag.internal .class-dot { background: #00D4FF; }
+        .class-tag.public .class-dot { background: #00E68C; }
+
+        /* Stats row */
+        .stat-row {
+            display: flex; gap: 24px; justify-content: center;
+            flex-wrap: wrap; margin: 40px 0;
+        }
+        .stat-box {
+            text-align: center; padding: 24px 32px;
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg); min-width: 150px;
+            transition: all 0.3s;
+        }
+        .stat-box:hover { border-color: var(--border-accent); }
+        .stat-value {
+            font-size: 32px; font-weight: 800; letter-spacing: -1px;
+            background: var(--gradient-hero); -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Speaker notes */
+        .speaker-notes {
+            margin-top: 48px; padding: 20px 28px;
+            background: rgba(255,184,0,0.04); border-left: 3px solid var(--accent-gold);
+            border-radius: 0 var(--radius-md) var(--radius-md) 0;
+            font-size: 13px; color: var(--text-muted); line-height: 1.7;
+        }
+        .speaker-notes strong { color: var(--accent-gold); }
+
+        /* Encryption visual */
+        .encrypt-visual {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0; margin: 36px 0; flex-wrap: wrap;
+        }
+        .encrypt-block {
+            padding: 20px 28px; border-radius: var(--radius-md);
+            text-align: center; min-width: 160px;
+        }
+        .encrypt-block .eb-icon { font-size: 28px; margin-bottom: 8px; }
+        .encrypt-block .eb-label { font-size: 13px; font-weight: 700; }
+        .encrypt-block .eb-detail { font-size: 11px; opacity: 0.6; margin-top: 4px; }
+        .encrypt-block.plain { background: rgba(255,61,113,0.08); border: 1px solid rgba(255,61,113,0.2); color: #FF6B8A; }
+        .encrypt-block.process { background: rgba(124,92,252,0.08); border: 1px solid rgba(124,92,252,0.2); color: #B8A5FF; }
+        .encrypt-block.secured { background: rgba(0,230,140,0.08); border: 1px solid rgba(0,230,140,0.2); color: #00E68C; }
+        .encrypt-arrow { font-size: 22px; color: var(--text-muted); padding: 0 12px; }
+        .encrypt-arrow::after { content: "\2192"; }
+
+        /* Divider */
+        .section-divider {
+            width: 60px; height: 3px; border-radius: 2px;
+            background: var(--gradient-hero); margin: 0 0 32px;
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .nav-sidebar { display: none; }
+            .main-content { margin-left: 0; }
+            .confidential-bar { left: 0; }
+            .card-grid-3, .card-grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .two-col { grid-template-columns: 1fr; }
+            .flow-horizontal { flex-wrap: wrap; }
+        }
+        @media (max-width: 700px) {
+            .slide { padding: 40px 20px; }
+            .hero-title { font-size: 36px; }
+            .slide-title { font-size: 28px; }
+            .card-grid-3, .card-grid-4, .card-grid-2 { grid-template-columns: 1fr; }
+            .shield-row { justify-content: center; }
+            .shield { width: 120px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ═══════ NDA DISCLOSURE GATE ═══════ -->
+    <div class="nda-overlay" id="ndaOverlay">
+        <div class="nda-container">
+            <div id="ndaMain">
+                <div class="nda-header">
+                    <div class="nda-icon">&#128274;</div>
+                    <h2>Confidential Disclosure Agreement</h2>
+                    <p>BotifyTrades Data Compliance &amp; Security Overview &mdash; Proprietary &amp; Confidential</p>
+                </div>
+                <div class="nda-body">
+                    <ol>
+                        <li><strong>Confidential Information.</strong> This data compliance and security overview document, including all diagrams, data flow representations, compliance frameworks, and security specifications contained herein (collectively, &ldquo;Confidential Information&rdquo;), is the proprietary and trade secret information of BotifyTrades.</li>
+                        <li><strong>Non-Disclosure.</strong> You agree to hold all Confidential Information in strict confidence and shall not disclose, publish, distribute, or disseminate any portion of this document to any third party without prior written authorization from BotifyTrades.</li>
+                        <li><strong>No Reproduction or Copying.</strong> You shall not copy, reproduce, screenshot, record, photograph, transcribe, or extract &mdash; in whole or in part &mdash; any content from this document by any means, whether electronic, mechanical, or manual.</li>
+                        <li><strong>No Reverse Engineering or Development.</strong> You shall not use any Confidential Information to design, develop, build, replicate, or create any software, system, product, or service that is derived from or substantially similar to the security architecture described herein.</li>
+                        <li><strong>No AI or Machine Learning Input.</strong> You shall not input, upload, paste, or otherwise feed any content from this document into any artificial intelligence system, large language model, machine learning tool, or automated analysis service, including but not limited to ChatGPT, Claude, Gemini, Copilot, or similar tools.</li>
+                        <li><strong>Review Purpose Only.</strong> This document is provided solely for the purpose of evaluating the BotifyTrades platform&rsquo;s data compliance and security posture. No license, intellectual property rights, or ownership interest is granted or implied.</li>
+                        <li><strong>Return or Destruction.</strong> Upon request by BotifyTrades, you agree to immediately return or permanently destroy all copies of this document and certify such destruction in writing.</li>
+                        <li><strong>Remedies.</strong> You acknowledge that unauthorized disclosure or use of the Confidential Information may cause irreparable harm. BotifyTrades reserves the right to seek injunctive relief and any other legal remedies available under applicable law.</li>
+                    </ol>
+                </div>
+                <div class="nda-footer">
+                    <div class="nda-checkbox-row" onclick="document.getElementById('ndaAcceptCheck').click()">
+                        <input type="checkbox" id="ndaAcceptCheck" onclick="event.stopPropagation(); toggleNdaButton()">
+                        <label for="ndaAcceptCheck" onclick="event.stopPropagation()">I have read and understood the above terms. I agree to be bound by this <strong>Confidential Disclosure Agreement</strong> and acknowledge that unauthorized use or disclosure may result in legal action.</label>
+                    </div>
+                    <button class="nda-btn-accept" id="ndaBtnAccept" onclick="acceptNda()">I Agree &mdash; View Document</button>
+                    <button class="nda-btn-decline" onclick="declineNda()">Decline</button>
+                </div>
+            </div>
+            <div class="nda-declined-msg" id="ndaDeclined">
+                <h3>Access Denied</h3>
+                <p>You have declined the Confidential Disclosure Agreement.<br>This document cannot be viewed without accepting the terms.<br><br>Please close this window.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════ DOCUMENT (hidden until NDA accepted) ═══════ -->
+    <div class="document-content" id="documentContent">
+
+    <!-- ═══════ NAVIGATION ═══════ -->
+    <nav class="nav-sidebar">
+        <div class="nav-logo">
+            <h1>BotifyTrades</h1>
+            <span>Compliance &amp; Security</span>
+        </div>
+        <div class="nav-items">
+            <div class="nav-section">Overview</div>
+            <a href="#hero" class="nav-item active">Cover</a>
+            <a href="#overview" class="nav-item">Platform Overview</a>
+            <a href="#classification" class="nav-item">Data Classification</a>
+            <div class="nav-section">Security</div>
+            <a href="#encryption" class="nav-item">Encryption</a>
+            <a href="#authentication" class="nav-item">Authentication</a>
+            <a href="#dataflow" class="nav-item">Data Flow</a>
+            <a href="#network" class="nav-item">Network Security</a>
+            <div class="nav-section">Compliance</div>
+            <a href="#framework" class="nav-item">Compliance Framework</a>
+            <a href="#privacy" class="nav-item">Privacy &amp; Retention</a>
+            <a href="#audit" class="nav-item">Audit &amp; Monitoring</a>
+            <a href="#incident" class="nav-item">Incident Response</a>
+            <a href="#closing" class="nav-item">Summary</a>
+        </div>
+    </nav>
+
+    <!-- Confidential bar -->
+    <div class="confidential-bar">
+        <span>&#x1F512; Confidential &mdash; Do Not Distribute</span>
+    </div>
+
+    <!-- ═══════ MAIN CONTENT ═══════ -->
+    <main class="main-content">
+
+        <!-- ═══════ SLIDE 1 — HERO ═══════ -->
+        <section id="hero" class="slide hero-slide">
+            <div class="bg-mesh"></div>
+            <div class="bg-grid"></div>
+            <div class="slide-inner" style="text-align: center;">
+                <div class="hero-badge">Compliance &amp; Data Security</div>
+                <h1 class="hero-title">
+                    <span class="gradient-text">Data Compliance</span><br>
+                    &amp; Security Overview
+                </h1>
+                <p class="hero-sub">
+                    A high-level review of BotifyTrades' data handling practices, encryption standards,
+                    compliance framework, and security architecture for enterprise trading automation.
+                </p>
+                <div class="stat-row" style="margin-top: 48px;">
+                    <div class="stat-box"><div class="stat-value">AES-256</div><div class="stat-label">Encryption Standard</div></div>
+                    <div class="stat-box"><div class="stat-value">TLS 1.2+</div><div class="stat-label">Transit Security</div></div>
+                    <div class="stat-box"><div class="stat-value">OAuth 2.0</div><div class="stat-label">Authentication</div></div>
+                    <div class="stat-box"><div class="stat-value">Zero</div><div class="stat-label">Plaintext Credentials</div></div>
+                </div>
+                <div class="hero-version">DOCUMENT VERSION 1.0 &mdash; CONFIDENTIAL &mdash; MAY 2026</div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 2 — PLATFORM OVERVIEW ═══════ -->
+        <section id="overview" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">01 &mdash; Platform Overview</div>
+                <h2 class="slide-title">Platform <span class="gradient-text">at a Glance</span></h2>
+                <p class="slide-subtitle">BotifyTrades is a desktop trading automation platform that connects signal sources to multiple brokerage accounts with built-in risk management.</p>
+
+                <div class="diagram-box">
+                    <div class="diagram-title">High-Level Architecture</div>
+                    <div class="flow-horizontal">
+                        <div class="flow-node blue">
+                            <div class="fn-label">&#x1F4E1; Signal Sources</div>
+                            <div class="fn-desc">Discord &bull; Telegram</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node purple">
+                            <div class="fn-label">&#x2699; Processing Engine</div>
+                            <div class="fn-desc">Parse &bull; Validate &bull; Route</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node gold">
+                            <div class="fn-label">&#x1F6E1; Risk Engine</div>
+                            <div class="fn-desc">Evaluate &bull; Size &bull; Protect</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node green">
+                            <div class="fn-label">&#x1F3E6; Broker Execution</div>
+                            <div class="fn-desc">Multi-Broker API</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-grid card-grid-4">
+                    <div class="card">
+                        <div class="card-icon">&#x1F3E6;</div>
+                        <h4>Multi-Broker</h4>
+                        <p>Connects to multiple regulated brokerages across US and international markets</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon purple">&#x1F6E1;</div>
+                        <h4>Risk Management</h4>
+                        <p>Tiered profit targets, stop losses, trailing stops, and position sizing controls</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon green">&#x1F4BB;</div>
+                        <h4>Desktop Application</h4>
+                        <p>Self-hosted on user's machine &mdash; no cloud servers, no third-party data exposure</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon gold">&#x1F50D;</div>
+                        <h4>Web Dashboard</h4>
+                        <p>Localhost-only control panel for configuration, monitoring, and trade management</p>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    BotifyTrades runs entirely on the user's local machine. No trading data, credentials, or personal information is transmitted to BotifyTrades servers. The platform connects directly to broker APIs using the user's own credentials.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 3 — DATA CLASSIFICATION ═══════ -->
+        <section id="classification" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">02 &mdash; Data Classification</div>
+                <h2 class="slide-title">Data <span class="gradient-text">Classification Framework</span></h2>
+                <p class="slide-subtitle">All data handled by the platform is classified into four tiers with corresponding security controls applied at each level.</p>
+
+                <div class="diagram-box">
+                    <div class="diagram-title">Classification Tiers</div>
+                    <div class="layer-stack">
+                        <div class="layer l6">
+                            <div>
+                                <div class="layer-name">&#x1F534; Critical &mdash; Broker Credentials</div>
+                                <div class="layer-desc">API keys, OAuth tokens, secrets &bull; Encrypted at rest &bull; Never logged &bull; Memory-only decryption</div>
+                            </div>
+                            <div class="class-tag critical"><div class="class-dot"></div>CRITICAL</div>
+                        </div>
+                        <div class="layer l4">
+                            <div>
+                                <div class="layer-name">&#x1F7E0; Sensitive &mdash; Trading Data</div>
+                                <div class="layer-desc">Open positions, order history, PNL data &bull; Local database storage &bull; No external transmission</div>
+                            </div>
+                            <div class="class-tag sensitive"><div class="class-dot"></div>SENSITIVE</div>
+                        </div>
+                        <div class="layer l1">
+                            <div>
+                                <div class="layer-name">&#x1F535; Internal &mdash; Configuration</div>
+                                <div class="layer-desc">Channel settings, risk profiles, UI preferences &bull; Local storage &bull; Non-identifying</div>
+                            </div>
+                            <div class="class-tag internal"><div class="class-dot"></div>INTERNAL</div>
+                        </div>
+                        <div class="layer l3">
+                            <div>
+                                <div class="layer-name">&#x1F7E2; Public &mdash; Market Data</div>
+                                <div class="layer-desc">Stock prices, option chains, volume data &bull; Sourced from broker APIs &bull; Publicly available</div>
+                            </div>
+                            <div class="class-tag public"><div class="class-dot"></div>PUBLIC</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="card">
+                        <h4 style="color: var(--accent-rose);">&#x1F6AB; Never Stored</h4>
+                        <p>Broker account passwords &bull; Social security numbers &bull; Bank account details &bull; Personal identification documents &bull; Payment card numbers</p>
+                    </div>
+                    <div class="card">
+                        <h4 style="color: var(--accent-green);">&#x2705; Locally Stored Only</h4>
+                        <p>Encrypted API credentials &bull; Trade execution logs &bull; Position cache &bull; User configuration &bull; License activation key</p>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    BotifyTrades does not collect, transmit, or store personally identifiable information (PII). Broker credentials are encrypted and stored exclusively on the user's local machine. The platform has no remote database and no analytics collection.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 4 — ENCRYPTION ═══════ -->
+        <section id="encryption" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">03 &mdash; Encryption Architecture</div>
+                <h2 class="slide-title">Encryption <span class="gradient-text">at Every Layer</span></h2>
+                <p class="slide-subtitle">Credentials and sensitive data are protected using industry-standard symmetric encryption, with keys derived from license-bound or OS-level sources.</p>
+
+                <div class="diagram-box">
+                    <div class="diagram-title">Credential Encryption Flow</div>
+                    <div class="encrypt-visual">
+                        <div class="encrypt-block plain">
+                            <div class="eb-icon">&#x1F511;</div>
+                            <div class="eb-label">User Enters Credentials</div>
+                            <div class="eb-detail">API Key / OAuth Token</div>
+                        </div>
+                        <div class="encrypt-arrow"></div>
+                        <div class="encrypt-block process">
+                            <div class="eb-icon">&#x1F510;</div>
+                            <div class="eb-label">Encryption Engine</div>
+                            <div class="eb-detail">Fernet (AES-128-CBC + HMAC)</div>
+                        </div>
+                        <div class="encrypt-arrow"></div>
+                        <div class="encrypt-block secured">
+                            <div class="eb-icon">&#x1F6E1;</div>
+                            <div class="eb-label">Encrypted Storage</div>
+                            <div class="eb-detail">Local Database Only</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-grid card-grid-3">
+                    <div class="card">
+                        <div class="card-icon">&#x1F512;</div>
+                        <h4>At-Rest Encryption</h4>
+                        <p>All broker credentials encrypted using Fernet symmetric encryption (AES-128 CBC mode with HMAC-SHA256 authentication) before database storage</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon green">&#x1F310;</div>
+                        <h4>In-Transit Encryption</h4>
+                        <p>All broker API communication over TLS 1.2+ with verified CA certificates via certifi bundle. WebSocket connections use WSS protocol</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon purple">&#x1F5DD;</div>
+                        <h4>Key Management</h4>
+                        <p>Encryption keys derived from license activation binding or OS-level key file. Keys never transmitted externally. Supports environment variable override</p>
+                    </div>
+                </div>
+
+                <div class="diagram-box" style="margin-top: 32px;">
+                    <div class="diagram-title">Key Derivation Priority</div>
+                    <div class="flow-horizontal">
+                        <div class="flow-node blue">
+                            <div class="fn-label">1. Environment Key</div>
+                            <div class="fn-desc">Direct override</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node purple">
+                            <div class="fn-label">2. Local Key File</div>
+                            <div class="fn-desc">Backward compatible</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node gold">
+                            <div class="fn-label">3. License-Derived</div>
+                            <div class="fn-desc">SHA-256 derivation</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node green">
+                            <div class="fn-label">4. Auto-Generated</div>
+                            <div class="fn-desc">Last resort fallback</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    Encryption uses the Python cryptography library's Fernet implementation (AES-128-CBC + HMAC-SHA256). Encryption keys can be derived from the user's license key via SHA-256 for portability across machines. Plaintext credentials exist only in memory during active API calls and are never written to disk or logs.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 5 — AUTHENTICATION ═══════ -->
+        <section id="authentication" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">04 &mdash; Authentication &amp; Access</div>
+                <h2 class="slide-title">Authentication <span class="gradient-text">Framework</span></h2>
+                <p class="slide-subtitle">Broker connections use industry-standard OAuth 2.0 authorization code flows or API key authentication, depending on broker requirements.</p>
+
+                <div class="two-col">
+                    <div class="diagram-box" style="margin: 0;">
+                        <div class="diagram-title">OAuth 2.0 Flow</div>
+                        <div class="flow-vertical">
+                            <div class="flow-node blue" style="width: 220px;">
+                                <div class="fn-label">&#x1F464; User Initiates</div>
+                                <div class="fn-desc">Click "Connect Broker"</div>
+                            </div>
+                            <div class="flow-arrow-down"></div>
+                            <div class="flow-node purple" style="width: 220px;">
+                                <div class="fn-label">&#x1F3E6; Broker Auth Page</div>
+                                <div class="fn-desc">User authorizes access</div>
+                            </div>
+                            <div class="flow-arrow-down"></div>
+                            <div class="flow-node gold" style="width: 220px;">
+                                <div class="fn-label">&#x1F504; Token Exchange</div>
+                                <div class="fn-desc">Authorization code &rarr; tokens</div>
+                            </div>
+                            <div class="flow-arrow-down"></div>
+                            <div class="flow-node green" style="width: 220px;">
+                                <div class="fn-label">&#x1F512; Encrypted Storage</div>
+                                <div class="fn-desc">Tokens encrypted at rest</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="diagram-box" style="margin: 0;">
+                        <div class="diagram-title">API Key Flow</div>
+                        <div class="flow-vertical">
+                            <div class="flow-node blue" style="width: 220px;">
+                                <div class="fn-label">&#x1F464; User Enters Keys</div>
+                                <div class="fn-desc">Via secure web form</div>
+                            </div>
+                            <div class="flow-arrow-down"></div>
+                            <div class="flow-node purple" style="width: 220px;">
+                                <div class="fn-label">&#x2705; Validation Check</div>
+                                <div class="fn-desc">Verify with broker API</div>
+                            </div>
+                            <div class="flow-arrow-down"></div>
+                            <div class="flow-node green" style="width: 220px;">
+                                <div class="fn-label">&#x1F512; Encrypted Storage</div>
+                                <div class="fn-desc">Fernet encryption at rest</div>
+                            </div>
+                            <div class="flow-arrow-down"></div>
+                            <div class="flow-node teal" style="width: 220px;">
+                                <div class="fn-label">&#x1F504; Auto-Refresh</div>
+                                <div class="fn-desc">Token rotation when supported</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-grid card-grid-3" style="margin-top: 32px;">
+                    <div class="card">
+                        <div class="card-icon">&#x1F6AB;</div>
+                        <h4>No Plaintext Storage</h4>
+                        <p>Credentials are encrypted immediately upon entry and never stored in plaintext on disk, in logs, or in configuration files</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon green">&#x1F504;</div>
+                        <h4>Automatic Token Refresh</h4>
+                        <p>OAuth tokens are automatically refreshed before expiration, maintaining continuous broker connectivity without user intervention</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon purple">&#x1F6E1;</div>
+                        <h4>Single-Instance Access</h4>
+                        <p>Platform enforces single-instance execution to prevent concurrent credential access and duplicate order submissions</p>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    Brokers supporting OAuth 2.0 (Schwab, Tastytrade, Questrade, Zerodha, Upstox) use the authorization code flow with automatic token refresh. Other brokers use encrypted API key storage. The localhost-only web interface handles credential entry through HTTPS-capable forms. A single-instance guard prevents multiple copies from running simultaneously.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 6 — DATA FLOW ═══════ -->
+        <section id="dataflow" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">05 &mdash; Data Flow</div>
+                <h2 class="slide-title">Data Flow <span class="gradient-text">Architecture</span></h2>
+                <p class="slide-subtitle">End-to-end data flow showing how information moves through the platform with security controls at each boundary.</p>
+
+                <div class="diagram-box">
+                    <div class="diagram-title">End-to-End Data Flow &mdash; Signal to Execution</div>
+                    <div class="flow-vertical" style="gap: 0;">
+                        <div class="flow-horizontal" style="margin-bottom: 0;">
+                            <div class="flow-node blue" style="min-width: 180px;">
+                                <div class="fn-label">&#x1F4E1; Signal Ingestion</div>
+                                <div class="fn-desc">WebSocket Gateway<br>TLS-encrypted channel</div>
+                            </div>
+                            <div class="flow-arrow"></div>
+                            <div class="flow-node purple" style="min-width: 180px;">
+                                <div class="fn-label">&#x1F50D; Signal Parser</div>
+                                <div class="fn-desc">Pattern recognition<br>Input validation</div>
+                            </div>
+                            <div class="flow-arrow"></div>
+                            <div class="flow-node rose" style="min-width: 180px;">
+                                <div class="fn-label">&#x1F6E1; Risk Evaluation</div>
+                                <div class="fn-desc">Position sizing<br>Exposure limits</div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; padding: 10px 0;">
+                            <span style="font-size: 24px; color: var(--text-muted);">&#x2193;</span>
+                        </div>
+                        <div class="flow-horizontal" style="margin-top: 0;">
+                            <div class="flow-node green" style="min-width: 180px;">
+                                <div class="fn-label">&#x2705; Order Validation</div>
+                                <div class="fn-desc">Duplicate check<br>Account verification</div>
+                            </div>
+                            <div class="flow-arrow"></div>
+                            <div class="flow-node gold" style="min-width: 180px;">
+                                <div class="fn-label">&#x1F3E6; Broker API</div>
+                                <div class="fn-desc">TLS 1.2+ transmission<br>Encrypted credentials</div>
+                            </div>
+                            <div class="flow-arrow"></div>
+                            <div class="flow-node teal" style="min-width: 180px;">
+                                <div class="fn-label">&#x1F4BE; Execution Log</div>
+                                <div class="fn-desc">Local database<br>Complete audit trail</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diagram-box">
+                    <div class="diagram-title">Data Boundary Controls</div>
+                    <div style="display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;">
+                        <div style="flex: 1; min-width: 200px; padding: 20px; background: rgba(0,212,255,0.05); border: 1px dashed rgba(0,212,255,0.2); border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: 24px; margin-bottom: 8px;">&#x1F310;</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--accent-primary); margin-bottom: 6px;">External Boundary</div>
+                            <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">TLS encryption on all outbound connections<br>Certificate verification via CA bundle<br>No inbound ports exposed</div>
+                        </div>
+                        <div style="flex: 1; min-width: 200px; padding: 20px; background: rgba(124,92,252,0.05); border: 1px dashed rgba(124,92,252,0.2); border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: 24px; margin-bottom: 8px;">&#x1F5A5;</div>
+                            <div style="font-size: 13px; font-weight: 700; color: #B8A5FF; margin-bottom: 6px;">Local Boundary</div>
+                            <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">Localhost-only web interface<br>No remote access by default<br>Single-instance enforcement</div>
+                        </div>
+                        <div style="flex: 1; min-width: 200px; padding: 20px; background: rgba(0,230,140,0.05); border: 1px dashed rgba(0,230,140,0.2); border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: 24px; margin-bottom: 8px;">&#x1F4BE;</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--accent-green); margin-bottom: 6px;">Storage Boundary</div>
+                            <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">Encrypted credential storage<br>Local SQLite database<br>No cloud synchronization</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    All data flows remain within the user's local environment. The only outbound connections are to broker APIs (for trading) and signal sources (for receiving alerts). The web dashboard binds to localhost only and is not accessible from other machines on the network. No data is sent to BotifyTrades servers.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 7 — NETWORK SECURITY ═══════ -->
+        <section id="network" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">06 &mdash; Network Security</div>
+                <h2 class="slide-title">Network <span class="gradient-text">Security Controls</span></h2>
+                <p class="slide-subtitle">All external communication is secured with TLS encryption. The platform exposes no inbound network services to the internet.</p>
+
+                <div class="ring-diagram">
+                    <div class="ring ring-outer">
+                        <div class="ring-label">External Network &mdash; TLS 1.2+ Encrypted</div>
+                    </div>
+                    <div class="ring ring-mid">
+                        <div class="ring-label">Application Layer &mdash; Localhost Only</div>
+                    </div>
+                    <div class="ring ring-inner">
+                        <div class="ring-label">Encrypted<br>Data Store</div>
+                    </div>
+                </div>
+
+                <div class="card-grid card-grid-2" style="margin-top: 40px;">
+                    <div class="card">
+                        <div class="card-icon">&#x1F512;</div>
+                        <h4>TLS Certificate Verification</h4>
+                        <p>All HTTPS and WSS connections validate server certificates against a trusted CA bundle (certifi). Prevents man-in-the-middle attacks on broker API communication.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon green">&#x1F6E1;</div>
+                        <h4>No Inbound Exposure</h4>
+                        <p>The platform does not open any ports to the internet. The web dashboard is bound to 127.0.0.1 (localhost) and is accessible only from the local machine.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon purple">&#x1F504;</div>
+                        <h4>WebSocket Security</h4>
+                        <p>Real-time data streams from brokers and signal sources use WSS (WebSocket Secure) protocol with automatic reconnection and heartbeat monitoring.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon gold">&#x23F1;</div>
+                        <h4>Rate Limiting</h4>
+                        <p>Built-in rate limit management for all broker APIs prevents throttling and ensures compliance with broker-imposed API usage limits.</p>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    The platform's network footprint is minimal by design. Outbound connections go to: (1) broker REST APIs over HTTPS, (2) broker streaming APIs over WSS, (3) signal source WebSocket gateways over WSS. The only local service is the Flask web dashboard bound to 127.0.0.1:5000, inaccessible from outside the machine.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 8 — COMPLIANCE FRAMEWORK ═══════ -->
+        <section id="framework" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">07 &mdash; Compliance Framework</div>
+                <h2 class="slide-title">Compliance <span class="gradient-text">Framework</span></h2>
+                <p class="slide-subtitle">BotifyTrades aligns with industry security and data handling best practices across multiple compliance domains.</p>
+
+                <div class="shield-row">
+                    <div class="shield">
+                        <div class="shield-icon blue">&#x1F512;</div>
+                        <div class="shield-label">Encryption</div>
+                        <div class="shield-desc">AES symmetric at rest, TLS in transit</div>
+                    </div>
+                    <div class="shield">
+                        <div class="shield-icon green">&#x1F4BE;</div>
+                        <div class="shield-label">Data Locality</div>
+                        <div class="shield-desc">100% local storage, zero cloud</div>
+                    </div>
+                    <div class="shield">
+                        <div class="shield-icon purple">&#x1F464;</div>
+                        <div class="shield-label">No PII Collection</div>
+                        <div class="shield-desc">No personal data gathered</div>
+                    </div>
+                    <div class="shield">
+                        <div class="shield-icon gold">&#x1F4DD;</div>
+                        <div class="shield-label">Audit Trail</div>
+                        <div class="shield-desc">Complete trade and event logging</div>
+                    </div>
+                    <div class="shield">
+                        <div class="shield-icon teal">&#x1F510;</div>
+                        <div class="shield-label">Credential Safety</div>
+                        <div class="shield-desc">Never logged, never plaintext on disk</div>
+                    </div>
+                    <div class="shield">
+                        <div class="shield-icon rose">&#x1F6E1;</div>
+                        <div class="shield-label">Single Instance</div>
+                        <div class="shield-desc">Prevents duplicate execution</div>
+                    </div>
+                </div>
+
+                <div class="diagram-box">
+                    <div class="diagram-title">Compliance Alignment Matrix</div>
+                    <table class="matrix-table">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Requirement</th>
+                                <th>Implementation</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Data Protection</td>
+                                <td>Encrypt sensitive data at rest</td>
+                                <td>Fernet symmetric encryption for all credentials</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                            <tr>
+                                <td>Data Protection</td>
+                                <td>Encrypt data in transit</td>
+                                <td>TLS 1.2+ on all external connections</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                            <tr>
+                                <td>Privacy</td>
+                                <td>Minimize data collection</td>
+                                <td>No PII collected, no analytics, no telemetry</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                            <tr>
+                                <td>Privacy</td>
+                                <td>Data residency control</td>
+                                <td>All data stored locally on user's machine</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                            <tr>
+                                <td>Access Control</td>
+                                <td>Prevent unauthorized access</td>
+                                <td>Localhost-only interface, license-gated activation</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                            <tr>
+                                <td>Access Control</td>
+                                <td>Single-instance enforcement</td>
+                                <td>OS-level startup guard prevents concurrent copies</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                            <tr>
+                                <td>Audit</td>
+                                <td>Trade execution logging</td>
+                                <td>Full signal-to-fill audit trail with timestamps</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                            <tr>
+                                <td>Integrity</td>
+                                <td>Code protection</td>
+                                <td>Obfuscated distribution builds (PyArmor)</td>
+                                <td><span class="badge badge-active">Implemented</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    As a self-hosted desktop application with no cloud infrastructure, BotifyTrades inherently satisfies many data residency and privacy requirements. The user maintains full control of their data at all times. The platform collects no personal data, has no analytics, and sends no telemetry.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 9 — PRIVACY & RETENTION ═══════ -->
+        <section id="privacy" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">08 &mdash; Privacy &amp; Data Retention</div>
+                <h2 class="slide-title">Privacy &amp; <span class="gradient-text">Data Retention</span></h2>
+                <p class="slide-subtitle">The platform follows a data minimization approach &mdash; collecting only what is necessary for trading execution and storing it exclusively on the user's machine.</p>
+
+                <div class="two-col">
+                    <div>
+                        <h3 style="font-size: 18px; margin-bottom: 20px;">&#x1F6E1; Privacy Principles</h3>
+                        <div class="card" style="margin-bottom: 16px;">
+                            <h4>Data Minimization</h4>
+                            <p>Only data required for trade execution is processed. No browsing history, personal demographics, or behavioral analytics are collected.</p>
+                        </div>
+                        <div class="card" style="margin-bottom: 16px;">
+                            <h4>Local-First Architecture</h4>
+                            <p>100% of user data resides on the local machine. No cloud databases, no third-party storage, no data replication.</p>
+                        </div>
+                        <div class="card">
+                            <h4>User Data Sovereignty</h4>
+                            <p>The user has complete control over their data. Uninstalling the application removes all data. No residual data remains on external systems.</p>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 18px; margin-bottom: 20px;">&#x1F4C5; Retention Schedule</h3>
+                        <div class="diagram-box" style="margin: 0;">
+                            <table class="matrix-table" style="margin-top: 0;">
+                                <thead>
+                                    <tr><th>Data Type</th><th>Retention</th><th>Location</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Broker Credentials</td><td>Until removed by user</td><td>Encrypted DB</td></tr>
+                                    <tr><td>Trade History</td><td>Indefinite (local)</td><td>SQLite DB</td></tr>
+                                    <tr><td>Position Cache</td><td>Active session</td><td>JSON file</td></tr>
+                                    <tr><td>Execution Logs</td><td>Indefinite (local)</td><td>Log files</td></tr>
+                                    <tr><td>OAuth Tokens</td><td>Until expiry/refresh</td><td>Encrypted file</td></tr>
+                                    <tr><td>Configuration</td><td>Until changed by user</td><td>SQLite DB</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    All retention is user-controlled. The platform provides no mechanism to exfiltrate data. Since there is no remote server component, data retention is entirely at the user's discretion. Complete data removal is achieved by uninstalling the application and deleting its directory.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 10 — AUDIT & MONITORING ═══════ -->
+        <section id="audit" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">09 &mdash; Audit &amp; Monitoring</div>
+                <h2 class="slide-title">Audit Trail &amp; <span class="gradient-text">Monitoring</span></h2>
+                <p class="slide-subtitle">Every trade signal, execution, and risk decision is logged with timestamps for complete auditability.</p>
+
+                <div class="diagram-box">
+                    <div class="diagram-title">Audit Trail Coverage</div>
+                    <div class="flow-horizontal">
+                        <div class="flow-node blue">
+                            <div class="fn-label">&#x1F4E8; Signal Received</div>
+                            <div class="fn-desc">Source, timestamp, content</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node purple">
+                            <div class="fn-label">&#x1F50D; Signal Parsed</div>
+                            <div class="fn-desc">Symbol, action, price</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node gold">
+                            <div class="fn-label">&#x1F6E1; Risk Evaluated</div>
+                            <div class="fn-desc">Sizing, SL/PT, decision</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node green">
+                            <div class="fn-label">&#x2705; Order Executed</div>
+                            <div class="fn-desc">Fill price, broker, latency</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-grid card-grid-3">
+                    <div class="card">
+                        <div class="card-icon">&#x1F4CA;</div>
+                        <h4>Execution Speed Tracking</h4>
+                        <p>Signal-to-fill latency measurement across the entire entry and exit pipeline for performance analysis and optimization</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon green">&#x1F4DD;</div>
+                        <h4>Trade Logging</h4>
+                        <p>Every order submission, fill, rejection, and cancellation is recorded in the local database with full context and timestamps</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon purple">&#x1F4F1;</div>
+                        <h4>Real-Time Alerts</h4>
+                        <p>Configurable notifications via Discord webhooks and mobile relay for trade executions, risk events, and system health alerts</p>
+                    </div>
+                </div>
+
+                <div class="card-grid card-grid-2" style="margin-top: 20px;">
+                    <div class="card">
+                        <div class="card-icon gold">&#x1F4C8;</div>
+                        <h4>PNL Analytics Dashboard</h4>
+                        <p>Daily, weekly, and monthly profit/loss tracking with per-channel breakdowns, win rates, profit factors, and performance metrics accessible via the web dashboard</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon teal">&#x2764;</div>
+                        <h4>System Health Monitoring</h4>
+                        <p>Continuous gateway watchdog, broker connection heartbeats, order processor health checks, and automatic reconnection with alerting on connection loss</p>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    The audit trail captures the complete lifecycle of every trade: signal ingestion, parsing, risk evaluation, order submission, fill confirmation, and eventual exit. Execution speed tracking measures signal-to-fill latency across entry and exit pipelines. All audit data is stored locally and viewable through the web dashboard.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 11 — INCIDENT RESPONSE ═══════ -->
+        <section id="incident" class="slide">
+            <div class="bg-mesh"></div>
+            <div class="slide-inner">
+                <div class="slide-number">10 &mdash; Incident Response &amp; Resilience</div>
+                <h2 class="slide-title">Resilience &amp; <span class="gradient-text">Recovery</span></h2>
+                <p class="slide-subtitle">Built-in safeguards for connection failures, broker outages, and unexpected disruptions ensure trading continuity.</p>
+
+                <div class="card-grid card-grid-2">
+                    <div class="card">
+                        <div class="card-icon rose">&#x1F6A8;</div>
+                        <h4>Emergency Stop</h4>
+                        <p>One-click kill switch accessible via web dashboard and mobile relay to immediately halt all trading activity and cancel pending orders</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">&#x1F504;</div>
+                        <h4>Automatic Reconnection</h4>
+                        <p>Gateway watchdog monitors signal source connections with automatic reconnection when message flow is interrupted for more than 2 minutes</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon green">&#x1F4BE;</div>
+                        <h4>Position Recovery</h4>
+                        <p>Position cache and broker synchronization service ensures positions are recovered and risk monitoring resumes after any application restart</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon purple">&#x1F4F1;</div>
+                        <h4>Remote Monitoring</h4>
+                        <p>Mobile relay client provides remote system monitoring, emergency controls, and trade notifications when away from the desktop</p>
+                    </div>
+                </div>
+
+                <div class="diagram-box" style="margin-top: 32px;">
+                    <div class="diagram-title">Failure Recovery Flow</div>
+                    <div class="flow-horizontal">
+                        <div class="flow-node rose">
+                            <div class="fn-label">&#x26A0; Disruption</div>
+                            <div class="fn-desc">Connection lost<br>Process restart</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node gold">
+                            <div class="fn-label">&#x1F50D; Detection</div>
+                            <div class="fn-desc">Watchdog alert<br>Health check fail</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node purple">
+                            <div class="fn-label">&#x1F504; Recovery</div>
+                            <div class="fn-desc">Auto-reconnect<br>Position sync</div>
+                        </div>
+                        <div class="flow-arrow"></div>
+                        <div class="flow-node green">
+                            <div class="fn-label">&#x2705; Restored</div>
+                            <div class="fn-desc">Trading resumes<br>Risk monitoring active</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    The platform includes multiple resilience layers: gateway watchdog for signal source connectivity, broker connection health monitoring with retry logic, position cache for state recovery after restarts, and a mobile relay for remote emergency control. The position synchronization service reconciles local state with actual broker positions on every restart.
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ SLIDE 12 — CLOSING ═══════ -->
+        <section id="closing" class="slide hero-slide" style="text-align: center;">
+            <div class="bg-mesh"></div>
+            <div class="bg-grid"></div>
+            <div class="slide-inner" style="text-align: center;">
+                <div class="hero-badge">Data Compliance &amp; Security</div>
+                <h1 class="hero-title" style="font-size: 48px;">
+                    <span class="gradient-text">Security-First</span><br>
+                    by Design
+                </h1>
+                <p class="hero-sub">
+                    BotifyTrades is built with data protection at its foundation &mdash; encrypted credentials,
+                    local-only data storage, and zero cloud dependency ensure your trading data
+                    stays under your control.
+                </p>
+
+                <div class="stat-row">
+                    <div class="stat-box"><div class="stat-value">Zero</div><div class="stat-label">Cloud Data Storage</div></div>
+                    <div class="stat-box"><div class="stat-value">Zero</div><div class="stat-label">PII Collection</div></div>
+                    <div class="stat-box"><div class="stat-value">100%</div><div class="stat-label">Local Data Control</div></div>
+                    <div class="stat-box"><div class="stat-value">AES-256</div><div class="stat-label">Credential Encryption</div></div>
+                </div>
+
+                <div style="margin-top: 60px; padding: 32px; border-radius: var(--radius-lg); background: var(--gradient-card); border: 1px solid var(--border-accent);">
+                    <p style="font-size: 16px; color: var(--text-secondary); line-height: 1.7; max-width: 700px; margin: 0 auto;">
+                        BotifyTrades is a software automation tool. It does not provide financial advice or trading
+                        recommendations. All trading decisions and outcomes are the user's responsibility. Past performance
+                        does not guarantee future results.
+                    </p>
+                </div>
+
+                <div class="speaker-notes">
+                    <strong>Speaker Notes</strong><br>
+                    This document provides a high-level overview of BotifyTrades' data compliance and security posture. The platform's self-hosted, local-first architecture inherently eliminates many cloud-related security risks. All credentials are encrypted at rest, all communications are encrypted in transit, and the user maintains complete sovereignty over their data at all times.
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    </div><!-- /document-content -->
+
+    <script>
+        // Navigation highlight on scroll
+        document.addEventListener('scroll', function() {
+            var sections = document.querySelectorAll('.slide[id]');
+            var navItems = document.querySelectorAll('.nav-item');
+            var current = '';
+            sections.forEach(function(section) {
+                if (window.pageYOffset >= section.offsetTop - 200) {
+                    current = section.getAttribute('id');
+                }
+            });
+            navItems.forEach(function(item) {
+                item.classList.remove('active');
+                if (item.getAttribute('href') === '#' + current) {
+                    item.classList.add('active');
+                }
+            });
+        });
+
+        // ═══════ COPY PROTECTION ═══════
+        document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+        document.addEventListener('selectstart', function(e) { e.preventDefault(); });
+        document.addEventListener('dragstart', function(e) { e.preventDefault(); });
+        document.addEventListener('copy', function(e) { e.preventDefault(); });
+        document.addEventListener('cut', function(e) { e.preventDefault(); });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && (e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A' ||
+                e.key === 'u' || e.key === 'U' || e.key === 's' || e.key === 'S' ||
+                e.key === 'p' || e.key === 'P')) {
+                e.preventDefault();
+            }
+            if (e.key === 'F12') { e.preventDefault(); }
+            if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' ||
+                e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) {
+                e.preventDefault();
+            }
+        });
+
+        // ═══════ NDA GATE LOGIC ═══════
+        function toggleNdaButton() {
+            var cb = document.getElementById('ndaAcceptCheck');
+            var btn = document.getElementById('ndaBtnAccept');
+            if (cb.checked) { btn.classList.add('enabled'); }
+            else { btn.classList.remove('enabled'); }
+        }
+
+        function acceptNda() {
+            var cb = document.getElementById('ndaAcceptCheck');
+            if (!cb.checked) return;
+            document.getElementById('ndaOverlay').classList.add('accepted');
+            document.getElementById('documentContent').classList.add('visible');
+            var ts = new Date().toISOString();
+            try { sessionStorage.setItem('nda_compliance_accepted', ts); } catch(e) {}
+        }
+
+        function declineNda() {
+            document.getElementById('ndaMain').style.display = 'none';
+            document.getElementById('ndaDeclined').style.display = 'block';
+        }
+
+        (function() {
+            try {
+                if (sessionStorage.getItem('nda_compliance_accepted')) {
+                    document.getElementById('ndaOverlay').classList.add('accepted');
+                    document.getElementById('documentContent').classList.add('visible');
+                }
+            } catch(e) {}
+        })();
+    </script>
+</body>
+</html>

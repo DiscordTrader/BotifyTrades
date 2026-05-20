@@ -35,6 +35,7 @@ pywin32>=306; platform_system=="Windows"
 # AI Analysis - OpenAI Integration
 # ============================================================
 openai>=1.0.0
+anthropic>=0.30.0
 
 # ============================================================
 # Technical Analysis & Market Data

@@ -695,7 +695,7 @@ class BrokerSyncService:
                         raw_positions = ib.positions()
                         if not raw_positions:
                             raw_positions = ib.portfolio()
-                        
+
                         for pos in raw_positions:
                             contract = pos.contract
                             symbol = contract.symbol
@@ -704,14 +704,14 @@ class BrokerSyncService:
                                 continue
                             avg_cost_raw = getattr(pos, 'avgCost', None) or getattr(pos, 'averageCost', None) or 0
                             avg_cost = float(avg_cost_raw) if avg_cost_raw else 0
-                            
+
                             if contract.secType == 'OPT':
                                 expiry_raw = contract.lastTradeDateOrContractMonth
                                 if len(expiry_raw) == 8:
                                     expiry = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
                                 else:
                                     expiry = expiry_raw
-                                
+
                                 result['positions'].append({
                                     'symbol': symbol,
                                     'quantity': quantity,
@@ -734,7 +734,7 @@ class BrokerSyncService:
                                     'position_id': contract.conId,
                                     'asset_type': 'stock'
                                 })
-                        
+
                         raw_trades = ib.openTrades()
                         for trade in raw_trades:
                             order = trade.order
@@ -749,6 +749,10 @@ class BrokerSyncService:
                             })
                     except Exception as e:
                         print(f"[SYNC] IBKR fetch error: {e}")
+                        result['_fetch_error'] = True
+                else:
+                    print(f"[SYNC] ⚠️ IBKR not connected to TWS/Gateway — marking as fetch error to protect trades")
+                    result['_fetch_error'] = True
             
             elif broker_name.startswith('TASTYTRADE'):
                 if hasattr(broker_instance, 'session') and broker_instance.session:
@@ -1386,8 +1390,13 @@ class BrokerSyncService:
                     self._first_empty_times[broker_name] = _empty_time.time()
                 import time as _empty_time2
                 _empty_elapsed = _empty_time2.time() - self._first_empty_times.get(broker_name, _empty_time2.time())
-                required_consecutive = 2
-                required_time_seconds = 0
+                # IBKR reconnect storms can produce many consecutive empties — require more cycles + time
+                if broker_name.startswith('IBKR'):
+                    required_consecutive = 6
+                    required_time_seconds = 120
+                else:
+                    required_consecutive = 3
+                    required_time_seconds = 30
                 if empty_count < required_consecutive or _empty_elapsed < required_time_seconds:
                     statuses_deferred = []
                     if has_pending_trades:
@@ -1988,7 +1997,7 @@ class BrokerSyncService:
                         self._consecutive_empty_counts = {}
                     _empty_key = f"{broker_name}_{trade_id}"
                     self._consecutive_empty_counts[_empty_key] = self._consecutive_empty_counts.get(_empty_key, 0) + 1
-                    _REQUIRED_CONFIRMATIONS = 3
+                    _REQUIRED_CONFIRMATIONS = 8 if broker_name.startswith('IBKR') else 4
                     if self._consecutive_empty_counts[_empty_key] < _REQUIRED_CONFIRMATIONS:
                         print(f"[SYNC] ⏳ Trade #{trade_id} ({symbol}) not in {broker_name} positions ({self._consecutive_empty_counts[_empty_key]}/{_REQUIRED_CONFIRMATIONS} confirmations)")
                         continue

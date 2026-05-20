@@ -16,6 +16,7 @@ class FormatTrainer:
     
     def __init__(self):
         self._openai_client = None
+        self._anthropic_client = None
         self._openai_available = None
     
     def _get_openai_client(self):
@@ -35,6 +36,7 @@ class FormatTrainer:
             cached_provider = getattr(self, '_cached_provider', None)
             if cached_provider != provider:
                 self._openai_client = None
+                self._anthropic_client = None
                 self._cached_provider = provider
             
             # Return cached client if available
@@ -70,12 +72,12 @@ class FormatTrainer:
             # Use user's OpenAI API key
             if provider == 'openai':
                 user_api_key = os.environ.get('OPENAI_API_KEY')
-                
+
                 if not user_api_key:
                     api_keys = load_config('api_keys')
                     if api_keys and api_keys.get('openai'):
                         user_api_key = api_keys['openai']
-                
+
                 if user_api_key:
                     self._openai_client = OpenAI(api_key=user_api_key)
                     self._openai_available = True
@@ -85,7 +87,10 @@ class FormatTrainer:
                     print("[FORMAT_TRAINER] OpenAI API key not configured")
                     self._openai_available = False
                     return None
-            
+
+            if provider == 'claude':
+                return self._init_claude_trainer()
+
             self._openai_available = False
             return None
                 
@@ -94,8 +99,37 @@ class FormatTrainer:
             self._openai_available = False
             return None
     
+    def _init_claude_trainer(self):
+        if self._anthropic_client is not None:
+            self._openai_available = True
+            return self._anthropic_client
+        try:
+            from anthropic import Anthropic
+            from .broker_credentials_service import get_api_keys_extended
+            keys = get_api_keys_extended()
+            api_key = os.environ.get('ANTHROPIC_API_KEY') or keys.get('anthropic', '')
+            if not api_key:
+                print("[FORMAT_TRAINER] Anthropic API key not configured")
+                self._openai_available = False
+                return None
+            self._anthropic_client = Anthropic(api_key=api_key)
+            self._openai_available = True
+            print("[FORMAT_TRAINER] Using Claude (Anthropic) API")
+            return self._anthropic_client
+        except ImportError:
+            print("[FORMAT_TRAINER] Anthropic SDK not installed (pip install anthropic)")
+            self._openai_available = False
+            return None
+        except Exception as e:
+            print(f"[FORMAT_TRAINER] Anthropic initialization failed: {e}")
+            self._openai_available = False
+            return None
+
+    def _is_claude_provider(self) -> bool:
+        return getattr(self, '_cached_provider', None) == 'claude'
+
     def is_ai_available(self) -> bool:
-        """Check if OpenAI is available."""
+        """Check if AI is available."""
         return self._get_openai_client() is not None
     
     def get_message_hash(self, message: str) -> str:
@@ -117,7 +151,9 @@ class FormatTrainer:
             if provider == 'disabled':
                 error_msg = 'AI is disabled. Enable it in Settings > AI & Market Data APIs.'
             elif provider == 'replit_ai':
-                error_msg = 'Replit AI is not available. Try selecting OpenAI in Settings.'
+                error_msg = 'Replit AI is not available. Try selecting OpenAI or Claude in Settings.'
+            elif provider == 'claude':
+                error_msg = 'Anthropic API key not configured. Add it in Settings > AI & Market Data APIs.'
             else:
                 error_msg = 'OpenAI API key not configured. Add it in Settings > AI & Market Data APIs.'
             return {
@@ -167,19 +203,33 @@ Only include fields that are actually present in the signal. Be precise with the
             user_content = f"Analyze this trading signal:\n```\n{example_signal}\n```"
             if user_guidance:
                 user_content += f"\n\nUser guidance: {user_guidance}"
-            
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content}
-                ],
-                max_tokens=800,
-                temperature=0.3,
-                response_format={"type": "json_object"}
-            )
-            
-            result_text = response.choices[0].message.content or "{}"
+
+            if self._is_claude_provider():
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=800,
+                    temperature=0.3,
+                    system=system_prompt,
+                    messages=[
+                        {"role": "user", "content": user_content},
+                        {"role": "assistant", "content": "{"}
+                    ]
+                )
+                result_text = "{" + (response.content[0].text or "}")
+                if result_text.endswith("```"):
+                    result_text = result_text[:result_text.rfind("```")].strip()
+            else:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content}
+                    ],
+                    max_tokens=800,
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
+                )
+                result_text = response.choices[0].message.content or "{}"
             result = json.loads(result_text)
             
             return {
@@ -218,10 +268,10 @@ Only include fields that are actually present in the signal. Be precise with the
         if not client:
             return {
                 'success': False,
-                'error': 'OpenAI not available',
+                'error': 'AI not available',
                 'ai_powered': False
             }
-        
+
         try:
             system_prompt = """You are a trading signal parser. Extract trading information from the given signal.
 
@@ -243,18 +293,33 @@ Return a JSON object:
 
 If it's not a trading signal, set is_trading_signal to false and action to null."""
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Parse this message:\n{signal_text}"}
-                ],
-                max_tokens=400,
-                temperature=0.2,
-                response_format={"type": "json_object"}
-            )
-            
-            result = json.loads(response.choices[0].message.content or "{}")
+            if self._is_claude_provider():
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=400,
+                    temperature=0.2,
+                    system=system_prompt,
+                    messages=[
+                        {"role": "user", "content": f"Parse this message:\n{signal_text}"},
+                        {"role": "assistant", "content": "{"}
+                    ]
+                )
+                raw = "{" + (response.content[0].text or "}")
+                if raw.endswith("```"):
+                    raw = raw[:raw.rfind("```")].strip()
+                result = json.loads(raw)
+            else:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Parse this message:\n{signal_text}"}
+                    ],
+                    max_tokens=400,
+                    temperature=0.2,
+                    response_format={"type": "json_object"}
+                )
+                result = json.loads(response.choices[0].message.content or "{}")
             
             return {
                 'success': True,

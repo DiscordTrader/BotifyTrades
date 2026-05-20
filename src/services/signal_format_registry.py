@@ -141,7 +141,25 @@ class SignalFormatRegistry:
                     continue
 
         return None
-    
+
+    def parse_all(self, text: str) -> List[Dict[str, Any]]:
+        """Parse text for ALL signals (multi-plan messages like $GOVX...\\n\\n$CISS...).
+
+        Splits on blank-line-then-$TICKER boundaries and parses each segment.
+        Returns list of parsed signal dicts (may be empty).
+        """
+        segments = re.split(r'\n\n+(?=\$[A-Z])', text.strip())
+        if len(segments) <= 1:
+            result = self.parse(text)
+            return [result] if result else []
+
+        results = []
+        for seg in segments:
+            result = self.parse(seg.strip())
+            if result:
+                results.append(result)
+        return results
+
     def list_formats(self) -> List[Dict[str, Any]]:
         """List all registered formats."""
         return [
@@ -688,12 +706,12 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
         
-        # Phoenix exit: SL hit with SYMBOL / SYMBOL SL hit
+        # Phoenix exit: SL hit with SYMBOL / SYMBOL SL hit (exclude "No SL hit" and "SL hit but")
         self.register(
             name="phoenix_sl_hit_with",
             description="Phoenix stop loss hit with symbol",
             priority=68,
-            pattern=r'(?:(?:hit\s+(?:my\s+)?SL\s+with|SL\s+hit\s+(?:with)?)\s+\$?([A-Z]{1,5})|([A-Z]{1,5})\s+SL\s+hit)',
+            pattern=r'(?:(?:hit\s+(?:my\s+)?SL\s+with|(?<!No\s)SL\s+hit\s+(?:with)?)\s+\$?([A-Z]{1,5})|([A-Z]{1,5})\s+(?<!No\s)SL\s+hit(?!\s+but))',
             parser=self._parse_phoenix_sl_hit_with,
             examples=["hit SL with MIGI", "SL hit with NIVF", "ENVB SL hit"],
             flags=re.IGNORECASE
@@ -1292,11 +1310,11 @@ class SignalFormatRegistry:
 
         self.register(
             name="temple_zz_range_entry",
-            description="Temple ZZ range entry: SYMBOL LOW-HIGH",
+            description="Temple ZZ range entry: SYMBOL LOW-HIGH (with optional trailing text)",
             priority=77,
-            pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(?:<[^>]*>|[^\x00-\x7F]|\s)*$',
+            pattern=r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)',
             parser=parse_temple_zz_range_entry,
-            examples=["CRE 2.80-3.91", "SDOT 0.36-0.50", "BLZE 5.70-6.47"],
+            examples=["CRE 2.80-3.91", "SDOT 0.36-0.50", "BLZE 5.70-6.47", "SPAI 3.80-4.15 already"],
             flags=re.IGNORECASE
         )
 
@@ -1321,13 +1339,45 @@ class SignalFormatRegistry:
             flags=re.IGNORECASE
         )
 
+        # --- ZZ scalp/inline entries ---
+
+        self.register(
+            name="temple_zz_scalp_at",
+            description="ZZ scalp: SYMBOL scalping/scalp at PRICE",
+            priority=74,
+            pattern=r'^\$?([A-Z]{2,5})\s+(?:scalp(?:ing)?|will\s+scalp\s+it\s+here)\s+(?:again\s+)?at\s+\$?(\d+(?:\.\d+)?)',
+            parser=self._parse_temple_zz_scalp_at,
+            examples=["RECT scalping at 1.68 for 1.80", "CREG scalp again at 0.688 looking for", "MGN will scalp it here at 0.20"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_in_small",
+            description="ZZ inline: $SYMBOL in small at PRICE / Small $SYMBOL PRICE",
+            priority=74,
+            pattern=r'(?:^\$?([A-Z]{2,5})\s+in\s+(?:small\s+)?(?:at\s+)\$?(\d+(?:\.\d+)?)|\b[Ss]mall\s+\$([A-Z]{2,5})\s+(?:for\s+.*?)?\$?(\d+(?:\.\d+)?))',
+            parser=self._parse_temple_zz_in_small,
+            examples=["$EDBL in small at 0.45", "Small $IPST for a <@&role> 5.22"],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_bird_inline",
+            description="ZZ inline: $SYMBOL in $PRICE small/for role SL PRICE",
+            priority=73,
+            pattern=r'^\$?([A-Z]{2,5})\s+in\s+\$?(\d+(?:\.\d+)?)\s+(?:small|for)',
+            parser=self._parse_temple_zz_bird_inline,
+            examples=["$BIRD in $12.00 small for a <@&role> SL 11.80"],
+            flags=re.IGNORECASE
+        )
+
         # --- ZZ structured emoji (✅/❌/🎯 format — author "ZZ") ---
 
         self.register(
             name="temple_zz_structured_entry",
             description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL (optional) / 🎯 targets",
             priority=50,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
             parser=parse_temple_zz_structured_entry,
             examples=[
                 "$AREB <@&1330929339134640179> \n✅ 0.30\n❌ 0.28\n🎯 0.33...0.37...0.40",
@@ -1336,6 +1386,8 @@ class SignalFormatRegistry:
                 "$OCG\n✅ 2.25\n🎯 5% 10% 15%",
                 "YOOV\n✅ 1.90 clear break\n❌ 1.75\n🎯 5%-10% -15%+",
                 "$AIIO\n✅ 5.00 break\n❌ 4.5\n🎯 5% 10% 15%+",
+                "$FUSE <@&role>\n✅ around 1.70\n❌ 1.50\n🎯 2.00-3.50",
+                "$WNW <@&role>\n✅ $4.00-4.20\n❌ 3.75\n🎯 4.46...4.78...5.20",
             ],
             flags=re.IGNORECASE
         )
@@ -2212,9 +2264,62 @@ class SignalFormatRegistry:
         }
     
     # =========================================================================
+    # TEMPLE ZZ SCALP/INLINE PARSER IMPLEMENTATIONS
+    # =========================================================================
+
+    def _parse_temple_zz_scalp_at(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse ZZ scalp: RECT scalping at 1.68 for 1.80...1.90..."""
+        import re as _re
+        symbol = match.group(1).upper()
+        price = float(match.group(2))
+        sl_match = _re.search(r'\bSL\s+\$?(\d+(?:\.\d+)?)', text, _re.IGNORECASE)
+        stop_loss = float(sl_match.group(1)) if sl_match else None
+        return {
+            "asset": "stock", "action": "BTO", "qty": 1, "qty_specified": False,
+            "symbol": symbol, "strike": None, "opt_type": None, "expiry": None,
+            "price": price, "stop_loss": stop_loss,
+            "is_market_order": False, "confidence": 0.85,
+            "_bracket_order": bool(stop_loss), "_temple_entry": True,
+        }
+
+    def _parse_temple_zz_in_small(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse ZZ inline: $EDBL in small at 0.45 / Small $IPST 5.22"""
+        groups = match.groups()
+        symbol = (groups[0] or groups[2] or '').upper()
+        price_str = groups[1] or groups[3]
+        if not symbol or not price_str:
+            return None
+        price = float(price_str)
+        import re as _re
+        sl_match = _re.search(r'\bSL\s+\$?(\d+(?:\.\d+)?)', text, _re.IGNORECASE)
+        stop_loss = float(sl_match.group(1)) if sl_match else None
+        return {
+            "asset": "stock", "action": "BTO", "qty": 1, "qty_specified": False,
+            "symbol": symbol, "strike": None, "opt_type": None, "expiry": None,
+            "price": price, "stop_loss": stop_loss,
+            "is_market_order": False, "confidence": 0.85,
+            "_bracket_order": bool(stop_loss), "_temple_entry": True,
+        }
+
+    def _parse_temple_zz_bird_inline(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse ZZ inline: $BIRD in $12.00 small for a <@&role> SL 11.80"""
+        symbol = match.group(1).upper()
+        price = float(match.group(2))
+        import re as _re
+        sl_match = _re.search(r'\bSL\s+\$?(\d+(?:\.\d+)?)', text, _re.IGNORECASE)
+        stop_loss = float(sl_match.group(1)) if sl_match else None
+        return {
+            "asset": "stock", "action": "BTO", "qty": 1, "qty_specified": False,
+            "symbol": symbol, "strike": None, "opt_type": None, "expiry": None,
+            "price": price, "stop_loss": stop_loss,
+            "is_market_order": False, "confidence": 0.85,
+            "_bracket_order": bool(stop_loss), "_temple_entry": True,
+        }
+
+    # =========================================================================
     # PHOENIX PARSER IMPLEMENTATIONS
     # =========================================================================
-    
+
     def _parse_phoenix_entry(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Phoenix entry: <@&role> PAVM over 21.50 SL 20"""
         groups = match.groups()
@@ -3939,11 +4044,19 @@ def get_signal_format_registry() -> SignalFormatRegistry:
 def parse_with_registry(text: str) -> Optional[Dict[str, Any]]:
     """
     Convenience function to parse text using the global registry.
-    
+
     Args:
         text: Signal text to parse
-        
+
     Returns:
         Parsed signal dict or None
     """
     return get_signal_format_registry().parse(text)
+
+
+def parse_all_with_registry(text: str) -> List[Dict[str, Any]]:
+    """Parse text for ALL signals (handles multi-plan messages).
+
+    Returns list of parsed signal dicts (may be empty).
+    """
+    return get_signal_format_registry().parse_all(text)

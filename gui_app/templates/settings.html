@@ -1204,9 +1204,10 @@ input:checked + .slider:before {
         <div class="form-group">
             <label>AI Provider</label>
             <select id="ai-provider" class="form-control" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff;">
-                <option value="replit_ai">Replit AI (Uses Replit Credits - Recommended)</option>
-                <option value="openai">OpenAI (Your Own API Key)</option>
-                <option value="disabled">Disabled (No AI Features)</option>
+                <option value="replit_ai" style="background: #1a1a2e; color: #fff;">Replit AI (Uses Replit Credits - Recommended)</option>
+                <option value="openai" style="background: #1a1a2e; color: #fff;">OpenAI (Your Own API Key)</option>
+                <option value="claude" style="background: #1a1a2e; color: #fff;">Claude (Anthropic API Key)</option>
+                <option value="disabled" style="background: #1a1a2e; color: #fff;">Disabled (No AI Features)</option>
             </select>
             <p class="help-text">Choose which AI service to use for chatbot and signal format learning</p>
         </div>
@@ -1216,6 +1217,12 @@ input:checked + .slider:before {
             <label>OpenAI API Key</label>
             <input type="password" id="openai-key" placeholder="sk-...">
             <p class="help-text">Required when using "OpenAI" provider above</p>
+        </div>
+        <!-- Anthropic Key (only shown when Claude is selected) -->
+        <div class="form-group" id="anthropic-key-group" style="display:none;">
+            <label>Anthropic API Key</label>
+            <input type="password" id="anthropic-key" placeholder="sk-ant-...">
+            <p class="help-text">Required when using "Claude" provider. Get your key at console.anthropic.com</p>
         </div>
         <div class="form-group">
             <label>Alpha Vantage Key</label>
@@ -3131,11 +3138,9 @@ document.getElementById('submit-schwab-code').addEventListener('click', async ()
 function updateAiProviderUI() {
     const provider = document.getElementById('ai-provider').value;
     const openaiGroup = document.getElementById('openai-key-group');
-    if (provider === 'openai') {
-        openaiGroup.style.display = 'block';
-    } else {
-        openaiGroup.style.display = 'none';
-    }
+    const anthropicGroup = document.getElementById('anthropic-key-group');
+    openaiGroup.style.display = provider === 'openai' ? 'block' : 'none';
+    anthropicGroup.style.display = provider === 'claude' ? 'block' : 'none';
 }
 
 document.getElementById('ai-provider').addEventListener('change', updateAiProviderUI);
@@ -3151,6 +3156,7 @@ async function loadApiKeys() {
             if (data.openai_key) document.getElementById('openai-key').value = data.openai_key;
             if (data.alphavantage_key) document.getElementById('alphavantage-key').value = data.alphavantage_key;
             if (data.finnhub_key) document.getElementById('finnhub-key').value = data.finnhub_key;
+            if (data.anthropic_key) document.getElementById('anthropic-key').value = data.anthropic_key;
             updateAiProviderUI();
         }
     } catch (error) {
@@ -3163,7 +3169,8 @@ document.getElementById('save-api-keys').addEventListener('click', async () => {
         ai_provider: document.getElementById('ai-provider').value,
         openai_key: document.getElementById('openai-key').value.trim(),
         alphavantage_key: document.getElementById('alphavantage-key').value.trim(),
-        finnhub_key: document.getElementById('finnhub-key').value.trim()
+        finnhub_key: document.getElementById('finnhub-key').value.trim(),
+        anthropic_key: document.getElementById('anthropic-key').value.trim()
     };
     
     try {
@@ -5083,7 +5090,7 @@ const ADMIN_HELP_CONTENT = {
         title: '🤖 AI & Market Data APIs',
         sections: [
             { heading: 'What This Is', body: 'API credentials for AI-powered features (chatbot, signal format learning) and market data services (option flow scanning, market news).' },
-            { heading: 'AI Provider', body: '<strong>Replit AI:</strong> Uses Replit Credits — no external API key needed (recommended).<br><strong>OpenAI:</strong> Uses your own OpenAI API key (sk-...) for GPT models.<br><strong>Disabled:</strong> Turns off all AI features.' },
+            { heading: 'AI Provider', body: '<strong>Replit AI:</strong> Uses Replit Credits — no external API key needed (recommended).<br><strong>OpenAI:</strong> Uses your own OpenAI API key (sk-...) for GPT models.<br><strong>Claude:</strong> Uses Anthropic Claude API (sk-ant-...) — superior instruction-following for signal pattern recognition.<br><strong>Disabled:</strong> Turns off all AI features.' },
             { heading: 'Alpha Vantage', body: 'Provides option flow data and fundamental analysis. Free tier available with limited calls. Used for the option flow scanner feature.' },
             { heading: 'Finnhub', body: 'Provides market news, real-time quotes, and company data. Used as a price data source for conditional orders and market sentiment features. Free tier available.' }
         ]

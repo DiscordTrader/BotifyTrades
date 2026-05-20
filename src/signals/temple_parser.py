@@ -106,9 +106,9 @@ TEMPLE_ZZ_TICKER_PRICE_NOW = re.compile(
     re.IGNORECASE
 )
 
-# Range entry: "SYMBOL LOW-HIGH" (with optional flame emoji)
+# Range entry: "SYMBOL LOW-HIGH" (with optional flame emoji and trailing text)
 TEMPLE_ZZ_RANGE_ENTRY = re.compile(
-    r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(?:<[^>]*>|[^\x00-\x7F]|\s)*$',
+    r'^\$?([A-Z]{2,5})\s+(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(?:<[^>]*>|[^\x00-\x7F]|[.,;!\s])*(?:\S.*)?$',
     re.IGNORECASE
 )
 
@@ -133,8 +133,8 @@ ZZ_ROLE_SWING = '1330915546513805463'
 # Structured entry: "$TICKER <@&role>\n✅ PRICE\n❌ PRICE (optional)\n🎯 T1...T2...T3"
 TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
     r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n'
-    r'✅[ \t]*(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n'
-    r'(?:❌[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?'
+    r'✅[ \t]*(?:around[ \t]+|break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n'
+    r'(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?'
     r'🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
     re.IGNORECASE
 )

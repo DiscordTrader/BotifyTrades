@@ -1,5 +1,79 @@
 # BotifyTrades Progress Log
 
+## Session: May 20, 2026 — IBKR Position Persistence Hardening (P0)
+
+### BUG: IBKR positions vulnerable to false closure during reconnect storms
+- **Reported**: User observed positions losing SL/PT/channel after restart, showing as "broker synced"
+- **Root cause**: Three compounding vulnerabilities in `broker_sync_service.py`:
+  1. **No `_fetch_error` for IBKR** — When IBKR disconnects, `get_positions_detailed()` returns `[]` and sync never set `_fetch_error = True`, so the fetch-error safety net at line 1375 never fired. Compare to Schwab which had explicit `_fetch_error` handling. Also, exception handler at line 750 printed error but didn't set the flag.
+  2. **Broker-level empty guard too lenient** — `required_consecutive = 2` with `required_time_seconds = 0`. During IBKR reconnect storms (78 cycles in logs), just 2 consecutive empties (~1 min) allowed trade closures to proceed.
+  3. **Per-trade guard too low** — `_REQUIRED_CONFIRMATIONS = 3` meant only 5 total empty cycles (~2.5 min) could falsely close a real DB trade.
+- **Kill chain**: IBKR disconnects → returns `[]` (no error flag) → 2 broker empties pass broker guard → 3 more empties pass per-trade guard → DB trade closed → on reconnect position reappears but `auto_import_external=false` blocks reimport → orphaned position with no SL/PT/channel.
+- **Fixes applied to `src/services/broker_sync_service.py`**:
+  1. Set `result['_fetch_error'] = True` when IBKR is disconnected (line 753-755) AND when fetch throws exception (line 752)
+  2. Broker-level guard: IBKR now requires 6 consecutive empties + 120s elapsed (was 2/0s). Other brokers raised to 3/30s.
+  3. Per-trade guard: IBKR now requires 8 confirmations (was 3). Other brokers raised to 4.
+- **Protection math**: IBKR now needs 6+8=14 consecutive empty cycles (~7 min at 30s interval) AND 120s elapsed before closing a trade. But with `_fetch_error` set on disconnect, the counter never even starts — empties during disconnect are completely blocked.
+
+### BUG: Discord disconnects on auto-start after computer wake from sleep
+- **Reported**: User has bot set to auto-start when computer wakes. Discord always disconnects. Manual stop+start fixes it.
+- **Root cause**: `discord_main()` in `selfbot_webull.py:21278` had a single-shot connection attempt with NO retry. When computer wakes from sleep, network interfaces aren't ready yet. `client.start(USER_TOKEN)` fails immediately (DNS/TCP timeout). The exception handler enters fallback mode (brokers only, no Discord) and never retries.
+- **Why manual restart works**: By the time user opens GUI and clicks Stop/Start, network is fully up → single attempt succeeds.
+- **Fix**: Replaced single-shot `await client.start()` with a retry loop:
+  1. **Network readiness check** — probes `discord.com:443` and `1.1.1.1:443` before attempting. If down, polls every 5s for up to 60s.
+  2. **5 retry attempts** with increasing delays (10s, 15s, 20s, 30s, 45s) — total ~2 min window for network to come up.
+  3. Token errors (no token configured) break immediately — no pointless retries.
+  4. Fresh `SelfClient()` on each retry to avoid stale state.
+  5. Existing fallback mode preserved: if all 5 retries fail, brokers still initialize without Discord.
+- **Files**: `src/selfbot_webull.py` (lines 21278-21380)
+
+### BUG: Conditional orders fail silently for all channels — 100% failure rate
+- **User**: Running v10.1.1, Schwab broker, 6 conditional order signals (GOVX, VRAX, CISS, AIIO, SBFM) — ALL failed
+- **Log pattern**: `[CONDITIONAL] ✓ Detected conditional order: GOVX over $3.8` → `[CONDITIONAL] ⚠️ Failed to create conditional order [SCHWAB]` — no error detail
+- **Root cause analysis**: `base.py:create_order()` returns `None` before reaching DB INSERT. All early-exit checks log to stderr only (via `self._log()` → `sys.stderr.write()`), making them invisible in user's log file.
+- **Probable cause**: One of: (a) `conditional_order_enabled=0` on channel, (b) DB schema mismatch in v10.1.1 vs current INSERT columns, (c) `is_enabled()` returning False
+- **Fix**: Added `print()` (stdout) diagnostics to ALL early-exit checks in `base.py:create_order()` — service disabled, trading paused, execute OFF, conditional disabled, no broker. Also added try/except around the DB INSERT call with stdout traceback. Next user log will show exact blocker.
+- **Files**: `src/services/conditional_orders/base.py` (lines 1504-1548, 1737-1784)
+- **Secondary finding**: ProTrader channel (PIII) has `execute_enabled=0` — this is expected/correct behavior
+
+## Session: May 20, 2026 — IBKR Close Position Bug Fix (P0)
+
+### BUG: IBKR positions cannot be closed from Dashboard — "cannot access local variable 'asyncio'"
+- **Reported**: User screenshot confirmed browser alert: `IBKR close error: cannot access local variable 'asyncio' where it is not associated with a value`
+- **Root cause**: Python scoping bug in `close_position_by_id()` (routes.py line 6778). A conditional `import asyncio` at line 6523 (inside bracket cleanup `if` block) caused Python's compiler to treat `asyncio` as a local variable for the entire function. When the IBKR sell code at line 6778 ran, the conditional import hadn't executed yet → `UnboundLocalError`.
+- **Fix**: Added `import asyncio` at function top (line 6399), alongside existing `import concurrent.futures`. The later conditional import is now redundant but harmless.
+- **Additional fix**: Added `isConnected()` guard to `ibkr_broker.place_stock_order()` and `place_option_order()` — previously these methods had no connection check, so during the IBKR reconnect storm they would throw cryptic errors instead of a clear "not connected" message.
+- **Secondary issue found**: IBKR WebSocket in reconnect death loop — 78 timeouts, 73 failed reconnects, 75 successful reconnects in ~1 hour. Connection recovers but never receives streaming data → times out every 30s. This is a TWS/Gateway-side issue (market data subscription or TWS state).
+- **PIII position**: 2 shares @ $8.20 entry, running +13.3% ($9.29) with NO SL/PT set. Risk engine monitors but never auto-exits.
+- **Files**: `gui_app/routes.py` (line 6399), `src/brokers/ibkr_broker.py` (lines 468, 551)
+
+## Session: May 18, 2026 — Multi-Plan Execution + Claude AI Integration
+
+### Multi-Plan Message Fix (GOVX + CISS)
+- **Problem**: When ZZ Boom sends two plans in one message (`$GOVX\n...\n\n$CISS\n...`), only the first was detected
+- **Fix**: Added `parse_all()` method to SignalFormatRegistry that splits on `\n\n+(?=\$[A-Z])` boundaries
+- **Execution**: Added multi-plan processing loop at end of stock signal pipeline — each extra gets BTO guard, channel config copy, DB save, and queue
+- **Files**: `signal_format_registry.py` (parse_all), `selfbot_webull.py` (extras loop at ~line 16522)
+
+### Claude AI Integration (Anthropic API)
+- **Architect review**: Safety review doc at `docs/claude_ai_integration_review.md`
+- **Provider added**: `claude` option in Settings > AI & Market Data APIs dropdown
+- **Components updated**:
+  - `config_service.py` — added `'claude'` to AI_PROVIDERS
+  - `broker_credentials_service.py` — added `anthropic` key to api_keys_extended (with default migration)
+  - `ai_signal_parser.py` — added `_init_anthropic_client()` and `_call_anthropic()` methods, provider-based routing
+  - `format_trainer.py` — added Claude client init and dispatch in learn/parse methods
+  - `settings.html` — Claude dropdown option, Anthropic API key field, JS save/load/show-hide
+  - `routes.py` — all 5 `save_api_keys_extended` callers updated to preserve `anthropic` key
+  - `requirements.txt` — added `anthropic>=0.30.0`
+- **Safety**: Zero changes to `signal_parsing_pipeline.py`. All existing gates intact:
+  - AI disabled by default (`_ai_enabled=False`)
+  - AI execution blocked (`_ai_execution_allowed=False`)
+  - Admin approval required (`admin_approved=False` hardcoded)
+  - Confidence threshold 0.8
+- **Model**: Claude Haiku 3.5 (fast, cheap, excellent at structured extraction)
+- **Verified**: All safety gate tests pass, integration tests pass
+
 ## Session: May 14, 2026 — Temple of Boom (ZZ) Parser: 2 Bugs Fixed
 
 ### BUG 1: OCG missed — structured entry parser required ❌ stop loss line

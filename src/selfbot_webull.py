@@ -12147,9 +12147,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 is_phoenix_registry = False
                 is_protrader_conditional = False
                 _phoenix_registry_result = None
+                _phoenix_registry_extras = []
                 try:
-                    from src.services.signal_format_registry import parse_with_registry
-                    _phoenix_registry_result = parse_with_registry(combined_content)
+                    from src.services.signal_format_registry import parse_with_registry, parse_all_with_registry
+                    _all_results = parse_all_with_registry(combined_content)
+                    if _all_results:
+                        _phoenix_registry_result = _all_results[0]
+                        _phoenix_registry_extras = _all_results[1:]
                     if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'stock':
                         if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
                             is_phoenix_registry = True
@@ -16511,12 +16515,112 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[ROUTE] TRACK-only channel (paper trading disabled) - signal saved for performance analysis")
             elif track_enabled and execute_enabled:
                 print(f"[ROUTE] DUAL mode - executing trade AND tracking performance")
-            
+
             # Legacy fallback REMOVED - all channels must be properly configured via GUI
             # This prevents unintended order execution from unconfigured channels
-            
+
+            # Process multi-plan extras (e.g., $GOVX + $CISS in one Discord message)
+            if _phoenix_registry_extras:
+                for _extra_idx, _extra_result in enumerate(_phoenix_registry_extras):
+                    try:
+                        _extra_action = _extra_result.get('action')
+                        _extra_symbol = _extra_result.get('symbol')
+                        _extra_price = _extra_result.get('price')
+                        _extra_asset = _extra_result.get('asset', 'stock')
+                        _extra_fmt = _extra_result.get('format', 'REGISTRY')
+
+                        if not _extra_symbol or _extra_asset != 'stock' or _extra_action not in ('BTO', 'STC'):
+                            print(f"[MULTI-PLAN] ⚠️ Skipping extra #{_extra_idx+1}: {_extra_symbol} action={_extra_action} asset={_extra_asset}")
+                            continue
+
+                        print(f"[MULTI-PLAN] Processing extra #{_extra_idx+1}/{len(_phoenix_registry_extras)}: {_extra_action} {_extra_symbol} @ ${_extra_price} ({_extra_fmt})")
+
+                        if _extra_action == 'BTO':
+                            _extra_stk = {
+                                'action': 'BTO',
+                                'symbol': _extra_symbol,
+                                'qty': _extra_result.get('qty', 1),
+                                'qty_specified': _extra_result.get('qty_specified', False),
+                                'price': _extra_price,
+                                'asset': 'stock',
+                                'stop_loss_price': _extra_result.get('stop_loss'),
+                                'profit_targets': _extra_result.get('profit_targets') or ([_extra_result['take_profit']] if _extra_result.get('take_profit') else None),
+                                'is_market_order': _extra_result.get('is_market_order', _extra_price is None),
+                                '_bracket_order': bool(_extra_result.get('stop_loss')),
+                                '_registry_parsed': True,
+                                'parsed_by': _extra_fmt,
+                            }
+                            if _extra_stk.get('profit_targets'):
+                                _extra_stk['profit_target_price'] = _extra_stk['profit_targets'][0]
+                        else:
+                            _extra_stk = {
+                                'action': 'STC',
+                                'symbol': _extra_symbol,
+                                'qty': _extra_result.get('qty', 1),
+                                'qty_specified': _extra_result.get('qty_specified', False),
+                                'price': _extra_price,
+                                'asset': 'stock',
+                                'is_market_order': _extra_result.get('is_market_order', True),
+                                'is_trim': _extra_result.get('is_trim', False),
+                                'is_full_exit': _extra_result.get('is_full_exit', False),
+                                '_registry_parsed': True,
+                                'parsed_by': _extra_fmt,
+                            }
+
+                        if _extra_stk['action'] == 'BTO':
+                            try:
+                                from gui_app.database import get_connection as _mp_get_conn
+                                _mp_conn = _mp_get_conn()
+                                _mp_cursor = _mp_conn.cursor()
+                                _mp_cursor.execute('''
+                                    SELECT id, status FROM trades
+                                    WHERE UPPER(symbol) = ? AND channel_id = ?
+                                    AND status IN ('OPEN', 'PENDING')
+                                    ORDER BY id DESC LIMIT 1
+                                ''', (_extra_symbol.upper(), str(message.channel.id)))
+                                if _mp_cursor.fetchone():
+                                    print(f"[MULTI-PLAN] ⛔ BLOCKED duplicate BTO: {_extra_symbol} already open in this channel")
+                                    continue
+                            except Exception:
+                                pass
+
+                        for _cfg_key in ('_enabled_brokers', '_channel_risk_config', '_channel_paper_config',
+                                         '_position_size_pct', '_pct_from_channel', '_calculate_qty',
+                                         '_channel_max_position_size', '_sizing_mode', '_use_market_order',
+                                         '_exit_strategy_mode', '_broker_override', '_channel_name',
+                                         '_paper_trade_mode'):
+                            if _cfg_key in stk and _cfg_key not in _extra_stk:
+                                _extra_stk[_cfg_key] = stk[_cfg_key]
+
+                        if not _extra_stk.get('qty_specified') and stk.get('qty') and not stk.get('_calculate_qty'):
+                            _extra_stk['qty'] = stk['qty']
+
+                        if channel_info:
+                            _extra_stk['channel_record_id'] = channel_info.get('id')
+                            _extra_stk['channel_id'] = str(message.channel.id)
+                            _extra_stk['message_id'] = str(message.id)
+                            _extra_stk['author'] = author_name
+
+                        self._save_signal_to_db(_extra_stk, message.channel.id, message.id, author_name)
+                        print(f"[MULTI-PLAN] ✓ Extra signal saved to database: {_extra_action} {_extra_symbol}")
+
+                        if execute_enabled or (track_enabled and stk.get('_paper_trade_mode')):
+                            import time as _tmod
+                            _extra_stk['_parsed_at'] = _tmod.monotonic()
+                            _extra_stk['_queued_at'] = _tmod.monotonic()
+                            _extra_stk['detected_at'] = arrived_at.isoformat() if arrived_at else datetime.now().isoformat()
+                            _extra_stk['parsed_at'] = datetime.now().isoformat()
+                            await self.order_queue.put(_extra_stk)
+                            print(f"[MULTI-PLAN] ✓ Extra signal queued: {_extra_action} {_extra_symbol} @ ${_extra_price}")
+                        else:
+                            print(f"[MULTI-PLAN] ✓ Extra signal tracked (not executed): {_extra_action} {_extra_symbol}")
+                    except Exception as _mp_err:
+                        print(f"[MULTI-PLAN] ❌ Error processing extra #{_extra_idx+1}: {_mp_err}")
+                        import traceback
+                        traceback.print_exc()
+
             return
-        
+
         # CHANNEL MAPPING FORWARDING: Forward messages (including TRADE IDEA) to webhook destinations
         # This runs FIRST for mapped channels, regardless of execute/track status
         if is_mapped_source_channel:
@@ -21173,63 +21277,110 @@ def run_discord_bot_thread():
     
     async def discord_main():
         """Async entrypoint for Discord bot with proper lifecycle"""
-        try:
-            _original_print("[Discord Thread] Starting Discord bot...")
-            logging.info("[Discord Thread] Starting Discord bot...")
-            
-            client = SelfClient()
-            
-            _original_print("[Discord Thread] Connecting to Discord...")
-            logging.info("[Discord Thread] Connecting to Discord...")
-            await client.start(USER_TOKEN)
-            
-        except Exception as e:
-            error_msg = str(e)
-            if 'expected token to be a str' in error_msg or 'NoneType' in error_msg:
-                _original_print("[Discord Thread] Discord token not configured - this is expected if you haven't set it up yet")
-                _original_print("[Discord Thread] Configure your Discord token in Settings > Discord to enable signal reading")
-                logging.warning("[Discord Thread] Discord token not configured")
-            else:
-                _original_print(f"[Discord Thread ERROR] Bot crashed: {e}")
-                logging.error(f"[Discord Thread] Bot crashed: {e}")
-                log_error_to_db('discord_connection', f"Discord bot crashed: {str(e)}", 
-                               'DiscordClient', 'critical', 'Check Discord token and network connection')
-                import traceback
-                traceback.print_exc()
-                logging.error(f"[Discord Thread] Traceback:\n{traceback.format_exc()}")
-            _discord_error_queue.put(e)
+        import time as _dm_time
 
-            if not client._on_ready_completed:
-                _original_print("[Discord Thread] Discord failed before broker init — starting brokers independently...")
+        def _is_network_available():
+            import socket
+            for host in ('discord.com', '1.1.1.1'):
                 try:
-                    if client.broker_ready is None:
-                        client.order_queue = _PriorityOrderQueue()
-                        client.broker_ready = asyncio.Event()
-                        client.sync_ready = asyncio.Event()
-                        client.processing_ready = asyncio.Event()
-                        client._send_lock = asyncio.Lock()
-                        client._message_dedupe_lock = asyncio.Lock()
-                        _original_print("[ASYNC] ✓ Queue, events, and locks created (fallback)")
-                    await client._init_brokers_background()
-                    _original_print("[Discord Thread] ✓ Brokers initialized without Discord — keeping loop alive")
+                    socket.create_connection((host, 443), timeout=3).close()
+                    return True
+                except (OSError, socket.timeout):
+                    continue
+            return False
 
-                    client.loop = asyncio.get_event_loop()
-                    try:
-                        from gui_app import routes
-                        routes.set_bot_instance(client)
-                        _original_print("[Discord Thread] ✓ Bot instance registered with web GUI (fallback)")
-                    except Exception as gui_err:
-                        _original_print(f"[Discord Thread] Warning: Could not register bot with GUI: {gui_err}")
+        _MAX_CONNECT_RETRIES = 5
+        _RETRY_DELAYS = [10, 15, 20, 30, 45]
+        client = None
+        last_error = None
 
-                    _discord_ready_event.set()
-                    while not _discord_shutdown_event.is_set():
-                        await asyncio.sleep(1)
-                    return
-                except Exception as broker_err:
-                    _original_print(f"[Discord Thread] Fallback broker init error: {broker_err}")
+        for attempt in range(1, _MAX_CONNECT_RETRIES + 1):
+            try:
+                if attempt == 1:
+                    _original_print("[Discord Thread] Starting Discord bot...")
+                    logging.info("[Discord Thread] Starting Discord bot...")
+
+                if not _is_network_available():
+                    _original_print(f"[Discord Thread] ⏳ Network not ready (attempt {attempt}/{_MAX_CONNECT_RETRIES}) — waiting for connectivity...")
+                    logging.warning(f"[Discord Thread] Network not available, waiting...")
+                    wait_start = _dm_time.time()
+                    while not _is_network_available():
+                        if _dm_time.time() - wait_start > 60:
+                            _original_print(f"[Discord Thread] ⚠️ Network still unavailable after 60s — attempting connection anyway")
+                            break
+                        await asyncio.sleep(5)
+                    else:
+                        _original_print(f"[Discord Thread] ✓ Network available (waited {_dm_time.time() - wait_start:.0f}s)")
+
+                if client is None:
+                    client = SelfClient()
+
+                _original_print(f"[Discord Thread] Connecting to Discord... (attempt {attempt}/{_MAX_CONNECT_RETRIES})")
+                logging.info(f"[Discord Thread] Connecting to Discord (attempt {attempt})...")
+                await client.start(USER_TOKEN)
+                return
+
+            except Exception as e:
+                last_error = e
+                error_msg = str(e)
+                if 'expected token to be a str' in error_msg or 'NoneType' in error_msg:
+                    _original_print("[Discord Thread] Discord token not configured - this is expected if you haven't set it up yet")
+                    _original_print("[Discord Thread] Configure your Discord token in Settings > Discord to enable signal reading")
+                    logging.warning("[Discord Thread] Discord token not configured")
+                    break
+
+                _original_print(f"[Discord Thread] ⚠️ Connection attempt {attempt}/{_MAX_CONNECT_RETRIES} failed: {e}")
+                logging.warning(f"[Discord Thread] Connection attempt {attempt} failed: {e}")
+
+                if attempt < _MAX_CONNECT_RETRIES:
+                    delay = _RETRY_DELAYS[attempt - 1]
+                    _original_print(f"[Discord Thread] Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    client = None
+                else:
+                    _original_print(f"[Discord Thread ERROR] All {_MAX_CONNECT_RETRIES} connection attempts failed: {e}")
+                    logging.error(f"[Discord Thread] All retries exhausted: {e}")
+                    log_error_to_db('discord_connection', f"Discord bot failed after {_MAX_CONNECT_RETRIES} retries: {str(e)}",
+                                   'DiscordClient', 'critical', 'Check Discord token and network connection')
                     import traceback
                     traceback.print_exc()
-            raise
+                    logging.error(f"[Discord Thread] Traceback:\n{traceback.format_exc()}")
+
+        if last_error:
+            _discord_error_queue.put(last_error)
+
+        if client and not client._on_ready_completed:
+            _original_print("[Discord Thread] Discord failed before broker init — starting brokers independently...")
+            try:
+                if client.broker_ready is None:
+                    client.order_queue = _PriorityOrderQueue()
+                    client.broker_ready = asyncio.Event()
+                    client.sync_ready = asyncio.Event()
+                    client.processing_ready = asyncio.Event()
+                    client._send_lock = asyncio.Lock()
+                    client._message_dedupe_lock = asyncio.Lock()
+                    _original_print("[ASYNC] ✓ Queue, events, and locks created (fallback)")
+                await client._init_brokers_background()
+                _original_print("[Discord Thread] ✓ Brokers initialized without Discord — keeping loop alive")
+
+                client.loop = asyncio.get_event_loop()
+                try:
+                    from gui_app import routes
+                    routes.set_bot_instance(client)
+                    _original_print("[Discord Thread] ✓ Bot instance registered with web GUI (fallback)")
+                except Exception as gui_err:
+                    _original_print(f"[Discord Thread] Warning: Could not register bot with GUI: {gui_err}")
+
+                _discord_ready_event.set()
+                while not _discord_shutdown_event.is_set():
+                    await asyncio.sleep(1)
+                return
+            except Exception as broker_err:
+                _original_print(f"[Discord Thread] Fallback broker init error: {broker_err}")
+                import traceback
+                traceback.print_exc()
+        if last_error:
+            raise last_error
     
     loop = None
     try:

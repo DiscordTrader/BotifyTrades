@@ -25,6 +25,12 @@ except ImportError:
     OPENAI_AVAILABLE = False
     print("[AI_PARSER] OpenAI not available")
 
+try:
+    from anthropic import AsyncAnthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
 
 @dataclass
 class AIParseResult:
@@ -88,39 +94,100 @@ class AISignalParser:
     
     def __init__(self, max_concurrent: int = 3):
         self._client: Optional[AsyncOpenAI] = None
+        self._anthropic_client = None
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._cache = AISignalParserCache()
         self._model = "gpt-4o-mini"
+        self._anthropic_model = "claude-haiku-4-5-20251001"
+        self._provider = None
         self._initialized = False
         self._few_shot_examples: List[Dict] = []
         self._load_few_shot_examples()
-    
+
+    def _get_provider(self) -> str:
+        try:
+            from gui_app.config_service import get_ai_provider
+            return get_ai_provider()
+        except Exception:
+            return 'disabled'
+
     def _init_client(self) -> bool:
-        """Initialize OpenAI client."""
+        """Initialize AI client based on provider config."""
+        provider = self._get_provider()
+
+        if provider != self._provider:
+            self._initialized = False
+            self._client = None
+            self._anthropic_client = None
+            self._provider = provider
+
         if self._initialized:
-            return self._client is not None
-        
+            return self._client is not None or self._anthropic_client is not None
+
         self._initialized = True
-        
+
+        if provider == 'disabled':
+            return False
+
+        if provider == 'claude':
+            return self._init_anthropic_client()
+
+        return self._init_openai_client()
+
+    def _init_openai_client(self) -> bool:
         if not OPENAI_AVAILABLE:
             return False
-        
+
         api_key = os.getenv("AI_INTEGRATIONS_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            try:
+                from gui_app.broker_credentials_service import get_api_keys_extended
+                keys = get_api_keys_extended()
+                api_key = keys.get('openai', '')
+            except Exception:
+                pass
+
         base_url = os.getenv("AI_INTEGRATIONS_OPENAI_BASE_URL")
-        
+
         if not api_key:
             print("[AI_PARSER] No OpenAI API key found")
             return False
-        
+
         try:
             self._client = AsyncOpenAI(
                 api_key=api_key,
                 base_url=base_url if base_url else None
             )
-            print(f"[AI_PARSER] ✓ Initialized with model: {self._model}")
+            print(f"[AI_PARSER] ✓ Initialized OpenAI with model: {self._model}")
             return True
         except Exception as e:
-            print(f"[AI_PARSER] Failed to initialize: {e}")
+            print(f"[AI_PARSER] Failed to initialize OpenAI: {e}")
+            return False
+
+    def _init_anthropic_client(self) -> bool:
+        if not ANTHROPIC_AVAILABLE:
+            print("[AI_PARSER] Anthropic SDK not installed (pip install anthropic)")
+            return False
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            try:
+                from gui_app.broker_credentials_service import get_api_keys_extended
+                keys = get_api_keys_extended()
+                api_key = keys.get('anthropic', '')
+            except Exception:
+                pass
+
+        if not api_key:
+            print("[AI_PARSER] No Anthropic API key found")
+            return False
+
+        try:
+            self._anthropic_client = AsyncAnthropic(api_key=api_key)
+            print(f"[AI_PARSER] ✓ Initialized Claude with model: {self._anthropic_model}")
+            return True
+        except Exception as e:
+            print(f"[AI_PARSER] Failed to initialize Anthropic: {e}")
             return False
     
     def _load_few_shot_examples(self) -> None:
@@ -181,7 +248,10 @@ class AISignalParser:
         
         # Rate limit with semaphore
         async with self._semaphore:
-            result = await self._call_openai(text)
+            if self._anthropic_client and self._provider == 'claude':
+                result = await self._call_anthropic(text)
+            else:
+                result = await self._call_openai(text)
         
         # Cache result
         self._cache.set(text, result)
@@ -255,6 +325,76 @@ Examples:
             return AIParseResult(error=f"Invalid JSON response: {e}")
         except Exception as e:
             print(f"[AI_PARSER] API error: {e}")
+            return AIParseResult(error=str(e))
+
+    async def _call_anthropic(self, text: str) -> AIParseResult:
+        """Make API call to Anthropic Claude."""
+        try:
+            examples_str = "\n".join([
+                f"Input: {ex['input']}\nOutput: {json.dumps(ex['output'])}"
+                for ex in self._few_shot_examples[:6]
+            ])
+
+            system_prompt = """You are a trading signal parser. Extract structured data from messages.
+Return ONLY a valid JSON object with these fields:
+- action: "BTO" (buy to open), "STC" (sell to close), or null if not a trading signal
+- asset: "stock" or "option"
+- symbol: Stock ticker (uppercase, 1-5 letters)
+- strike: Option strike price (null for stocks)
+- option_type: "C" for call, "P" for put (null for stocks)
+- expiry: Expiration date (null for stocks)
+- price: Entry/exit price if mentioned
+- qty: Quantity if mentioned (default 1)
+- is_trim: true if partial exit
+- confidence: 0.0 to 1.0
+- rationale: Brief explanation
+
+RULES:
+- Only return action if it's a clear trading signal (entry/exit/trim)
+- Commentary, watchlist mentions, analysis = action null, confidence 0.0
+- Never hallucinate symbols not present in the input
+- Never recommend trades or suggest position sizes
+
+Examples:
+""" + examples_str
+
+            response = await self._anthropic_client.messages.create(
+                model=self._anthropic_model,
+                max_tokens=300,
+                temperature=0.3,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": f"Parse this trading message and return JSON only:\n\n{text}"},
+                    {"role": "assistant", "content": "{"}
+                ]
+            )
+
+            content = "{" + response.content[0].text
+            content = content.strip()
+            if content.endswith("```"):
+                content = content[:content.rfind("```")].strip()
+
+            data = json.loads(content)
+
+            return AIParseResult(
+                action=data.get('action'),
+                asset=data.get('asset', 'stock'),
+                symbol=data.get('symbol'),
+                strike=data.get('strike'),
+                option_type=data.get('option_type'),
+                expiry=data.get('expiry'),
+                price=data.get('price'),
+                qty=data.get('qty', 1),
+                confidence=data.get('confidence', 0.0),
+                rationale=data.get('rationale', ''),
+                is_trim=data.get('is_trim', False)
+            )
+
+        except json.JSONDecodeError as e:
+            print(f"[AI_PARSER] Claude JSON decode error: {e}")
+            return AIParseResult(error=f"Invalid JSON from Claude: {e}")
+        except Exception as e:
+            print(f"[AI_PARSER] Claude API error: {e}")
             return AIParseResult(error=str(e))
 
 

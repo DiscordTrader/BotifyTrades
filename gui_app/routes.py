@@ -6396,6 +6396,7 @@ def register_routes(app):
     def close_position_by_id(trade_id):
         """Close a position by trade ID (used by Dashboard) - Uses LIVE broker quantity"""
         import concurrent.futures
+        import asyncio
         print(f"[API] ========== CLOSE ENDPOINT CALLED FOR TRADE ID {trade_id} ==========")
         try:
             if _bot_instance is None:
@@ -10160,7 +10161,8 @@ def register_routes(app):
                 'ai_provider': get_ai_provider(),
                 'openai_key': mask_key(keys.get('openai', '')),
                 'alphavantage_key': mask_key(keys.get('alpha_vantage', '')),
-                'finnhub_key': mask_key(keys.get('finnhub', ''))
+                'finnhub_key': mask_key(keys.get('finnhub', '')),
+                'anthropic_key': mask_key(keys.get('anthropic', ''))
             })
         except Exception as e:
             print(f"[API] Error getting API keys: {e}")
@@ -10185,7 +10187,8 @@ def register_routes(app):
             openai = data.get('openai_key', '')
             alpha_vantage = data.get('alphavantage_key', '')
             finnhub = data.get('finnhub_key', '')
-            
+            anthropic = data.get('anthropic_key', '')
+
             # If value starts with masked chars, keep existing
             if openai.startswith('••••'):
                 openai = existing.get('openai', '')
@@ -10193,12 +10196,15 @@ def register_routes(app):
                 alpha_vantage = existing.get('alpha_vantage', '')
             if finnhub.startswith('••••'):
                 finnhub = existing.get('finnhub', '')
-            
+            if anthropic.startswith('••••'):
+                anthropic = existing.get('anthropic', '')
+
             save_api_keys_extended(
                 openai=openai or existing.get('openai', ''),
                 alpha_vantage=alpha_vantage or existing.get('alpha_vantage', ''),
                 finnhub=finnhub or existing.get('finnhub', ''),
-                license_key=existing.get('license_key', '')
+                license_key=existing.get('license_key', ''),
+                anthropic=anthropic or existing.get('anthropic', '')
             )
             
             return jsonify({
@@ -17511,7 +17517,8 @@ def register_routes(app):
                 openai=data.get('openai', existing.get('openai', '')),
                 alpha_vantage=data.get('alpha_vantage', existing.get('alpha_vantage', '')),
                 finnhub=data.get('finnhub', existing.get('finnhub', '')),
-                license_key=data.get('license_key', existing.get('license_key', ''))
+                license_key=data.get('license_key', existing.get('license_key', '')),
+                anthropic=data.get('anthropic', existing.get('anthropic', ''))
             )
             
             return jsonify({
@@ -17924,9 +17931,10 @@ def register_routes(app):
                     openai=existing.get('openai', ''),
                     alpha_vantage=existing.get('alpha_vantage', ''),
                     finnhub=existing.get('finnhub', ''),
-                    license_key=license_key
+                    license_key=license_key,
+                    anthropic=existing.get('anthropic', '')
                 )
-                
+
                 # Also save to wizard credentials if available
                 try:
                     try:
@@ -18084,9 +18092,10 @@ def register_routes(app):
                 openai=existing.get('openai', ''),
                 alpha_vantage=existing.get('alpha_vantage', ''),
                 finnhub=existing.get('finnhub', ''),
-                license_key=''
+                license_key='',
+                anthropic=existing.get('anthropic', '')
             )
-            
+
             return jsonify({
                 'success': True,
                 'message': 'License deactivated successfully',

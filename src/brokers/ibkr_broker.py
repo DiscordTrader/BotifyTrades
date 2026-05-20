@@ -465,6 +465,8 @@ class IBKRBroker(BrokerInterface):
         _auto_adjust_depth: int = 0
     ) -> OrderResult:
         """Place a stock order"""
+        if not self.ib.isConnected():
+            return OrderResult(success=False, message="IBKR not connected to TWS/Gateway", symbol=symbol, action=action)
         try:
             # Create contract
             contract = Stock(symbol, 'SMART', 'USD')
@@ -547,6 +549,8 @@ class IBKRBroker(BrokerInterface):
         price: Optional[float] = None
     ) -> OrderResult:
         """Place an options order"""
+        if not self.ib.isConnected():
+            return OrderResult(success=False, message="IBKR not connected to TWS/Gateway", symbol=symbol, action=action)
         try:
             from datetime import datetime
             expiry_formatted = self._normalize_expiry_yyyymmdd(expiry)
