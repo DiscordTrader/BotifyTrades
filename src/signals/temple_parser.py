@@ -131,12 +131,13 @@ ZZ_ROLE_MOMENTUM = '1330929339134640179'
 ZZ_ROLE_SWING = '1330915546513805463'
 
 # Structured entry: "$TICKER <@&role>\n✅ PRICE\n❌ PRICE (optional)\n🎯 T1...T2...T3"
+# re.MULTILINE so ^ matches line starts (handles "Overnight idea\n$MTVA re-entry\n✅...")
 TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
-    r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*\n'
+    r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n'
     r'✅[ \t]*(?:around[ \t]+|break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n'
     r'(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?'
     r'🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
-    re.IGNORECASE
+    re.IGNORECASE | re.MULTILINE
 )
 
 # Inline entry with role: "SYMBOL in at PRICE <@&role>" or "$SYMBOL <@&role> PRICE"
@@ -837,9 +838,24 @@ def _detect_zz_trade_type(text: str) -> str:
     return 'day'
 
 
+_STRUCTURED_REJECT_WORDS = {
+    'IF', 'OR', 'IT', 'IS', 'IN', 'ON', 'AT', 'TO', 'DO', 'GO', 'NO', 'SO',
+    'AN', 'AS', 'BE', 'BY', 'HE', 'ME', 'MY', 'OF', 'UP', 'US', 'WE',
+    'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER',
+    'WAS', 'ONE', 'OUR', 'OUT', 'DAY', 'GET', 'HAS', 'HIM', 'HIS', 'HOW',
+    'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'SEE', 'WAY', 'WHO', 'DID', 'LET',
+    'SAY', 'SHE', 'TOO', 'USE', 'THAT', 'THIS', 'JUST', 'SOME', 'WILL',
+    'BEEN', 'HAVE', 'MUCH', 'THEN', 'WITH', 'FROM', 'ALSO', 'BACK', 'BEEN',
+    'HERE', 'MORE', 'ONLY', 'OVER', 'SUCH', 'TAKE', 'THAN', 'THEM', 'VERY',
+    'WHEN', 'COME', 'MADE', 'FIND', 'LONG', 'LOOK', 'MANY', 'NEXT', 'PLAN',
+}
+
+
 def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
     """Parse structured ZZ entry: $TICKER @role / ✅ entry / ❌ stoploss (optional) / 🎯 targets."""
     symbol = match.group(1).upper()
+    if symbol in _STRUCTURED_REJECT_WORDS:
+        return None
     entry_price = float(match.group(2))
     entry_low = float(match.group(3)) if match.group(3) else None
     stop_loss = float(match.group(4)) if match.group(4) else None

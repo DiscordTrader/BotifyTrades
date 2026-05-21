@@ -21854,16 +21854,20 @@ if __name__ == '__main__':
     _is_main_process = multiprocessing.parent_process() is None
     if _is_main_process:
         try:
-            from src.gui.single_instance import check_single_instance, show_already_running_dialog
+            from src.gui.single_instance import check_single_instance
             if not check_single_instance("BotifyTrades"):
                 _original_print("[STARTUP] Another instance of BotifyTrades is already running!")
-                # Only show dialog for frozen (exe) builds to avoid Qt issues in dev
                 if getattr(sys, 'frozen', False):
-                    show_already_running_dialog()
+                    try:
+                        from src.gui.single_instance import show_already_running_dialog
+                        show_already_running_dialog()
+                    except Exception:
+                        pass
                 sys.exit(0)
+        except SystemExit:
+            raise
         except Exception as si_err:
             _original_print(f"[STARTUP] Single instance check error: {si_err}")
-            # On frozen Windows builds, refuse to start for safety
             if getattr(sys, 'frozen', False) and sys.platform == 'win32':
                 _original_print("[STARTUP] Cannot verify single instance - refusing to start.")
                 sys.exit(1)

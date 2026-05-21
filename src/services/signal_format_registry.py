@@ -1388,8 +1388,9 @@ class SignalFormatRegistry:
                 "$AIIO\n✅ 5.00 break\n❌ 4.5\n🎯 5% 10% 15%+",
                 "$FUSE <@&role>\n✅ around 1.70\n❌ 1.50\n🎯 2.00-3.50",
                 "$WNW <@&role>\n✅ $4.00-4.20\n❌ 3.75\n🎯 4.46...4.78...5.20",
+                "$MTVA re-entry\n✅ 2.60-2.65\n❌ 2.50\n🎯 2.75...3.00...3.12..3.30..3.60",
             ],
-            flags=re.IGNORECASE
+            flags=re.IGNORECASE | re.MULTILINE
         )
 
         self.register(
@@ -1487,7 +1488,7 @@ class SignalFormatRegistry:
         self.register(
             name="temple_options_exit",
             description="Temple options exit: out/sold TICKER STRIKEc",
-            priority=76,
+            priority=69,
             pattern=r'\b(?:out|sold|cut|SL\s+out)\s+\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])',
             parser=parse_temple_options_exit,
             examples=["out TSLA 350c", "sold SPY 580c 2.50", "SL out QQQ 480p"],
