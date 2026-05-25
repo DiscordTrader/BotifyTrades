@@ -1481,11 +1481,13 @@ class BrokerSyncService:
                     )
 
                     # Recalculate SL/PT prices using actual fill price instead of trigger price
+                    # Only for small slippage — skip if fill diverges >50% (e.g. range entries)
                     try:
                         intended = float(trade.get('intended_price') or 0)
                         old_sl = float(trade.get('stop_loss_price') or 0)
                         old_pt = float(trade.get('profit_target_price') or 0)
-                        if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001:
+                        _divergence = abs(fill_price - intended) / intended if intended > 0 else 0
+                        if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001 and _divergence <= 0.50:
                             _recalc_dec = 4 if fill_price < 1.0 else 2
                             recalc_updates = {}
                             if old_sl > 0:
@@ -1500,6 +1502,8 @@ class BrokerSyncService:
                                 print(f"[SYNC] 🔧 Recalculated PT for #{trade_id}: ${old_pt} → ${new_pt}")
                             if recalc_updates:
                                 self.db.update_trade(trade_id, **recalc_updates)
+                        elif _divergence > 0.50 and intended > 0:
+                            print(f"[SYNC] ⏭ Skipping SL/PT rescale for #{trade_id}: fill ${fill_price} diverges {_divergence:.0%} from signal ${intended} (range entry?)")
                     except Exception as recalc_err:
                         print(f"[SYNC] Warning: SL/PT recalculation failed: {recalc_err}")
 
@@ -1796,7 +1800,8 @@ class BrokerSyncService:
                                             intended = float(trade.get('intended_price') or 0)
                                             old_sl = float(trade.get('stop_loss_price') or 0)
                                             old_pt = float(trade.get('profit_target_price') or 0)
-                                            if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001:
+                                            _divergence = abs(fill_price - intended) / intended if intended > 0 else 0
+                                            if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001 and _divergence <= 0.50:
                                                 _recalc_dec = 4 if fill_price < 1.0 else 2
                                                 recalc_updates = {}
                                                 if old_sl > 0:
@@ -1811,6 +1816,8 @@ class BrokerSyncService:
                                                     print(f"[SYNC] 🔧 Recalculated PT for #{trade_id}: ${old_pt} → ${new_pt}")
                                                 if recalc_updates:
                                                     self.db.update_trade(trade_id, **recalc_updates)
+                                            elif _divergence > 0.50 and intended > 0:
+                                                print(f"[SYNC] ⏭ Skipping SL/PT rescale for #{trade_id}: fill ${fill_price} diverges {_divergence:.0%} from signal ${intended} (range entry?)")
                                         except Exception as recalc_err:
                                             print(f"[SYNC] Warning: SL/PT recalculation failed: {recalc_err}")
                                         try:
@@ -2869,7 +2876,8 @@ class BrokerSyncService:
                         intended = float(pending_trade.get('intended_price') or 0)
                         old_sl = float(pending_trade.get('stop_loss_price') or 0)
                         old_pt = float(pending_trade.get('profit_target_price') or 0)
-                        if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001:
+                        _divergence = abs(fill_price - intended) / intended if intended > 0 else 0
+                        if intended > 0 and fill_price > 0 and abs(fill_price - intended) > 0.0001 and _divergence <= 0.50:
                             _recalc_dec = 4 if fill_price < 1.0 else 2
                             recalc_updates = {}
                             if old_sl > 0:
@@ -2884,6 +2892,8 @@ class BrokerSyncService:
                                 print(f"[SYNC] 🔧 Recalculated PT for #{trade_id}: ${old_pt} → ${new_pt}")
                             if recalc_updates:
                                 self.db.update_trade(trade_id, **recalc_updates)
+                        elif _divergence > 0.50 and intended > 0:
+                            print(f"[SYNC] ⏭ Skipping SL/PT rescale for #{trade_id}: fill ${fill_price} diverges {_divergence:.0%} from signal ${intended} (range entry?)")
                     except Exception as recalc_err:
                         print(f"[SYNC] Warning: SL/PT recalculation failed: {recalc_err}")
                     del pending_trades_by_key[pos_key]

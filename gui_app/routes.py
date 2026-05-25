@@ -6739,7 +6739,7 @@ def register_routes(app):
                     
                     if result and result.success:
                         if is_db_trade:
-                            db.close_trade(numeric_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                            db.close_trade(numeric_id, result.price or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"Schwab position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Schwab close failed: {result.message if result else "Unknown error"}'}), 500
@@ -6784,7 +6784,7 @@ def register_routes(app):
                     
                     if result and result.success:
                         if is_db_trade:
-                            db.close_trade(numeric_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                            db.close_trade(numeric_id, result.price or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"IBKR position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'IBKR close failed: {result.message if result else "Unknown error"}'}), 500
@@ -6829,7 +6829,7 @@ def register_routes(app):
                     
                     if result and result.success:
                         if is_db_trade:
-                            db.close_trade(numeric_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                            db.close_trade(numeric_id, result.price or requested_limit_price or 0, 'manual_close')
                         return jsonify({'success': True, 'message': f"Tastytrade position closed: {quantity_to_close} {symbol} @ {order_type}"})
                     else:
                         return jsonify({'success': False, 'error': f'Tastytrade close failed: {result.message if result else "Unknown error"}'}), 500
@@ -7839,7 +7839,7 @@ def register_routes(app):
                             )
                         result = future.result(timeout=25)
                         if result and result.success:
-                            db.close_trade(trade_id, result.fill_price or limit_price or 0, 'manual_close_all')
+                            db.close_trade(trade_id, result.price or limit_price or 0, 'manual_close_all')
                             return {'trade_id': trade_id, 'symbol': symbol, 'success': True, 'message': f'{broker} close sent'}
                         else:
                             return {'trade_id': trade_id, 'symbol': symbol, 'success': False, 'message': f'{broker} close failed: {result.message if result else "Unknown"}'}

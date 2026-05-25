@@ -663,7 +663,7 @@ class BrokerHealthMonitor:
         if qty <= 0:
             return False, f"Invalid or missing quantity in signal: {qty}"
         
-        asset_type = signal.get('asset_type', 'option')
+        asset_type = signal.get('asset_type') or signal.get('asset', 'option')
         
         if asset_type in ('option', 'options'):
             if qty != int(qty):
@@ -722,7 +722,7 @@ class BrokerHealthMonitor:
             ''', (
                 channel_id or signal.get('channel_id'),
                 signal.get('action', 'BTO'),
-                signal.get('asset_type', 'option'),
+                signal.get('asset_type') or signal.get('asset', 'option'),
                 signal.get('symbol'),
                 signal.get('strike'),
                 signal.get('expiry'),

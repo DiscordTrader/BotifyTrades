@@ -2088,34 +2088,52 @@ class RiskManager:
 
     async def start_monitoring(self) -> None:
         """Start the position monitoring loop with enable gate and standby support."""
-        cached_count = self.cache.load()
-        if cached_count > 0:
-            print(f"[RISK] Loaded {cached_count} cached positions")
-        
-        risk_restored = self.cache.restore_full_risk_state_from_db()
-        if risk_restored > 0:
-            print(f"[RISK] ✓ Restored full risk state (tier hits, dynamic SL, giveback) for {risk_restored} positions")
-        
-        trade_mappings = self.cache.populate_trade_id_mappings()
-        if trade_mappings > 0:
-            print(f"[RISK] ✓ Pre-loaded {trade_mappings} trade→position mappings at startup")
-        
-        self._load_db_price_targets()
-        
-        reconciled = self._reconcile_conditional_orders()
-        if reconciled > 0:
-            print(f"[RISK] ✓ Reconciled {reconciled} conditional order position(s) with SL/PT")
-        
+        try:
+            cached_count = self.cache.load()
+            if cached_count > 0:
+                print(f"[RISK] Loaded {cached_count} cached positions")
+        except Exception as e:
+            print(f"[RISK] ⚠️ Cache load failed (continuing): {e}")
+
+        try:
+            risk_restored = self.cache.restore_full_risk_state_from_db()
+            if risk_restored > 0:
+                print(f"[RISK] ✓ Restored full risk state (tier hits, dynamic SL, giveback) for {risk_restored} positions")
+        except Exception as e:
+            print(f"[RISK] ⚠️ Risk state restore failed (continuing): {e}")
+
+        try:
+            trade_mappings = self.cache.populate_trade_id_mappings()
+            if trade_mappings > 0:
+                print(f"[RISK] ✓ Pre-loaded {trade_mappings} trade→position mappings at startup")
+        except Exception as e:
+            print(f"[RISK] ⚠️ Trade mapping load failed (continuing): {e}")
+
+        try:
+            self._load_db_price_targets()
+        except Exception as e:
+            print(f"[RISK] ⚠️ Price target load failed (continuing): {e}")
+
+        try:
+            reconciled = self._reconcile_conditional_orders()
+            if reconciled > 0:
+                print(f"[RISK] ✓ Reconciled {reconciled} conditional order position(s) with SL/PT")
+        except Exception as e:
+            print(f"[RISK] ⚠️ Conditional order reconcile failed (continuing): {e}")
+
         print(f"[RISK] ✓ Position monitoring loop started - Will activate when risk settings enabled")
         self._running = True
         self._standby_mode = False
         self._last_status_log = 0
         self._first_sync_completed = False
-        
+
         if not hasattr(self, '_heartbeat_counter'):
             self._heartbeat_counter = 0
-        
-        self._subscribe_to_price_streams()
+
+        try:
+            self._subscribe_to_price_streams()
+        except Exception as e:
+            print(f"[RISK] ⚠️ Price stream subscribe failed (continuing): {e}")
         
         while self._running:
             try:

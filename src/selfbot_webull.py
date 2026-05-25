@@ -3959,7 +3959,11 @@ class WebullBroker:
             _yr = expiry_year or datetime.now().strftime('%Y')
             if '/' in expiry_mmdd:
                 _parts = expiry_mmdd.split('/')
-                full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
+                if len(_parts) == 3:
+                    _yr = _parts[2] if len(_parts[2]) == 4 else f"20{_parts[2]}"
+                    full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
+                else:
+                    full_expiry = f"{_yr}-{_parts[0].zfill(2)}-{_parts[1].zfill(2)}"
             else:
                 full_expiry = expiry_mmdd
             
@@ -7306,6 +7310,8 @@ class SelfClient(discord.Client):
         self._last_message_time = 0.0
         self._gateway_watchdog_started = False
         self._gateway_watchdog_interval = 120  # seconds - force reconnect if no messages for 2 min
+        self._power_resume_monitor_started = False
+        self._last_sleep_time = 0.0
         # Initialize async objects to None - will be created in setup() when event loop is ready
         self.order_queue = None
         self.broker: Optional[WebullBroker] = None
@@ -8756,7 +8762,9 @@ class SelfClient(discord.Client):
             _original_print("[WATCHDOG] ✓ Gateway health monitor started (reconnect if no messages for 2 min)", flush=True)
         else:
             _original_print("[WATCHDOG] ⚠️ Watchdog already started - skipping", flush=True)
-        
+
+        self._start_power_resume_monitor()
+
         global _telegram_signal_queue
         if _telegram_signal_queue is None:
             import queue as _q
@@ -8810,8 +8818,17 @@ class SelfClient(discord.Client):
                     sync_ready_event=self.sync_ready
                 )
                 
-                # Start monitoring as async task
-                self.loop.create_task(self.risk_manager.start_monitoring())
+                # Start monitoring as async task — with crash detection for PyArmor builds
+                _risk_task = self.loop.create_task(self.risk_manager.start_monitoring())
+                def _risk_task_done(t):
+                    if t.cancelled():
+                        print("[RISK] ⚠️ Monitoring task was cancelled")
+                    elif t.exception():
+                        print(f"[RISK] ❌ Monitoring task crashed: {t.exception()}")
+                        import traceback
+                        traceback.print_exception(type(t.exception()), t.exception(), t.exception().__traceback__)
+                        print("[RISK] ❌ RISK MONITORING IS DOWN — positions will NOT be managed. Restart required.")
+                _risk_task.add_done_callback(_risk_task_done)
                 print("[RISK] ✓ RiskManager module initialized")
                 
                 # Register global instance for Flask route access (cache invalidation)
@@ -10413,15 +10430,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         await asyncio.sleep(30)
         self._last_message_time = _time_mod.time()
         self._watchdog_log("[WATCHDOG] Gateway watchdog active - monitoring message flow")
-        
+        _last_tick = _time_mod.time()
+
         while True:
             await asyncio.sleep(30)
             try:
                 now = _time_mod.time()
+                tick_gap = now - _last_tick
+                _last_tick = now
+
+                # Detect system sleep: if a 30s sleep took >90s wall-clock, the OS suspended us
+                if tick_gap > 90:
+                    _original_print(f"[WATCHDOG] System sleep detected! Timer gap={int(tick_gap)}s (expected ~30s)", flush=True)
+                    _original_print(f"[WATCHDOG] Forcing immediate gateway reconnect after wake...", flush=True)
+                    try:
+                        if hasattr(self, 'ws') and self.ws and hasattr(self.ws, 'close'):
+                            await self.ws.close(code=4000)
+                            _original_print("[WATCHDOG] ✓ Gateway closed after sleep wake — auto-reconnect pending", flush=True)
+                    except Exception as e:
+                        _original_print(f"[WATCHDOG] Wake reconnect error: {e}", flush=True)
+                    self._last_message_time = now
+                    await asyncio.sleep(10)
+                    continue
+
                 silence = now - self._last_message_time
-                
+
                 self._watchdog_log(f"[WATCHDOG] Heartbeat: silence={int(silence)}s, events={self._gateway_event_count}")
-                
+
                 if silence > self._gateway_watchdog_interval:
                     self._watchdog_log(f"[WATCHDOG] ⚠️ No messages for {int(silence)}s - gateway stalled!")
                     self._watchdog_log(f"[WATCHDOG] 🔄 Forcing gateway reconnect...")
@@ -10443,6 +10478,120 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as e:
                 self._watchdog_log(f"[WATCHDOG] Error: {e}")
                 await asyncio.sleep(10)
+
+    def _start_power_resume_monitor(self):
+        """Start a background thread that listens for Windows sleep/wake events."""
+        if self._power_resume_monitor_started or sys.platform != 'win32':
+            return
+        self._power_resume_monitor_started = True
+        import threading
+        t = threading.Thread(target=self._power_resume_listener, name="PowerMonitor", daemon=True)
+        t.start()
+        _original_print("[POWER] ✓ Windows sleep/wake monitor started", flush=True)
+
+    def _power_resume_listener(self):
+        """Win32 hidden window that receives WM_POWERBROADCAST messages."""
+        import ctypes
+        import ctypes.wintypes as wt
+
+        user32 = ctypes.windll.user32
+        WM_POWERBROADCAST = 0x0218
+        PBT_APMRESUMEAUTOMATIC = 0x0012
+        PBT_APMRESUMESUSPEND = 0x0007
+        PBT_APMSUSPEND = 0x0004
+
+        WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_long, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
+
+        def wnd_proc(hwnd, msg, wparam, lparam):
+            if msg == WM_POWERBROADCAST:
+                if wparam == PBT_APMSUSPEND:
+                    import time as _t
+                    self._last_sleep_time = _t.time()
+                    _original_print("[POWER] System going to sleep — Discord will disconnect", flush=True)
+                elif wparam in (PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND):
+                    import time as _t
+                    sleep_duration = _t.time() - self._last_sleep_time if self._last_sleep_time > 0 else 0
+                    _original_print(f"[POWER] System resumed from sleep (was asleep {int(sleep_duration)}s) — forcing Discord reconnect", flush=True)
+                    self._schedule_power_resume_reconnect()
+            return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+        self._wnd_proc_ref = WNDPROC(wnd_proc)
+
+        wc = wt.WNDCLASSW()
+        wc.lpfnWndProc = self._wnd_proc_ref
+        wc.lpszClassName = "BotifyPowerMonitor"
+        wc.hInstance = user32.GetModuleHandleW(None)
+        atom = user32.RegisterClassW(ctypes.byref(wc))
+        if not atom:
+            _original_print("[POWER] ⚠️ Failed to register window class", flush=True)
+            return
+
+        hwnd = user32.CreateWindowExW(
+            0, wc.lpszClassName, "BotifyPowerMonitor", 0,
+            0, 0, 0, 0, None, None, wc.hInstance, None
+        )
+        if not hwnd:
+            _original_print("[POWER] ⚠️ Failed to create power monitor window", flush=True)
+            return
+
+        msg = wt.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
+
+    def _schedule_power_resume_reconnect(self):
+        """Schedule a gateway reconnect on the Discord event loop after system wake."""
+        loop = getattr(self, 'loop', None)
+        if loop and not loop.is_closed():
+            loop.call_soon_threadsafe(asyncio.ensure_future, self._power_resume_reconnect())
+        else:
+            _original_print("[POWER] ⚠️ No event loop available for reconnect", flush=True)
+
+    async def _power_resume_reconnect(self):
+        """Force Discord gateway reconnect after system wake from sleep."""
+        import time as _time_mod
+        _original_print("[POWER] Waiting 5s for network stack to initialize...", flush=True)
+        await asyncio.sleep(5)
+
+        # Check if network is back
+        import socket
+        for attempt in range(6):
+            try:
+                socket.create_connection(('discord.com', 443), timeout=3).close()
+                _original_print(f"[POWER] ✓ Network available (attempt {attempt + 1})", flush=True)
+                break
+            except (OSError, socket.timeout):
+                if attempt < 5:
+                    _original_print(f"[POWER] Network not ready (attempt {attempt + 1}/6) — retrying in 5s...", flush=True)
+                    await asyncio.sleep(5)
+                else:
+                    _original_print("[POWER] ⚠️ Network still unavailable after 30s — reconnect may fail", flush=True)
+
+        _original_print("[POWER] Forcing Discord gateway reconnect...", flush=True)
+        try:
+            if hasattr(self, 'ws') and self.ws and hasattr(self.ws, 'close'):
+                await self.ws.close(code=4000)
+                _original_print("[POWER] ✓ Gateway WebSocket closed — discord.py will auto-reconnect", flush=True)
+            else:
+                _original_print("[POWER] No WebSocket handle — connection may already be dead", flush=True)
+        except Exception as e:
+            _original_print(f"[POWER] Reconnect error: {e}", flush=True)
+
+        self._last_message_time = _time_mod.time()
+
+        # Also reconnect broker streaming connections that may have died
+        try:
+            if hasattr(self, '_streaming_client') and self._streaming_client:
+                _original_print("[POWER] Restarting Schwab streaming...", flush=True)
+                try:
+                    self._streaming_client.stop()
+                except Exception:
+                    pass
+                await asyncio.sleep(2)
+                self._streaming_client.start()
+                _original_print("[POWER] ✓ Schwab streaming restarted", flush=True)
+        except Exception as e:
+            _original_print(f"[POWER] Schwab streaming restart skipped: {e}", flush=True)
 
     def dispatch(self, event, /, *args, **kwargs):
         """Override dispatch to track ALL gateway events for diagnostics."""
@@ -12069,6 +12218,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if execute_enabled or track_enabled:
             print(f"[DEBUG] Channel config: execute={execute_enabled}, track={track_enabled}, mapped={is_mapped_source_channel}, should_convert={should_convert}")
         
+        _phoenix_registry_extras = []
+
         if should_convert:
             # Don't process commands, only natural language text
             if not message.content.strip().startswith('!'):
@@ -14825,6 +14976,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     opt['_sizing_mode'] = channel_sizing_mode
                 
                 if channel_default_qty:
+                    opt['_used_default_qty'] = True
                     signal_qty_val = opt.get('qty')
                     channel_qty_val = int(channel_default_qty)
                     qty_actually_from_signal = opt.get('qty_specified', opt.get('_qty_from_signal', False))
@@ -14838,7 +14990,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     else:
                         opt['qty'] = channel_qty_val
                         print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts (auto-calc qty={signal_qty_val} overridden by channel setting)")
-                    
+
                     # BUGFIX: Enforce MAX POSITION$ cap for fixed QTY mode
                     # If channel_max_position_size is set, verify the trade doesn't exceed it
                     if channel_max_position_size:
@@ -15180,9 +15332,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 try:
                     from gui_app.database import get_open_trades_by_channel
                     stc_symbol = opt.get('symbol', '').upper()
-                    stc_strike = float(opt.get('strike', 0))
-                    stc_opt = opt.get('opt_type', '').upper()[:1]
-                    stc_expiry = opt.get('expiry', '')
+                    stc_strike = float(opt.get('strike') or 0)
+                    stc_opt = (opt.get('opt_type') or '').upper()[:1]
+                    stc_expiry = opt.get('expiry') or ''
                     
                     def _norm_exp_precheck(exp_str):
                         if not exp_str:
@@ -15229,9 +15381,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         t_status = (t.get('status') or '').upper()
                         t_expiry = _norm_exp_precheck(t.get('expiry') or '')
                         expiry_ok = (not norm_stc_expiry or not t_expiry or norm_stc_expiry == t_expiry)
-                        if (t_sym in stc_sym_set and 
-                            abs(t_strike - stc_strike) < 0.01 and 
-                            t_opt == stc_opt and
+                        strike_ok = (stc_strike < 0.01 or abs(t_strike - stc_strike) < 0.01)
+                        opt_type_ok = (not stc_opt or t_opt == stc_opt)
+                        if (t_sym in stc_sym_set and
+                            strike_ok and
+                            opt_type_ok and
                             t_status in ('OPEN', 'PENDING') and
                             expiry_ok):
                             if t_status == 'PENDING':
@@ -15280,6 +15434,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         return
                     else:
                         print(f"[STC PRE-CHECK] ✓ Found matching trade for {stc_symbol} ${stc_strike}{stc_opt} {stc_expiry}", flush=True)
+                        matched_t = next((t for t in (open_trades or []) if (t.get('symbol') or '').upper() in stc_sym_set and (t.get('status') or '').upper() in ('OPEN', 'PENDING')), None)
+                        if matched_t:
+                            if not opt.get('strike') and matched_t.get('strike'):
+                                opt['strike'] = float(matched_t['strike'])
+                                print(f"[STC PRE-CHECK] Backfilled strike={opt['strike']} from trade DB", flush=True)
+                            if not opt.get('opt_type') and matched_t.get('call_put'):
+                                opt['opt_type'] = matched_t['call_put'].upper()[:1]
+                                print(f"[STC PRE-CHECK] Backfilled opt_type={opt['opt_type']} from trade DB", flush=True)
+                            if not opt.get('expiry') and matched_t.get('expiry'):
+                                opt['expiry'] = matched_t['expiry']
+                                print(f"[STC PRE-CHECK] Backfilled expiry={opt['expiry']} from trade DB", flush=True)
                 except Exception as stc_pre_err:
                     print(f"[STC PRE-CHECK] ⚠️ Check failed (proceeding anyway): {stc_pre_err}", flush=True)
             
@@ -15302,31 +15467,36 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[DEBUG] Queue size BEFORE put: {self.order_queue.qsize()}", flush=True)
             
             if execute_enabled:
-                
+
                 # Add EXECUTION position size percentage for dynamic qty calculation
-                # Priority: Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
-                exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
-                ignore_signal_pct = channel_info.get('ignore_signal_position_size', 0) if channel_info else 0
-                print(f"[DEBUG] Channel position_size_pct from DB: {exec_position_size_pct} (type: {type(exec_position_size_pct).__name__})")
-                
-                # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
-                signal_has_pct = opt.get('_position_size_pct') is not None and opt.get('_calculate_qty', False)
-                
-                if signal_has_pct and not ignore_signal_pct:
-                    # Signal's percentage takes precedence - don't overwrite
-                    print(f"[POSITION SIZE] ✓ Using signal's {opt['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
-                elif signal_has_pct and ignore_signal_pct and exec_position_size_pct:
-                    # Channel has "Ignore Signal Position Size" enabled - use channel's percentage instead
-                    signal_original_pct = opt.get('_position_size_pct')
-                    opt['_position_size_pct'] = float(exec_position_size_pct)
-                    opt['_pct_from_channel'] = True
-                    print(f"[POSITION SIZE] ✓ Ignoring signal's {signal_original_pct}% - using channel's {exec_position_size_pct}% (channel priority)")
-                elif exec_position_size_pct:
-                    opt['_position_size_pct'] = float(exec_position_size_pct)
-                    opt['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
-                    print(f"[POSITION SIZE] ✓ Execution configured for {exec_position_size_pct}% of portfolio (channel setting)")
+                # Priority: default_quantity (fixed) > Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
+                # Skip if Phase 1 already applied fixed default_quantity — don't let percentage override it
+                if opt.get('_used_default_qty'):
+                    print(f"[POSITION SIZE] ✓ Using fixed default_quantity from channel (skipping percentage override)")
                 else:
-                    print(f"[POSITION SIZE] ⚠️ No position_size_pct configured - using signal quantity as-is")
+                    exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
+                    ignore_signal_pct = channel_info.get('ignore_signal_position_size', 0) if channel_info else 0
+                    print(f"[DEBUG] Channel position_size_pct from DB: {exec_position_size_pct} (type: {type(exec_position_size_pct).__name__})")
+
+                    # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
+                    signal_has_pct = opt.get('_position_size_pct') is not None and opt.get('_calculate_qty', False)
+
+                    if signal_has_pct and not ignore_signal_pct:
+                        # Signal's percentage takes precedence - don't overwrite
+                        _pct_source = "signal" if not opt.get('_pct_from_channel') else "channel"
+                        print(f"[POSITION SIZE] ✓ Using {_pct_source}'s {opt['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
+                    elif signal_has_pct and ignore_signal_pct and exec_position_size_pct:
+                        # Channel has "Ignore Signal Position Size" enabled - use channel's percentage instead
+                        signal_original_pct = opt.get('_position_size_pct')
+                        opt['_position_size_pct'] = float(exec_position_size_pct)
+                        opt['_pct_from_channel'] = True
+                        print(f"[POSITION SIZE] ✓ Ignoring signal's {signal_original_pct}% - using channel's {exec_position_size_pct}% (channel priority)")
+                    elif exec_position_size_pct:
+                        opt['_position_size_pct'] = float(exec_position_size_pct)
+                        opt['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
+                        print(f"[POSITION SIZE] ✓ Execution configured for {exec_position_size_pct}% of portfolio (channel setting)")
+                    else:
+                        print(f"[POSITION SIZE] ⚠️ No position_size_pct configured - using signal quantity as-is")
                 
                 # Add enabled brokers if configured
                 enabled_brokers_json = channel_info.get('enabled_brokers') if channel_info else None
@@ -15870,7 +16040,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Use India stock signal if parsed, otherwise try US stock parser
         stk = india_stock_signal if india_stock_signal else parse_stock_signal(normalized_content)
         if stk:
-            if stk.get('action') == 'BTO' and not stk.get('_calculate_qty', False):
+            if stk.get('action') == 'BTO':
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 channel_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
                 channel_max_position_size = channel_info.get('channel_max_position_size') if channel_info else None
@@ -15887,6 +16057,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stk['_sizing_mode'] = channel_sizing_mode
 
                 if channel_default_qty:
+                    stk['_used_default_qty'] = True
                     signal_qty_val = stk.get('qty')
                     channel_qty_val = int(channel_default_qty)
                     qty_actually_from_signal = stk.get('qty_specified', stk.get('_qty_from_signal', False))
@@ -16180,26 +16351,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stk['_sizing_mode'] = stk_sizing_mode
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
-                # Priority: Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
-                exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
-                ignore_signal_pct = channel_info.get('ignore_signal_position_size', 0) if channel_info else 0
-                
-                # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
-                signal_has_pct = stk.get('_position_size_pct') is not None and stk.get('_calculate_qty', False)
-                
-                if signal_has_pct and not ignore_signal_pct:
-                    # Signal's percentage takes precedence - don't overwrite
-                    print(f"[POSITION SIZE] ✓ Using signal's {stk['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
-                elif signal_has_pct and ignore_signal_pct and exec_position_size_pct:
-                    # Channel has "Ignore Signal Position Size" enabled - use channel's percentage instead
-                    signal_original_pct = stk.get('_position_size_pct')
-                    stk['_position_size_pct'] = float(exec_position_size_pct)
-                    stk['_pct_from_channel'] = True
-                    print(f"[POSITION SIZE] ✓ Ignoring signal's {signal_original_pct}% - using channel's {exec_position_size_pct}% (channel priority)")
-                elif exec_position_size_pct:
-                    stk['_position_size_pct'] = float(exec_position_size_pct)
-                    stk['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
-                    print(f"[POSITION SIZE] Execution configured for {exec_position_size_pct}% of portfolio (channel setting)")
+                # Priority: default_quantity (fixed) > Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
+                # Skip if Phase 1 already applied fixed default_quantity — don't let percentage override it
+                if stk.get('_used_default_qty'):
+                    print(f"[POSITION SIZE] ✓ Using fixed default_quantity from channel (skipping percentage override)")
+                else:
+                    exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
+                    ignore_signal_pct = channel_info.get('ignore_signal_position_size', 0) if channel_info else 0
+
+                    # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
+                    signal_has_pct = stk.get('_position_size_pct') is not None and stk.get('_calculate_qty', False)
+
+                    if signal_has_pct and not ignore_signal_pct:
+                        # Signal's percentage takes precedence - don't overwrite
+                        _pct_source = "signal" if not stk.get('_pct_from_channel') else "channel"
+                        print(f"[POSITION SIZE] ✓ Using {_pct_source}'s {stk['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
+                    elif signal_has_pct and ignore_signal_pct and exec_position_size_pct:
+                        # Channel has "Ignore Signal Position Size" enabled - use channel's percentage instead
+                        signal_original_pct = stk.get('_position_size_pct')
+                        stk['_position_size_pct'] = float(exec_position_size_pct)
+                        stk['_pct_from_channel'] = True
+                        print(f"[POSITION SIZE] ✓ Ignoring signal's {signal_original_pct}% - using channel's {exec_position_size_pct}% (channel priority)")
+                    elif exec_position_size_pct:
+                        stk['_position_size_pct'] = float(exec_position_size_pct)
+                        stk['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
+                        print(f"[POSITION SIZE] Execution configured for {exec_position_size_pct}% of portfolio (channel setting)")
                 
                 # Channel max position size cap (dollar amount cap on position sizing)
                 channel_max_position_size = channel_info.get('channel_max_position_size') if channel_info else None
@@ -16909,20 +17085,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         try:
                             from src.services.broker_health_monitor import get_health_monitor
                             _hm = get_health_monitor()
-                            _cached = _hm.get_cached_account_info(broker_name)
-                            if _cached:
-                                account_info = _cached
-                                options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
-                                _original_print(f"[{broker_name}] [POSITION SIZE] Using cached account data (0ms)")
-                        except Exception:
-                            pass
-                        
+                            if _hm:
+                                _cached = _hm.get_cached_account_info(broker_name)
+                                if _cached:
+                                    account_info = _cached
+                                    options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
+                                    _original_print(f"[{broker_name}] [POSITION SIZE] Using cached account data (0ms)")
+                                else:
+                                    _original_print(f"[{broker_name}] [POSITION SIZE] Health monitor cache miss for '{broker_name}'")
+                            else:
+                                _original_print(f"[{broker_name}] [POSITION SIZE] Health monitor not initialized")
+                        except Exception as _cache_err:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] Health monitor cache error: {_cache_err}")
+
                         if not account_info:
                             _original_print(f"[{broker_name}] [POSITION SIZE] Cache miss — falling back to live API")
                             if hasattr(broker_instance, 'get_account_info'):
                                 account_info = await broker_instance.get_account_info()
                                 if account_info:
                                     options_buying_power = account_info.get('options_buying_power') or account_info.get('buying_power')
+                                    _original_print(f"[{broker_name}] [POSITION SIZE] Got account info from live API (BP=${account_info.get('buying_power', 0):.2f})")
+                                else:
+                                    _original_print(f"[{broker_name}] [POSITION SIZE] ❌ Live API returned None")
                             elif hasattr(broker_instance, 'wb') and broker_instance.wb:
                                 raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
                                 if raw_account:
@@ -16933,7 +17117,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if raw_account:
                                     account_info = {'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0)}
                                     options_buying_power = float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
-                    
+
+                    if not account_info:
+                        requires_sizing = signal.get('_pct_from_channel', False) or signal.get('_calculate_qty', False)
+                        if requires_sizing:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] ❌ REJECTING — channel requires {position_size_pct}% sizing but no account data available (would execute with wrong qty)")
+                            return {'success': False, 'error': f'{broker_name}: Cannot calculate position size — no account data available. Retrying on next signal.'}
+                        else:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ No account data — using signal qty as-is (no channel sizing required)")
+
                     if account_info:
                         buying_power = float(account_info.get('buying_power') or account_info.get('net_liquidation') or 0)
                         options_buying_power = float(options_buying_power or 0)
@@ -17112,8 +17304,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             cost_info = f"${original_qty * price:.0f}"
                                             _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using full signal qty: {original_qty} shares (cost: {cost_info}, buying power: ${buying_power:.0f})")
                 except Exception as e:
-                    _original_print(f"[{broker_name}] [POSITION SIZE] Could not get account info for qty adjustment: {e}")
-            
+                    _original_print(f"[{broker_name}] [POSITION SIZE] ❌ Error during position sizing: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    requires_sizing = signal.get('_pct_from_channel', False) or signal.get('_calculate_qty', False)
+                    if requires_sizing:
+                        _original_print(f"[{broker_name}] [POSITION SIZE] ❌ REJECTING — sizing error with channel percentage mode (would execute with wrong qty)")
+                        return {'success': False, 'error': f'{broker_name}: Position sizing failed — {e}'}
+
             if signal['action'] == 'BTO' and not position_size_pct:
                 try:
                     account_info = None
@@ -17371,8 +17569,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     try:
                         pos_list = await broker_instance.get_positions_detailed()
                         sig_symbol = signal.get('symbol', '').upper()
-                        sig_strike = float(signal.get('strike', 0))
-                        sig_opt = signal.get('opt_type', '').upper()[:1]
+                        sig_strike = float(signal.get('strike') or 0)
+                        sig_opt = (signal.get('opt_type') or '').upper()[:1]
                         sig_expiry = signal.get('expiry', '')
                         
                         def _normalize_expiry(exp_str):
@@ -17422,15 +17620,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             p_exp = _normalize_expiry(p.get('expiry', ''))
                             
                             expiry_match = (not norm_sig_expiry or not p_exp or norm_sig_expiry == p_exp)
-                            
-                            if (p_sym in sig_symbol_set and 
-                                abs(p_strike - sig_strike) < 0.01 and 
-                                p_dir == sig_opt and
+                            strike_match = (sig_strike < 0.01 or abs(p_strike - sig_strike) < 0.01)
+                            opt_type_match = (not sig_opt or p_dir == sig_opt)
+
+                            if (p_sym in sig_symbol_set and
+                                strike_match and
+                                opt_type_match and
                                 expiry_match):
                                 matched_qty = int(p.get('quantity', 0))
                                 matched_pos = p
                                 break
-                        
+
                         if matched_pos:
                             if matched_pos.get('option_id'):
                                 if signal.get('option_id') != matched_pos['option_id']:
@@ -17438,6 +17638,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 signal['option_id'] = matched_pos['option_id']
                             if matched_pos.get('expiry_full') and not signal.get('expiry_full'):
                                 signal['expiry_full'] = matched_pos['expiry_full']
+                            if matched_pos.get('expiry') and not signal.get('expiry'):
+                                signal['expiry'] = matched_pos['expiry']
+                                _original_print(f"[{broker_name}] STC: Backfilled expiry={matched_pos['expiry']} from matched position")
+                            if matched_pos.get('strike') and not signal.get('strike'):
+                                signal['strike'] = float(matched_pos['strike'])
+                                _original_print(f"[{broker_name}] STC: Backfilled strike={matched_pos['strike']} from matched position")
+                            if matched_pos.get('direction') and not signal.get('opt_type'):
+                                signal['opt_type'] = matched_pos['direction'].upper()[:1]
+                                _original_print(f"[{broker_name}] STC: Backfilled opt_type={signal['opt_type']} from matched position")
                         
                         if matched_qty <= 0:
                             _original_print(f"[{broker_name}] ⚠️ STC rejected: No matching position for {sig_symbol} ${sig_strike}{sig_opt} {sig_expiry}")

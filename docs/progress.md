@@ -1,5 +1,58 @@
 # BotifyTrades Progress Log
 
+## Session: May 25, 2026 — Infra Trade Parser + Architect Gap Fixes
+
+### FEATURE: Infra Trade / Small Account channel parser (signal_format_registry.py)
+- **3 new formats**: `infra_trade_buy` (pri 12), `infra_trade_sell` (pri 13), `infra_trade_sell_symbol_only` (pri 72)
+- **BUY**: Matches `**SMALL ACCOUNT :**` / `**SMALL :**` prefix with symbol/strike/opt_type/price. Extracts qty from `(N Calls/Puts)` or `(Total: N Calls)`. Extracts expiry from `Exp: MM/DD/YYYY` or `Exp; MM/DD/YYYY`. Defaults to 0DTE (today) when no Exp: found.
+- **SELL with strike**: Matches `Sold [qty/all] SYMBOL STRIKEC/P at PRICE`. Supports qty, full_exit flag.
+- **SELL symbol-only**: Matches `Sold [all/qty] SYMBOL [calls/puts] at/around PRICE`. Falls back when no strike info.
+- **20/20 test signals pass** including all user-provided examples.
+
+### Architect Review: 3 Critical Gaps Fixed
+1. **GAP: `float(None)` crash in STC pre-check and broker matching** — `signal.get('strike', 0)` returns `None` (not `0`) when key exists with value `None`. Fixed: changed to `float(signal.get('strike') or 0)` and `(signal.get('opt_type') or '').upper()` at both STC pre-check (line ~15331) and broker position matching (line ~17555).
+2. **GAP: STC missing expiry/strike/opt_type backfill** — When STC matches a position, `option_id` and `expiry_full` were copied back but NOT `expiry`, `strike`, or `opt_type`. Signal with `None` expiry would crash all brokers (`'/' in None` → TypeError). Fixed: added backfill of `expiry`, `strike`, `opt_type` from matched position at both broker-level match (line ~17620) and STC pre-check (line ~15430).
+3. **GAP: STC matching required exact strike/opt_type** — `sell_symbol_only` with `strike=None` would fail `abs(p_strike - 0) < 0.01` for any non-zero strike. Fixed: skip strike/opt_type matching when signal has None values (match by symbol only).
+4. **GAP: Webull 3-part expiry year extraction** — `expiry_mmdd.split('/')` only used first 2 parts, ignoring year in `MM/DD/YYYY`. Fixed at Webull `_blocking_place` to extract year from 3-part dates.
+
+## Session: May 25, 2026 — Dashboard Close Position Fix (OrderResult.fill_price)
+
+### BUG: Manual close from Dashboard fails for IBKR/Schwab/Tastytrade
+- **Problem**: Trading → Dashboard → Live Trading Monitor → close position gives: `IBKR close error: 'OrderResult' Object has no attribute 'fill_price'`
+- **Root cause**: `OrderResult` class in `src/broker_interface.py` has attribute `price`, not `fill_price`. Four locations in `gui_app/routes.py` accessed `result.fill_price` — all crash with `AttributeError`.
+- **Affected brokers**: Schwab (line 6742), IBKR (line 6787), Tastytrade (line 6832), and Close-All endpoint (line 7842)
+- **Fix**: Changed `result.fill_price` to `result.price` at all 4 locations
+- **Note**: Alpaca and Robinhood use dict-style results (`result.get('fill_price')`), so they were not affected
+
+## Session: May 22, 2026 — Customer Log Analysis + PT Rescaling + RGTI Sizing + UnboundLocalError Fixes
+
+### Customer IBKR_LIVE Log Analysis (C:\VSCode\logs\bot.log)
+- **Problem**: NIVF, VIDA, CODX, QUCY — no risk management despite phoenix channel having risk settings enabled
+- **Root cause**: Position monitor's `start_monitoring()` async task crashes silently in user (PyArmor) build. Confirmed `_var_var_1232` UnboundLocalError — PyArmor obfuscation issue. Zero monitoring cycles/heartbeats in 4+ hours of log.
+- **Fix**: Added `add_done_callback` on risk task in `selfbot_webull.py:8818` to catch silent crashes. Wrapped all init steps in `start_monitoring()` with individual try/except blocks so one failure doesn't kill the loop.
+
+### QTEX PT Rescaling Bug (broker_sync_service.py)
+- **Problem**: Range entry `QTEX 0.30-1.06` filled at $0.8166. Sync service recalculated PT from $1.06 to $2.8853 (253% above fill) using percentage-based rescaling designed for small slippage.
+- **Root cause**: `pt_pct = (old_pt - intended) / intended` = `(1.06 - 0.30) / 0.30` = 253%. Applied to fill: `$0.8166 × 3.53 = $2.88`. The rescaling assumes fill≈intended, which fails for range entries where signal price is the low end.
+- **Fix**: Added 50% divergence guard at all 3 recalculation sites in `broker_sync_service.py`. If fill price diverges >50% from signal price, skip rescaling entirely and log it.
+
+### RGTI Position Sizing Bug — $2100 Instead of $21 (broker_health_monitor.py)
+- **Problem**: RGTI stock signal ($21/share) rejected with "Insufficient settled cash: need $2100.00, have $376.59". Position sizing (25% of $376.59 = ~$94) never ran.
+- **Root cause**: Health monitor `pre_trade_validation()` at line 666 uses `signal.get('asset_type', 'option')` but stock signals use key `'asset'` not `'asset_type'`. Missing key defaults to `'option'`, applying 100x multiplier: $21 × 100 = $2100. Trade rejected before position sizing code could run.
+- **Fix**: Changed to `signal.get('asset_type') or signal.get('asset', 'option')` — checks both key names.
+
+### `_phoenix_registry_extras` UnboundLocalError (selfbot_webull.py)
+- **Problem**: `on_message` crashes with `UnboundLocalError: cannot access local variable '_phoenix_registry_extras'` during RGTI and QTEX processing on TEMP-BOOM channel.
+- **Root cause**: Variable initialized at line 12295 inside `if should_convert:` block (16 spaces), but referenced at line 16680 in stock processing path (12 spaces). For channels with `execute_enabled=1` that aren't signal conversion channels, `should_convert` is False, skipping the initialization.
+- **Fix**: Moved `_phoenix_registry_extras = []` to 8-space level before `if should_convert:` so it's always defined.
+
+## Release: v10.2.1 — May 20, 2026
+- **Commit**: `378b0563` pushed to `origin/main`
+- **Admin build**: Triggered via `admin_release_ready` dispatch on `DiscordTrader/BotifyTradesv2`
+- **User build**: Triggered via `user_release_ready` dispatch on `DiscordTrader/BotifyTradesv2` → publishes to `DiscordTrader/BotifyTrades`
+- **Changes**: 21 files, 6241 insertions, 192 deletions
+- **Highlights**: IBKR persistence hardening (3 fixes), Discord wake-from-sleep retry loop, conditional order stdout diagnostics, AI signal parser Claude integration, settings dropdown visibility fix
+
 ## Session: May 20, 2026 — IBKR Position Persistence Hardening (P0)
 
 ### BUG: IBKR positions vulnerable to false closure during reconnect storms

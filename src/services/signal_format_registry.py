@@ -1678,6 +1678,60 @@ class SignalFormatRegistry:
             ]
         )
 
+        # =====================================================================
+        # INFRA TRADE / SMALL ACCOUNT FORMAT
+        # =====================================================================
+
+        # BTO: **SMALL ACCOUNT :** Bought SPX 6900C at 2.50( 5 Calls)
+        # Also matches: **SMALL :** Bought ..., **SMALL ACCOUNT :** ,Other Bought ...
+        self.register(
+            name="infra_trade_buy",
+            description="Infra Trade small account buy alert",
+            priority=12,
+            pattern=r'\*{0,2}SMALL(?:\s+ACCOUNT)?\s*(?::|\*{0,2}\s*:)\s*\*{0,2}\s*(?:,\s*\w+\s+)?(?:Bought\s+)?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)([CPcp])\s+at\s*\.?\s*(\d*\.?\d+)',
+            parser=self._parse_infra_trade_buy,
+            examples=[
+                "**SMALL ACCOUNT :** Bought MSFT 450C at 3.80 Exp: 06/18/2026( 2 Calls)",
+                "**SMALL :** Bought SPX 6950C at 1.50( 5 Calls)",
+                "**SMALL :** SPX 6860P at 2.10 ( 5 Puts)",
+                "**SMALL ACCOUNT :** ,Other Bought NFLX 90C at 1.30 Exp: 03/20/2026 (10 Calls)",
+            ]
+        )
+
+        # STC: @here Sold 3 GLD 450C at 3   /  Sold 5 NVDA 192.50C at 2.45
+        # Matches: Sold [qty] SYMBOL STRIKEC/P at PRICE
+        #          Sold [all/last] SYMBOL STRIKEC/P at PRICE
+        self.register(
+            name="infra_trade_sell",
+            description="Infra Trade sell with symbol and strike",
+            priority=13,
+            pattern=r'[Ss]old\s+(?:(?:the\s+)?(?:last\s+)?)?(\d+|all)?\s*(?:more\s+)?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)([CPcp])\s+(?:(?:runners?\s+)?at\s*\.?\s*(\d*\.?\d+))',
+            parser=self._parse_infra_trade_sell,
+            examples=[
+                "@here Sold 3 GLD 450C at 3",
+                "@here Sold 1 MSFT 450C at 4.80 Holding 1 call",
+                "Sold 5 NVDA 192.50C at 2.45 ( Holding 5 )",
+                "@here Sold last SPX 6810P at 2.80",
+                "@here Sold all ASTS 100C at 4.40",
+            ]
+        )
+
+        # STC: Sold SYMBOL at PRICE (no strike — close all matching)
+        # e.g. "@here Sold all BABA at 4.20", "@here Sold all XPEV at 1.50"
+        self.register(
+            name="infra_trade_sell_symbol_only",
+            description="Infra Trade sell by symbol only (no strike)",
+            priority=72,
+            pattern=r'[Ss]old\s+(?:(?:the\s+)?(?:last\s+)?)?(?:(?:all|\d+)\s+)?([A-Z]{1,5})\s+(?:calls?\s+|puts?\s+)?(?:at|around)\s+\.?\s*(\d*\.?\d+)',
+            parser=self._parse_infra_trade_sell_symbol_only,
+            examples=[
+                "@here Sold all BABA at 4.20",
+                "@here Sold all XPEV at 1.50",
+                "@here Sold all XLF calls at 1.60",
+                "@here Sold 3 PLTR calls around 3.55",
+            ]
+        )
+
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
@@ -4019,7 +4073,109 @@ class SignalFormatRegistry:
     def _parse_learned_pattern(self, match: re.Match, text: str) -> Optional[Dict]:
         """Legacy parser for learned patterns (fallback)."""
         return self._parse_learned_pattern_with_metadata(match, text, 'unknown')
-    
+
+    # =========================================================================
+    # INFRA TRADE / SMALL ACCOUNT PARSER IMPLEMENTATIONS
+    # =========================================================================
+
+    def _parse_infra_trade_buy(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, strike, opt_type, price = match.groups()
+
+        if not symbol or not strike or not price:
+            return None
+
+        qty = 1
+        qty_specified = False
+        qty_match = re.search(r'\(\s*(?:Total[:\s\-]*)?(\d+)\s*(?:Calls?|Puts?)\s*\)', text, re.IGNORECASE)
+        if qty_match:
+            qty = int(qty_match.group(1))
+            qty_specified = True
+
+        expiry = None
+        exp_match = re.search(r'Exp[;:\s]+\s*(\d{1,2})/(\d{1,2})/(\d{4})', text)
+        if exp_match:
+            expiry = f"{exp_match.group(1)}/{exp_match.group(2)}/{exp_match.group(3)}"
+        else:
+            from datetime import datetime
+            today = datetime.now()
+            expiry = f"{today.month:02d}/{today.day:02d}/{today.year}"
+
+        return {
+            "asset": "option",
+            "action": "BTO",
+            "qty": qty,
+            "qty_specified": qty_specified,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type.upper(),
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_infra_trade_buy": True
+        }
+
+    def _parse_infra_trade_sell(self, match: re.Match, text: str) -> Optional[Dict]:
+        qty_str, symbol, strike, opt_type, price_str = match.groups()
+
+        if not symbol or not strike:
+            return None
+
+        qty = 1
+        qty_specified = False
+        is_full_exit = False
+        if qty_str:
+            if qty_str.lower() == 'all':
+                is_full_exit = True
+                qty_specified = False
+            else:
+                qty = int(qty_str)
+                qty_specified = True
+
+        price = float(price_str) if price_str else None
+
+        return {
+            "asset": "option",
+            "action": "STC",
+            "qty": qty,
+            "qty_specified": qty_specified,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type.upper(),
+            "expiry": None,
+            "price": price,
+            "is_market_order": price is None,
+            "is_full_exit": is_full_exit,
+            "_infra_trade_sell": True
+        }
+
+    def _parse_infra_trade_sell_symbol_only(self, match: re.Match, text: str) -> Optional[Dict]:
+        symbol, price_str = match.groups()
+
+        if not symbol:
+            return None
+
+        if symbol in self._COMMON_ENGLISH_WORDS:
+            return None
+
+        price = float(price_str) if price_str else None
+
+        is_full_exit = bool(re.search(r'\ball\b', text, re.IGNORECASE))
+
+        return {
+            "asset": "option",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol.upper(),
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": price is None,
+            "is_full_exit": is_full_exit,
+            "_infra_trade_sell_symbol_only": True
+        }
+
     def _month_name_to_num(self, month_name: str) -> str:
         """Convert month name to number."""
         months = {
