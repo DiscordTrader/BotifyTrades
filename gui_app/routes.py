@@ -7150,7 +7150,9 @@ def register_routes(app):
                         quantity = float(trade.get('quantity', 1) or 1)
                         
                         # Calculate P&L
-                        pnl = (current_price - entry_price) * quantity * 100  # Options are x100
+                        _is_option = (trade.get('asset_type') or '').lower() in ('option', 'options')
+                        _multiplier = 100 if _is_option else 1
+                        pnl = (current_price - entry_price) * quantity * _multiplier
                         pnl_percent = ((current_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
                         
                         # Update trade in database
@@ -7283,17 +7285,58 @@ def register_routes(app):
                                     }
                     else:
                         quote_data = None
-                        try:
-                            from src.services.webull_data_hub import get_webull_data_hub
-                            import time as _hub_time
-                            _hub = get_webull_data_hub()
-                            _hq = _hub.get_quote(symbol)
-                            if _hq and _hq.timestamp and (_hub_time.time() - _hq.timestamp) < 15:
-                                if _hq.last > 0 or (_hq.bid > 0 and _hq.ask > 0):
-                                    mid = (_hq.bid + _hq.ask) / 2 if _hq.bid > 0 and _hq.ask > 0 else _hq.last
-                                    quote_data = {'bid': _hq.bid, 'ask': _hq.ask, 'mid': mid, 'last': _hq.last}
-                        except Exception:
-                            pass
+                        _pos_broker = (pos.get('broker') or '').upper()
+
+                        if 'SCHWAB' in _pos_broker:
+                            try:
+                                from src.services.schwab_data_hub import get_schwab_data_hub
+                                _sh = get_schwab_data_hub()
+                                _shq = _sh.get_quote_price(symbol)
+                                if _shq and _shq > 0:
+                                    quote_data = {'bid': 0, 'ask': 0, 'mid': _shq, 'last': _shq}
+                                if not quote_data:
+                                    _sh_pos = _sh.get_positions(detailed=True)
+                                    if _sh_pos:
+                                        for _sp in _sh_pos:
+                                            if (_sp.get('symbol') or '').upper() == symbol.upper() and _sp.get('current_price', 0) > 0:
+                                                _cp = float(_sp['current_price'])
+                                                quote_data = {'bid': 0, 'ask': 0, 'mid': _cp, 'last': _cp}
+                                                break
+                            except Exception:
+                                pass
+
+                        if not quote_data and 'IBKR' in _pos_broker:
+                            try:
+                                from src.services.ibkr_data_hub import get_ibkr_data_hub
+                                _ih = get_ibkr_data_hub()
+                                _ihq = _ih.get_quote(symbol)
+                                if _ihq and getattr(_ihq, 'last', 0) > 0:
+                                    quote_data = {'bid': getattr(_ihq, 'bid', 0), 'ask': getattr(_ihq, 'ask', 0), 'mid': getattr(_ihq, 'last', 0), 'last': getattr(_ihq, 'last', 0)}
+                            except Exception:
+                                pass
+
+                        if not quote_data and 'TASTYTRADE' in _pos_broker:
+                            try:
+                                from src.services.tastytrade_data_hub import get_tastytrade_data_hub
+                                _th = get_tastytrade_data_hub()
+                                _thq = _th.get_quote(symbol)
+                                if _thq and getattr(_thq, 'last', 0) > 0:
+                                    quote_data = {'bid': getattr(_thq, 'bid', 0), 'ask': getattr(_thq, 'ask', 0), 'mid': getattr(_thq, 'last', 0), 'last': getattr(_thq, 'last', 0)}
+                            except Exception:
+                                pass
+
+                        if not quote_data:
+                            try:
+                                from src.services.webull_data_hub import get_webull_data_hub
+                                import time as _hub_time
+                                _hub = get_webull_data_hub()
+                                _hq = _hub.get_quote(symbol)
+                                if _hq and _hq.timestamp and (_hub_time.time() - _hq.timestamp) < 15:
+                                    if _hq.last > 0 or (_hq.bid > 0 and _hq.ask > 0):
+                                        mid = (_hq.bid + _hq.ask) / 2 if _hq.bid > 0 and _hq.ask > 0 else _hq.last
+                                        quote_data = {'bid': _hq.bid, 'ask': _hq.ask, 'mid': mid, 'last': _hq.last}
+                            except Exception:
+                                pass
                         if not quote_data and wb:
                             try:
                                 ticker_id = None
@@ -7320,6 +7363,22 @@ def register_routes(app):
                             except Exception as e:
                                 print(f"[API] Webull quote error for {symbol}: {e}")
                         
+                        if not quote_data and 'SCHWAB' in _pos_broker:
+                            try:
+                                _schwab_b = None
+                                if hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                                    _schwab_b = _bot_instance.schwab_broker
+                                if _schwab_b and _schwab_b.is_authenticated():
+                                    import asyncio as _sq_aio
+                                    _sq_future = _sq_aio.run_coroutine_threadsafe(
+                                        _schwab_b.get_quote(symbol), _bot_instance.loop)
+                                    _sq_price = _sq_future.result(timeout=10)
+                                    if _sq_price and _sq_price > 0:
+                                        quote_data = {'bid': 0, 'ask': 0, 'mid': _sq_price, 'last': _sq_price}
+                                        print(f"[API] Schwab REST quote for {symbol}: ${_sq_price:.4f}")
+                            except Exception as _sq_err:
+                                print(f"[API] Schwab REST quote error for {symbol}: {_sq_err}")
+
                         # Fallback to yfinance for non-Webull positions (Robinhood, Alpaca, etc.)
                         if not quote_data:
                             print(f"[API] Using yfinance fallback for {symbol}")
