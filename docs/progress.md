@@ -1,5 +1,28 @@
 # BotifyTrades Progress Log
 
+## Session: May 26, 2026 — Public Repo Security Cleanup
+
+### CRITICAL: Source Code Exposed on Public Repo
+- **Problem**: `DiscordTrader/BotifyTrades` (public) had 768 files including full Python source, `.encryption_key`, `.schwab_salt`, `schwab_tokens.enc`, and `license_server/` pushed directly to `main` branch across 30 commits by `udayerpdba`.
+- **Root cause**: Direct `git push` of source code to public repo. CI/CD (`build-user.yml`) correctly only publishes release binaries via `softprops/action-gh-release` — it never pushes source.
+- **Fix**: Created orphan branch `releases-only` with only `README.md` (download links) + `.gitignore`, force-pushed as `main`. All 35 releases (v9.1.3 through v10.2.4) with 4-platform binaries confirmed intact.
+- **Status**: All 4 phases COMPLETE.
+- **Note**: 1 fork exists that still has old source code — cannot be controlled from upstream.
+
+### Phase 3: Credential Rotation
+- **`.encryption_key`**: Regenerated (new 44-byte Fernet key). Old config.enc is invalidated — broker creds must be re-entered on next bot start.
+- **`.schwab_salt`**: Regenerated (new 16-byte random salt). Old `schwab_tokens.enc` deleted — Schwab OAuth re-authentication required.
+- **`.gitignore` fixed**: Added `.encryption_key`, `.schwab_salt`, `schwab_tokens.enc`, `config.enc` — these should never have been tracked.
+- **Git untracked**: All 3 files removed from git index via `git rm --cached`.
+
+### Phase 4: Branch Protection
+- Public repo `main` branch now requires 1 PR approval, enforced for admins, force pushes and deletions blocked.
+
+### INVESTIGATED: TEMPLE-BOOM Signal Detection
+- No signals were posted in TEMPLE-BOOM today — only 1 message received ("IQST will re-enter if it breaks and holds 1.30") which is commentary, correctly not matched.
+- All 66/66 Temple parser tests pass, no cross-contamination from Infra Trade parsers.
+- Format gap identified: watchlist/ideas format (`$GXAI ✅ 1.19` without ❌/🎯) from May 22 is unsupported.
+
 ## Session: May 25, 2026 — Infra Trade Parser + Architect Gap Fixes
 
 ### FEATURE: Infra Trade / Small Account channel parser (signal_format_registry.py)

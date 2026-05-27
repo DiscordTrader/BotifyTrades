@@ -43,11 +43,25 @@ config.ini.local
 .env.local
 schwab_token.json
 token.json
+.encryption_key
+.schwab_salt
+schwab_tokens.enc
+config.enc
+wizard_credentials.json
+
+# Runtime data - machine-specific, changes constantly
+.position_cache.json
+sod_snapshots.json
+
+# Extracted channel data (Discord signal dumps)
+extracted_*.json
 
 # License Server - NEVER include in client builds or public repos
 license_server/
+license_server_package.tar.gz
 admin_server.py
 admin_panel/
+scripts/admin/
 
 # PyArmor license files - NEVER COMMIT THESE
 pyarmor-regcode-*.txt
