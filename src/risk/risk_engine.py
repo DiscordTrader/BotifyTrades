@@ -616,15 +616,17 @@ def evaluate_exit_actions(
         }
         tier_qtys = calculate_tier_quantities(state.qty, leave_runner, enabled_tiers, custom_qtys, custom_trim_pcts) if not escalation_only else {}
         
+        peak_pnl = max(pnl_pct, state.max_pnl_seen)
+
         for tier in enabled_tiers:
             tier_hit_attr = f'pt{tier}_hit'
             already_hit = getattr(state, tier_hit_attr, False)
             threshold = tier_thresholds[tier]
-            
-            if not already_hit and pnl_pct >= threshold:
+
+            if not already_hit and peak_pnl >= threshold:
                 setattr(state, tier_hit_attr, True)
-                
-                if not escalation_only:
+
+                if not escalation_only and pnl_pct >= threshold:
                     sell_qty = tier_qtys.get(tier, 0)
                     if sell_qty > 0 and sell_qty <= state.remaining_qty:
                         actions.append(RiskAction(

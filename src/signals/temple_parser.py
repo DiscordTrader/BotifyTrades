@@ -134,7 +134,7 @@ ZZ_ROLE_SWING = '1330915546513805463'
 # re.MULTILINE so ^ matches line starts (handles "Overnight idea\n$MTVA re-entry\n✅...")
 TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
     r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n'
-    r'✅[ \t]*(?:around[ \t]+|break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n'
+    r'✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n'
     r'(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?'
     r'🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
     re.IGNORECASE | re.MULTILINE
@@ -143,6 +143,12 @@ TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
 # Inline entry with role: "SYMBOL in at PRICE <@&role>" or "$SYMBOL <@&role> PRICE"
 TEMPLE_ZZ_INLINE_ROLE_ENTRY_A = re.compile(
     r'^\$?([A-Z]{1,5})\s+(?:in\s+(?:small\s+)?(?:at\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:!?\s*)?<@&(\d+)>',
+    re.IGNORECASE
+)
+
+# Plain text entry: "SYMBOL in [again/back] at PRICE [@Tag]" (no Discord role mention needed)
+TEMPLE_ZZ_PLAIN_ENTRY = re.compile(
+    r'^\$?([A-Z]{1,5})\s+in\s+(?:again\s+|back\s+|small\s+)?at\s+\$?(\d+(?:\.\d+)?)\s*(?:@(\w+))?',
     re.IGNORECASE
 )
 TEMPLE_ZZ_INLINE_ROLE_ENTRY_B = re.compile(
@@ -553,6 +559,12 @@ def parse_temple_zz_ticker_price_now(match: re.Match, text: str) -> Optional[Dic
     return result
 
 
+_RANGE_COMMENTARY_RE = re.compile(
+    r'\b(fib|fibonacci|retracement|resistance|support|level|target|analysis|watch|watching|if\s+it)\b',
+    re.IGNORECASE
+)
+
+
 def parse_temple_zz_range_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
     """Parse 'CRE 2.80-3.91' — range entry (low=entry, high=PT)."""
     groups = match.groups()
@@ -563,6 +575,13 @@ def parse_temple_zz_range_entry(match: re.Match, text: str) -> Optional[Dict[str
     if not symbol or not low or not high:
         return None
     if low >= high:
+        return None
+
+    after_range = text[match.end():]
+    if _RANGE_COMMENTARY_RE.search(after_range):
+        return None
+
+    if low > 0 and high / low > 3.0:
         return None
 
     result = {
@@ -896,6 +915,32 @@ def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dic
         '_trade_type': trade_type,
     }
     return result
+
+
+def parse_temple_zz_plain_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse plain text entry: 'MREO in at 2.50' or 'YMAT in again at 1.15 @Swing'."""
+    symbol = match.group(1).upper()
+    price = float(match.group(2))
+    tag = match.group(3)
+
+    trade_type = 'swing' if tag and tag.lower() == 'swing' else 'momentum'
+
+    return {
+        "asset": "stock",
+        "action": "BTO",
+        "qty": 1,
+        "qty_specified": False,
+        "symbol": symbol,
+        "strike": None,
+        "opt_type": None,
+        "expiry": None,
+        "price": price,
+        "is_market_order": False,
+        "confidence": 1.0,
+        "_temple_entry": True,
+        "_temple_zz_plain_entry": True,
+        "_trade_type": trade_type,
+    }
 
 
 def parse_temple_zz_inline_role_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:

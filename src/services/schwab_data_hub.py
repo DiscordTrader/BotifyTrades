@@ -86,6 +86,7 @@ class SchwabDataHub:
         self._last_quote_ts: float = 0
         self._subscribed_symbols: Set[str] = set()
         self._pending_equity_subs: Set[str] = set()
+        self._pending_option_subs: Set[str] = set()
         self._pending_subs_lock = threading.Lock()
         self._risk_eval_requested = threading.Event()
 
@@ -288,10 +289,22 @@ class SchwabDataHub:
             if new:
                 self._pending_equity_subs |= new
 
+    def request_subscribe_options(self, symbols: Set[str]):
+        with self._pending_subs_lock:
+            new = symbols - self._subscribed_symbols
+            if new:
+                self._pending_option_subs |= new
+
     def drain_pending_subscriptions(self) -> Set[str]:
         with self._pending_subs_lock:
             pending = self._pending_equity_subs - self._subscribed_symbols
             self._pending_equity_subs.clear()
+        return pending
+
+    def drain_pending_option_subscriptions(self) -> Set[str]:
+        with self._pending_subs_lock:
+            pending = self._pending_option_subs - self._subscribed_symbols
+            self._pending_option_subs.clear()
         return pending
 
     def add_subscribed_symbols(self, symbols: Set[str]):

@@ -53,6 +53,11 @@ from .temple_parser import (
     parse_temple_zz_swing_update,
     parse_temple_zz_standalone_targets,
 )
+from .abtrades_parser import (
+    parse_abtrades_entry,
+    parse_abtrades_trim,
+    parse_abtrades_exit,
+)
 
 __all__ = [
     'parse_option_signal',
@@ -95,4 +100,7 @@ __all__ = [
     'parse_temple_zz_inline_role_entry',
     'parse_temple_zz_swing_update',
     'parse_temple_zz_standalone_targets',
+    'parse_abtrades_entry',
+    'parse_abtrades_trim',
+    'parse_abtrades_exit',
 ]

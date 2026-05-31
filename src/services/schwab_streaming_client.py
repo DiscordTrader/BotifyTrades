@@ -403,15 +403,22 @@ class SchwabStreamingClient:
                         if now - self._last_pending_drain >= 10:
                             self._last_pending_drain = now
                             pending = set()
+                            pending_opts = set()
                             try:
                                 if self._hub:
                                     pending = self._hub.drain_pending_subscriptions()
                                     if pending:
                                         await self.subscribe_equities(list(pending))
                                         print(f"[SCHWAB_STREAM] ✓ Cross-broker subscribe: {', '.join(sorted(pending))}")
+                                    pending_opts = self._hub.drain_pending_option_subscriptions()
+                                    if pending_opts:
+                                        await self.subscribe_options(list(pending_opts))
+                                        print(f"[SCHWAB_STREAM] ✓ Cross-broker option subscribe: {len(pending_opts)} symbols")
                             except Exception:
                                 if pending and self._hub:
                                     self._hub.request_subscribe_equities(pending)
+                                if pending_opts and self._hub:
+                                    self._hub.request_subscribe_options(pending_opts)
 
             except asyncio.CancelledError:
                 break

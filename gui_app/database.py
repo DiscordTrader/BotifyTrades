@@ -12762,7 +12762,11 @@ def migrate_channels_for_conditional_orders():
         if 'ticker_filter_list' not in columns:
             cursor.execute('ALTER TABLE channels ADD COLUMN ticker_filter_list TEXT DEFAULT NULL')
             print("[DATABASE] ✓ Added ticker_filter_list column for ticker whitelist/blacklist")
-        
+
+        if 'allowed_signal_formats' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN allowed_signal_formats TEXT DEFAULT NULL')
+            print("[DATABASE] ✓ Added allowed_signal_formats column for per-channel format filtering")
+
         conn.commit()
     except Exception as e:
         print(f"[DATABASE] Error migrating channels for conditional orders: {e}")

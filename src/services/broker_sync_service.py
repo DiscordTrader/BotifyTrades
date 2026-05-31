@@ -2832,26 +2832,41 @@ class BrokerSyncService:
                         'call_put': call_put
                     })
                 
-                # DUPLICATE PREVENTION: Check database for existing OPEN or PENDING positions before inserting
-                # This prevents duplicates across sync cycles and signal execution races
-                # FIX: Also check PENDING trades to prevent race condition where worker creates
-                # PENDING trade before sync detects the position
-                existing_trades = self.db.get_trades(status='OPEN', limit=1000) + self.db.get_trades(status='PENDING', limit=500)
+                # DUPLICATE PREVENTION: Check by order_id (any status) then by symbol+broker (OPEN/PENDING)
                 has_duplicate = False
-                for existing in existing_trades:
-                    existing_broker = (existing.get('broker') or '').upper()
-                    trade_broker = trade_data['broker'].upper()
-                    if existing['symbol'] == symbol and existing_broker == trade_broker:
-                        if asset_type == 'stock':
-                            print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')}, broker={trade_broker})")
+                position_order_id = trade_data.get('order_id')
+                trade_broker = trade_data['broker'].upper()
+
+                # Check 1: order_id match across ALL statuses (deterministic, prevents re-import of closed trades)
+                if position_order_id:
+                    try:
+                        from gui_app.database import get_connection as _dup_conn
+                        _dc = _dup_conn()
+                        _dcur = _dc.cursor()
+                        _dcur.execute('SELECT id, status, broker FROM trades WHERE order_id = ? LIMIT 1', (position_order_id,))
+                        _dup_row = _dcur.fetchone()
+                        if _dup_row:
+                            print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} order_id={position_order_id} already exists (ID={_dup_row['id']}, status={_dup_row['status']})")
                             has_duplicate = True
-                            break
-                        elif asset_type == 'option':
-                            if (existing.get('strike') == strike and 
-                                existing.get('call_put') == call_put):
-                                print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} {strike}{call_put} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')})")
+                    except Exception:
+                        pass
+
+                # Check 2: Symbol + broker match (OPEN/PENDING only)
+                if not has_duplicate:
+                    existing_trades = self.db.get_trades(status='OPEN', limit=1000) + self.db.get_trades(status='PENDING', limit=500)
+                    for existing in existing_trades:
+                        existing_broker = (existing.get('broker') or '').upper()
+                        if existing['symbol'] == symbol and existing_broker == trade_broker:
+                            if asset_type == 'stock':
+                                print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')}, broker={trade_broker})")
                                 has_duplicate = True
                                 break
+                            elif asset_type == 'option':
+                                if (existing.get('strike') == strike and
+                                    existing.get('call_put') == call_put):
+                                    print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} {strike}{call_put} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')})")
+                                    has_duplicate = True
+                                    break
                 
                 if not has_duplicate:
                     self.db.add_trade(trade_data)

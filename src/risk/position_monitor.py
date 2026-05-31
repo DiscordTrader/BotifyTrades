@@ -1952,6 +1952,7 @@ class RiskManager:
     def _update_monitored_symbols(self, positions):
         symbols = set()
         non_streaming_symbols = set()
+        option_symbols_needing_sub = set()
         for p in positions:
             sym = p.symbol.upper()
             symbols.add(sym)
@@ -1965,13 +1966,16 @@ class RiskManager:
                     has_streaming = get_tastytrade_data_hub().is_streaming()
                 except Exception:
                     pass
-            if not has_streaming:
-                if p.asset != 'option':
-                    non_streaming_symbols.add(sym)
+            if p.asset == 'option' and hasattr(p, 'raw_symbol') and p.raw_symbol:
+                option_symbols_needing_sub.add(p.raw_symbol.upper())
+            elif not has_streaming:
+                non_streaming_symbols.add(sym)
         with self._monitored_symbols_lock:
             self._monitored_symbols = symbols
         if non_streaming_symbols:
             self._request_cross_broker_subscriptions(non_streaming_symbols)
+        if option_symbols_needing_sub:
+            self._request_cross_broker_option_subscriptions(option_symbols_needing_sub)
 
     def _request_cross_broker_subscriptions(self, symbols):
         try:
@@ -1982,6 +1986,18 @@ class RiskManager:
                 needed = symbols - already
                 if needed:
                     hub.request_subscribe_equities(needed)
+        except Exception:
+            pass
+
+    def _request_cross_broker_option_subscriptions(self, raw_symbols):
+        try:
+            from src.services.schwab_data_hub import get_schwab_data_hub
+            hub = get_schwab_data_hub()
+            if hub.is_streaming():
+                already = hub.get_subscribed_symbols()
+                needed = raw_symbols - already
+                if needed:
+                    hub.request_subscribe_options(needed)
         except Exception:
             pass
 
@@ -4701,6 +4717,7 @@ class RiskManager:
         
         if channel_settings.escalation_only_mode and channel_settings.has_tiered_targets:
             current_pnl = updated_state.pnl_pct
+            peak_pnl = updated_state.max_pnl_seen
             tier_thresholds = {
                 1: channel_settings.profit_target_1_pct,
                 2: channel_settings.profit_target_2_pct,
@@ -4712,9 +4729,9 @@ class RiskManager:
                 if threshold <= 0:
                     continue
                 tier_attr = f'tier{tier}_hit'
-                if not getattr(cache, tier_attr, False) and current_pnl >= threshold:
+                if not getattr(cache, tier_attr, False) and peak_pnl >= threshold:
                     setattr(cache, tier_attr, True)
-                    print(f"[RISK] ESCALATION ONLY: T{tier} hit ({current_pnl:.1f}% >= {threshold}%) — tier marked for SL escalation, NO partial sell")
+                    print(f"[RISK] ESCALATION ONLY: T{tier} hit (peak {peak_pnl:.1f}% >= {threshold}%) — tier marked for SL escalation, NO partial sell")
 
             if cache.tier1_hit or cache.tier2_hit or cache.tier3_hit or cache.tier4_hit:
                 pts_hit = {1: cache.tier1_hit, 2: cache.tier2_hit, 3: cache.tier3_hit, 4: cache.tier4_hit}
@@ -4723,7 +4740,7 @@ class RiskManager:
 
                 configured_tiers = [t for t in [1,2,3,4] if tier_thresholds.get(t, 0) > 0]
                 all_configured_hit = all(pts_hit.get(t, False) for t in configured_tiers) if configured_tiers else False
-                if all_configured_hit and configured_tiers and current_pnl > 0:
+                if all_configured_hit and configured_tiers and peak_pnl > 0:
                     from src.risk.risk_engine import DYNAMIC_SL_PROFILES
                     _profile_name = channel_settings.dynamic_sl_profile or 'standard'
                     _profile = DYNAMIC_SL_PROFILES.get(_profile_name, DYNAMIC_SL_PROFILES['standard'])
@@ -4733,8 +4750,8 @@ class RiskManager:
                     giveback_pct = highest_tier_pct - highest_sl_pct
                     if giveback_pct < 1:
                         giveback_pct = 5.0
-                    if current_pnl > highest_tier_pct:
-                        ratchet_sl_pct = current_pnl - giveback_pct
+                    if peak_pnl > highest_tier_pct:
+                        ratchet_sl_pct = peak_pnl - giveback_pct
                         ratchet_sl_price = cache.entry_price * (1 + ratchet_sl_pct / 100)
                         if current_px and ratchet_sl_price >= current_px:
                             ratchet_sl_price = current_px * 0.98

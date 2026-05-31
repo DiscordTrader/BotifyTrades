@@ -1,5 +1,48 @@
 # BotifyTrades Progress Log
 
+## Session: May 29, 2026 — PANW Risk Analysis + TEMPLE-BOOM Format Filter + Webull Diagnosis
+
+### ANALYSIS + FIX: PANW 280C 05/29 — Risk Engine Post-Mortem
+- **Trade**: BTO $0.19 → STC $0.18 (-5.26%), held 3 min 14 sec, dynamic_sl trigger
+- **max_pnl_seen**: 47.37% (DB), actual peak 117%+ (user confirmed). System only captured 47% from slow REST polls.
+- **Root cause 1 (Bug)**: New options NOT dynamically subscribed to Schwab streaming after BTO fill — only equities got subscribed. Options relied on 5s REST polls, missing 0DTE spikes.
+- **Root cause 2 (Bug)**: Tiered targets + ratchet SL only checked `pnl_pct` (current snapshot price), not `max_pnl_seen` (interval peak). Price spiked to 117% between evaluations but by eval time was only ~40%.
+- **Impact**: Ratchet SL computed from 40% snapshot → $0.2223 (+17%). Should have used 117% peak → $0.3686 (+94%). Loss of ~$55 per contract.
+- **Fix 1**: Dynamic option streaming subscription via `schwab_data_hub.request_subscribe_options()` + drain loop in streaming client. Position monitor now pushes option raw_symbols to Schwab streaming when new positions detected.
+- **Fix 2**: Tier evaluation uses `peak_pnl = max(pnl_pct, max_pnl_seen)` to MARK tiers. Partial sells still require current price confirmation. Ratchet SL in escalation_only mode uses `peak_pnl` for SL calculation.
+- **Files**: `schwab_data_hub.py`, `schwab_streaming_client.py`, `position_monitor.py`, `risk_engine.py`
+- **Tests**: 539 passed, 0 failures. Verified PANW scenario: 117% peak → all 4 tiers hit → ratchet SL at $0.3686. Equity behavior unchanged.
+
+### FEATURE: AbTrades Signal Parser (abi channel)
+- **New file**: `src/signals/abtrades_parser.py` — standalone parser, no existing code modified
+- **3 formats**: `abtrades_entry` (pri 82), `abtrades_trim` (pri 83), `abtrades_exit` (pri 84)
+- **Entry**: `**$SYMBOL MM/DD STRIKEc PRICE**` — bold-wrapped, extracts SL/PT/qty(xN)/expiry_year
+- **Trim**: `$SYMBOL STRIKEc NN%` (non-bold) — profit update with percentage
+- **Exit**: Bidirectional `ALL OUT`/`closing remaining` — handles symbol before OR after exit phrase
+- **Architect gap review**: Fixed 7 gaps including BLOCKER (option signals invisible to execution pipeline), 6 missed exits (reversed symbol order), LEAPS expiry_year, PT extraction crash
+- **Pipeline fix**: `selfbot_webull.py` now routes `abtrades_*` option signals to `opt` dict for broker execution (same pattern as Sir Goldman)
+- **Validation**: 41 entries, 12 exits (was 6 before fix), 141 trims from 1000 real messages. 588 tests pass.
+- **Channel setup**: Set `allowed_signal_formats = '["abtrades_entry","abtrades_trim","abtrades_exit"]'` to prevent cross-parser collision
+
+### FIX: TEMPLE-BOOM False Positive Signal Filtering
+- **Problem**: Channel updates/commentary parsed as trade signals by loose regex patterns
+- **Fix**: Added per-channel `allowed_signal_formats` column to channels table. TEMPLE-BOOM set to only accept structured signals (✅/❌/🎯 format)
+- **Files**: `gui_app/database.py` (migration), `src/selfbot_webull.py` (filter logic after `parse_all_with_registry()`)
+
+### FIX: GMEX "clear break of" Pattern Not Matching
+- **Problem**: "✅ clear break of 3.50" failed structured entry regex
+- **Fix**: Added `(?:clear[ \t]+)?` before `break` in both `temple_parser.py` and `signal_format_registry.py`
+
+### DIAGNOSED: Webull Connection Red on Dashboard
+- **Problem**: Webull shows red on Multi-Broker Dashboard despite account balance showing
+- **Root cause**: Credentials corrupted from encryption key rotation (email/password empty, refresh_token 5 chars)
+- **Action needed**: Re-enter Webull credentials via GUI
+
+### FIX: Phoenix/TEMPLE-BOOM Missing WEBULL in enabled_brokers
+- **Problem**: REPL conditional order only created for Schwab, not Webull
+- **Root cause**: Phoenix channel had `enabled_brokers: ["SCHWAB"]`
+- **Fix**: Added WEBULL to phoenix and TEMPLE-BOOM enabled_brokers
+
 ## Session: May 26, 2026 — Public Repo Security Cleanup
 
 ### CRITICAL: Source Code Exposed on Public Repo
@@ -18,10 +61,13 @@
 ### Phase 4: Branch Protection
 - Public repo `main` branch now requires 1 PR approval, enforced for admins, force pushes and deletions blocked.
 
-### INVESTIGATED: TEMPLE-BOOM Signal Detection
-- No signals were posted in TEMPLE-BOOM today — only 1 message received ("IQST will re-enter if it breaks and holds 1.30") which is commentary, correctly not matched.
-- All 66/66 Temple parser tests pass, no cross-contamination from Infra Trade parsers.
-- Format gap identified: watchlist/ideas format (`$GXAI ✅ 1.19` without ❌/🎯) from May 22 is unsupported.
+### FIX: TEMPLE-BOOM "SYMBOL in at PRICE" format not detected
+- **Problem**: `MREO in at 2.50`, `NCEL in at 3.80 @Momentum`, `YMAT in again at 1.15 @Swing` — all missed.
+- **Root cause**: `phoenix_entry_in_at` (pri 62) regex `\bin\s+([A-Z])` starts from the word "in", capturing the NEXT word as symbol (e.g. "AT" or "AGAIN"). The existing `temple_zz_inline_role_entry` (pri 51) only matches Discord `<@&ID>` mentions, not plain `@Momentum`/`@Swing` text.
+- **Fix**: New `temple_zz_plain_entry` format (pri 50) — regex `^SYMBOL in [again/back/small] at PRICE [@Tag]`. Correctly captures symbol from start of line, handles optional `@Swing`/`@Momentum` text tags.
+- **Files**: `src/signals/temple_parser.py` (new regex + parser), `src/services/signal_format_registry.py` (new registration + import)
+- **Tests**: 66/66 existing tests pass, all 3 missed signals now correctly parsed.
+- Only SNGX was detected today (BTO via range entry → conditional order → executed). SNGX STC also executed (breakeven close).
 
 ## Session: May 25, 2026 — Infra Trade Parser + Architect Gap Fixes
 
@@ -784,3 +830,15 @@ Verified live with OSRH Trade #36 on IBKR_PAPER:
 - **539 total tests, 0 failures, 0 regressions**
 - New tests: 77 (28 auth + 28 trading + 21 streaming/wiring)
 - Existing tests: 462 — all pass unchanged
+
+## Session: May 28, 2026 — Duplicate Position Fix
+
+### Bug: Sync creates duplicate trade records (HOTH, GNS)
+- **Root cause 1**: `_import_manual_trades()` in `broker_sync_service.py` checked for duplicates only by symbol+broker in OPEN/PENDING trades. If the trade was briefly CLOSED or the order_id differed in case, a duplicate was created with `source='sync_discord'`.
+- **Root cause 2**: `trade_monitor.py` `_add_bto_to_trades_table()` had zero dedup — blindly inserted, creating parallel entries alongside the signal-execution path.
+- **Root cause 3**: `trade_monitor` also created entries in `webhook_positions` table, which the dashboard displayed alongside `trades` table entries — visual duplicate.
+
+### Fixes Applied
+- `broker_sync_service.py`: Added `order_id` dedup check across ALL trade statuses (not just OPEN/PENDING) via direct DB query before the symbol+broker fuzzy check
+- `trade_monitor.py`: Added `order_id` and symbol+broker dedup checks in `_add_bto_to_trades_table()` before inserting
+- Cleaned up existing duplicates: HOTH #152, #157 (hidden), GNS webhook_position #4 (closed), stale SPY webhook_position #3 (closed)

@@ -12302,12 +12302,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 try:
                     from src.services.signal_format_registry import parse_with_registry, parse_all_with_registry
                     _all_results = parse_all_with_registry(combined_content)
+                    _ch_allowed_fmts = None
+                    if channel_info:
+                        import json as _json_fmt
+                        _raw_fmts = channel_info.get('allowed_signal_formats')
+                        if _raw_fmts:
+                            try:
+                                _ch_allowed_fmts = set(_json_fmt.loads(_raw_fmts)) if isinstance(_raw_fmts, str) else set(_raw_fmts)
+                            except Exception:
+                                pass
+                    if _ch_allowed_fmts and _all_results:
+                        _filtered = [r for r in _all_results if r.get('_format_name') in _ch_allowed_fmts]
+                        _blocked = [r for r in _all_results if r.get('_format_name') not in _ch_allowed_fmts]
+                        for _blk in _blocked:
+                            print(f"[FORMAT FILTER] Blocked '{_blk.get('_format_name')}' for {_blk.get('symbol')} on channel {channel_info.get('name')} — not in allowed formats")
+                        _all_results = _filtered
                     if _all_results:
                         _phoenix_registry_result = _all_results[0]
                         _phoenix_registry_extras = _all_results[1:]
                     if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'stock':
                         if not _phoenix_registry_result.get('_conditional_order') and not _phoenix_registry_result.get('_protrader_cancel'):
                             is_phoenix_registry = True
+                    if _phoenix_registry_result and _phoenix_registry_result.get('action') in ('BTO', 'STC') and _phoenix_registry_result.get('asset') == 'option' and _phoenix_registry_result.get('_format_name', '').startswith('abtrades_'):
+                        is_phoenix_registry = True
                     if _phoenix_registry_result and (_phoenix_registry_result.get('_conditional_order') or _phoenix_registry_result.get('_protrader_cancel') or _phoenix_registry_result.get('_protrader_exit') or _phoenix_registry_result.get('action') in ('SL_UPDATE', 'TARGET_UPDATE', 'CANCEL')):
                         is_protrader_conditional = True
                 except Exception:
@@ -14524,6 +14541,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     '_sir_goldman': True  # Mark for special handling
                 }
                 print(f"[SIR-GOLDMAN] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']}")
+            elif _phoenix_registry_result and _phoenix_registry_result.get('asset') == 'option' and _phoenix_registry_result.get('_format_name', '').startswith('abtrades_'):
+                _ab = _phoenix_registry_result
+                opt = {
+                    'action': _ab.get('action', 'BTO'),
+                    'symbol': _ab.get('symbol'),
+                    'strike': _ab.get('strike'),
+                    'opt_type': _ab.get('opt_type', 'C'),
+                    'expiry': _ab.get('expiry', ''),
+                    'expiry_year': _ab.get('expiry_year'),
+                    'price': _ab.get('price'),
+                    'qty': _ab.get('qty', 1),
+                    'qty_specified': _ab.get('qty_specified', False),
+                    'asset': 'option',
+                    'is_market_order': _ab.get('is_market_order', False),
+                    'is_trim': _ab.get('is_trim', False),
+                    'is_full_exit': _ab.get('is_full_exit', False),
+                    'stop_loss': _ab.get('stop_loss'),
+                    'take_profit': _ab.get('take_profit'),
+                    '_abtrades': True,
+                }
+                _ab_fmt = _ab.get('_format_name', 'abtrades')
+                print(f"[ABTRADES] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']} ({_ab_fmt})")
             else:
                 opt = parse_option_signal(normalized_content)
         

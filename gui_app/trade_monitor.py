@@ -901,6 +901,20 @@ class TradeMonitor:
                                   entry_price: float, asset_type: str, order_id: str):
         """Add BTO entry to main trades table for P&L tracking"""
         try:
+            # Dedup: skip if a trade with this order_id already exists
+            if order_id:
+                existing = db.get_trades(status='OPEN', limit=1000) + db.get_trades(status='PENDING', limit=500)
+                for t in existing:
+                    if t.get('order_id') == order_id:
+                        print(f"[TRADE MONITOR] ⚠️ Skipping duplicate: {symbol} order_id={order_id} already exists (ID={t['id']})", flush=True)
+                        return
+                    if (t['symbol'] == symbol and
+                        (t.get('broker') or '').upper() == broker_name.upper() and
+                        t.get('direction') == 'BTO'):
+                        if asset_type == 'stock' or (t.get('strike') == strike and t.get('call_put') == direction):
+                            print(f"[TRADE MONITOR] ⚠️ Skipping duplicate: {symbol} already tracked (ID={t['id']}, broker={broker_name})", flush=True)
+                            return
+
             signal_data = {
                 'symbol': symbol,
                 'strike': strike,

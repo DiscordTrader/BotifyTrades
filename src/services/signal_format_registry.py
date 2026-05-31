@@ -1208,7 +1208,8 @@ class SignalFormatRegistry:
             parse_temple_zz_ticker_price_now,
             parse_temple_zz_range_entry, parse_temple_zz_sl_update_new,
             parse_temple_zz_sl_update_move,
-            parse_temple_zz_structured_entry, parse_temple_zz_inline_role_entry,
+            parse_temple_zz_structured_entry, parse_temple_zz_plain_entry,
+            parse_temple_zz_inline_role_entry,
             parse_temple_zz_swing_update, parse_temple_zz_standalone_targets,
         )
 
@@ -1377,7 +1378,7 @@ class SignalFormatRegistry:
             name="temple_zz_structured_entry",
             description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL (optional) / 🎯 targets",
             priority=50,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
             parser=parse_temple_zz_structured_entry,
             examples=[
                 "$AREB <@&1330929339134640179> \n✅ 0.30\n❌ 0.28\n🎯 0.33...0.37...0.40",
@@ -1389,8 +1390,24 @@ class SignalFormatRegistry:
                 "$FUSE <@&role>\n✅ around 1.70\n❌ 1.50\n🎯 2.00-3.50",
                 "$WNW <@&role>\n✅ $4.00-4.20\n❌ 3.75\n🎯 4.46...4.78...5.20",
                 "$MTVA re-entry\n✅ 2.60-2.65\n❌ 2.50\n🎯 2.75...3.00...3.12..3.30..3.60",
+                "GMEX\n✅ clear break of 3.50\n🎯 4.00...4.21...4.38...5.83",
             ],
             flags=re.IGNORECASE | re.MULTILINE
+        )
+
+        self.register(
+            name="temple_zz_plain_entry",
+            description="ZZ plain text entry: SYMBOL in [again] at PRICE [@Tag]",
+            priority=50,
+            pattern=r'^\$?([A-Z]{1,5})\s+in\s+(?:again\s+|back\s+|small\s+)?at\s+\$?(\d+(?:\.\d+)?)\s*(?:@(\w+))?',
+            parser=parse_temple_zz_plain_entry,
+            examples=[
+                "MREO in at 2.50",
+                "NCEL in at 3.80 @Momentum",
+                "YMAT in again at 1.15 @Swing",
+                "SNGX in at 0.95",
+            ],
+            flags=re.IGNORECASE
         )
 
         self.register(
@@ -1469,7 +1486,7 @@ class SignalFormatRegistry:
             name="temple_zz_options_b",
             description="Temple zz options: TICKER STRIKEc PRICE",
             priority=79,
-            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+(\d+(?:\.\d+)?)(?!\s*/)',
+            pattern=r'\$?([A-Z]{1,5})\s+(\d+(?:\.\d+)?)\s*([CcPp])\s+(\d+(?:\.\d+)?)(?!\s*/)(?!\d)',
             parser=parse_temple_zz_options_b,
             examples=["SPY 580c 1.80", "NVDA 135c 2.50"],
             flags=re.IGNORECASE
@@ -1770,7 +1787,52 @@ class SignalFormatRegistry:
             print(f"[FORMAT REGISTRY] ✓ Loaded {loaded} learned patterns (cleared {len(old_learned)} old)")
         except Exception as e:
             print(f"[FORMAT REGISTRY] Warning: Could not load learned patterns: {e}")
-    
+
+        # =====================================================================
+        # ABTRADES FORMAT (bold-wrapped options entries, trims, exits)
+        # =====================================================================
+        from src.signals.abtrades_parser import (
+            parse_abtrades_entry, parse_abtrades_trim, parse_abtrades_exit,
+        )
+
+        self.register(
+            name="abtrades_entry",
+            description="AbTrades bold option entry: **$SYMBOL MM/DD STRIKEc PRICE**",
+            priority=82,
+            pattern=r'\*\*\$([A-Z]{1,5})\s+(\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+(\d+(?:\.\d+)?)([cpCP])\s+(\d*\.?\d+)(?:x(\d+))?\s*(?:\([^)]*\))?\s*\*\*',
+            parser=parse_abtrades_entry,
+            examples=[
+                "**$MCHP 6/18 100c 3.65**",
+                "**$OKLO 6/18 70c 1.85x10**",
+                "**$MTCH 1/15/2027 40c 3.2**",
+                "**$BAC 6/18 52.5c 1.06**",
+            ],
+        )
+
+        self.register(
+            name="abtrades_trim",
+            description="AbTrades trim/profit update: $SYMBOL STRIKEc NN% (non-bold)",
+            priority=83,
+            pattern=r'(?<!\*)\$([A-Z]{1,5})\s+(\d+(?:\.\d+)?)([cpCP])\s+(\d+(?:\.\d+)?)%',
+            parser=parse_abtrades_trim,
+            examples=["$MSFT 450c 40%", "$IREN 50c 100%", "$OKLO 70c 150%"],
+        )
+
+        self.register(
+            name="abtrades_exit",
+            description="AbTrades full exit: ALL OUT / closing remaining (bidirectional)",
+            priority=84,
+            pattern=r'(?:(?:ALL\s+OUT|(?:I|i)(?:\'?m|m)\s+all\s+out|[Cc]losing\s+(?:the\s+)?(?:remaining|last\b[^$]*?\bon\b))[\s\S]{0,60}?\$([A-Z]{1,5})|\$([A-Z]{1,5})[^\n]{0,40}?(?:\n[^\n]{0,60}){0,2}?(?:all\s+out|(?:I|i)(?:\'?m|m)\s+all\s+out|closing\s+(?:the\s+)?remaining))',
+            parser=parse_abtrades_exit,
+            examples=[
+                "ALL OUT: **$FROG**\n6/18 70c 100%",
+                "Closing the remaining 5 $FSLR 9/18 280c for 500%",
+                "$MRVL 110c 200%\nI'm all OUT.",
+                "$GLW 150c all OUT for 550%",
+                "$RGTI 20c: All out for 150%",
+            ],
+        )
+
     # =========================================================================
     # PARSER IMPLEMENTATIONS
     # =========================================================================
