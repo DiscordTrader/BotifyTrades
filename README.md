@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/BotifyTrades-v10.2.5-00d4ff?style=for-the-badge&labelColor=1a1a2e" alt="Version"/>
+  <img src="https://img.shields.io/badge/BotifyTrades-v10.2.6-00d4ff?style=for-the-badge&labelColor=1a1a2e" alt="Version"/>
   <img src="https://img.shields.io/badge/Brokers-7+ Supported-blueviolet?style=for-the-badge&labelColor=1a1a2e" alt="Brokers"/>
   <img src="https://img.shields.io/badge/Platform-Win%20%7C%20Mac%20%7C%20Linux-green?style=for-the-badge&labelColor=1a1a2e" alt="Platform"/>
   <img src="https://img.shields.io/github/downloads/DiscordTrader/BotifyTrades/total?style=for-the-badge&color=ff6b6b&labelColor=1a1a2e&label=Downloads" alt="Downloads"/>
