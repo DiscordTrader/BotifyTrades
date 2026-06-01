@@ -11830,6 +11830,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             traceback.print_exc()
 
     async def _process_message(self, message: discord.Message, arrived_at=None):
+        _phoenix_registry_result = None
+        _phoenix_registry_extras = []
         # Generate trace ID for complete signal lifecycle tracking
         trace_id = f"T{message.id % 100000:05d}"  # Short trace ID based on message ID
         
