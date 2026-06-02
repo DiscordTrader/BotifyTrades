@@ -4965,10 +4965,9 @@ class RiskManager:
                 strike=getattr(position, 'strike', None),
                 expiry=getattr(position, 'expiry', None),
                 call_put=getattr(position, 'direction', None),
-                is_risk_order=True,
-                is_pt_bracket=True
+                is_risk_order=True
             )
-            print(f"[RISK] 📋 Registered PT order {order_id} with order chaser for {pos_key} (no-chase bracket)")
+            print(f"[RISK] 📋 Registered PT order {order_id} with order chaser for {pos_key}")
         except Exception as e:
             print(f"[RISK] ⚠️ Could not register PT with chaser: {e}")
 

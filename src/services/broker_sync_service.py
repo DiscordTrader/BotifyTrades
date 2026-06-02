@@ -1879,18 +1879,6 @@ class BrokerSyncService:
                                     if raw_status.upper() in ('WORKING', 'PENDING', 'SUBMITTED'):
                                         print(f"[SYNC] ✓ Order #{order_id_str} still {raw_status} in history — skipping cancellation")
                                         _skip_cancel = True
-                                    elif raw_status.upper() == 'FILLED':
-                                        fill_price = float(raw_order.get('avgFilledPrice', 0) or raw_order.get('lmtPrice', 0) or trade.get('intended_price', 0) or 0)
-                                        fill_qty = int(raw_order.get('filledQuantity', 0) or raw_order.get('totalQuantity', 0) or trade.get('quantity', 1))
-                                        print(f"[SYNC] ✓ Webull order #{order_id_str} FILLED: {fill_qty}x @ ${fill_price} — promoting PENDING → OPEN")
-                                        self.db.update_trade(
-                                            trade_id,
-                                            status='OPEN',
-                                            executed_price=fill_price if fill_price > 0 else None,
-                                            quantity=fill_qty if fill_qty > 0 else None,
-                                            executed_at=datetime.now().isoformat()
-                                        )
-                                        _skip_cancel = True
                                     elif cancel_reason_detail:
                                         cancel_reason = f"broker_rejected: {cancel_reason_detail}"
                                     elif raw_msg:
@@ -1913,17 +1901,6 @@ class BrokerSyncService:
                                 continue
                     except Exception as _chaser_err:
                         print(f"[SYNC] ⚠️ Order chaser check error: {_chaser_err}")
-
-                    if _bn_upper in ('WEBULL', 'WEBULL_PAPER') and _broker_inst:
-                        try:
-                            _wb_positions = await _broker_inst.get_positions()
-                            _wb_pos_symbols = {(p.get('symbol') or p.get('ticker', {}).get('symbol', '')).upper() for p in (_wb_positions or [])}
-                            if symbol.upper() in _wb_pos_symbols:
-                                print(f"[SYNC] ✓ POSITION GUARD: Trade #{trade_id} ({symbol}) — position exists at Webull, order must have filled. Promoting PENDING → OPEN")
-                                self.db.update_trade(trade_id, status='OPEN', executed_at=datetime.now().isoformat())
-                                continue
-                        except Exception as _pg_err:
-                            print(f"[SYNC] ⚠️ Webull position guard check error: {_pg_err}")
 
                     if hasattr(self, '_risk_manager') and self._risk_manager:
                         if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
