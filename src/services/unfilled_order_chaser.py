@@ -58,6 +58,7 @@ class TrackedExitOrder:
     replacement_order_id: Optional[str] = None
     final_fill_price: Optional[float] = None
     is_risk_order: bool = True
+    is_pt_bracket: bool = False
 
 
 @dataclass
@@ -571,6 +572,7 @@ class UnfilledOrderChaser:
         action: str,
         position_key: str,
         strike: Optional[float] = None,
+        is_pt_bracket: bool = False,
         expiry: Optional[str] = None,
         call_put: Optional[str] = None,
         is_risk_order: bool = True
@@ -594,10 +596,11 @@ class UnfilledOrderChaser:
                 strike=strike,
                 expiry=expiry,
                 call_put=call_put,
-                is_risk_order=is_risk_order
+                is_risk_order=is_risk_order,
+                is_pt_bracket=is_pt_bracket
             )
             self._tracked_orders[order_id] = order
-            _source = "risk" if is_risk_order else "signal"
+            _source = "PT bracket" if is_pt_bracket else ("risk" if is_risk_order else "signal")
             _price_str = f"${price:.2f}" if price is not None else "MKT"
             print(f"[ORDER_CHASER] Tracking {_source} exit order: {order_id} | {symbol} {quantity}x @ {_price_str}")
             try:
@@ -833,6 +836,8 @@ class UnfilledOrderChaser:
     
     async def _chase_order(self, order: TrackedExitOrder):
         """Chase a stale order - cancel and replace with mid-price"""
+        if order.is_pt_bracket:
+            return
         try:
             broker = self._get_broker(order.broker_id)
             if not broker:
@@ -1058,7 +1063,8 @@ class UnfilledOrderChaser:
                         expiry=order.expiry,
                         call_put=order.call_put,
                         chase_attempts=self.max_chase_attempts if is_market else order.chase_attempts,
-                        is_risk_order=order.is_risk_order
+                        is_risk_order=order.is_risk_order,
+                        is_pt_bracket=order.is_pt_bracket
                     )
                     self._tracked_orders[new_order_id] = new_tracked
             else:
@@ -1092,7 +1098,8 @@ class UnfilledOrderChaser:
                             expiry=order.expiry,
                             call_put=order.call_put,
                             chase_attempts=self.max_chase_attempts if is_market else order.chase_attempts,
-                            is_risk_order=order.is_risk_order
+                            is_risk_order=order.is_risk_order,
+                        is_pt_bracket=order.is_pt_bracket
                         )
                         self._tracked_orders[retry_order_id] = new_tracked
                 else:
@@ -1562,7 +1569,8 @@ class UnfilledOrderChaser:
                         expiry=order.expiry,
                         call_put=order.call_put,
                         chase_attempts=self.max_chase_attempts,
-                        is_risk_order=order.is_risk_order
+                        is_risk_order=order.is_risk_order,
+                        is_pt_bracket=order.is_pt_bracket
                     )
                     self._tracked_orders[mkt_order_id] = new_tracked
                 return True
