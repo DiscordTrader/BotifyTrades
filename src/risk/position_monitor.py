@@ -4085,10 +4085,19 @@ class RiskManager:
                     except Exception as e:
                         print(f"[RISK] ⚠️ Auto-import error for {pos_key}: {e}")
         
+        if not position.current_price or position.current_price <= 0:
+            if not hasattr(self, '_zero_price_logged'):
+                self._zero_price_logged = set()
+            if pos_key not in self._zero_price_logged:
+                self._zero_price_logged.add(pos_key)
+                print(f"[RISK] 🛡️ ZERO PRICE GUARD: {pos_key} has current_price=${position.current_price or 0} — "
+                      f"skipping ALL risk evaluation until valid price arrives (entry=${position.avg_cost:.2f})")
+            return
+
         self.cache.update_highest_price(pos_key, position.current_price, trade_id=trade_id)
-        
+
         pct_change = position.pct_change
-        
+
         if position.avg_cost <= 0:
             if not hasattr(self, '_zero_entry_logged'):
                 self._zero_entry_logged = set()
@@ -4650,10 +4659,6 @@ class RiskManager:
                 profit_target_3_pct=0.0,
                 profit_target_4_pct=0.0,
             )
-
-        if not position.current_price or position.current_price <= 0:
-            print(f"[RISK] ⏭ Skipping risk eval for {position.position_key} — current_price is ${position.current_price or 0} (awaiting first valid tick)")
-            return None
 
         original_qty = cache.original_qty if cache.original_qty else int(position.quantity)
         state = TradeState(

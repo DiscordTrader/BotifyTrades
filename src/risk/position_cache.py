@@ -401,7 +401,7 @@ class PositionCache:
             
             entry = PositionCacheEntry(
                 entry_price=position.avg_cost,
-                highest_price=position.current_price,
+                highest_price=max(position.current_price, position.avg_cost) if position.current_price and position.current_price > 0 else position.avg_cost,
                 broker=position.broker,
                 raw_symbol=position.raw_symbol,
                 stop_loss_price=sl_price,
