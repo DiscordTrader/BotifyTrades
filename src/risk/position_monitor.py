@@ -4651,6 +4651,10 @@ class RiskManager:
                 profit_target_4_pct=0.0,
             )
 
+        if not position.current_price or position.current_price <= 0:
+            print(f"[RISK] ⏭ Skipping risk eval for {position.position_key} — current_price is ${position.current_price or 0} (awaiting first valid tick)")
+            return None
+
         original_qty = cache.original_qty if cache.original_qty else int(position.quantity)
         state = TradeState(
             entry_price=cache.entry_price,

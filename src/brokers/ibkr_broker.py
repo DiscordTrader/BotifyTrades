@@ -425,6 +425,15 @@ class IBKRBroker(BrokerInterface):
 
                 if current_price <= 0:
                     current_price = portfolio_prices.get(contract.conId, 0.0)
+                if current_price <= 0:
+                    try:
+                        from src.services.ibkr_data_hub import get_ibkr_data_hub
+                        hub = get_ibkr_data_hub()
+                        hub_price = hub.get_quote_price(contract.symbol)
+                        if hub_price and hub_price > 0:
+                            current_price = hub_price
+                    except Exception:
+                        pass
 
                 if is_option:
                     avg_cost = avg_cost_raw / 100 if avg_cost_raw > 0 else 0
