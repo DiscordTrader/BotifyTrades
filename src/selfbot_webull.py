@@ -7715,6 +7715,10 @@ class SelfClient(discord.Client):
             if signal.get('profit_target_price'):
                 trade_data['profit_target_price'] = signal['profit_target_price']
                 print(f"[DATABASE] Trade includes signal PT: ${signal['profit_target_price']}")
+            if signal.get('profit_targets') and isinstance(signal['profit_targets'], list) and len(signal['profit_targets']) > 1:
+                import json as _pt_json
+                trade_data['profit_targets_json'] = _pt_json.dumps(signal['profit_targets'])
+                print(f"[DATABASE] Trade includes {len(signal['profit_targets'])} signal targets: {signal['profit_targets']}")
             
             self.db.add_trade(trade_data)
             print(f"[DATABASE] ✓ Trade saved: {signal['symbol']} {signal['action']} qty={signal['qty']} order_id={trade_data.get('order_id')}")

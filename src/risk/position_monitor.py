@@ -519,7 +519,7 @@ class RiskDBAdapter:
                                    c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                    c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                    c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                                   c.broker_bracket_mode
+                                   c.broker_bracket_mode, t.profit_targets_json
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -547,7 +547,7 @@ class RiskDBAdapter:
                                    c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                    c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                    c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                                   c.broker_bracket_mode
+                                   c.broker_bracket_mode, t.profit_targets_json
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -579,7 +579,7 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode
+                               c.broker_bracket_mode, t.profit_targets_json
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -615,7 +615,7 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode
+                               c.broker_bracket_mode, t.profit_targets_json
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -643,7 +643,7 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode
+                               c.broker_bracket_mode, t.profit_targets_json
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -672,7 +672,7 @@ class RiskDBAdapter:
                                c.ema_use_underlying, c.ema_no_trend_candles, c.escalation_only_mode,
                                c.profit_target_trim_pct_1, c.profit_target_trim_pct_2,
                                c.profit_target_trim_pct_3, c.profit_target_trim_pct_4,
-                               c.broker_bracket_mode
+                               c.broker_bracket_mode, t.profit_targets_json
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -777,13 +777,14 @@ class RiskDBAdapter:
                             if len(row) > 42: row[42] = ch_row[37]  # ema_use_underlying
                             if len(row) > 43: row[43] = ch_row[38]  # ema_no_trend_candles
                             if len(row) > 44: row[44] = ch_row[39]  # escalation_only_mode
-                            while len(row) < 50:
+                            while len(row) < 51:
                                 row.append(None)
                             row[45] = ch_row[40]  # profit_target_trim_pct_1
                             row[46] = ch_row[41]  # profit_target_trim_pct_2
                             row[47] = ch_row[42]  # profit_target_trim_pct_3
                             row[48] = ch_row[43]  # profit_target_trim_pct_4
                             row[49] = ch_row[44]  # broker_bracket_mode
+                            # row[50] = profit_targets_json (from trade, not channel)
                             print(f"[RISK] ✓ Channel settings recovered via direct lookup for '{channel_name_from_join}' (LEFT JOIN fallback)")
                     except Exception as e:
                         print(f"[RISK] ⚠️ Direct channel lookup fallback failed: {e}")
@@ -920,8 +921,26 @@ class RiskDBAdapter:
                         if sl_pct_calc > 0:
                             sl = round(sl_pct_calc, 1)
                             print(f"[RISK] Using trade-level SL: ${trade_sl_price:.2f} ({sl}% from entry ${trade_entry_price:.2f})")
-                    
-                    if trade_pt_price and trade_entry_price and trade_entry_price > 0:
+
+                    _signal_targets_json = row[50] if len(row) > 50 and row[50] else None
+                    _actual_entry = trade_entry_price or 0
+                    if _signal_targets_json and _actual_entry > 0:
+                        try:
+                            import json as _tj
+                            _signal_prices = _tj.loads(_signal_targets_json) if isinstance(_signal_targets_json, str) else _signal_targets_json
+                            _valid_targets = [t for t in _signal_prices if isinstance(t, (int, float)) and t > _actual_entry]
+                            if _valid_targets:
+                                _tier_pcts = [round(((t - _actual_entry) / _actual_entry) * 100, 1) for t in _valid_targets[:4]]
+                                if len(_tier_pcts) >= 1: pt1 = _tier_pcts[0]
+                                if len(_tier_pcts) >= 2: pt2 = _tier_pcts[1]
+                                if len(_tier_pcts) >= 3: pt3 = _tier_pcts[2]
+                                if len(_tier_pcts) >= 4: pt4 = _tier_pcts[3]
+                                _prices_str = '/'.join(f'${t:.2f}' for t in _valid_targets[:4])
+                                _pcts_str = '/'.join(f'{p}%' for p in _tier_pcts)
+                                print(f"[RISK] Using signal multi-targets: {_prices_str} = {_pcts_str} (from entry ${_actual_entry:.2f})")
+                        except Exception as _tje:
+                            print(f"[RISK] ⚠️ Could not parse profit_targets_json: {_tje}")
+                    elif trade_pt_price and trade_entry_price and trade_entry_price > 0:
                         pt_pct_calc = ((trade_pt_price - trade_entry_price) / trade_entry_price) * 100
                         if pt_pct_calc > 0:
                             pt_pct_rounded = round(pt_pct_calc, 1)

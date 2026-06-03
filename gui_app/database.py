@@ -804,6 +804,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Per-signal stop/target price columns added")
     
+    # Migration: Add profit_targets_json for multi-target signals (protrader, etc.)
+    try:
+        cursor.execute('SELECT profit_targets_json FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE trades ADD COLUMN profit_targets_json TEXT')
+        conn.commit()
+        print("[DATABASE] ✓ Added profit_targets_json column for multi-target signals")
+
     # Migration: Add risk_trigger column to track automated exit reasons
     try:
         cursor.execute('SELECT risk_trigger FROM trades LIMIT 1')
