@@ -1006,20 +1006,43 @@ def parse_temple_zz_plain_entry(match: re.Match, text: str) -> Optional[Dict[str
 
     return {
         "asset": "stock",
+        "asset_type": "stock",
         "action": "BTO",
         "qty": 1,
         "qty_specified": False,
         "symbol": symbol,
+        "ticker": symbol,
         "strike": None,
         "opt_type": None,
         "expiry": None,
         "price": price,
+        "trigger_type": "over",
+        "trigger_price": price,
+        "entry_high": price,
+        "entry_low": None,
         "is_market_order": False,
+        "is_conditional": True,
+        "_conditional_order": True,
         "confidence": 1.0,
         "_temple_entry": True,
         "_temple_zz_plain_entry": True,
         "_trade_type": trade_type,
+        "stop_loss_type": None,
+        "stop_loss_value": None,
+        "stop_loss_fixed": None,
+        "stop_loss_pct": None,
+        "profit_targets": [],
     }
+
+
+def _extract_prices_from_text(text: str, min_price: float = 0) -> list:
+    """Extract all price-like numbers from freeform text, filtering above min_price."""
+    prices = []
+    for m in re.finditer(r'\$?(\d+(?:\.\d+)?)', text):
+        val = float(m.group(1))
+        if val > min_price:
+            prices.append(val)
+    return prices
 
 
 def parse_temple_zz_inline_role_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
@@ -1041,23 +1064,81 @@ def parse_temple_zz_inline_role_entry(match: re.Match, text: str) -> Optional[Di
 
     trade_type = 'swing' if role_id == ZZ_ROLE_SWING else 'momentum'
 
+    targets = []
+    looking_match = re.search(r'[Ll]ooking[\s.]*for[\s.]+(.+)', text)
+    if looking_match:
+        targets = _extract_prices_from_text(looking_match.group(1), min_price=price)
+
     result = {
         "asset": "stock",
+        "asset_type": "stock",
         "action": "BTO",
         "qty": 1,
         "qty_specified": False,
         "symbol": symbol,
+        "ticker": symbol,
         "strike": None,
         "opt_type": None,
         "expiry": None,
         "price": price,
+        "trigger_type": "over",
+        "trigger_price": price,
+        "entry_high": price,
+        "entry_low": None,
         "is_market_order": False,
+        "is_conditional": True,
+        "_conditional_order": True,
         "confidence": 1.0,
         "_temple_entry": True,
         "_temple_zz_role_entry": True,
         "_trade_type": trade_type,
+        "stop_loss_type": None,
+        "stop_loss_value": None,
+        "stop_loss_fixed": None,
+        "stop_loss_pct": None,
+        "profit_targets": targets,
     }
     return result
+
+
+def parse_temple_zz_will_enter_break(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse 'RKTO will enter break of 2.02 for 2.12...2.21...2.35..2.53'."""
+    symbol = match.group(1).upper()
+    trigger_price = float(match.group(2))
+    raw_targets = match.group(3) if match.lastindex >= 3 and match.group(3) else ''
+    targets = _parse_zz_targets(raw_targets, entry_price=trigger_price) if raw_targets else []
+    if not targets and raw_targets:
+        targets = _extract_prices_from_text(raw_targets, min_price=trigger_price)
+
+    return {
+        'format': 'TEMPLE_ZZ_WILL_ENTER_BREAK',
+        'is_conditional': True,
+        '_conditional_order': True,
+        '_temple_zz_structured': True,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'action': 'BTO',
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': 'over',
+        'trigger_price': trigger_price,
+        'entry_high': trigger_price,
+        'entry_low': None,
+        'stop_loss_type': None,
+        'stop_loss_value': None,
+        'stop_loss_fixed': None,
+        'stop_loss_pct': None,
+        'profit_targets': targets,
+        'target_ranges': [],
+        'position_size_pct': None,
+        'fixed_qty': None,
+        'size_mode': None,
+        'qty': 1,
+        'qty_specified': False,
+        'price': trigger_price,
+        'confidence': 0.9,
+        '_trade_type': 'momentum',
+    }
 
 
 def parse_temple_zz_swing_update(match: re.Match, text: str) -> Optional[Dict[str, Any]]:

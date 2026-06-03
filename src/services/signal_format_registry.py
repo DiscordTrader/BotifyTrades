@@ -1213,6 +1213,7 @@ class SignalFormatRegistry:
             parse_temple_zz_inline_role_entry,
             parse_temple_zz_structured_entry_no_targets,
             parse_temple_zz_single_line_entry,
+            parse_temple_zz_will_enter_break,
             parse_temple_zz_swing_update, parse_temple_zz_standalone_targets,
         )
 
@@ -1381,13 +1382,14 @@ class SignalFormatRegistry:
             name="temple_zz_structured_entry",
             description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL (optional) / 🎯 targets",
             priority=50,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?\s*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?bre?a?k[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?\s*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
             parser=parse_temple_zz_structured_entry,
             examples=[
                 "$AREB <@&1330929339134640179> \n✅ 0.30\n❌ 0.28\n🎯 0.33...0.37...0.40",
                 "$BIYA\n✅ 1.55\n❌ 1.45\n🎯 1.64...1.74...1.88...2.00",
                 "XOS\n✅ 4.30\n❌ -10%\n🎯 4.53...5.15...5.43...6.00..6.50+",
                 "GMEX\n✅ clear break of 3.50\n🎯 4.00...4.21...4.38...5.83",
+                "RKTO \n✅ clear brak of 2.53\n🎯 2.77...3.03...3.50",
             ],
             flags=re.IGNORECASE | re.MULTILINE
         )
@@ -1396,7 +1398,7 @@ class SignalFormatRegistry:
             name="temple_zz_structured_entry_no_targets",
             description="ZZ structured without targets: $TICKER @role / ✅ entry / ❌ SL (optional)",
             priority=51,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*(?:\n(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?)?',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?bre?a?k[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*(?:\n(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?)?',
             parser=parse_temple_zz_structured_entry_no_targets,
             examples=[
                 "$CYAB <@&swing>\n✅ 0.66",
@@ -1447,6 +1449,30 @@ class SignalFormatRegistry:
                 "OUST 29.26 <@&1330915546513805463>",
             ],
             flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_will_enter_break",
+            description="ZZ will-enter: SYMBOL will enter break of PRICE for TARGETS",
+            priority=49,
+            pattern=r'^\$?([A-Z]{1,5})\s+will\s+enter\s+bre?a?k\s+(?:of\s+)?\$?(\d+(?:\.\d+)?)\s+for\s+(.+)',
+            parser=parse_temple_zz_will_enter_break,
+            examples=[
+                "RKTO will enter break of 2.02 for 2.12...2.21...2.35..2.53",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_structured_entry_for_targets",
+            description="ZZ structured with 'for' targets: SYMBOL ✅ break of PRICE for TARGETS",
+            priority=49,
+            pattern=r'^\$?([A-Z]{1,5})\s*\n✅[ \t]*(?:clear[ \t]+)?bre?a?k[ \t]+(?:of[ \t]+)?\$?(\d+(?:\.\d+)?)\s+for\s+(.+)',
+            parser=parse_temple_zz_will_enter_break,
+            examples=[
+                "RKTO \n✅ clear brak of 2.53 for 2.77 retest and 3.03-3.50",
+            ],
+            flags=re.IGNORECASE | re.MULTILINE
         )
 
         self.register(
