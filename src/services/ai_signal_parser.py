@@ -191,24 +191,72 @@ class AISignalParser:
             return False
     
     def _load_few_shot_examples(self) -> None:
-        """Load few-shot examples for prompting."""
-        self._few_shot_examples = [
-            {
-                "input": "Taking a position in $NAMM average $2.38",
-                "output": {"action": "BTO", "asset": "stock", "symbol": "NAMM", "price": 2.38, "confidence": 0.95}
-            },
-            {
-                "input": "All out of $ROLR now with profits",
-                "output": {"action": "STC", "asset": "stock", "symbol": "ROLR", "price": None, "confidence": 0.95}
-            },
-            {
-                "input": "Taking some profits on SIDU",
-                "output": {"action": "STC", "asset": "stock", "symbol": "SIDU", "is_trim": True, "confidence": 0.9}
-            },
-            {
-                "input": "Adding more to IBRX. Average is now 6.65",
-                "output": {"action": "BTO", "asset": "stock", "symbol": "IBRX", "price": 6.65, "is_add": True, "confidence": 0.9}
-            },
+        """Load few-shot examples from SignalFormatRegistry + manual non-signal examples."""
+        self._few_shot_examples = []
+        self._registry_examples_str = None
+
+        try:
+            from src.services.signal_format_registry import SignalFormatRegistry
+            reg = SignalFormatRegistry()
+            raw_examples = []
+            for fmt in reg._sorted_formats:
+                for ex in fmt.examples:
+                    m = fmt.pattern.search(ex)
+                    if not m:
+                        continue
+                    try:
+                        parsed = fmt.parser(m, ex)
+                        if not parsed:
+                            continue
+                        action = parsed.get('action')
+                        if not action or action in ('SKIP', 'UPDATE', 'TARGET_UPDATE', 'SL_UPDATE', 'CANCEL'):
+                            continue
+                        asset = parsed.get('asset', 'stock')
+                        symbol = parsed.get('symbol', '')
+                        if not symbol or len(symbol) > 5:
+                            continue
+                        out = {"action": action, "asset": asset, "symbol": symbol, "confidence": 0.95}
+                        price = parsed.get('price')
+                        if price:
+                            out["price"] = price
+                        if asset == 'option':
+                            if parsed.get('strike'):
+                                out["strike"] = parsed['strike']
+                            if parsed.get('opt_type'):
+                                out["option_type"] = parsed['opt_type']
+                            if parsed.get('expiry'):
+                                out["expiry"] = parsed['expiry']
+                        if parsed.get('is_trim'):
+                            out["is_trim"] = True
+                        raw_examples.append({"input": ex, "output": out, "_family": fmt.name.split('_')[0]})
+                    except Exception:
+                        continue
+
+            seen_families = {}
+            max_per_family = 3
+            selected = []
+            for ex in raw_examples:
+                fam = ex["_family"]
+                if seen_families.get(fam, 0) >= max_per_family:
+                    continue
+                seen_families[fam] = seen_families.get(fam, 0) + 1
+                selected.append(ex)
+
+            for s in selected:
+                s.pop('_family', None)
+            self._few_shot_examples = selected
+
+            lines = []
+            for ex in selected:
+                inp = ex['input'].replace('\n', '\\n')
+                lines.append(f"Input: {inp}\nOutput: {json.dumps(ex['output'])}")
+            self._registry_examples_str = "\n\n".join(lines)
+
+            print(f"[AI_PARSER] ✓ Loaded {len(selected)} training examples from {len(seen_families)} channel families")
+        except Exception as e:
+            print(f"[AI_PARSER] ⚠️ Could not load registry examples: {e}")
+
+        self._few_shot_examples.extend([
             {
                 "input": "IBRX should start paying us soon",
                 "output": {"action": None, "confidence": 0.0, "rationale": "Commentary only, not a trading signal"}
@@ -216,9 +264,17 @@ class AISignalParser:
             {
                 "input": "Watching 1.99 break on NAMM, no entry yet",
                 "output": {"action": None, "confidence": 0.0, "rationale": "Watchlist mention, no position taken"}
+            },
+            {
+                "input": "Weekly RECAP:\n$PBM 183%\n$TDIC 110%\n$MMA 86%",
+                "output": {"action": None, "confidence": 0.0, "rationale": "Performance recap, not a trading signal"}
+            },
+            {
+                "input": "WL:\n$ANY alerted mid 3.00s. 6.53 above.\n$DXST 4.50 break takes it to 5.50+",
+                "output": {"action": None, "confidence": 0.0, "rationale": "Watchlist / analysis, not an entry signal"}
             }
-        ]
-    
+        ])
+
     def add_learned_example(self, input_text: str, output: Dict) -> None:
         """Add a learned example to few-shot prompts."""
         self._few_shot_examples.append({
@@ -258,24 +314,22 @@ class AISignalParser:
         
         return result
     
-    async def _call_openai(self, text: str) -> AIParseResult:
-        """Make API call to OpenAI."""
-        try:
-            # Build few-shot prompt
-            examples_str = "\n".join([
-                f"Input: {ex['input']}\nOutput: {json.dumps(ex['output'])}"
-                for ex in self._few_shot_examples[:6]  # Limit examples
-            ])
-            
-            system_prompt = """You are a trading signal parser. Analyze the input text and extract trading signal information.
+    def _build_system_prompt(self) -> str:
+        examples_str = self._registry_examples_str or "\n".join([
+            f"Input: {ex['input']}\nOutput: {json.dumps(ex['output'])}"
+            for ex in self._few_shot_examples[:6]
+        ])
+        return """You are a trading signal parser for Discord trading channels. You must extract structured data from messages posted by traders.
+
+These channels use many different formats — structured emoji (✅/❌/🎯), natural language, options notation, and more. You have been trained on all known formats below.
 
 Return a JSON object with these fields:
 - action: "BTO" (buy to open), "STC" (sell to close), or null if not a trading signal
 - asset: "stock" or "option"
-- symbol: Stock ticker (uppercase)
+- symbol: Stock ticker (uppercase, 1-5 letters)
 - strike: Option strike price (null for stocks)
 - option_type: "C" for call, "P" for put (null for stocks)
-- expiry: Expiration date (null for stocks)
+- expiry: Expiration date as MM/DD or MM/DD/YYYY (null for stocks)
 - price: Entry/exit price if mentioned
 - qty: Quantity if mentioned (default 1)
 - is_trim: true if partial exit
@@ -283,14 +337,25 @@ Return a JSON object with these fields:
 - confidence: 0.0 to 1.0 confidence score
 - rationale: Brief explanation of your interpretation
 
-IMPORTANT:
-- Only return action if it's a clear trading signal (entry/exit/trim)
-- Commentary, watchlist mentions, and analysis should have action=null
-- Confidence should reflect certainty (0.9+ for clear signals, 0.5-0.8 for ambiguous)
-- Always validate symbol is a valid stock ticker format (1-5 uppercase letters)
+CRITICAL RULES:
+- Only return action for CLEAR trading signals (entry/exit/trim/add)
+- Weekly recaps, performance summaries, watchlists, commentary = action null
+- "WL:" or "Watchlist" messages are NOT signals
+- Price updates like "+50%" or "running" are NOT signals
+- Messages with only a ticker and no price/action context are NOT signals
+- For structured formats (✅ price / 🎯 targets), extract the entry price after ✅
+- For option signals: extract strike, C/P, and expiry. Format: "SYMBOL STRIKEC/P MM/DD"
+- Confidence 0.9+ for clear signals matching known patterns, 0.8 for reasonable inference
+- Never hallucinate symbols not present in the input
 
-Examples:
+KNOWN CHANNEL FORMATS (trained examples):
+
 """ + examples_str
+
+    async def _call_openai(self, text: str) -> AIParseResult:
+        """Make API call to OpenAI."""
+        try:
+            system_prompt = self._build_system_prompt()
 
             response = await self._client.chat.completions.create(
                 model=self._model,
@@ -330,33 +395,7 @@ Examples:
     async def _call_anthropic(self, text: str) -> AIParseResult:
         """Make API call to Anthropic Claude."""
         try:
-            examples_str = "\n".join([
-                f"Input: {ex['input']}\nOutput: {json.dumps(ex['output'])}"
-                for ex in self._few_shot_examples[:6]
-            ])
-
-            system_prompt = """You are a trading signal parser. Extract structured data from messages.
-Return ONLY a valid JSON object with these fields:
-- action: "BTO" (buy to open), "STC" (sell to close), or null if not a trading signal
-- asset: "stock" or "option"
-- symbol: Stock ticker (uppercase, 1-5 letters)
-- strike: Option strike price (null for stocks)
-- option_type: "C" for call, "P" for put (null for stocks)
-- expiry: Expiration date (null for stocks)
-- price: Entry/exit price if mentioned
-- qty: Quantity if mentioned (default 1)
-- is_trim: true if partial exit
-- confidence: 0.0 to 1.0
-- rationale: Brief explanation
-
-RULES:
-- Only return action if it's a clear trading signal (entry/exit/trim)
-- Commentary, watchlist mentions, analysis = action null, confidence 0.0
-- Never hallucinate symbols not present in the input
-- Never recommend trades or suggest position sizes
-
-Examples:
-""" + examples_str
+            system_prompt = self._build_system_prompt() + "\n\nReturn ONLY valid JSON, no markdown."
 
             response = await self._anthropic_client.messages.create(
                 model=self._anthropic_model,

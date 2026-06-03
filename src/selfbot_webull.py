@@ -13648,7 +13648,131 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         import traceback
                         print(f"[COND ORDER] ⚠️ Error checking conditional order: {e}")
                         traceback.print_exc()
-                    
+
+                    # AI FALLBACK: Try AI parsing for unrecognized signals
+                    if execute_enabled and channel_info:
+                        try:
+                            from gui_app.config_service import get_ai_provider
+                            _ai_provider = get_ai_provider()
+                            if _ai_provider != 'disabled':
+                                from src.services.ai_signal_parser import parse_signal_with_ai
+                                _ai_result = await parse_signal_with_ai(combined_content)
+                                if _ai_result and _ai_result.get('action') in ('BTO', 'STC') and _ai_result.get('symbol') and _ai_result.get('confidence', 0) >= 0.8:
+                                    _ai_sym = _ai_result['symbol']
+                                    _ai_action = _ai_result['action']
+                                    _ai_price = _ai_result.get('price')
+                                    _ai_conf = _ai_result['confidence']
+                                    _ai_rationale = _ai_result.get('rationale', '')
+                                    print(f"[AI_FALLBACK] ✓ AI parsed: {_ai_action} {_ai_sym} @ ${_ai_price or 'market'} (confidence={_ai_conf:.2f}, provider={_ai_provider})")
+                                    print(f"[AI_FALLBACK] Rationale: {_ai_rationale}")
+
+                                    _ai_signal = {
+                                        'action': _ai_action,
+                                        'symbol': _ai_sym,
+                                        'price': _ai_price or 0,
+                                        'qty': _ai_result.get('qty', 1),
+                                        'asset': _ai_result.get('asset', 'stock'),
+                                        'asset_type': _ai_result.get('asset', 'stock'),
+                                        'is_market_order': _ai_price is None,
+                                        '_ai_fallback': True,
+                                        '_ai_confidence': _ai_conf,
+                                        '_ai_provider': _ai_provider,
+                                    }
+
+                                    if _ai_result.get('asset') == 'option':
+                                        _ai_signal['strike'] = _ai_result.get('strike')
+                                        _ai_signal['opt_type'] = _ai_result.get('option_type')
+                                        _ai_signal['expiry'] = _ai_result.get('expiry')
+
+                                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                    self._save_signal_to_db(_ai_signal, message.channel.id, message.id, author_name)
+
+                                    import time as _ai_tmod
+                                    cond_brokers = self._get_channel_brokers(channel_info)
+                                    if not cond_brokers:
+                                        print(f"[AI_FALLBACK] ❌ No broker configured for channel {message.channel.id}")
+                                    elif _ai_action == 'BTO' and _ai_result.get('asset', 'stock') == 'stock':
+                                        for _aib_idx, _ai_broker in enumerate(cond_brokers):
+                                            print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
+                                            try:
+                                                stock_signal = {
+                                                    'action': 'BTO',
+                                                    'asset': 'stock',
+                                                    'symbol': _ai_sym,
+                                                    'qty': _ai_signal['qty'],
+                                                    'price': _ai_price or 0,
+                                                    'limit_price': _ai_price,
+                                                    'is_market_order': _ai_signal['is_market_order'],
+                                                    'message_id': str(message.id),
+                                                    'channel_id': str(message.channel.id),
+                                                    '_broker_override': _ai_broker,
+                                                    '_enabled_brokers': [_ai_broker],
+                                                    '_ai_fallback': True,
+                                                    '_queued_at': _ai_tmod.monotonic(),
+                                                    'detected_at': datetime.now().isoformat(),
+                                                    'parsed_at': datetime.now().isoformat(),
+                                                }
+                                                await self.order_queue.put(stock_signal)
+                                            except Exception as _ai_exec_err:
+                                                print(f"[AI_FALLBACK] ⚠️ Execution error on {_ai_broker}: {_ai_exec_err}")
+                                    elif _ai_action == 'STC' and _ai_result.get('asset', 'stock') == 'stock':
+                                        for _aib_idx, _ai_broker in enumerate(cond_brokers):
+                                            print(f"[AI_FALLBACK] Executing {_ai_action} {_ai_sym} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
+                                            try:
+                                                stc_signal = {
+                                                    'action': 'STC',
+                                                    'asset': 'stock',
+                                                    'symbol': _ai_sym,
+                                                    'qty': _ai_signal['qty'],
+                                                    'price': _ai_price or 0,
+                                                    'is_market_order': _ai_signal['is_market_order'],
+                                                    'is_full_exit': not _ai_result.get('is_trim', False),
+                                                    'message_id': str(message.id),
+                                                    'channel_id': str(message.channel.id),
+                                                    '_broker_override': _ai_broker,
+                                                    '_ai_fallback': True,
+                                                    '_queued_at': _ai_tmod.monotonic(),
+                                                    'detected_at': datetime.now().isoformat(),
+                                                    'parsed_at': datetime.now().isoformat(),
+                                                }
+                                                await self.order_queue.put(stc_signal)
+                                            except Exception as _ai_exec_err:
+                                                print(f"[AI_FALLBACK] ⚠️ Exit error on {_ai_broker}: {_ai_exec_err}")
+                                    elif _ai_result.get('asset') == 'option' and _ai_result.get('strike') and _ai_result.get('option_type') and _ai_result.get('expiry'):
+                                        for _aib_idx, _ai_broker in enumerate(cond_brokers):
+                                            print(f"[AI_FALLBACK] Executing option {_ai_action} {_ai_sym} on {_ai_broker} ({_aib_idx+1}/{len(cond_brokers)})")
+                                            try:
+                                                opt_signal = {
+                                                    'action': _ai_action,
+                                                    'asset': 'option',
+                                                    'symbol': _ai_sym,
+                                                    'strike': _ai_result['strike'],
+                                                    'opt_type': _ai_result['option_type'],
+                                                    'expiry': _ai_result['expiry'],
+                                                    'qty': _ai_signal['qty'],
+                                                    'price': _ai_price or 0,
+                                                    'limit_price': _ai_price,
+                                                    'is_market_order': _ai_signal['is_market_order'],
+                                                    'message_id': str(message.id),
+                                                    'channel_id': str(message.channel.id),
+                                                    '_broker_override': _ai_broker,
+                                                    '_enabled_brokers': [_ai_broker],
+                                                    '_ai_fallback': True,
+                                                    '_queued_at': _ai_tmod.monotonic(),
+                                                    'detected_at': datetime.now().isoformat(),
+                                                    'parsed_at': datetime.now().isoformat(),
+                                                }
+                                                await self.order_queue.put(opt_signal)
+                                            except Exception as _ai_exec_err:
+                                                print(f"[AI_FALLBACK] ⚠️ Option error on {_ai_broker}: {_ai_exec_err}")
+                                    return
+                                elif _ai_result and _ai_result.get('action'):
+                                    print(f"[AI_FALLBACK] ⚠️ Low confidence ({_ai_result.get('confidence', 0):.2f}) — not executing: {_ai_result.get('action')} {_ai_result.get('symbol')}")
+                        except ImportError:
+                            pass
+                        except Exception as _ai_fb_err:
+                            print(f"[AI_FALLBACK] ⚠️ Error: {_ai_fb_err}")
+
                     # Check for PARTIAL EXIT signals (e.g., "selling 80% MLTX", "leaving 10%")
                     try:
                         from src.signals.parser import is_partial_exit_signal, parse_partial_exit_signal
