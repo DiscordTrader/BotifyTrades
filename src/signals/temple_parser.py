@@ -840,7 +840,7 @@ def _parse_zz_targets(targets_str: str, entry_price: float = None) -> list:
     pct_parts = re.findall(r'(\d+(?:\.\d+)?)\s*%', targets_str)
     if pct_parts and entry_price and entry_price > 0:
         return [round(entry_price * (1 + float(p) / 100), 4) for p in pct_parts]
-    parts = re.split(r'\.{2,3}|/|,', targets_str)
+    parts = re.split(r'\.{2,}|/|,', targets_str)
     targets = []
     for part in parts:
         part = part.strip().rstrip('%+')
