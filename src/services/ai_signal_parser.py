@@ -47,6 +47,12 @@ class AIParseResult:
     rationale: str = ""
     is_trim: bool = False
     error: Optional[str] = None
+    is_conditional: bool = False
+    trigger_price: Optional[float] = None
+    trigger_type: str = "over"
+    profit_targets: Optional[List[float]] = None
+    stop_loss: Optional[float] = None
+    stop_loss_pct: Optional[float] = None
 
 
 class AISignalParserCache:
@@ -330,27 +336,75 @@ Return a JSON object with these fields:
 - strike: Option strike price (null for stocks)
 - option_type: "C" for call, "P" for put (null for stocks)
 - expiry: Expiration date as MM/DD or MM/DD/YYYY (null for stocks)
-- price: Entry/exit price if mentioned
+- price: Entry/exit price if mentioned (the trigger/break price for conditional entries)
 - qty: Quantity if mentioned (default 1)
 - is_trim: true if partial exit
 - is_add: true if adding to existing position
+- is_conditional: true if the entry depends on a price breakout/trigger (NOT immediate market buy)
+- trigger_price: The price that must be broken/reached before entering (same as price for conditional)
+- trigger_type: "over" (break above) or "under" (break below), default "over"
+- profit_targets: Array of target prices [2.35, 2.50, 3.00] extracted from "for X...Y...Z" or 🎯
+- stop_loss: Fixed stop loss price if mentioned (from ❌ or "SL" text)
+- stop_loss_pct: Percentage stop loss if mentioned (e.g. -10% -> 10)
 - confidence: 0.0 to 1.0 confidence score
 - rationale: Brief explanation of your interpretation
+
+CONDITIONAL ORDER DETECTION — these are NOT immediate buys, they are conditional triggers:
+- "will enter [if/only if] [it] breaks [and holds] PRICE" -> is_conditional=true, trigger_price=PRICE
+- "will enter at PRICE break" -> is_conditional=true
+- "clear break of PRICE for TARGETS" -> is_conditional=true
+- "SYMBOL over VWAP/PRICE" -> is_conditional=true
+- "will re-enter if it breaks PRICE" -> is_conditional=true
+- "break of PRICE only for TARGETS" -> is_conditional=true
+- "lotto [at] PRICE" -> is_conditional=false (immediate small entry)
+- "Scalping SYMBOL [at/here] PRICE" -> is_conditional=false (immediate entry)
+- "Small SYMBOL [at] PRICE" -> is_conditional=false (immediate small entry)
+- "in again at PRICE" -> is_conditional=false (immediate re-entry)
+- Structured ✅ PRICE 🎯 TARGETS -> is_conditional=true (standard conditional)
+
+TARGET EXTRACTION from "for" text:
+- "for 3.51-4.00-4.30" -> profit_targets: [3.51, 4.00, 4.30]
+- "for 2.34...2.50...2.69...3.00" -> profit_targets: [2.34, 2.50, 2.69, 3.00]
+- "🎯 5% 10% 15%" -> profit_targets as percentages (leave as [5, 10, 15] with is_pct flag)
+- "for PRICE retest" -> profit_targets: [PRICE]
 
 CRITICAL RULES:
 - Only return action for CLEAR trading signals (entry/exit/trim/add)
 - Weekly recaps, performance summaries, watchlists, commentary = action null
-- "WL:" or "Watchlist" messages are NOT signals
-- Price updates like "+50%" or "running" are NOT signals
+- "WL:" or "Watchlist" messages are NOT entry signals — they are analysis
+- Price updates like "+50%" or "running" or "halted" are NOT signals
+- "PT hit", "all PTs hit", "paid us" are NOT signals (past tense updates)
 - Messages with only a ticker and no price/action context are NOT signals
+- "alert valid again" is NOT a signal (no price)
 - For structured formats (✅ price / 🎯 targets), extract the entry price after ✅
-- For option signals: extract strike, C/P, and expiry. Format: "SYMBOL STRIKEC/P MM/DD"
+- For option signals: extract strike, C/P, and expiry
 - Confidence 0.9+ for clear signals matching known patterns, 0.8 for reasonable inference
 - Never hallucinate symbols not present in the input
 
 KNOWN CHANNEL FORMATS (trained examples):
 
 """ + examples_str
+
+    def _build_result(self, data: Dict) -> AIParseResult:
+        return AIParseResult(
+            action=data.get('action'),
+            asset=data.get('asset', 'stock'),
+            symbol=data.get('symbol'),
+            strike=data.get('strike'),
+            option_type=data.get('option_type'),
+            expiry=data.get('expiry'),
+            price=data.get('price'),
+            qty=data.get('qty', 1),
+            confidence=data.get('confidence', 0.0),
+            rationale=data.get('rationale', ''),
+            is_trim=data.get('is_trim', False),
+            is_conditional=data.get('is_conditional', False),
+            trigger_price=data.get('trigger_price') or data.get('price'),
+            trigger_type=data.get('trigger_type', 'over'),
+            profit_targets=data.get('profit_targets'),
+            stop_loss=data.get('stop_loss'),
+            stop_loss_pct=data.get('stop_loss_pct'),
+        )
 
     async def _call_openai(self, text: str) -> AIParseResult:
         """Make API call to OpenAI."""
@@ -370,21 +424,8 @@ KNOWN CHANNEL FORMATS (trained examples):
             
             content = response.choices[0].message.content
             data = json.loads(content)
-            
-            return AIParseResult(
-                action=data.get('action'),
-                asset=data.get('asset', 'stock'),
-                symbol=data.get('symbol'),
-                strike=data.get('strike'),
-                option_type=data.get('option_type'),
-                expiry=data.get('expiry'),
-                price=data.get('price'),
-                qty=data.get('qty', 1),
-                confidence=data.get('confidence', 0.0),
-                rationale=data.get('rationale', ''),
-                is_trim=data.get('is_trim', False)
-            )
-            
+            return self._build_result(data)
+
         except json.JSONDecodeError as e:
             print(f"[AI_PARSER] JSON decode error: {e}")
             return AIParseResult(error=f"Invalid JSON response: {e}")
@@ -414,20 +455,7 @@ KNOWN CHANNEL FORMATS (trained examples):
                 content = content[:content.rfind("```")].strip()
 
             data = json.loads(content)
-
-            return AIParseResult(
-                action=data.get('action'),
-                asset=data.get('asset', 'stock'),
-                symbol=data.get('symbol'),
-                strike=data.get('strike'),
-                option_type=data.get('option_type'),
-                expiry=data.get('expiry'),
-                price=data.get('price'),
-                qty=data.get('qty', 1),
-                confidence=data.get('confidence', 0.0),
-                rationale=data.get('rationale', ''),
-                is_trim=data.get('is_trim', False)
-            )
+            return self._build_result(data)
 
         except json.JSONDecodeError as e:
             print(f"[AI_PARSER] Claude JSON decode error: {e}")
@@ -465,7 +493,7 @@ async def parse_signal_with_ai(text: str) -> Optional[Dict[str, Any]]:
     if result.error or not result.action:
         return None
     
-    return {
+    d = {
         'action': result.action,
         'asset': result.asset,
         'symbol': result.symbol,
@@ -477,5 +505,12 @@ async def parse_signal_with_ai(text: str) -> Optional[Dict[str, Any]]:
         'confidence': result.confidence,
         'rationale': result.rationale,
         'is_trim': result.is_trim,
+        'is_conditional': result.is_conditional,
+        'trigger_price': result.trigger_price,
+        'trigger_type': result.trigger_type,
+        'profit_targets': result.profit_targets or [],
+        'stop_loss': result.stop_loss,
+        'stop_loss_pct': result.stop_loss_pct,
         '_ai_parsed': True
     }
+    return d
