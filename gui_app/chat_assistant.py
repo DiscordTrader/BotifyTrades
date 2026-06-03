@@ -2689,6 +2689,8 @@ def get_ai_response(query: str) -> Dict:
         return handle_format_teaching(query)
     elif is_format_management_query(query_lower):
         return handle_format_management(query)
+    elif is_signal_test_query(query_lower):
+        return test_signal_parsing(query)
     elif is_trade_query(query_lower):
         return analyze_trades(query)
     elif is_log_query(query_lower):
@@ -2985,9 +2987,96 @@ def format_parsed_fields(parsed: Dict) -> str:
     return '\n'.join(lines) if lines else "No fields extracted"
 
 
+def is_signal_test_query(query: str) -> bool:
+    """Check if user wants to test if a signal will be recognized."""
+    test_keywords = ["test this", "will this work", "parse this", "recognize this",
+                     "try this signal", "check this signal", "validate this",
+                     "will bot recognize", "can you parse", "test signal"]
+    return any(kw in query for kw in test_keywords)
+
+
+def test_signal_parsing(query: str) -> Dict:
+    """Test if a signal will be recognized by regex parsers and/or AI fallback."""
+    try:
+        signal_text = extract_signal_from_query(query) or query
+        signal_match = re.search(r'(?:test|parse|recognize|validate|check|try)[:\s]+(.+)', query, re.IGNORECASE | re.DOTALL)
+        if signal_match:
+            signal_text = signal_match.group(1).strip()
+
+        from src.services.signal_format_registry import SignalFormatRegistry
+        reg = SignalFormatRegistry()
+        results = reg.parse_all(signal_text)
+
+        if results:
+            r = results[0]
+            fmt = r.get('_format_name', 'unknown')
+            action = r.get('action', '?')
+            symbol = r.get('symbol', '?')
+            price = r.get('price')
+            is_cond = r.get('_conditional_order') or r.get('is_conditional')
+            targets = r.get('profit_targets', [])
+            sl = r.get('stop_loss_value') or r.get('stop_loss_fixed')
+            sl_pct = r.get('stop_loss_pct')
+
+            lines = [
+                f"**Regex Match: {fmt}**\n",
+                f"- **Action:** {action}",
+                f"- **Symbol:** {symbol}",
+                f"- **Price:** ${price}" if price else "- **Price:** market",
+                f"- **Type:** {'Conditional Order' if is_cond else 'Immediate Execution'}",
+            ]
+            if targets:
+                lines.append(f"- **Targets:** {', '.join(f'${t}' for t in targets)}")
+            if sl:
+                lines.append(f"- **Stop Loss:** ${sl}")
+            elif sl_pct:
+                lines.append(f"- **Stop Loss:** {sl_pct}%")
+            lines.append(f"\nThis signal **will be recognized** by the regex parser and executed on your channel's assigned broker(s).")
+
+            return {
+                "success": True,
+                "response": '\n'.join(lines),
+                "topic": "signal_test",
+                "ai_powered": False
+            }
+        else:
+            ai_note = ""
+            try:
+                from gui_app.config_service import get_ai_provider
+                provider = get_ai_provider()
+                if provider != 'disabled':
+                    ai_response = _call_ai(
+                        f"Parse this trading signal:\n\n{signal_text}",
+                        "", "signal_test"
+                    )
+                    if ai_response:
+                        ai_note = f"\n\n**AI Fallback Analysis ({provider}):**\n{ai_response}"
+                    else:
+                        ai_note = f"\n\nAI fallback ({provider}) could not analyze this signal."
+                else:
+                    ai_note = "\n\nAI fallback is **disabled**. Enable it in Settings > AI & Market Data APIs to catch unrecognized formats."
+            except Exception:
+                pass
+
+            return {
+                "success": True,
+                "response": f"**No Regex Match**\n\nThis signal does not match any of the 140+ registered format patterns.\n\n```\n{signal_text[:200]}\n```{ai_note}",
+                "topic": "signal_test",
+                "ai_powered": bool(ai_note)
+            }
+
+    except Exception as e:
+        print(f"[CHAT] Signal test error: {e}")
+        return {
+            "success": True,
+            "response": f"Error testing signal: {e}",
+            "topic": "error"
+        }
+
+
 def is_trade_query(query: str) -> bool:
     """Check if query is about trades."""
-    trade_keywords = ["trade", "position", "order", "buy", "sell", "bto", "stc", 
+    trade_keywords = ["trade", "position", "order", "buy", "sell", "bto", "stc",
                       "filled", "executed", "profit", "loss", "p&l", "pnl"]
     return any(kw in query for kw in trade_keywords)
 
@@ -3247,64 +3336,108 @@ def _generate_trade_summary(trades: List[Dict], positions: List[Dict]) -> str:
     return "\n".join(parts)
 
 
-def _get_openai_client():
-    """Get OpenAI client based on user's provider preference from GUI.
-    
-    Provider options (set in Settings > AI & Market Data APIs):
-    - 'replit_ai': Use Replit AI Integrations (billed to Replit credits)
-    - 'openai': Use user's own OpenAI API key
-    - 'disabled': No AI features
+_chat_ai_cache = {'client': None, 'provider': None, 'is_anthropic': False, 'model': None}
+
+
+def _get_ai_client():
+    """Get AI client based on provider preference. Supports OpenAI, Claude, Replit AI.
+    Returns (client, is_anthropic, model) or (None, False, None) if disabled.
     """
     import os
-    
+
     try:
         from .config_service import get_ai_provider, load_config
-        from openai import OpenAI
-        
         provider = get_ai_provider()
-        
-        # Check if AI is disabled
+
+        if provider == _chat_ai_cache.get('provider') and _chat_ai_cache.get('client'):
+            return _chat_ai_cache['client'], _chat_ai_cache['is_anthropic'], _chat_ai_cache['model']
+
         if provider == 'disabled':
-            print("[CHAT] AI is disabled in settings")
-            return None
-        
-        # Use Replit AI Integrations
+            return None, False, None
+
+        if provider == 'claude':
+            try:
+                from anthropic import Anthropic
+            except ImportError:
+                print("[CHAT] Anthropic SDK not installed")
+                return None, False, None
+            api_key = os.environ.get('ANTHROPIC_API_KEY')
+            if not api_key:
+                try:
+                    from .broker_credentials_service import get_api_keys_extended
+                    keys = get_api_keys_extended()
+                    api_key = keys.get('anthropic', '')
+                except Exception:
+                    pass
+            if not api_key:
+                print("[CHAT] Anthropic API key not configured")
+                return None, False, None
+            client = Anthropic(api_key=api_key)
+            model = "claude-haiku-4-5-20251001"
+            _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': True, 'model': model})
+            print(f"[CHAT] Using Claude (model={model})")
+            return client, True, model
+
         if provider == 'replit_ai':
-            ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
-            ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
-            
-            if ai_integrations_key and ai_integrations_base:
-                print("[CHAT] Using Replit AI Integrations")
-                return OpenAI(api_key=ai_integrations_key, base_url=ai_integrations_base)
-            else:
-                print("[CHAT] Replit AI Integrations not available")
-                return None
-        
-        # Use user's OpenAI API key
-        if provider == 'openai':
-            user_api_key = os.environ.get('OPENAI_API_KEY')
-            
-            if not user_api_key:
+            try:
+                from openai import OpenAI
+            except ImportError:
+                return None, False, None
+            ai_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
+            ai_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+            if not ai_key:
+                print("[CHAT] Replit AI not available")
+                return None, False, None
+            client = OpenAI(api_key=ai_key, base_url=ai_base)
+            model = "gpt-4o-mini"
+            _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'model': model})
+            print("[CHAT] Using Replit AI")
+            return client, False, model
+
+        # provider == 'openai'
+        try:
+            from openai import OpenAI
+        except ImportError:
+            return None, False, None
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            try:
                 api_keys = load_config('api_keys')
                 if api_keys and api_keys.get('openai'):
-                    user_api_key = api_keys['openai']
-            
-            if user_api_key:
-                print("[CHAT] Using user's OpenAI API key")
-                return OpenAI(api_key=user_api_key)
-            else:
-                print("[CHAT] OpenAI API key not configured")
-                return None
-        
-        return None
+                    api_key = api_keys['openai']
+            except Exception:
+                pass
+        if not api_key:
+            try:
+                from .broker_credentials_service import get_api_keys_extended
+                keys = get_api_keys_extended()
+                api_key = keys.get('openai', '')
+            except Exception:
+                pass
+        if not api_key:
+            print("[CHAT] OpenAI API key not configured")
+            return None, False, None
+        client = OpenAI(api_key=api_key)
+        model = "gpt-4o-mini"
+        _chat_ai_cache.update({'client': client, 'provider': provider, 'is_anthropic': False, 'model': model})
+        print("[CHAT] Using OpenAI")
+        return client, False, model
+
     except Exception as e:
-        print(f"[CHAT] OpenAI client initialization failed: {e}")
-        return None
+        print(f"[CHAT] AI client init failed: {e}")
+        return None, False, None
+
+
+def _get_openai_client():
+    """Legacy wrapper — returns client or None."""
+    client, _, _ = _get_ai_client()
+    return client
 
 
 def is_ai_available() -> bool:
-    """Check if OpenAI is available (via AI Integrations or user API key)."""
-    return _get_openai_client() is not None
+    """Check if any AI provider is available."""
+    client, _, _ = _get_ai_client()
+    return client is not None
 
 
 def analyze_uploaded_log(log_content: str, query: str = "") -> Dict:
@@ -3457,100 +3590,98 @@ def analyze_uploaded_log(log_content: str, query: str = "") -> Dict:
         }
 
 
-def _call_openai(query: str, context: str, analysis_type: str) -> Optional[str]:
-    """Call OpenAI to analyze context and answer query."""
-    try:
-        client = _get_openai_client()
-        if not client:
-            return None
-        
-        system_prompts = {
-            "trade_analysis": """You are a trading assistant for BotifyTrades, a Discord trading bot.
+_CHAT_SYSTEM_PROMPTS = {
+    "trade_analysis": """You are a trading assistant for BotifyTrades, a Discord trading bot.
 Analyze the provided trade data and console logs to answer the user's question.
 Be concise but helpful. If you see errors, explain what they mean.
 Format your response with markdown for readability.""",
-            
-            "log_analysis": """You are a technical assistant for BotifyTrades, a Discord trading bot.
+
+    "log_analysis": """You are a technical assistant for BotifyTrades, a Discord trading bot.
 Analyze the console logs and activity to answer the user's question.
 Identify any issues, patterns, or important events.
 Be concise and highlight the most relevant information.""",
-            
-            "error_analysis": """You are a troubleshooting assistant for BotifyTrades, a Discord trading bot.
+
+    "error_analysis": """You are a troubleshooting assistant for BotifyTrades, a Discord trading bot.
 Analyze the errors and issues to help the user understand what went wrong.
 Provide clear explanations and suggest solutions when possible.
 Be empathetic - users are often frustrated when things don't work.""",
-            
-            "log_upload": """You are a log file debugger for BotifyTrades, a Discord trading bot that automates stock and options trading.
+
+    "log_upload": """You are a log file debugger for BotifyTrades, a Discord trading bot that automates stock and options trading.
 The user has uploaded a log file. Analyze it thoroughly and answer their question.
 Focus on:
 - Trade entries (BTO) and exits (STC) - were they successful? What symbols/prices?
-- Rejections and skipped signals - WHY were they rejected? (insufficient funds, invalid format, filtered, etc.)
+- Rejections and skipped signals - WHY were they rejected?
 - Errors and failures - broker connection issues, order placement failures, API errors
 - Risk management events - stop loss triggers, profit target hits, trailing stops
 - Signal parsing - were signals detected and parsed correctly?
 - Order flow - was the order placed, filled, or cancelled?
 Provide a clear summary with specific line references. Highlight problems and suggest fixes.
 Use markdown formatting for readability.""",
-            
-            "general": """You are a helpful assistant for BotifyTrades, a Discord trading bot that automates stock and options trading.
-Answer the user's question helpfully. Be concise but informative.
-If asked about features, explain what BotifyTrades can do.
-Format your response with markdown for readability."""
-        }
-        
-        system_prompt = system_prompts.get(analysis_type, system_prompts["general"])
-        
-        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-        # do not change this unless explicitly requested by the user
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Context:\n{context}\n\nUser Question: {query}"}
-            ],
-            max_completion_tokens=500
-        )
-        
-        return response.choices[0].message.content
-        
+
+    "signal_test": """You are a signal parser for BotifyTrades. The user wants to test if a trading signal will be recognized.
+Analyze the signal text and determine:
+1. Is this a valid trading signal? (BTO/STC entry or exit)
+2. What format does it match? (structured emoji, natural language, options, etc.)
+3. What fields can be extracted? (symbol, price, action, targets, stop loss)
+4. Is this a conditional order (break/trigger) or immediate entry?
+Be specific about what was parsed and what might be missing.""",
+
+    "general": """You are a helpful assistant for BotifyTrades, a Discord trading bot.
+BotifyTrades monitors Discord channels for trading signals and executes trades on Schwab, Webull, Alpaca, IBKR, and Tastytrade.
+
+Key features:
+- 140+ regex signal format parsers with AI fallback
+- AI-powered signal recognition (Claude/OpenAI) for unrecognized formats
+- Conditional order system (break/trigger entries)
+- Risk management: tiered PT, dynamic SL, trailing stops, OCO brackets
+- Per-channel broker assignment and risk settings
+- Format teaching: teach new signal formats via chat
+- Log analysis and error troubleshooting
+
+Answer helpfully and concisely. Use markdown formatting."""
+}
+
+
+def _call_ai(query: str, context: str, analysis_type: str) -> Optional[str]:
+    """Call AI provider (Claude or OpenAI) to analyze context and answer query."""
+    try:
+        client, is_anthropic, model = _get_ai_client()
+        if not client:
+            return None
+
+        system_prompt = _CHAT_SYSTEM_PROMPTS.get(analysis_type, _CHAT_SYSTEM_PROMPTS["general"])
+        user_content = f"Context:\n{context}\n\nUser Question: {query}" if context else query
+
+        if is_anthropic:
+            response = client.messages.create(
+                model=model,
+                max_tokens=600,
+                temperature=0.5,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_content}]
+            )
+            return response.content[0].text
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                max_tokens=600
+            )
+            return response.choices[0].message.content
+
     except Exception as e:
-        print(f"[CHAT] OpenAI call failed: {e}")
+        print(f"[CHAT] AI call failed ({analysis_type}): {e}")
         return None
+
+
+def _call_openai(query: str, context: str, analysis_type: str) -> Optional[str]:
+    """Legacy wrapper — routes to provider-aware _call_ai."""
+    return _call_ai(query, context, analysis_type)
 
 
 def get_general_ai_response(query: str) -> Optional[str]:
     """Get a general AI response for questions not in knowledge base."""
-    try:
-        client = _get_openai_client()
-        if not client:
-            return None
-        
-        system_prompt = """You are a helpful assistant for BotifyTrades, a Discord trading bot.
-BotifyTrades monitors Discord channels for trading signals and automatically executes trades on brokers like Webull, Alpaca, Interactive Brokers, and Tastytrade.
-
-Key features:
-- Automated trade execution from Discord signals
-- Risk management with profit targets and stop losses
-- Paper and live trading modes
-- Per-channel configuration
-- Web-based control panel
-
-Answer the user's question helpfully and concisely. Use markdown formatting.
-If you don't know something specific about BotifyTrades, suggest they check the Settings or Channels page in the GUI."""
-        
-        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-        # do not change this unless explicitly requested by the user
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": query}
-            ],
-            max_completion_tokens=500
-        )
-        
-        return response.choices[0].message.content
-        
-    except Exception as e:
-        print(f"[CHAT] AI response failed: {e}")
-        return None
+    return _call_ai(query, "", "general")
