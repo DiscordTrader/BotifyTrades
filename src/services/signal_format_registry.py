@@ -1087,7 +1087,7 @@ class SignalFormatRegistry:
         self.register(
             name="protrader_structured",
             description="ProTrader structured: Ticker/Entey range/SL/Targs",
-            priority=73,
+            priority=9,
             pattern=r'Ticker\s*:\s*\$?([A-Z]{1,5})\s*\n\s*Ent(?:e|r)y\s+range\s*:\s*(.+)',
             parser=self._parse_protrader_structured,
             examples=[
@@ -3397,7 +3397,7 @@ class SignalFormatRegistry:
 
     def _extract_protrader_sl(self, text: str) -> Optional[float]:
         """Extract stop loss price from protrader text."""
-        sl_match = re.search(r'SL\s+(?:below\s*:?\s*)\$?([\d.]+)', text, re.IGNORECASE)
+        sl_match = re.search(r'SL\s+(?:below\s*:?\s*(?:below\s*)?)\$?([\d.]+)', text, re.IGNORECASE)
         if sl_match:
             try:
                 return float(sl_match.group(1))
@@ -3408,7 +3408,7 @@ class SignalFormatRegistry:
     def _extract_protrader_targets(self, text: str) -> list:
         """Extract profit targets from protrader text."""
         targets = []
-        targ_match = re.search(r'Targs?\s*:?\s*([\d.,\s\-–—+]+)', text, re.IGNORECASE)
+        targ_match = re.search(r'Targs?\s*:?\s*(?:[A-Za-z\s]+[-–—]\s*)?([\d.,\s\-–—+]+)', text, re.IGNORECASE)
         if targ_match:
             raw = targ_match.group(1)
             for val in re.findall(r'([\d.]+)', raw):
@@ -3493,7 +3493,9 @@ class SignalFormatRegistry:
         entry_high = None
         entry_low = None
 
-        breakout_match = re.match(r'[Bb]reak\s+([\d.]+)', entry_text)
+        breakout_match = re.search(r'(?:[Bb](?:uy(?:ing)?\s+)?)?[Bb]reak\s+(?:of\s+)?([\d.]+)', entry_text)
+        if not breakout_match:
+            breakout_match = re.match(r'([\d.]+)\s+break\b', entry_text)
         if breakout_match:
             entry_high = float(breakout_match.group(1))
             is_breakout = True
