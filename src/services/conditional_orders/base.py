@@ -1750,7 +1750,7 @@ class BaseConditionalOrderService(ABC):
                 target_ranges=target_ranges_json,
                 size_mode=size_mode,
                 qty_value=qty_value,
-                calculated_qty=parsed_signal.get('qty') or parsed_signal.get('quantity'),
+                calculated_qty=(parsed_signal.get('qty') or parsed_signal.get('quantity')) if parsed_signal.get('qty_specified') else None,
                 expires_at=expires_at,
                 original_message=parsed_signal.get('original_message'),
                 asset_type='option' if parsed_signal.get('strike') else 'stock',

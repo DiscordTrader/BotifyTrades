@@ -1852,7 +1852,8 @@ class BrokerSyncService:
                     if _bn_upper == 'SCHWAB' and schwab_desc:
                         cancel_reason = f"order_cancelled_or_rejected: {schwab_desc}"
 
-                    if order_id_str and _broker_inst and hasattr(_broker_inst, 'wb'):
+                    _wb_client = getattr(_broker_inst, 'wb', None) or getattr(_broker_inst, '_client', None)
+                    if order_id_str and _broker_inst and _wb_client:
                         try:
                             _broker_inst._data_hub and _broker_inst._data_hub.invalidate_orders()
                             fresh_pending = await _broker_inst.get_pending_orders()
@@ -1868,7 +1869,7 @@ class BrokerSyncService:
                         _skip_cancel = False
                         try:
                             all_orders_raw = await asyncio.to_thread(
-                                _broker_inst.wb.get_history_orders, count=20
+                                _wb_client.get_history_orders, count=20
                             )
                             for raw_order in (all_orders_raw or []):
                                 if str(raw_order.get('orderId', '')) == order_id_str:
@@ -1878,6 +1879,18 @@ class BrokerSyncService:
                                     print(f"[SYNC] 🔍 Order #{order_id_str} history: status={raw_status}, statusStr={raw_msg}, reason={cancel_reason_detail}")
                                     if raw_status.upper() in ('WORKING', 'PENDING', 'SUBMITTED'):
                                         print(f"[SYNC] ✓ Order #{order_id_str} still {raw_status} in history — skipping cancellation")
+                                        _skip_cancel = True
+                                    elif raw_status.upper() == 'FILLED':
+                                        fill_price = float(raw_order.get('avgFilledPrice', 0) or raw_order.get('filledPrice', 0) or raw_order.get('lmtPrice', 0) or 0)
+                                        fill_qty = int(raw_order.get('filledQuantity', 0) or raw_order.get('totalQuantity', 0) or trade.get('quantity', 1))
+                                        print(f"[SYNC] ✓ Webull order #{order_id_str} FILLED: {fill_qty}x @ ${fill_price:.4f} — promoting PENDING → OPEN")
+                                        self.db.update_trade(
+                                            trade_id,
+                                            status='OPEN',
+                                            executed_price=fill_price if fill_price > 0 else None,
+                                            quantity=fill_qty if fill_qty > 0 else None,
+                                            executed_at=datetime.now().isoformat()
+                                        )
                                         _skip_cancel = True
                                     elif cancel_reason_detail:
                                         cancel_reason = f"broker_rejected: {cancel_reason_detail}"
