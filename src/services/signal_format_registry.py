@@ -108,7 +108,8 @@ class SignalFormatRegistry:
         return text.strip()
     
     _ROLE_AWARE_FORMATS = frozenset({
-        'temple_zz_structured_entry', 'temple_zz_inline_role_entry',
+        'temple_zz_structured_entry', 'temple_zz_structured_entry_no_targets',
+        'temple_zz_single_line_entry', 'temple_zz_inline_role_entry',
         'temple_zz_swing_update',
     })
 
@@ -1210,6 +1211,8 @@ class SignalFormatRegistry:
             parse_temple_zz_sl_update_move,
             parse_temple_zz_structured_entry, parse_temple_zz_plain_entry,
             parse_temple_zz_inline_role_entry,
+            parse_temple_zz_structured_entry_no_targets,
+            parse_temple_zz_single_line_entry,
             parse_temple_zz_swing_update, parse_temple_zz_standalone_targets,
         )
 
@@ -1378,21 +1381,42 @@ class SignalFormatRegistry:
             name="temple_zz_structured_entry",
             description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL (optional) / 🎯 targets",
             priority=50,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?\s*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
             parser=parse_temple_zz_structured_entry,
             examples=[
                 "$AREB <@&1330929339134640179> \n✅ 0.30\n❌ 0.28\n🎯 0.33...0.37...0.40",
                 "$BIYA\n✅ 1.55\n❌ 1.45\n🎯 1.64...1.74...1.88...2.00",
-                "$FBLG <@&1330915546513805463>\n✅ 1.30-1.50\n❌ 1.25\n🎯 1.80...3.60...4.50",
-                "$OCG\n✅ 2.25\n🎯 5% 10% 15%",
-                "YOOV\n✅ 1.90 clear break\n❌ 1.75\n🎯 5%-10% -15%+",
-                "$AIIO\n✅ 5.00 break\n❌ 4.5\n🎯 5% 10% 15%+",
-                "$FUSE <@&role>\n✅ around 1.70\n❌ 1.50\n🎯 2.00-3.50",
-                "$WNW <@&role>\n✅ $4.00-4.20\n❌ 3.75\n🎯 4.46...4.78...5.20",
-                "$MTVA re-entry\n✅ 2.60-2.65\n❌ 2.50\n🎯 2.75...3.00...3.12..3.30..3.60",
+                "XOS\n✅ 4.30\n❌ -10%\n🎯 4.53...5.15...5.43...6.00..6.50+",
                 "GMEX\n✅ clear break of 3.50\n🎯 4.00...4.21...4.38...5.83",
             ],
             flags=re.IGNORECASE | re.MULTILINE
+        )
+
+        self.register(
+            name="temple_zz_structured_entry_no_targets",
+            description="ZZ structured without targets: $TICKER @role / ✅ entry / ❌ SL (optional)",
+            priority=51,
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*(?:\n(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?)?',
+            parser=parse_temple_zz_structured_entry_no_targets,
+            examples=[
+                "$CYAB <@&swing>\n✅ 0.66",
+                "BNRG\n✅ 1.60\n❌ 1.45",
+                "$VIVO <@&swing>\n✅ 3.45\n❌ 3.10",
+            ],
+            flags=re.IGNORECASE | re.MULTILINE
+        )
+
+        self.register(
+            name="temple_zz_single_line_entry",
+            description="ZZ single-line: $SYMBOL @role [✅] PRICE[-PRICE]",
+            priority=52,
+            pattern=r'^\$?([A-Z]{1,5})\s*(?:<@&\d+>\s*)+(?:✅\s*)?(?:\$\s*)?(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?',
+            parser=parse_temple_zz_single_line_entry,
+            examples=[
+                "$ACXP <@&swing> ✅ 1.75-1.80",
+                "CTNT <@&momentum> <@&swing> 2.18",
+            ],
+            flags=re.IGNORECASE
         )
 
         self.register(
@@ -1414,7 +1438,7 @@ class SignalFormatRegistry:
             name="temple_zz_inline_role_entry",
             description="ZZ inline entry with role: SYMBOL price @Momentum/@Swing",
             priority=51,
-            pattern=r'^\$?([A-Z]{1,5})\s+(?:(?:in\s+(?:small\s+)?(?:at\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:!?\s*)?<@&(\d+)>|<@&(\d+)>\s*(?:/\w+\s*)?\$?(\d+(?:\.\d+)?))',
+            pattern=r'^\$?([A-Z]{1,5})\s+(?:(?:in\s+(?:small\s+)?(?:at\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:!?\s*)?<@&(\d+)>|(?:<@&(\d+)>\s*)+(?:/\w+\s*)?\$?(\d+(?:\.\d+)?))',
             parser=parse_temple_zz_inline_role_entry,
             examples=[
                 "OCG  in at 2.12 <@&1330929339134640179>",

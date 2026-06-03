@@ -135,9 +135,21 @@ ZZ_ROLE_SWING = '1330915546513805463'
 TEMPLE_ZZ_STRUCTURED_ENTRY = re.compile(
     r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n'
     r'✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n'
-    r'(?:(?:❌|➕)[ \t]*(\d+(?:\.\d+)?)[ \t]*\n)?'
+    r'(?:(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?[ \t]*\n)?'
     r'🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,3}[\d.,\s%+\-]+)*)',
     re.IGNORECASE | re.MULTILINE
+)
+
+TEMPLE_ZZ_STRUCTURED_ENTRY_NO_TARGETS = re.compile(
+    r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n'
+    r'✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?break[ \t]+(?:of[ \t]+)?)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*'
+    r'(?:\n(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?)?',
+    re.IGNORECASE | re.MULTILINE
+)
+
+TEMPLE_ZZ_SINGLE_LINE_ENTRY = re.compile(
+    r'^\$?([A-Z]{1,5})\s*(?:<@&\d+>\s*)+(?:✅\s*)?(?:\$\s*)?(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?',
+    re.IGNORECASE
 )
 
 # Inline entry with role: "SYMBOL in at PRICE <@&role>" or "$SYMBOL <@&role> PRICE"
@@ -152,7 +164,7 @@ TEMPLE_ZZ_PLAIN_ENTRY = re.compile(
     re.IGNORECASE
 )
 TEMPLE_ZZ_INLINE_ROLE_ENTRY_B = re.compile(
-    r'^\$?([A-Z]{1,5})\s*<@&(\d+)>\s*(?:/\w+\s*)?\$?(\d+(?:\.\d+)?)',
+    r'^\$?([A-Z]{1,5})\s*(?:<@&(\d+)>\s*)+(?:/\w+\s*)?\$?(\d+(?:\.\d+)?)',
     re.IGNORECASE
 )
 
@@ -877,13 +889,30 @@ def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dic
         return None
     entry_price = float(match.group(2))
     entry_low = float(match.group(3)) if match.group(3) else None
-    stop_loss = float(match.group(4)) if match.group(4) else None
-    targets = _parse_zz_targets(match.group(5), entry_price=entry_price)
+    raw_sl = float(match.group(4)) if match.group(4) else None
+    has_targets = match.lastindex >= 5 and match.group(5)
+    targets = _parse_zz_targets(match.group(5), entry_price=entry_price) if has_targets else []
 
     trade_type = _detect_zz_trade_type(text)
     entry_high = entry_price
     if entry_low and entry_low > entry_high:
         entry_high, entry_low = entry_low, entry_high
+
+    sl_type = None
+    sl_value = None
+    sl_fixed = None
+    sl_pct = None
+    if raw_sl is not None:
+        is_pct = raw_sl <= 50 and raw_sl > 0 and (entry_high == 0 or raw_sl < entry_high * 0.5)
+        sl_raw_text = text[text.index('❌'):text.index('❌')+40] if '❌' in text else ''
+        if '%' in sl_raw_text or '-' in sl_raw_text.split('❌')[-1][:10]:
+            sl_type = 'percent'
+            sl_pct = raw_sl
+            sl_value = raw_sl
+        else:
+            sl_type = 'fixed'
+            sl_fixed = raw_sl
+            sl_value = raw_sl
 
     result = {
         'format': 'TEMPLE_ZZ_STRUCTURED',
@@ -899,10 +928,10 @@ def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dic
         'trigger_price': entry_low if entry_low else entry_high,
         'entry_high': entry_high,
         'entry_low': entry_low,
-        'stop_loss_type': 'fixed' if stop_loss else None,
-        'stop_loss_value': stop_loss,
-        'stop_loss_fixed': stop_loss,
-        'stop_loss_pct': None,
+        'stop_loss_type': sl_type,
+        'stop_loss_value': sl_value,
+        'stop_loss_fixed': sl_fixed,
+        'stop_loss_pct': sl_pct,
         'profit_targets': targets,
         'target_ranges': [],
         'position_size_pct': None,
@@ -915,6 +944,56 @@ def parse_temple_zz_structured_entry(match: re.Match, text: str) -> Optional[Dic
         '_trade_type': trade_type,
     }
     return result
+
+
+def parse_temple_zz_structured_entry_no_targets(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse structured ZZ entry without 🎯 targets: $TICKER @role / ✅ entry / ❌ SL (optional)."""
+    result = parse_temple_zz_structured_entry(match, text)
+    if result:
+        result['_format_name'] = 'temple_zz_structured_entry_no_targets'
+    return result
+
+
+def parse_temple_zz_single_line_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:
+    """Parse single-line entry: $SYMBOL @role [✅] PRICE[-PRICE]"""
+    symbol = match.group(1).upper()
+    if symbol in _STRUCTURED_REJECT_WORDS:
+        return None
+    entry_price = float(match.group(2))
+    entry_low = float(match.group(3)) if match.group(3) else None
+    trade_type = _detect_zz_trade_type(text)
+    entry_high = entry_price
+    if entry_low and entry_low > entry_high:
+        entry_high, entry_low = entry_low, entry_high
+    return {
+        'format': 'TEMPLE_ZZ_SINGLE_LINE',
+        'is_conditional': True,
+        '_conditional_order': True,
+        '_temple_zz_structured': True,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'action': 'BTO',
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': 'over',
+        'trigger_price': entry_low if entry_low else entry_high,
+        'entry_high': entry_high,
+        'entry_low': entry_low,
+        'stop_loss_type': None,
+        'stop_loss_value': None,
+        'stop_loss_fixed': None,
+        'stop_loss_pct': None,
+        'profit_targets': [],
+        'target_ranges': [],
+        'position_size_pct': None,
+        'fixed_qty': None,
+        'size_mode': None,
+        'qty': 1,
+        'qty_specified': False,
+        'price': entry_high,
+        'confidence': 0.9,
+        '_trade_type': trade_type,
+    }
 
 
 def parse_temple_zz_plain_entry(match: re.Match, text: str) -> Optional[Dict[str, Any]]:

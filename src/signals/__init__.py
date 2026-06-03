@@ -52,6 +52,8 @@ from .temple_parser import (
     parse_temple_zz_inline_role_entry,
     parse_temple_zz_swing_update,
     parse_temple_zz_standalone_targets,
+    parse_temple_zz_structured_entry_no_targets,
+    parse_temple_zz_single_line_entry,
 )
 from .abtrades_parser import (
     parse_abtrades_entry,
