@@ -16012,8 +16012,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
                 
                 # Entry Confirmation: require price to go +X% above signal's watching price
+                # GUARD: Options execute immediately — conditional/entry-confirmation is for stocks only
+                _is_option_signal = opt.get('asset') == 'option' or opt.get('strike') or opt.get('opt_type')
                 entry_confirmation_pct = float(channel_info.get('entry_confirmation_pct', 0) or 0) if channel_info else 0
-                if entry_confirmation_pct > 0 and opt.get('action', '').upper() == 'BTO':
+                if entry_confirmation_pct > 0 and opt.get('action', '').upper() == 'BTO' and not _is_option_signal:
                     watching_price = opt.get('trigger_price') or opt.get('price')
                     if watching_price and float(watching_price) > 0:
                         confirmation_trigger = round(float(watching_price) * (1 + entry_confirmation_pct / 100), 4)
@@ -16023,6 +16025,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['_entry_confirmation'] = True
                         opt['_watching_price'] = float(watching_price)
                         print(f"[ENTRY CONFIRM] ✓ Requires +{entry_confirmation_pct}% above ${watching_price} → trigger ${confirmation_trigger}")
+                elif entry_confirmation_pct > 0 and _is_option_signal:
+                    print(f"[ENTRY CONFIRM] ⛔ Options skip conditional routing — executing immediately")
                 
                 # Check for conditional order triggers (ABOVE/BELOW price triggers)
                 conditional_order_enabled = channel_info.get('conditional_order_enabled', 0) if channel_info else 0
@@ -16032,7 +16036,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 print(f"[DEBUG] CONDITIONAL CHECK: enabled={conditional_order_enabled}, trigger_price={trigger_price}, trigger_condition={trigger_condition}, trigger_symbol={trigger_symbol}")
                 
-                if (conditional_order_enabled or opt.get('_entry_confirmation')) and trigger_price and trigger_condition:
+                if (conditional_order_enabled or opt.get('_entry_confirmation')) and trigger_price and trigger_condition and not _is_option_signal:
                     if not execute_enabled:
                         print(f"[CONDITIONAL] ⚠️ SKIPPED — channel execute is OFF (track-only mode)")
                     else:

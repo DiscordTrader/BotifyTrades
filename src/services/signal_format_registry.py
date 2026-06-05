@@ -1214,6 +1214,10 @@ class SignalFormatRegistry:
             parse_temple_zz_structured_entry_no_targets,
             parse_temple_zz_single_line_entry,
             parse_temple_zz_will_enter_break,
+            parse_temple_zz_will_enter_if_breaks,
+            parse_temple_zz_breakout_shorthand,
+            parse_temple_zz_scalp, parse_temple_zz_lotto,
+            parse_temple_zz_small_entry,
             parse_temple_zz_swing_update, parse_temple_zz_standalone_targets,
         )
 
@@ -1382,7 +1386,7 @@ class SignalFormatRegistry:
             name="temple_zz_structured_entry",
             description="ZZ structured: $TICKER @role / ✅ entry / ❌ SL (optional) / 🎯 targets",
             priority=50,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?bre?a?k[ \t]+(?:of[ \t]+)?|in[ \t]+(?:again[ \t]+|back[ \t]+)?at[ \t]+)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?\s*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,}[\d.,\s%+\-]+)*)',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n?.*?✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?bre?a?k[ \t]+(?:of[ \t]+)?|in[ \t]+(?:again[ \t]+|back[ \t]+)?at[ \t]+)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)(?:ish|s)?[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*\n(?:(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?\s*\n)?🎯[ \t]*([\d.,\s%+\-]+(?:\.{2,}[\d.,\s%+\-]+)*)',
             parser=parse_temple_zz_structured_entry,
             examples=[
                 "$AREB <@&1330929339134640179> \n✅ 0.30\n❌ 0.28\n🎯 0.33...0.37...0.40",
@@ -1391,6 +1395,9 @@ class SignalFormatRegistry:
                 "GMEX\n✅ clear break of 3.50\n🎯 4.00...4.21...4.38...5.83",
                 "RKTO \n✅ clear brak of 2.53\n🎯 2.77...3.03...3.50",
                 "RKTO\n✅ in again at 2.10\n🎯 2.21....2.35...2.43....2.53...3.00+",
+                "MSAI lotto ✅ $6.20s ❌ 5.80 🎯 6.75...7.57...8.00",
+                "YMAT will enter for the 7th time around ✅ 1.00 again. ❌ 0.78 🎯 5% 10% 15%+",
+                "$SUGP\n✅ 1.30ish\n❌ 1.23\n🎯 1.50...1.80",
             ],
             flags=re.IGNORECASE | re.MULTILINE
         )
@@ -1399,7 +1406,7 @@ class SignalFormatRegistry:
             name="temple_zz_structured_entry_no_targets",
             description="ZZ structured without targets: $TICKER @role / ✅ entry / ❌ SL (optional)",
             priority=51,
-            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?bre?a?k[ \t]+(?:of[ \t]+)?|in[ \t]+(?:again[ \t]+|back[ \t]+)?at[ \t]+)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*(?:\n(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?)?',
+            pattern=r'^\$?([A-Z]{1,5})[ \t]*(?:<@&\d+>[ \t]*(?:/\w+)?[ \t]*)*[^\n]*\n?.*?✅[ \t]*(?:around[ \t]+|(?:clear[ \t]+)?bre?a?k[ \t]+(?:of[ \t]+)?|in[ \t]+(?:again[ \t]+|back[ \t]+)?at[ \t]+)?(?:\$[ \t]*)?(\d+(?:\.\d+)?)(?:ish|s)?[ \t]*(?:-[ \t]*(\d+(?:\.\d+)?))?[^\n]*(?:\n(?:❌|➕)[ \t]*(?:(?:under|below)\s+)?(?:\$\s*)?-?(\d+(?:\.\d+)?)[ \t]*%?(?:\s*(?:suggested|mental))?)?',
             parser=parse_temple_zz_structured_entry_no_targets,
             examples=[
                 "$CYAB <@&swing>\n✅ 0.66",
@@ -1418,6 +1425,19 @@ class SignalFormatRegistry:
             examples=[
                 "$ACXP <@&swing> ✅ 1.75-1.80",
                 "CTNT <@&momentum> <@&swing> 2.18",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_single_line_structured",
+            description="ZZ single-line: $SYMBOL [text] ✅ PRICE 🎯 TARGETS (no newlines)",
+            priority=51,
+            pattern=r'^\$?([A-Z]{1,5})\s+.*?✅\s*(?:\$\s*)?(\d+(?:\.\d+)?)(?:ish|s)?\s+🎯\s*([\d.,\s%+\-]+(?:\.{2,}[\d.,\s%+\-]+)*)',
+            parser=parse_temple_zz_structured_entry,
+            examples=[
+                "$AIM ✅ 0.81 🎯 0.86-1.00",
+                "$SBEV ✅ clear break of 0.33 for 0.35 🎯 0.41",
             ],
             flags=re.IGNORECASE
         )
@@ -1474,6 +1494,124 @@ class SignalFormatRegistry:
                 "RKTO \n✅ clear brak of 2.53 for 2.77 retest and 3.03-3.50",
             ],
             flags=re.IGNORECASE | re.MULTILINE
+        )
+
+        self.register(
+            name="temple_zz_will_enter_if_breaks",
+            description="ZZ will enter if breaks: SYMBOL will enter [only] if [it] breaks PRICE for TARGETS",
+            priority=48,
+            pattern=r'^\$?([A-Z]{1,5})\s+(?:I\s+)?will\s+(?:only\s+)?(?:re-?)?enter\s+(?:only\s+)?(?:if\s+)?(?:it\s+)?(?:give[s]?\s+(?:us\s+)?(?:a\s+)?)?(?:clear\s+)?(?:strong\s+)?(?:bre?a?k(?:s)?(?:\s+(?:and\s+)?holds?)?\s+(?:of\s+)?|(?:at\s+(?:a\s+)?)?(?:clear\s+)?)\$?(\d+(?:\.\d+)?)\s+(?:for|(?:bre?a?k\s+)?for)\s+(.+)',
+            parser=parse_temple_zz_will_enter_if_breaks,
+            examples=[
+                "SMTK will enter only if it breaks 0.55 for 0.60...0.65....0.68 retest",
+                "FFAI I will enter only if it breaks 0.45 for 0.47...0.52",
+                "STAK I will enter if it give us a clear break of 2.43 for 2.86-3.50",
+                "$MIMI will enter at a $4.00 clear break for 4.25-4.70-5.20",
+                "$DRTS good news - will enter a strong 10.19 break for 11.10-11.97",
+                "ALGS will enter if it breaks 9.16 for 10.23...11.97",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_will_enter_no_targets",
+            description="ZZ will enter if breaks without 'for' targets: SYMBOL will enter [if] breaks PRICE",
+            priority=48,
+            pattern=r'^\$?([A-Z]{1,5})\s+(?:I\s+)?will\s+(?:only\s+)?(?:re-?)?enter\s+(?:only\s+)?(?:if\s+)?(?:it\s+)?(?:bre?a?k(?:s)?(?:\s+(?:and\s+)?holds?)?\s+(?:of\s+)?|(?:at\s+))\$?(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_will_enter_if_breaks,
+            examples=[
+                "RMSG I will enter if it breaks and holds 1.59",
+                "ONFO will enter at 1.45 break",
+                "CLRB will enter only if it breaks 6.30 again.",
+                "IQST will re-enter if it breaks and holds 1.30",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_breakout_shorthand",
+            description="ZZ breakout shorthand: SYMBOL [clear] break [of] PRICE [only] for TARGETS",
+            priority=48,
+            pattern=r'^\$?([A-Z]{1,5})\s+(?:clear\s+)?bre?a?k\s+(?:of\s+)?\$?(\d+(?:\.\d+)?)\s+(?:only\s+)?for\s+(.+)',
+            parser=parse_temple_zz_breakout_shorthand,
+            examples=[
+                "ASBP clear break of 0.26 for 0.269....0.30...0.32",
+                "BBBY break of 6.40 only for 7.04",
+                "BIYA break of 1.58 only for 2.00",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_i_will_take_break",
+            description="ZZ I will take/buy break: I will take/buy PRICE break or breaks PRICE",
+            priority=48,
+            pattern=r'^\$?([A-Z]{1,5})\s+I\s+will\s+(?:take|buy)\s+(?:(?:clear\s+)?bre?a?k\s+(?:of\s+)?)?\$?(\d+(?:\.\d+)?)\s*(?:bre?a?k)?(?:\s+for\s+(.+))?',
+            parser=parse_temple_zz_will_enter_if_breaks,
+            examples=[
+                "DRCT I will take 3.67 break",
+                "ABVE I will take clear break of 0.84 for 1.00",
+                "$DARE I will buy if it breaks 2.80 for 3.00+",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_scalp_here",
+            description="ZZ scalping: Scalping SYMBOL [here] [at] PRICE",
+            priority=73,
+            pattern=r'[Ss]calping\s+\$?([A-Z]{2,5})\s+(?:here\s+)?(?:at\s+|from\s+)?\$?(\d+(?:\.\d+)?)?',
+            parser=parse_temple_zz_scalp,
+            examples=[
+                "Scalping NCT here at 4.40",
+                "Scalping $GDC here at 0.22",
+                "Scalping ISPC 0.16",
+                "Scalping $LABT from 16.00",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_lotto_entry",
+            description="ZZ lotto: [Small] [lotto] SYMBOL [at] PRICE",
+            priority=73,
+            pattern=r'(?:(?:[Ss]mall\s+)?[Ll]otto\s+(?:size\s+)?\$?([A-Z]{2,5})|\$?([A-Z]{2,5})\s+lotto(?:\s+(?:for\s+)?(?:day\s+\d+\s+)?)?)\s*(?:at\s+|@\s*)?\$?(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_lotto,
+            examples=[
+                "$OTLK lotto at $0.54",
+                "Small lotto $ADVB at 7.00",
+                "$WLAC lotto at 13.65",
+                "$ATER lotto for day 3 at $1.08",
+                "Small lotto USEG on news at $1.03",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_small_reversal",
+            description="ZZ small entry: Small SYMBOL [for the reversal] [at/here] PRICE",
+            priority=73,
+            pattern=r'[Ss]mall\s+\$?([A-Z]{2,5})\s+(?:(?:for\s+)?(?:the\s+)?(?:reversal\s+)?)?(?:(?:here\s+)?(?:at\s+)?\$?(\d+(?:\.\d+)?))?',
+            parser=parse_temple_zz_small_entry,
+            examples=[
+                "Small AGAE for the reversal 0.61",
+                "Small EDHL for the reversal here",
+                "Small $ABTS again 2.93",
+            ],
+            flags=re.IGNORECASE
+        )
+
+        self.register(
+            name="temple_zz_ciss_reversal",
+            description="ZZ reversal entry: SYMBOL for the reversal [here] at PRICE [SL -X%]",
+            priority=73,
+            pattern=r'^\$?([A-Z]{2,5})\s+for\s+the\s+reversal\s+(?:here\s+)?(?:at\s+)?\$?(\d+(?:\.\d+)?)',
+            parser=parse_temple_zz_scalp,
+            examples=[
+                "$CISS for the reversal here at 2.55. SL -10%",
+                "ASBP 0.32 for the reversal",
+            ],
+            flags=re.IGNORECASE
         )
 
         self.register(
@@ -2658,13 +2796,25 @@ class SignalFormatRegistry:
             "_phoenix_entry": True
         }
     
+    _PHOENIX_IN_AT_REJECT = frozenset({
+        'AGAIN', 'AROUN', 'AROUND', 'THE', 'THIS', 'THAT', 'SOME', 'SMALL',
+        'HERE', 'THERE', 'MORE', 'MOST', 'BACK', 'JUST', 'ALSO', 'BEEN',
+        'WILL', 'HAVE', 'WITH', 'FROM', 'THEM', 'THEN', 'WHEN', 'WHAT',
+        'FOR', 'BUT', 'NOT', 'ALL', 'CAN', 'HER', 'HIS', 'OUT', 'DAY',
+    })
+
     def _parse_phoenix_entry_in_at(self, match: re.Match, text: str) -> Optional[Dict]:
         """Parse Phoenix entry: in XHLD at 2.13"""
+        import re as _re
+        if _re.match(r'^\s*WL:', text, _re.IGNORECASE):
+            return None
         groups = match.groups()
         symbol = groups[0].upper() if groups else None
         price = float(groups[1]) if len(groups) > 1 and groups[1] else None
-        
+
         if not symbol:
+            return None
+        if symbol in self._PHOENIX_IN_AT_REJECT:
             return None
         
         return {
