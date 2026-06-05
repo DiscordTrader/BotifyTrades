@@ -373,9 +373,16 @@ class StreamingPriceMonitor(PriceMonitor):
     
     def _query_hub(self) -> Optional[float]:
         try:
-            price = self.data_hub.get_quote_price(self.symbol)
+            price = self.data_hub.get_quote_price(self.symbol, allow_stale=True)
             if price and price > 0:
                 return float(price)
+        except TypeError:
+            try:
+                price = self.data_hub.get_quote_price(self.symbol)
+                if price and price > 0:
+                    return float(price)
+            except Exception:
+                pass
         except Exception as e:
             sys.stderr.write(f"[STREAM_MON] Hub query error for {self.symbol}: {e}\n")
             sys.stderr.flush()

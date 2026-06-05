@@ -336,6 +336,8 @@ class QuoteAggregator:
                 hub_price = None
                 if ibkr_hub.is_streaming():
                     hub_price = ibkr_hub.get_quote_price(symbol)
+                    if not hub_price:
+                        hub_price = ibkr_hub.get_quote_price(symbol, allow_stale=True)
                     if hub_price and hub_price > 0:
                         return float(hub_price)
                 if not hub_price and ibkr_hub._loop and not ibkr_hub._loop.is_closed():

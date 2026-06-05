@@ -751,6 +751,8 @@ class IBKRBroker(BrokerInterface):
                 hub = get_ibkr_data_hub()
                 if hub.is_streaming():
                     cached = hub.get_quote_price(symbol)
+                    if not cached:
+                        cached = hub.get_quote_price(symbol, allow_stale=True)
                     if cached and cached > 0:
                         self._quote_fail_cache.pop(symbol, None)
                         return cached
