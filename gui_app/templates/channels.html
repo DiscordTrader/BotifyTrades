@@ -1022,7 +1022,7 @@
                 </div>
                 <div class="form-group">
                     <label>Bot Name</label>
-                    <input type="text" class="form-input" id="whNewBot" placeholder="Trade Echo Bot" value="Trade Echo Bot">
+                    <input type="text" class="form-input" id="whNewBot" placeholder="Uses webhook default" value="">
                 </div>
                 <div class="form-group">
                     <label>Color</label>
@@ -3910,7 +3910,7 @@ function whRender() {
             <div class="wh-card-info">
                 <div class="wh-card-name">${ch.name || 'Unnamed'}</div>
                 <div class="wh-card-url" title="${ch.webhook_url || ''}">${urlShort}</div>
-                <div class="wh-card-bot">Bot: ${ch.bot_name || 'Trade Echo Bot'}</div>
+                <div class="wh-card-bot">${ch.bot_name ? 'Bot: ' + ch.bot_name : 'Using webhook default'}</div>
             </div>
             <div class="wh-card-actions">
                 <button class="wh-btn wh-btn-test" onclick="whTestChannel(${ch.id})">Test</button>
@@ -3923,7 +3923,7 @@ function whRender() {
 async function whAddChannel() {
     const name = document.getElementById('whNewName').value.trim();
     const url = document.getElementById('whNewUrl').value.trim();
-    const botName = document.getElementById('whNewBot').value.trim() || 'Trade Echo Bot';
+    const botName = document.getElementById('whNewBot').value.trim() || '';
     const color = document.getElementById('whNewColor').value;
 
     if (!name) { showNotification('Enter a channel name', 'error'); return; }
@@ -3942,7 +3942,7 @@ async function whAddChannel() {
             showNotification('Webhook channel added!');
             document.getElementById('whNewName').value = '';
             document.getElementById('whNewUrl').value = '';
-            document.getElementById('whNewBot').value = 'Trade Echo Bot';
+            document.getElementById('whNewBot').value = '';
             await whLoadChannels();
         } else {
             showNotification(data.error || 'Failed to add webhook channel', 'error');

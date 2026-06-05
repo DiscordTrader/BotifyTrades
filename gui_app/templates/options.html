@@ -1044,7 +1044,7 @@
                 <div class="form-row">
                     <input type="text" id="newChannelName" class="name-input" placeholder="Channel Name">
                     <input type="text" id="newChannelUrl" class="url-input" placeholder="https://discord.com/api/webhooks/...">
-                    <input type="text" id="newChannelBot" class="bot-input" placeholder="Bot Name" value="Trade Echo Bot">
+                    <input type="text" id="newChannelBot" class="bot-input" placeholder="Uses webhook default" value="">
                     <input type="color" id="newChannelColor" class="color-input" value="#FF6B35">
                     <button class="form-btn save" onclick="addWebhookChannel()">Save</button>
                     <button class="form-btn cancel" onclick="toggleAddChannelForm()">Cancel</button>
@@ -1711,7 +1711,7 @@
                     <div class="webhook-channel-color" style="background: ${channel.color || '#FF6B35'}"></div>
                     <div class="webhook-channel-info">
                         <div class="webhook-channel-name">${escapeHtml(channel.name)}</div>
-                        <div class="webhook-channel-bot">${escapeHtml(channel.bot_name || 'Trade Echo Bot')}</div>
+                        <div class="webhook-channel-bot">${channel.bot_name ? escapeHtml(channel.bot_name) : 'Using webhook default'}</div>
                     </div>
                     <div class="webhook-channel-actions">
                         <button class="action-btn" onclick="testWebhookChannel(${channel.id})">Test</button>
@@ -1757,7 +1757,7 @@
         async function addWebhookChannel() {
             const name = document.getElementById('newChannelName').value.trim();
             const webhookUrl = document.getElementById('newChannelUrl').value.trim();
-            const botName = document.getElementById('newChannelBot').value.trim() || 'Trade Echo Bot';
+            const botName = document.getElementById('newChannelBot').value.trim() || '';
             const color = document.getElementById('newChannelColor').value;
             
             if (!name) {
@@ -1782,7 +1782,7 @@
                     showToast(`Channel "${name}" added successfully`, 'success');
                     document.getElementById('newChannelName').value = '';
                     document.getElementById('newChannelUrl').value = '';
-                    document.getElementById('newChannelBot').value = 'Trade Echo Bot';
+                    document.getElementById('newChannelBot').value = '';
                     document.getElementById('newChannelColor').value = '#FF6B35';
                     toggleAddChannelForm();
                     loadWebhookChannels();
@@ -1886,7 +1886,7 @@
                         qty: qty,
                         price: price,
                         trade_type: tradeType,
-                        bot_name: channel.bot_name || 'Trade Echo Bot'
+                        bot_name: channel.bot_name || ''
                     })
                 });
                 
@@ -1945,7 +1945,7 @@
                         qty: qty,
                         close_price: closePrice,
                         trade_type: tradeType,
-                        bot_name: channel.bot_name || 'Trade Echo Bot'
+                        bot_name: channel.bot_name || ''
                     })
                 });
                 

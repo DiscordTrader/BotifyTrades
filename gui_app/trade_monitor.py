@@ -137,6 +137,26 @@ def get_adaptive_poll_interval(base_interval: int) -> int:
         return max(base_interval, 30)
 
 
+def _is_admin_build() -> bool:
+    try:
+        from gui_app.routes import is_admin_build
+        return is_admin_build()
+    except ImportError:
+        pass
+    try:
+        import re
+        from pathlib import Path
+        src = Path(__file__).parent.parent / 'src' / 'selfbot_webull.py'
+        if src.exists():
+            text = src.read_text(encoding='utf-8', errors='ignore')[:2000]
+            m = re.search(r"^BUILD_TYPE\s*=\s*['\"](\w+)['\"]", text, re.MULTILINE)
+            if m:
+                return m.group(1).upper() == 'ADMIN'
+    except Exception:
+        pass
+    return False
+
+
 _trade_monitor_instance = None
 
 def get_trade_monitor() -> 'TradeMonitor':
@@ -421,6 +441,10 @@ class TradeMonitor:
     async def start(self):
         """Start the trade monitor loop with enable gate"""
         if self.running:
+            return
+
+        if not _is_admin_build():
+            print("[TRADE MONITOR] ⏭️ BLOCKED — admin-only feature (USER build)", flush=True)
             return
 
         settings = db.get_trade_monitor_settings()

@@ -71,7 +71,7 @@ def init_webhook_tables():
         CREATE TABLE IF NOT EXISTS webhook_config (
             id INTEGER PRIMARY KEY,
             webhook_url TEXT,
-            bot_name TEXT DEFAULT 'Trade Echo Bot',
+            bot_name TEXT DEFAULT '',
             avatar_url TEXT,
             enabled INTEGER DEFAULT 1,
             auto_post_bto INTEGER DEFAULT 0,
@@ -85,7 +85,7 @@ def init_webhook_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             webhook_url TEXT NOT NULL,
-            bot_name TEXT DEFAULT 'Trade Echo Bot',
+            bot_name TEXT DEFAULT '',
             avatar_url TEXT,
             color TEXT DEFAULT '#FF6B35',
             enabled INTEGER DEFAULT 1,
@@ -98,7 +98,7 @@ def init_webhook_tables():
     if cursor.fetchone()[0] == 0:
         cursor.execute('''
             INSERT INTO webhook_config (id, webhook_url, bot_name, enabled)
-            VALUES (1, '', 'Trade Echo Bot', 1)
+            VALUES (1, '', '', 1)
         ''')
     
     conn.commit()
@@ -118,7 +118,7 @@ def get_webhook_config() -> Dict[str, Any]:
         return dict(row)
     return {
         'webhook_url': '',
-        'bot_name': 'Trade Echo Bot',
+        'bot_name': '',
         'avatar_url': None,
         'enabled': True,
         'auto_post_bto': False,
@@ -145,7 +145,7 @@ def save_webhook_config(config: Dict[str, Any]) -> bool:
             WHERE id = 1
         ''', (
             config.get('webhook_url', ''),
-            config.get('bot_name', 'Trade Echo Bot'),
+            config.get('bot_name', ''),
             config.get('avatar_url'),
             1 if config.get('enabled', True) else 0,
             1 if config.get('auto_post_bto', False) else 0,
@@ -182,7 +182,7 @@ def get_webhook_channel(channel_id: int) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
-def add_webhook_channel(name: str, webhook_url: str, bot_name: str = 'Trade Echo Bot', color: str = '#FF6B35') -> Dict[str, Any]:
+def add_webhook_channel(name: str, webhook_url: str, bot_name: str = '', color: str = '#FF6B35') -> Dict[str, Any]:
     """Add a new webhook channel."""
     init_webhook_tables()
     conn = get_db_connection()
@@ -550,7 +550,7 @@ def post_bto_signal(
     qty: int,
     price: float,
     trade_type: str = 'Swing',
-    bot_name: str = 'Trade Echo Bot',
+    bot_name: str = '',
     avatar_url: str = None
 ) -> Tuple[bool, str]:
     """Post a BTO (Buy to Open) signal to Discord webhook."""
@@ -607,7 +607,7 @@ def post_stc_signal(
     call_put: str,
     qty: int,
     close_price: float,
-    bot_name: str = 'Trade Echo Bot',
+    bot_name: str = '',
     avatar_url: str = None
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Post an STC (Sell to Close) signal to Discord webhook with P&L."""
@@ -677,15 +677,16 @@ def post_stc_signal(
         return False, f"Request failed: {str(e)}", result
 
 
-def test_webhook(webhook_url: str, bot_name: str = 'Trade Echo Bot') -> Tuple[bool, str]:
+def test_webhook(webhook_url: str, bot_name: str = '') -> Tuple[bool, str]:
     """Test a webhook URL by sending a test message."""
     if not webhook_url:
         return False, "No webhook URL provided"
     
     payload = {
-        "content": "Webhook test successful! Your Trade Echo Bot is connected.",
-        "username": bot_name
+        "content": "Webhook test successful! BotifyTrades webhook is connected."
     }
+    if bot_name:
+        payload["username"] = bot_name
     
     try:
         response = requests.post(

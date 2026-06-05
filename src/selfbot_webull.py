@@ -8696,17 +8696,20 @@ class SelfClient(discord.Client):
                 await asyncio.sleep(0)  # Yield to event loop so sync task can start
                 _original_print("[SYNC] ✓ Trade synchronization service started (30s interval)", flush=True)
 
-                try:
-                    from gui_app.trade_monitor import get_trade_monitor
-                    _tm = get_trade_monitor()
-                    _tm.set_broker_manager(broker_manager)
-                    if not _tm.running:
-                        _tm.set_broker(self.broker)
-                        await _tm.start()
-                    _original_print(f"[TRADE MONITOR] ✓ Wiring complete (running={_tm.running})")
-                except Exception as _tm_err:
-                    import traceback as _tb
-                    _original_print(f"[TRADE MONITOR] ⚠️ Post-broker init failed: {_tm_err}")
+                if not is_admin_build():
+                    _original_print(f"[TRADE MONITOR] ⏭️ BLOCKED — admin-only feature (USER build)")
+                else:
+                    try:
+                        from gui_app.trade_monitor import get_trade_monitor
+                        _tm = get_trade_monitor()
+                        _tm.set_broker_manager(broker_manager)
+                        if not _tm.running:
+                            _tm.set_broker(self.broker)
+                            await _tm.start()
+                        _original_print(f"[TRADE MONITOR] ✓ Wiring complete (running={_tm.running})")
+                    except Exception as _tm_err:
+                        import traceback as _tb
+                        _original_print(f"[TRADE MONITOR] ⚠️ Post-broker init failed: {_tm_err}")
                     _tb.print_exc()
 
                 # Initialize Unfilled Order Chaser for mid-price replacement of stale exit orders
@@ -10729,9 +10732,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             pass
             traceback.print_exc()
         
-        # Start Signal Routing Engine risk monitor (for position_ledger price monitoring)
+        # Start Signal Routing Engine risk monitor (for position_ledger price monitoring) — ADMIN ONLY
         try:
-            if SIGNAL_ROUTING_ENGINE_AVAILABLE:
+            if not is_admin_build():
+                print("[STARTUP] ⏭️ Signal Routing Engine BLOCKED — admin-only feature (USER build)", flush=True)
+            elif SIGNAL_ROUTING_ENGINE_AVAILABLE:
                 from src.services.signal_routing_engine import get_signal_routing_engine
                 routing_engine = get_signal_routing_engine()
                 await routing_engine.start_risk_monitor()
@@ -11882,7 +11887,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Check if this channel is a source in signal_routing_mappings (forwarding-only routing)
         is_signal_routing_source = False
         signal_routing_config = None
-        if SIGNAL_ROUTING_ENGINE_AVAILABLE and not is_mapped_source_channel:
+        if SIGNAL_ROUTING_ENGINE_AVAILABLE and is_admin_build() and not is_mapped_source_channel:
             try:
                 routing_engine = get_signal_routing_engine()
                 signal_routing_config = routing_engine.get_or_load_config_for_channel(str(message.channel.id))
@@ -12012,7 +12017,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[Discord] Embed content: {' | '.join(embed_content_parts)[:200]}")
         
         # SPY-SNIPER SIGNAL PROCESSING: Detect and forward Open/Trim/Close alerts
-        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+        if SPY_SNIPER_AVAILABLE and is_admin_build() and hasattr(message, 'embeds') and message.embeds:
             for embed in message.embeds:
                 embed_title = embed.title if embed.title else ""
                 embed_desc = embed.description if embed.description else ""
@@ -13148,9 +13153,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 exit_price = parsed_signal.get('price', 0)
                                 exit_qty = parsed_signal.get('qty')  # Trader's exit qty from signal
                                 
-                                # === SIGNAL ROUTING ENGINE INTEGRATION ===
+                                # === SIGNAL ROUTING ENGINE INTEGRATION (ADMIN ONLY) ===
                                 # Forward STC to webhook if channel is routed (forwarding-only architecture)
-                                if SIGNAL_ROUTING_ENGINE_AVAILABLE:
+                                if SIGNAL_ROUTING_ENGINE_AVAILABLE and is_admin_build():
                                     try:
                                         routing_engine = get_signal_routing_engine()
                                         routing_config = routing_engine.get_or_load_config_for_channel(str(channel_id))
